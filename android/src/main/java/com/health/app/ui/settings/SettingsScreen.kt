@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.health.api.EnergyProfile
 import com.health.api.Goals
+import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.Units
 import com.health.app.BuildConfig
@@ -60,6 +61,7 @@ import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.components.ValueRow
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.log.NumberField
+import com.health.app.ui.modules.ModuleInfo
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -116,6 +118,21 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
                     if (profile.timezone.isNotBlank() && profile.timezone != phone) {
                         OutlinedButton(onClick = { actions.saveProfile(profile.copy(timezone = phone)) }) { Text("Use this phone's ($phone)") }
                     }
+                }
+                SectionCard("Features") {
+                    Hint("Turn on what's useful to you. What's off is hidden, and nothing you've logged is lost.")
+                    Module.entries.forEach { m ->
+                        val on = m in profile.modules
+                        LabeledSwitch(
+                            m.label, on,
+                            { v -> actions.saveProfile(profile.copy(modules = if (v) profile.modules + m else profile.modules - m)) },
+                            subtitle = ModuleInfo.description(m),
+                        )
+                    }
+                    Hint(
+                        "Mind, Cycle, Bladder & bowel and Medications are encrypted on your server, and an AI connector " +
+                            "link only sees them if you allow it when making the link.",
+                    )
                 }
                 SectionCard("Goals") {
                     ValueRow("Steps", Format.number(g.steps), onClick = { editing = Edit.STEPS })

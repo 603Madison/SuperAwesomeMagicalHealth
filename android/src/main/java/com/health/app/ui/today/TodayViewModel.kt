@@ -3,6 +3,13 @@ package com.health.app.ui.today
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.health.api.CheckIn
+import com.health.api.ContinenceEntry
+import com.health.api.ContinenceKind
+import com.health.api.DoseLog
+import com.health.api.DoseStatus
+import com.health.api.DueDose
+import com.health.api.MedForm
+import com.health.api.MoodEntry
 import com.health.api.DaySummary
 import com.health.api.MeasurementInput
 import com.health.api.Metric
@@ -94,4 +101,19 @@ class TodayViewModel(private val c: Container) : ViewModel() {
     fun logSleep(session: SleepSession) = act("Sleep saved") { c.api.addSleep(session) }
 
     fun saveCheckIn(checkIn: CheckIn) = act("Thanks for checking in") { c.api.saveCheckIn(checkIn) }
+
+    /** A face tapped on Today: the mood, now. */
+    fun quickMood(mood: Int) = act("Mood saved") { c.api.addMood(MoodEntry(System.currentTimeMillis(), mood)) }
+
+    fun logContinence(kind: ContinenceKind) = act("${kind.label} noted") {
+        c.api.addContinence(ContinenceEntry(System.currentTimeMillis(), kind))
+    }
+
+    /** Takes a scheduled dose; an injection or patch goes to the chosen site, or the one next in rotation. */
+    fun takeDose(due: DueDose, site: String?) = act("${due.name} taken") {
+        val rotates = due.form == MedForm.INJECTION || due.form == MedForm.PATCH
+        c.api.logDose(
+            DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site ?: due.nextSite.takeIf { rotates }),
+        )
+    }
 }

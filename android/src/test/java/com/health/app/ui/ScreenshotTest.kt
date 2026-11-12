@@ -40,6 +40,62 @@ import com.health.api.User
 import com.health.api.WaterEntry
 import com.health.api.Workout
 import com.health.api.WorkoutType
+import com.health.api.ContinenceDay
+import com.health.api.ContinenceEntry
+import com.health.api.ContinenceKind
+import com.health.api.ContinenceSummary
+import com.health.api.Count
+import com.health.api.CrisisResource
+import com.health.api.Cycle
+import com.health.api.CycleDay
+import com.health.api.CycleOverview
+import com.health.api.CyclePhase
+import com.health.api.CyclePrediction
+import com.health.api.CycleToday
+import com.health.api.DatedValue
+import com.health.api.DoseLog
+import com.health.api.DoseStatus
+import com.health.api.DueDose
+import com.health.api.Flow
+import com.health.api.JournalEntry
+import com.health.api.JournalKind
+import com.health.api.LabResult
+import com.health.api.LeakSize
+import com.health.api.MedForm
+import com.health.api.MedSchedule
+import com.health.api.Medication
+import com.health.api.MedsDay
+import com.health.api.MindDay
+import com.health.api.MindSummary
+import com.health.api.Module
+import com.health.api.ModulesToday
+import com.health.api.MoodEntry
+import com.health.api.Mucus
+import com.health.api.ScheduleKind
+import com.health.api.ScoreBand
+import com.health.api.Screener
+import com.health.api.ScreenerDefinition
+import com.health.api.ScreenerResult
+import com.health.app.ui.modules.HubScreen
+import com.health.app.ui.modules.continence.ContinenceActions
+import com.health.app.ui.modules.continence.ContinenceScreen
+import com.health.app.ui.modules.continence.ContinenceState
+import com.health.app.ui.modules.continence.PelvicFloorScreen
+import com.health.app.ui.modules.cycle.CycleActions
+import com.health.app.ui.modules.cycle.CycleScreen
+import com.health.app.ui.modules.cycle.CycleState
+import com.health.app.ui.modules.meds.MedEditorScreen
+import com.health.app.ui.modules.meds.MedsActions
+import com.health.app.ui.modules.meds.MedsScreen
+import com.health.app.ui.modules.meds.MedsState
+import com.health.app.ui.modules.meds.MedsTab
+import com.health.app.ui.modules.mind.BreathingScreen
+import com.health.app.ui.modules.mind.JournalEditor
+import com.health.app.ui.modules.mind.MindActions
+import com.health.app.ui.modules.mind.MindHome
+import com.health.app.ui.modules.mind.MindState
+import com.health.app.ui.modules.mind.ScreenerScreen
+import com.health.app.ui.modules.mind.SupportContent
 import com.health.app.data.Palette
 import com.health.app.data.Settings
 import com.health.app.data.ThemeMode
@@ -114,7 +170,9 @@ class ScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
+        // A module's pages sit under Health, which shows once one is turned on.
+        val tabs = if (tab == "health") tabsFor(Module.entries.toSet()) else tabsFor(Module.DEFAULT)
+        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabs, content = content)
     }
 
     private fun save(name: String) {
@@ -378,5 +436,355 @@ class ScreenshotTest {
         val config = AuthConfig("Health at home", "0.1.0", localLogin = false, oidc = OidcButton("Sign in with Authentik"))
         render(dark = true) { SignInScreen("health.home.arpa", finishing = false, error = null, actions = noSignIn, initialConfig = "https://health.home.arpa" to config) }
         save("sign_in_sso_dark")
+    }
+
+    // ---- Health modules ----
+
+    private val allModules = Module.entries.toSet()
+
+    private val mindState: MindState by lazy {
+        val moods = listOf(3.2, 3.6, 4.0, 3.0, 2.4, 2.8, 3.4, 3.8, 4.2, 4.0, 3.6, 3.0, 3.4, 3.9, 4.4, 4.1, 3.7, 3.2, 3.5, 3.9, 4.2, 4.5, 4.0, 3.6, 3.3, 3.8, 4.1, 4.3, 3.9, 4.0)
+        val days = moods.mapIndexed { i, m -> MindDay(today.minusDays(29L - i).toString(), mood = m, entries = 1, mindfulMinutes = if (i % 3 == 0) 5.0 else 0.0) }
+        val phq = ScreenerResult(Screener.PHQ9, at(today.minusDays(14), 20), List(9) { if (it < 4) 1 else 0 }, score = 4, severity = "Minimal", id = "r1")
+        val gad = ScreenerResult(Screener.GAD7, at(today.minusDays(14), 20), List(7) { if (it < 3) 2 else 1 }, score = 10, severity = "Moderate", id = "r2")
+        MindState(
+            summary = MindSummary(
+                days, averageMood = moods.average(),
+                feelings = listOf(Count("calm", 11), Count("tired", 8), Count("hopeful", 6), Count("anxious", 4)),
+                patterns = listOf(
+                    Insight("good", "Sleep and mood", "On days after 7 hours or more of sleep, your mood averaged 4.0, against 3.1.", "sleep"),
+                ),
+                latest = listOf(phq, gad),
+                mindfulMinutes = 50.0,
+            ),
+            moods = listOf(MoodEntry(at(today, 9, 10), 4, feelings = listOf("calm", "hopeful"), id = "m1")),
+            journal = listOf(
+                JournalEntry(at(today.minusDays(1), 21, 30), JournalKind.GRATITUDE, gratitude = listOf("A long walk in the cold sun", "Soup with Sam", "Finishing the hard email"), id = "j1"),
+                JournalEntry(at(today.minusDays(3), 22, 0), JournalKind.FREE, title = "Busy week", text = "Lots on, but I made time to stretch every morning and it helped.", id = "j2"),
+            ),
+            screeners = listOf(phq9),
+            results = listOf(phq, gad),
+            resources = crisis,
+            loading = false,
+        )
+    }
+
+    private val crisis = listOf(
+        CrisisResource("988 Suicide & Crisis Lifeline", "Call or text 988", "US", "https://988lifeline.org"),
+        CrisisResource("Crisis Text Line", "Text HOME to 741741", "US", "https://www.crisistextline.org"),
+        CrisisResource("Trans Lifeline", "Call 877-565-8860", "US", "https://translifeline.org", note = "Peer support run by and for trans people"),
+    )
+
+    private val phq9 = ScreenerDefinition(
+        Screener.PHQ9, "PHQ-9", "Nine questions about the last two weeks, used widely to check in on low mood.",
+        "Over the last 2 weeks, how often have you been bothered by any of the following problems?",
+        listOf(
+            "Little interest or pleasure in doing things",
+            "Feeling down, depressed, or hopeless",
+            "Trouble falling or staying asleep, or sleeping too much",
+            "Feeling tired or having little energy",
+            "Poor appetite or overeating",
+            "Feeling bad about yourself, or that you are a failure or have let yourself or your family down",
+            "Trouble concentrating on things, such as reading the newspaper or watching television",
+            "Moving or speaking so slowly that other people could have noticed, or the opposite: being so fidgety or restless that you have been moving around a lot more than usual",
+            "Thoughts that you would be better off dead, or of hurting yourself in some way",
+        ),
+        listOf("Not at all", "Several days", "More than half the days", "Nearly every day"),
+        listOf(ScoreBand(0, "Minimal"), ScoreBand(5, "Mild"), ScoreBand(10, "Moderate"), ScoreBand(15, "Moderately severe"), ScoreBand(20, "Severe")),
+        "Kroenke, Spitzer & Williams, 2001",
+    )
+
+    @Test
+    fun mindLight() {
+        render { Frame("health") { MindHome(mindState, zone, MindActions()) } }
+        save("mind_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2200dp-xxhdpi")
+    fun mindDarkWhole() {
+        render(dark = true) { Frame("health") { MindHome(mindState, zone, MindActions()) } }
+        save("mind_full_dark")
+    }
+
+    private fun breathing(dark: Boolean, name: String) {
+        compose.mainClock.autoAdvance = false
+        render(dark) { Frame("health") { BreathingScreen("box-breathing", {}, {}, startRunning = true) } }
+        compose.mainClock.advanceTimeBy(2_500)
+        save(name)
+    }
+
+    @Test
+    fun breathingLight() = breathing(false, "breathing_light")
+
+    @Test
+    fun breathingDark() = breathing(true, "breathing_dark")
+
+    private val someAnswers: List<Int?> = listOf(1, 2, 1, 2, 0, 1, null, null, null)
+
+    @Test
+    fun phq9Light() {
+        render { Frame("health") { ScreenerScreen(phq9, mindState.results, null, crisis, zone, {}, {}, {}, someAnswers) } }
+        save("phq9_light")
+    }
+
+    @Test
+    fun phq9Dark() {
+        render(dark = true) { Frame("health") { ScreenerScreen(phq9, mindState.results, null, crisis, zone, {}, {}, {}, someAnswers) } }
+        save("phq9_dark")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
+    fun phq9Result() {
+        val result = ScreenerResult(Screener.PHQ9, now, List(9) { 1 }, score = 9, severity = "Mild", id = "r3")
+        render { Frame("health") { ScreenerScreen(phq9, mindState.results + result, result, crisis, zone, {}, {}, {}) } }
+        save("phq9_result")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
+    fun supportSheet() {
+        render(dark = true) { Backdrop { SupportContent(crisis) } }
+        save("mind_support_dark")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1600dp-xxhdpi")
+    fun thoughtRecord() {
+        render { Frame("health") { JournalEditor(null, JournalKind.THOUGHT_RECORD, {}, {}, null) } }
+        save("mind_thought_record")
+    }
+
+    private val cycleOverview: CycleOverview by lazy {
+        fun period(start: LocalDate, flows: List<Flow>) = flows.mapIndexed { i, f ->
+            CycleDay(start.plusDays(i.toLong()).toString(), f, if (i < 2) listOf("cramps", "fatigue") else emptyList(), pain = if (i == 0) 5 else null)
+        }
+        val periods = listOf(LocalDate.of(2026, 9, 7), LocalDate.of(2026, 10, 5), LocalDate.of(2026, 11, 2))
+        val flows = listOf(Flow.MEDIUM, Flow.HEAVY, Flow.MEDIUM, Flow.LIGHT, Flow.SPOTTING)
+        val days = periods.flatMap { period(it, flows) } +
+            CycleDay("2026-11-10", symptoms = listOf("headache"), mucus = Mucus.CREAMY) +
+            CycleDay("2026-11-12", mucus = Mucus.WATERY, temperature = 36.42)
+        CycleOverview(
+            days = days,
+            cycles = listOf(
+                Cycle("2026-09-07", 28, 5, ovulation = "2026-09-21"),
+                Cycle("2026-10-05", 28, 5, ovulation = "2026-10-19"),
+                Cycle("2026-11-02", null, 5),
+            ),
+            averageCycle = 28.0, averagePeriod = 5.0, variation = 0.8,
+            prediction = CyclePrediction("2026-11-30", "2026-11-28", "2026-12-02", "2026-11-11", "2026-11-16", "2026-11-15", "medium"),
+            cycleDay = 11, phase = CyclePhase.FERTILE, daysUntilPeriod = 18,
+            temperatures = (0 until 40).map { i ->
+                val d = today.minusDays(39L - i)
+                DatedValue(d.toString(), 36.3 + (if (i in 14..27) 0.3 else 0.0) + 0.05 * sin(i * 1.3))
+            },
+        )
+    }
+
+    @Test
+    fun cycleLight() {
+        render { Frame("health") { CycleScreen(CycleState(today, overview = cycleOverview, loading = false), Units.METRIC, CycleActions()) } }
+        save("cycle_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2200dp-xxhdpi")
+    fun cycleDarkWhole() {
+        render(dark = true) { Frame("health") { CycleScreen(CycleState(today, overview = cycleOverview, loading = false), Units.METRIC, CycleActions()) } }
+        save("cycle_full_dark")
+    }
+
+    private val continenceState: ContinenceState by lazy {
+        val entries = listOf(
+            ContinenceEntry(at(today, 3, 40), ContinenceKind.URINATION, urgency = 1, night = true, id = "c1"),
+            ContinenceEntry(at(today, 7, 5), ContinenceKind.URINATION, volumeMl = 380, urgency = 2, id = "c2"),
+            ContinenceEntry(at(today, 8, 30), ContinenceKind.BOWEL, bristol = 4, id = "c3"),
+            ContinenceEntry(at(today, 10, 15), ContinenceKind.LEAK, leak = LeakSize.SMALL, triggers = listOf("cough", "sneeze"), id = "c4"),
+            ContinenceEntry(at(today, 11, 0), ContinenceKind.URINATION, urgency = 0, id = "c5"),
+            ContinenceEntry(at(today, 12, 30), ContinenceKind.PELVIC_FLOOR, reps = 10, holdSeconds = 5, id = "c6"),
+            ContinenceEntry(at(today, 13, 50), ContinenceKind.URINATION, urgency = 3, id = "c7"),
+        ).map { it.copy(date = today.toString()) }
+        val leaks = listOf(2, 1, 0, 1, 3, 1, 0, 0, 1, 2, 0, 1, 0, 1)
+        ContinenceState(
+            today, entries,
+            ContinenceSummary(
+                days = leaks.mapIndexed { i, l -> ContinenceDay(today.minusDays(13L - i).toString(), voids = 6 + (i % 3), nightVoids = i % 2 + 1, leaks = l, fluidMl = 1600) },
+                averageVoids = 7.0, averageNightVoids = 1.5, averageLeaks = 0.9,
+                triggers = listOf(Count("cough", 6), Count("sneeze", 4), Count("lifting", 2)),
+                averageInterval = 140,
+                patterns = listOf(Insight("info", "Coughs and sneezes", "Most leaks came with a cough or sneeze. Squeezing your pelvic floor just before can help.", "water")),
+            ),
+            loading = false,
+        )
+    }
+
+    @Test
+    fun continenceLight() {
+        render { Frame("health") { ContinenceScreen(continenceState, zone, ContinenceActions()) } }
+        save("continence_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2000dp-xxhdpi")
+    fun continenceDarkWhole() {
+        render(dark = true) { Frame("health") { ContinenceScreen(continenceState, zone, ContinenceActions()) } }
+        save("continence_full_dark")
+    }
+
+    @Test
+    fun pelvicFloor() {
+        render { Frame("health") { PelvicFloorScreen({}) { _, _ -> } } }
+        save("pelvic_floor")
+    }
+
+    private val estradiol = Medication("Estradiol", "2 mg", MedForm.PILL, MedSchedule(times = listOf("08:00", "20:00")), purpose = "HRT", stock = 6, id = "e")
+    private val spiro = Medication("Spironolactone", "50 mg", schedule = MedSchedule(times = listOf("09:00")), stock = 48, id = "s")
+    private val shot = Medication(
+        "Estradiol valerate", "5 mg (0.25 ml)", MedForm.INJECTION, MedSchedule(ScheduleKind.WEEKLY, listOf("19:30"), weekdays = listOf(4)),
+        sites = listOf("Left thigh", "Right thigh", "Left abdomen", "Right abdomen"), id = "v",
+    )
+    private val vitaminD = Medication("Vitamin D", "1000 IU", MedForm.SUPPLEMENT, MedSchedule(times = listOf("09:00")), reminders = false, id = "d")
+    private val ibuprofen = Medication("Ibuprofen", "200 mg", schedule = MedSchedule(ScheduleKind.AS_NEEDED, emptyList()), id = "i")
+    private val finasteride = Medication("Finasteride", "1 mg", active = false, id = "f")
+
+    private val medsDay = MedsDay(
+        today.toString(),
+        due = listOf(
+            DueDose("e", "Estradiol", "2 mg", MedForm.PILL, at(today, 8), DoseLog("e", at(today, 8, 12), scheduledFor = at(today, 8))),
+            DueDose("s", "Spironolactone", "50 mg", MedForm.PILL, at(today, 9), DoseLog("s", at(today, 9, 4), scheduledFor = at(today, 9))),
+            DueDose("d", "Vitamin D", "1000 IU", MedForm.SUPPLEMENT, at(today, 9), DoseLog("d", at(today, 9, 30), DoseStatus.SKIPPED, scheduledFor = at(today, 9))),
+            DueDose("v", "Estradiol valerate", "5 mg (0.25 ml)", MedForm.INJECTION, at(today, 19, 30), nextSite = "Right thigh"),
+            DueDose("e", "Estradiol", "2 mg", MedForm.PILL, at(today, 20)),
+        ),
+        asNeeded = listOf(ibuprofen),
+        extra = listOf(DoseLog("i", at(today, 11, 45))),
+        adherence7d = 94,
+        lowStock = listOf(estradiol),
+    )
+
+    private val labs = listOf(
+        LabResult("Estradiol", 96.0, "pg/mL", at(today.minusDays(180), 9), 100.0, 200.0, id = "l1"),
+        LabResult("Estradiol", 142.0, "pg/mL", at(today.minusDays(90), 9), 100.0, 200.0, id = "l2"),
+        LabResult("Estradiol", 168.0, "pg/mL", at(today.minusDays(7), 9), 100.0, 200.0, id = "l3"),
+        LabResult("Testosterone", 85.0, "ng/dL", at(today.minusDays(180), 9), high = 50.0, id = "l4"),
+        LabResult("Testosterone", 32.0, "ng/dL", at(today.minusDays(90), 9), high = 50.0, id = "l5"),
+        LabResult("Testosterone", 24.0, "ng/dL", at(today.minusDays(7), 9), high = 50.0, id = "l6"),
+        LabResult("Potassium", 4.4, "mmol/L", at(today.minusDays(7), 9), 3.5, 5.1, id = "l7"),
+    )
+
+    private val medsState get() = MedsState(today, MedsTab.TODAY, medsDay, listOf(estradiol, spiro, shot, vitaminD, ibuprofen, finasteride), labs, loading = false)
+
+    @Test
+    fun medsLight() {
+        render { Frame("health") { MedsScreen(medsState, zone, MedsActions()) } }
+        save("meds_today_light")
+    }
+
+    @Test
+    fun medsDark() {
+        render(dark = true) { Frame("health") { MedsScreen(medsState, zone, MedsActions(), canBeExact = false) } }
+        save("meds_today_dark")
+    }
+
+    @Test
+    fun medsList() {
+        render { Frame("health") { MedsScreen(medsState.copy(tab = MedsTab.ALL), zone, MedsActions()) } }
+        save("meds_list")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1600dp-xxhdpi")
+    fun medsLabsDark() {
+        render(dark = true) { Frame("health") { MedsScreen(medsState.copy(tab = MedsTab.LABS), zone, MedsActions()) } }
+        save("meds_labs_dark")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1800dp-xxhdpi")
+    fun medEditor() {
+        render { Frame("health") { MedEditorScreen(shot, {}, {}, {}) } }
+        save("meds_editor")
+    }
+
+    @Test
+    fun hub() {
+        render { Frame("health") { HubScreen(allModules, showDevices = true) {} } }
+        save("health_hub")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    fun featuresLight() {
+        render { Frame("settings") { SettingsScreen(settings, profile.copy(modules = Module.DEFAULT + Module.MIND + Module.MEDICATIONS), SettingsActions()) } }
+        save("settings_features_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    fun featuresDark() {
+        render(dark = true) { Frame("settings") { SettingsScreen(settings, profile.copy(modules = allModules), SettingsActions()) } }
+        save("settings_features_dark")
+    }
+
+    private val modulesToday = ModulesToday(
+        mind = MindDay(today.toString(), mood = 4.0, entries = 2, mindfulMinutes = 6.0, journal = 1),
+        cycle = CycleToday(11, CyclePhase.FERTILE, 18, CycleDay(today.toString(), mucus = Mucus.WATERY)),
+        continence = ContinenceDay(today.toString(), voids = 4, nightVoids = 1, leaks = 1, bowel = 1, pelvicFloor = 1),
+        meds = medsDay,
+    )
+
+    private fun allTabs() = tabsFor(allModules)
+
+    @Test
+    @Config(qualifiers = "w411dp-h3600dp-xxhdpi")
+    fun todayAllModulesLight() {
+        val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
+        render {
+            AppFrame("today", remember { SnackbarHostState() }, {}, allTabs()) {
+                TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = allModules)
+            }
+        }
+        save("today_all_modules_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h3600dp-xxhdpi")
+    fun todayAllModulesDark() {
+        val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
+        render(dark = true) {
+            AppFrame("today", remember { SnackbarHostState() }, {}, allTabs()) {
+                TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = allModules)
+            }
+        }
+        save("today_all_modules_dark")
+    }
+
+    @Test
+    fun todayModulesOnly() {
+        val only = setOf(Module.MIND, Module.CYCLE, Module.MEDICATIONS)
+        val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
+        render {
+            AppFrame("today", remember { SnackbarHostState() }, {}, tabsFor(only)) {
+                TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = only)
+            }
+        }
+        save("today_modules_only")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    fun trendsWithModules() {
+        val days = trendsState.trends!!.days.mapIndexed { i, d ->
+            d.copy(
+                mood = 3.0 + sin(i / 3.0), mindfulMinutes = if (i % 3 == 0) 5.0 else null,
+                flow = if (i in 21..25) listOf(Flow.MEDIUM, Flow.HEAVY, Flow.MEDIUM, Flow.LIGHT, Flow.SPOTTING)[i - 21] else null,
+                voids = 6 + i % 3, nightVoids = i % 2, leaks = listOf(0, 1, 0, 2)[i % 4],
+                dosesDue = 4, dosesTaken = if (i % 6 == 0) 3 else 4,
+            )
+        }
+        val state = trendsState.copy(trends = trendsState.trends!!.copy(days = days))
+        render { AppFrame("trends", remember { SnackbarHostState() }, {}, allTabs()) { TrendsScreen(state, Units.METRIC, goals, zone, TrendsActions(), modules = allModules) } }
+        save("trends_modules")
     }
 }

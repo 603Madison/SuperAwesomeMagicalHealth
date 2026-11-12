@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.MonitorWeight
@@ -64,6 +65,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.CheckIn
+import com.health.api.ContinenceKind
+import com.health.api.DueDose
+import com.health.api.Module
 import com.health.api.DaySummary
 import com.health.api.Insight
 import com.health.api.Score
@@ -113,18 +117,25 @@ class TodayActions(
     val logSleep: (com.health.api.SleepSession) -> Unit = {},
     val saveCheckIn: (CheckIn) -> Unit = {},
     val openDevices: () -> Unit = {},
+    /** Opens a module's page ("mind", "cycle?log=2026-11-12", "continence", "meds"). */
+    val open: (String) -> Unit = {},
+    val quickMood: (Int) -> Unit = {},
+    val logContinence: (ContinenceKind) -> Unit = {},
+    val takeDose: (DueDose, String?) -> Unit = { _, _ -> },
 )
 
 @Composable
-fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit) {
+fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen: (String) -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { TodayViewModel(c) }
     val state by vm.state.collectAsState()
     val settings by c.settings.collectAsState()
+    val profile by c.profile.collectAsState()
     TodayScreen(
         state = state,
         units = settings.units,
         zone = c.zone(),
+        modules = profile?.modules ?: Module.DEFAULT,
         actions = TodayActions(
             go = vm::go,
             refresh = vm::refresh,
@@ -136,6 +147,10 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit) {
             logSleep = vm::logSleep,
             saveCheckIn = vm::saveCheckIn,
             openDevices = onOpenDevices,
+            open = onOpen,
+            quickMood = vm::quickMood,
+            logContinence = vm::logContinence,
+            takeDose = vm::takeDose,
         ),
     )
 }
@@ -143,7 +158,7 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit) {
 private enum class Dialog { WEIGHT, WORKOUT, SLEEP, CHECK_IN }
 
 @Composable
-fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayActions) {
+fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayActions, modules: Set<Module> = Module.DEFAULT) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var sheet by remember { mutableStateOf<Pair<String, Score>?>(null) }
     val summary = state.summary
@@ -162,23 +177,37 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                     state.error != null && summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
                     summary != null -> {
                         state.error?.let { ErrorCard(it, actionLabel = "Try again", onAction = actions.retry) }
-                        Scores(summary) { name, score -> sheet = name to score }
-                        if (!summary.hasData) NoDataCard(actions.openDevices)
+                        val tracking = Module.ACTIVITY in modules || Module.SLEEP in modules
+                        if (tracking) Scores(summary) { name, score -> sheet = name to score }
+                        if (!summary.hasData && tracking) NoDataCard(actions.openDevices)
                         summary.insights.forEach { InsightCard(it) }
                         QuickActions(
+                            modules,
                             onFood = { actions.logFood(state.date) },
                             onWater = { actions.addWater(250) },
                             onWeight = { dialog = Dialog.WEIGHT },
                             onWorkout = { dialog = Dialog.WORKOUT },
                             onSleep = { dialog = Dialog.SLEEP },
                             onCheckIn = { dialog = Dialog.CHECK_IN },
+                            onPeriod = { actions.open("cycle?log=${state.date}") },
                         )
-                        ActivityCard(summary, units)
-                        SleepCard(summary.sleepSummary, zone) { dialog = Dialog.SLEEP }
-                        HeartCard(summary, units, zone)
-                        FoodCard(summary, units, onLog = { actions.logFood(state.date) }, onWater = actions.addWater)
-                        if (summary.workouts.isNotEmpty()) WorkoutsCard(summary.workouts, units, zone)
-                        BodyCard(summary, units) { dialog = Dialog.WEIGHT }
+                        val isToday = state.date == state.today
+                        if (Module.MEDICATIONS in modules && (isToday || summary.modules.meds?.due?.isNotEmpty() == true)) {
+                            MedsTodayCard(summary.modules.meds, zone, actions.takeDose) { actions.open("meds") }
+                        }
+                        if (Module.MIND in modules) MindTodayCard(summary.modules.mind, actions.quickMood) { actions.open("mind") }
+                        if (Module.CYCLE in modules) {
+                            CycleTodayCard(summary.modules.cycle, onLog = { actions.open("cycle?log=${state.date}") }) { actions.open("cycle") }
+                        }
+                        if (Module.CONTINENCE in modules) {
+                            ContinenceTodayCard(summary.modules.continence, actions.logContinence) { actions.open("continence") }
+                        }
+                        if (Module.ACTIVITY in modules) ActivityCard(summary, units)
+                        if (Module.SLEEP in modules) SleepCard(summary.sleepSummary, zone) { dialog = Dialog.SLEEP }
+                        if (tracking) HeartCard(summary, units, zone)
+                        if (Module.NUTRITION in modules) FoodCard(summary, units, onLog = { actions.logFood(state.date) }, onWater = actions.addWater)
+                        if (summary.workouts.isNotEmpty() && Module.ACTIVITY in modules) WorkoutsCard(summary.workouts, units, zone)
+                        if (Module.BODY in modules) BodyCard(summary, units) { dialog = Dialog.WEIGHT }
                         CheckInCard(summary.checkIn) { dialog = Dialog.CHECK_IN }
                     }
                 }
@@ -289,13 +318,25 @@ fun InsightCard(insight: Insight) {
 }
 
 @Composable
-private fun QuickActions(onFood: () -> Unit, onWater: () -> Unit, onWeight: () -> Unit, onWorkout: () -> Unit, onSleep: () -> Unit, onCheckIn: () -> Unit) {
+private fun QuickActions(
+    modules: Set<Module>,
+    onFood: () -> Unit,
+    onWater: () -> Unit,
+    onWeight: () -> Unit,
+    onWorkout: () -> Unit,
+    onSleep: () -> Unit,
+    onCheckIn: () -> Unit,
+    onPeriod: () -> Unit,
+) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QuickAction(Icons.Rounded.Restaurant, "Food", onFood)
-        QuickAction(Icons.Rounded.WaterDrop, "+250 ml", onWater)
-        QuickAction(Icons.Rounded.MonitorWeight, "Weight", onWeight)
-        QuickAction(Icons.Rounded.FitnessCenter, "Workout", onWorkout)
-        QuickAction(Icons.Rounded.Bedtime, "Sleep", onSleep)
+        if (Module.NUTRITION in modules) {
+            QuickAction(Icons.Rounded.Restaurant, "Food", onFood)
+            QuickAction(Icons.Rounded.WaterDrop, "+250 ml", onWater)
+        }
+        if (Module.CYCLE in modules) QuickAction(Icons.Rounded.CalendarMonth, "Period", onPeriod)
+        if (Module.BODY in modules) QuickAction(Icons.Rounded.MonitorWeight, "Weight", onWeight)
+        if (Module.ACTIVITY in modules) QuickAction(Icons.Rounded.FitnessCenter, "Workout", onWorkout)
+        if (Module.SLEEP in modules) QuickAction(Icons.Rounded.Bedtime, "Sleep", onSleep)
         QuickAction(Icons.Rounded.Mood, "Check in", onCheckIn)
     }
 }
