@@ -4,7 +4,9 @@ Your own health server. Wearables (Colmi rings, Pebble, Garmin, anything in Heal
 Connect or Gadgetbridge) send heart rate, HRV, sleep, steps and workouts in through the phone app;
 you log food, water, weight and how you feel; and the server turns it into Oura-style
 **readiness, sleep and activity scores** against your own baseline, with plain-English insights,
-trends and calorie targets. Everything stays on your server.
+trends and calorie targets. Turn on what else you want to keep track of: **mood and mental
+health**, **your cycle**, a **bladder and bowel diary**, and **medications** with reminders.
+Everything stays on your server, and the private parts are encrypted there.
 
 It's part of the SuperAwesomeMagical family (Music, Weather, Cockpit Manager) and looks like it:
 Lexend, rounded cards over a soft glow, and the **Aurora** theme (purple and green) by default,
@@ -13,10 +15,11 @@ with Violet, Ocean and Ember, light and dark.
 - **Server** (`server/`): Kotlin and Ktor with SQLite, in one container for Podman or Docker.
   Signs people in with **Authentik** (or any OpenID Connect provider), with a local
   **break-glass admin** that always works.
-- **Web app** (`web/`): React, served by the server. Today, Sleep, Activity, Food, Body, Trends,
-  Devices, Settings and Admin.
-- **Android app** (`android/`): logs food (with barcode scanning), weight, workouts and
-  check-ins, shows your days and trends, and carries data from your wearables to the server.
+- **Web app** (`web/`): React, served by the server. Today, Sleep, Activity, Food, Body, Mind,
+  Cycle, Bladder & bowel, Medications, Trends, Devices, Settings and Admin.
+- **Android app** (`android/`): logs food (with barcode scanning), weight, workouts, mood,
+  periods, toilet trips and doses (with reminders), shows your days and trends, and carries data
+  from your wearables to the server.
 - **AI connector** (MCP): bring your data to the AI of your choice, to ask about it, spot
   patterns, log meals by chat, and troubleshoot device syncs.
 
@@ -45,6 +48,32 @@ aiming for.
 **Devices**: data from several devices is combined sensibly (a ring and a phone don't both count
 the same steps; the night with sleep stages wins over one without). Sending the same data again
 is harmless.
+
+## Features you turn on
+
+Settings › **Features**: each person picks what they use. Activity, sleep, food and body are on
+to start; these are opt-in, encrypted on the server (AES-GCM, with a key file kept beside the
+database), and shown to an AI connector only if the person says so when making its link:
+
+- **Mind**: log mood (with energy, anxiety, feelings and what it's about) as often as you like,
+  and see a month of it with **what seems to help** (mood after good nights, on workout days,
+  after calm practice). **Calm tools**: box, 4-7-8 and coherent breathing, 5-4-3-2-1 grounding
+  and a quiet timer. **Check-ins**: the PHQ-9 (depression) and GAD-7 (anxiety) questionnaires,
+  scored and charted over time. A private **journal** with prompts, gratitude lists and CBT
+  thought records. **I need support** is always one tap away, with the support lines your admin
+  sets (988, Trans Lifeline, Samaritans and others to start), and it opens by itself if a
+  check-in's answers call for it.
+- **Cycle**: periods, symptoms, pain, ovulation tests, mucus and basal temperature. Averages,
+  the next period with a likely range and confidence, the estimated fertile window, and ovulation
+  confirmed by a sustained temperature rise from your ring or basal temperature. Readiness
+  understands that a warmer, faster heart after ovulation is normal.
+- **Bladder & bowel**: one-tap diary of toilet trips, leaks, bowel movements and pad changes,
+  with urgency, leak size, triggers and the Bristol scale; night-time trips from your recorded
+  sleep; patterns worth knowing; a guided **pelvic floor exercise**; and a printable **3-day
+  bladder diary** for your doctor.
+- **Medications**: medications and supplements on daily, weekly, every-few-days or as-needed
+  schedules; Take and Skip, reminders on the phone, adherence, doses left, **injection and patch
+  site rotation**, and **lab results** charted over time.
 
 ## Running it
 
@@ -153,8 +182,13 @@ your devices and removable there.
 Its tools: `status`, `day`, `trends`, `sleep`, `workouts`, `food_log`, `profile`,
 `search_foods`, and for troubleshooting `devices`, `sync_check` (gaps and duplicate nights per
 device and day) and `readings` (raw data as devices sent it). Links made with **Let it log
-entries** add `log_food`, `log_water`, `log_weight`, `log_workout` and `check_in`. An admin's
-**every-account** link reads any account, plus `server_log` and `recent_warnings`.
+entries** add `log_food`, `log_water`, `log_weight`, `log_workout` and `check_in`.
+
+The private features are opt-in per link: **Also let it see** Mind (`mind`, `journal`), Cycle
+(`cycle`), Bladder & bowel (`continence`) or Medications (`medications`), with `log_mood`,
+`log_cycle_day`, `log_continence` and `log_dose` for links that may log. An admin's
+**every-account** link reads any account's activity, sleep, food and devices, plus `server_log`
+and `recent_warnings`, but never the private features.
 
 ## Building
 

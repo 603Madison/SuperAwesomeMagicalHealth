@@ -14,6 +14,12 @@
 - `web/`: React + Vite + TypeScript, built into the server's jar.
 - `android/`: Jetpack Compose, signs in to the server; device conduits in `devices/`, sync in
   `sync/`.
+- Health modules (`Module` in `shared/…/Modules.kt`, `server/…/modules/`): each person turns them
+  on in `Profile.modules`. The sensitive ones (mind, cycle, continence, medications) keep their
+  entries sealed in the `entries` and `medications` tables (`EntryStore`, `SecretBox`), add their
+  part of a day through `ModuleService` (Today, Trends, insights tagged with their `module`), and
+  are only visible to AI connector links whose `scope` names them; every-account links never see
+  them. Keep it that way, and keep the copy for these modules kind, plain and never gendered.
 
 ## Design
 
