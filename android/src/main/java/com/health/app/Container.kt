@@ -15,6 +15,7 @@ import com.health.api.Share
 import com.health.app.net.ServerApi
 import com.health.app.net.SignIn
 import com.health.app.net.appointments
+import com.health.app.net.fields
 import com.health.app.net.habitsForReminders
 import com.health.app.reminders.DigestWorker
 import com.health.app.reminders.DoseOutbox
@@ -117,7 +118,27 @@ class Container(val context: Context) {
         _viewing.value = share
         _viewProfile.value = null
         if (share != null) _viewProfile.value = runCatching { viewApi.profile() }.getOrNull()
+        _fields.value = null
+        refreshFields()
         dataChanged()
+    }
+
+    private val _fields = MutableStateFlow<com.health.api.FieldLayout?>(null)
+
+    /**
+     * Which fields the forms show (from the person's conditions and choices, or what's shared while
+     * viewing). Null until loaded: screens then use [com.health.api.Fields.DEFAULTS].
+     */
+    val fields: StateFlow<com.health.api.FieldLayout?> = _fields.asStateFlow()
+
+    /** Reloads [fields]: after signing in, viewing a share, or changing conditions or fields. */
+    suspend fun refreshFields() {
+        _fields.value = try {
+            ui.fields()
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't load the fields", e)
+            _fields.value
+        }
     }
 
     /** The features to show: the viewed person's shared ones while viewing, else the person's own. */
@@ -217,6 +238,7 @@ class Container(val context: Context) {
                     runCatching { flushDoses() }
                 } else {
                     _profile.value = null
+                    _fields.value = null
                 }
             }
         }
@@ -247,6 +269,7 @@ class Container(val context: Context) {
         if (p.timezone.isBlank()) p = api.saveProfile(p.copy(timezone = ZoneId.systemDefault().id))
         _profile.value = p
         prefs.update { it.copy(units = p.units) }
+        refreshFields()
         p
     } catch (e: Exception) {
         Log.w(TAG, "Couldn't load the profile", e)
@@ -258,6 +281,7 @@ class Container(val context: Context) {
         val saved = api.saveProfile(profile)
         _profile.value = saved
         prefs.update { it.copy(units = saved.units) }
+        if (before != saved.modules) refreshFields()
         dataChanged()
         if (before != saved.modules || saved.reminders != reminderCache.prefs()) runCatching { refreshReminders() }
         return saved
@@ -298,6 +322,7 @@ class Container(val context: Context) {
         _viewing.value = null
         _viewProfile.value = null
         _profile.value = null
+        _fields.value = null
     }
 
     companion object {
