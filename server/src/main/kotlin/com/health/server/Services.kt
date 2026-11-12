@@ -162,7 +162,7 @@ class Services(
                     oidc = current.oidc.copy(
                         enabled = if (env["SAMH_OIDC_ISSUER"] != null && env["SAMH_OIDC_CLIENT_ID"] != null) true else current.oidc.enabled,
                         issuer = env["SAMH_OIDC_ISSUER"] ?: current.oidc.issuer,
-                        clientId = env["SAMH_OIDC_CLIENT_ID"] ?: current.oidc.clientId,
+                        clientId = env["SAMH_OIDC_CLIENT_ID"]?.trim() ?: current.oidc.clientId,
                         buttonLabel = env["SAMH_OIDC_BUTTON_LABEL"] ?: current.oidc.buttonLabel,
                         userGroup = env["SAMH_OIDC_USER_GROUP"] ?: current.oidc.userGroup,
                         adminGroup = env["SAMH_OIDC_ADMIN_GROUP"] ?: current.oidc.adminGroup,
@@ -170,7 +170,7 @@ class Services(
                     ),
                 )
             }
-            env["SAMH_OIDC_CLIENT_SECRET"]?.let { settings.setOidcClientSecret(it) }
+            env["SAMH_OIDC_CLIENT_SECRET"]?.let { settings.setOidcClientSecret(it.trim()) }
         }
         sessions.purgeExpired()
     }

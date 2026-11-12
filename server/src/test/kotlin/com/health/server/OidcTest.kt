@@ -38,6 +38,8 @@ class OidcTest {
     @Volatile private var tokenIssuer: String? = null
     @Volatile private var signingKey: RSAKey = key
     @Volatile private var lastVerifier = ""
+    /** How the fake provider takes the client secret: "basic" (the header) or "post" (the form). */
+    @Volatile private var tokenAuth = "basic"
 
     @Before
     fun start() {
@@ -51,10 +53,14 @@ class OidcTest {
                 "/application/o/samh/token/" -> {
                     val form = request.body.readUtf8()
                     lastVerifier = Regex("code_verifier=([^&]+)").find(form)?.groupValues?.get(1).orEmpty()
-                    if ("code=good-code" !in form || request.getHeader("Authorization") == null) {
-                        MockResponse().setResponseCode(400).setBody("""{"error":"invalid_grant"}""")
-                    } else {
-                        MockResponse().setBody("""{"access_token":"at","token_type":"Bearer","id_token":"${idToken()}"}""")
+                    val basic = request.getHeader("Authorization")
+                    val posted = Regex("client_secret=([^&]+)").find(form)?.groupValues?.get(1)?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+                    val clientOk = if (tokenAuth == "basic") basic == okhttp3.Credentials.basic("samh-client", "secret")
+                    else posted == "secret" && basic == null
+                    when {
+                        !clientOk -> MockResponse().setResponseCode(401).setBody("""{"error":"invalid_client","error_description":"Client authentication failed"}""")
+                        "code=good-code" !in form -> MockResponse().setResponseCode(400).setBody("""{"error":"invalid_grant"}""")
+                        else -> MockResponse().setBody("""{"access_token":"at","token_type":"Bearer","id_token":"${idToken()}"}""")
                     }
                 }
                 else -> MockResponse().setResponseCode(404)
@@ -105,6 +111,33 @@ class OidcTest {
         val back = browser.get("/api/auth/oidc/callback?code=$code&state=$state")
         assertEquals(HttpStatusCode.Found, back.status)
         return back.headers["Location"]!! to browser
+    }
+
+    @Test
+    fun `a provider that takes the secret in the form is tried that way too`() = serverTest { services ->
+        services.configure()
+        tokenAuth = "post"
+        val (location, _) = signIn()
+        assertEquals("/trends", location)
+    }
+
+    @Test
+    fun `a secret pasted with stray spaces still works`() = serverTest { services ->
+        services.configure()
+        services.settings.setOidcClientSecret("  secret\n")
+        assertEquals("/trends", signIn().first)
+    }
+
+    @Test
+    fun `without a saved secret, the error says what to do`() = serverTest { services ->
+        services.configure()
+        services.settings.setOidcClientSecret("")
+        val (location, _) = signIn()
+        val message = java.net.URLDecoder.decode(location, "UTF-8")
+        assertTrue(message, message.contains("none is saved") && message.contains("Admin › Sign-in"))
+        services.settings.setOidcClientSecret("not-the-secret")
+        val wrong = java.net.URLDecoder.decode(signIn().first, "UTF-8")
+        assertTrue(wrong, wrong.contains("must match exactly"))
     }
 
     @Test

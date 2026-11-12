@@ -57,6 +57,8 @@ class OidcClient(
         val jwksUri: String?,
         val userinfoEndpoint: String?,
         val endSessionEndpoint: String?,
+        /** How the provider takes the client's secret at the token endpoint (empty: not said, so either). */
+        val tokenAuthMethods: List<String> = emptyList(),
     )
 
     private val discoveries = ConcurrentHashMap<String, Pair<Long, Discovery>>()
@@ -78,6 +80,8 @@ class OidcClient(
             jwksUri = json.string("jwks_uri"),
             userinfoEndpoint = json.string("userinfo_endpoint"),
             endSessionEndpoint = json.string("end_session_endpoint"),
+            tokenAuthMethods = (json["token_endpoint_auth_methods_supported"] as? kotlinx.serialization.json.JsonArray)
+                ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.orEmpty(),
         )
         if (found.issuer.trimEnd('/') != key.trimEnd('/')) {
             throw ApiError.upstream("The provider calls itself ${found.issuer}, not $key: check the issuer address")
@@ -114,23 +118,57 @@ class OidcClient(
         verifier: String,
         nonce: String,
     ): OidcIdentity {
-        val form = FormBody.Builder()
-            .add("grant_type", "authorization_code")
-            .add("code", code)
-            .add("redirect_uri", redirectUri)
-            .add("code_verifier", verifier)
-            .add("client_id", settings.clientId)
-            .build()
-        val request = Request.Builder().url(discovery.tokenEndpoint).post(form).apply {
-            if (clientSecret.isNotEmpty()) header("Authorization", Credentials.basic(settings.clientId, clientSecret))
-        }.header("Accept", "application/json").build()
-        val tokens = try {
-            Json.parseToJsonElement(http.fetchString(request)).jsonObject
-        } catch (e: Exception) {
-            throw ApiError.upstream("The provider didn't accept the sign-in (${e.message ?: e.javaClass.simpleName})")
+        val clientId = settings.clientId.trim()
+        val secret = clientSecret.trim()
+        // The secret goes the way the provider says it takes it: in the Authorization header
+        // (client_secret_basic, the default) or in the form (client_secret_post). If the first way
+        // is refused as invalid_client, the other is tried once: the code isn't used up by that.
+        val methods = if (secret.isEmpty()) listOf("none") else {
+            val supported = discovery.tokenAuthMethods
+            when {
+                supported.isEmpty() || "client_secret_basic" in supported -> listOf("client_secret_basic", "client_secret_post")
+                "client_secret_post" in supported -> listOf("client_secret_post", "client_secret_basic")
+                else -> listOf("client_secret_basic", "client_secret_post")
+            }
+        }
+        fun request(method: String): Request {
+            val form = FormBody.Builder()
+                .add("grant_type", "authorization_code")
+                .add("code", code)
+                .add("redirect_uri", redirectUri)
+                .add("code_verifier", verifier)
+                .add("client_id", clientId)
+                .apply { if (method == "client_secret_post") add("client_secret", secret) }
+                .build()
+            return Request.Builder().url(discovery.tokenEndpoint).post(form).apply {
+                if (method == "client_secret_basic") header("Authorization", Credentials.basic(clientId, secret))
+            }.header("Accept", "application/json").build()
+        }
+        var tokens: JsonObject? = null
+        var failure: Exception? = null
+        for (method in methods) {
+            try {
+                tokens = Json.parseToJsonElement(http.fetchString(request(method))).jsonObject
+                break
+            } catch (e: Exception) {
+                failure = e
+                if (!(e.message ?: "").contains("invalid_client")) break
+            }
+        }
+        if (tokens == null) {
+            val detail = failure?.message ?: failure?.javaClass?.simpleName ?: "no answer"
+            throw ApiError.upstream(
+                when {
+                    !detail.contains("invalid_client") -> "The provider didn't accept the sign-in ($detail)"
+                    secret.isEmpty() -> "The provider wants this server's client secret, and none is saved. In Authentik, open the " +
+                        "provider, copy its Client Secret, and paste it into Admin › Sign-in (or set SAMH_OIDC_CLIENT_SECRET)."
+                    else -> "The provider didn't accept this server's client ID and secret. Copy the Client ID and Client Secret " +
+                        "from the provider in Authentik again and paste them into Admin › Sign-in: they must match exactly."
+                },
+            )
         }
         val idToken = tokens.string("id_token") ?: throw ApiError.upstream("The provider sent no ID token (is the openid scope on?)")
-        val claims = verifyIdToken(discovery, settings, clientSecret, idToken, nonce)
+        val claims = verifyIdToken(discovery, settings, secret, idToken, nonce)
 
         var groups = groupsOf(claims.getClaim(settings.groupsClaim))
         val needsGroups = settings.userGroup.isNotBlank() || settings.adminGroup.isNotBlank()
