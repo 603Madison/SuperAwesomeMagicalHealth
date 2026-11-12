@@ -44,6 +44,8 @@ object AiTools {
         "symptoms" to Module.SYMPTOMS,
         "hormones" to Module.HORMONES,
         "appointments" to Module.APPOINTMENTS,
+        "neuro" to Module.NEURO,
+        "transition" to Module.TRANSITION,
         "log_food" to Module.NUTRITION,
         "log_water" to Module.NUTRITION,
         "log_drink" to Module.NUTRITION,
@@ -59,6 +61,9 @@ object AiTools {
         "log_glucose" to Module.VITALS,
         "log_symptom" to Module.SYMPTOMS,
         "tick_habit" to Module.HABITS,
+        "log_overload" to Module.NEURO,
+        "log_energy" to Module.NEURO,
+        "log_moment" to Module.TRANSITION,
     )
 
     /** Run the assistant's own way: a day and trends limited to the features allowed, readings by their metric's feature. */

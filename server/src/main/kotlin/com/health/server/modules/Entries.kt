@@ -15,6 +15,9 @@ enum class EntryKind {
     HORMONE_SETTINGS, DOSE_CHANGE, LIFE_STAGE, KICKS, CONTRACTION, FEED, HOT_FLASH, APPOINTMENT,
     // Symptoms and migraines (tracking/Symptoms.kt).
     SYMPTOM, MIGRAINE,
+    // Autism and ADHD (neuro/), and transition (transition/).
+    NEURO_EVENT, NEURO_ENERGY, NEURO_CHECKIN, NEURO_FOCUS, NEURO_ROUTINE_RUN,
+    TRANSITION_MILESTONE, TRANSITION_CHANGE, TRANSITION_VOICE, TRANSITION_HAIR, TRANSITION_MOMENT,
 }
 
 /** An entry as stored: its row's id, day and time, and what it holds. */

@@ -124,6 +124,8 @@ data class TransitionOverview(
     val dysphoria: Int = 0,
     /** A few kind, plain lines: "12 moments of euphoria this month", "Passport: 2 of 5 steps done". */
     val highlights: List<String> = emptyList(),
+    /** Body measurements (cm) over the last two years, oldest first, for when Fields.TRANSITION_MEASUREMENTS is on. */
+    val measurements: List<MeasurementSet> = emptyList(),
 )
 
 @Serializable

@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.angus.mail)
     // The optional AI assistant (ai/): the official Anthropic Java SDK.
     implementation(libs.anthropic.java)
+    implementation(libs.imageio.webp)
 
     testImplementation(libs.junit)
     testImplementation(libs.ktor.server.test.host)
