@@ -1,6 +1,11 @@
 package com.health.server.insights
 
 import com.health.api.Aggregation
+import com.health.api.CyclePhase
+import com.health.api.Flow
+import com.health.api.Insight
+import com.health.api.ModulesToday
+import com.health.api.Profile
 import com.health.api.ApiJson
 import com.health.api.DaySummary
 import com.health.api.Metric
@@ -58,6 +63,27 @@ data class DayStats(
     }
 }
 
+/** What the health modules add to a day (see modules/ModuleService). */
+interface DayExtras {
+    suspend fun today(userId: String, profile: Profile, date: LocalDate): DayExtrasResult
+    suspend fun trends(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, ModuleTrend>
+}
+
+data class DayExtrasResult(val modules: ModulesToday, val insights: List<Pair<Int, Insight>>, val cyclePhase: CyclePhase?)
+
+/** A day's numbers from the health modules, for trends. */
+data class ModuleTrend(
+    val mood: Double? = null,
+    val anxiety: Double? = null,
+    val mindfulMinutes: Double? = null,
+    val flow: Flow? = null,
+    val voids: Int? = null,
+    val nightVoids: Int? = null,
+    val leaks: Int? = null,
+    val dosesTaken: Int? = null,
+    val dosesDue: Int? = null,
+)
+
 /** Days: their numbers, scores and insights, and trends over weeks. */
 class DayService(
     private val db: Database,
@@ -65,6 +91,9 @@ class DayService(
     private val records: Records,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    /** The health modules, once they exist (they need this service themselves). */
+    var extras: DayExtras? = null
+
     // ---- Keeping days up to date ----
 
     /** Something recorded between [from] and [to] changed: those days (and the next, for nights) are worked out again. */
@@ -221,10 +250,12 @@ class DayService(
         val heart = records.samples(userId, start, end, listOf(Metric.HEART_RATE))
         val workouts = records.workouts(userId, start, end)
         val checkIn = checkIn(userId, date)
+        val more = extras?.today(userId, profile, date)
         val insights = InsightRules.insights(
             InsightRules.Context(
                 today = today, history = before, profile = profile, target = target, readiness = readiness, sleep = sleep,
                 isToday = date == days.today(clock()), hourNow = days.hourOf(clock()), restingCalories = resting,
+                cyclePhase = more?.cyclePhase, extra = more?.insights.orEmpty(),
             ),
         )
         // Resting energy counts up through the day: all of it for a day that's over, the part so far for today.
@@ -265,6 +296,7 @@ class DayService(
             heartRate = bucket(heart.map { Point(it.start, it.value) }, 5 * 60_000L),
             goals = goals,
             hasData = today.hasData,
+            modules = more?.modules ?: ModulesToday(),
         )
     }
 
@@ -294,6 +326,7 @@ class DayService(
         val all = stats(userId, first.minusDays(HISTORY_DAYS), last, days)
         val offset = HISTORY_DAYS.toInt()
         val goals = profile.goals
+        val modules = extras?.trends(userId, profile, first, last).orEmpty()
         val rows = all.indices.drop(offset).map { i ->
             val day = all[i]
             val before = all.subList(maxOf(0, i - offset), i)
@@ -322,7 +355,14 @@ class DayService(
                 waterMl = day.waterMl.takeIf { it > 0 },
                 workouts = day.workouts,
                 workoutMinutes = day.workoutMinutes,
-            )
+            ).let { row ->
+                modules[day.date]?.let { m ->
+                    row.copy(
+                        mood = m.mood, anxiety = m.anxiety, mindfulMinutes = m.mindfulMinutes, flow = m.flow, voids = m.voids,
+                        nightVoids = m.nightVoids, leaks = m.leaks, dosesTaken = m.dosesTaken, dosesDue = m.dosesDue,
+                    )
+                } ?: row
+            }
         }
         return Trends(first.toString(), last.toString(), rows)
     }

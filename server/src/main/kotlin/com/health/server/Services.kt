@@ -17,6 +17,12 @@ import com.health.server.health.Ingest
 import com.health.server.health.ProfileStore
 import com.health.server.health.Records
 import com.health.server.insights.DayService
+import com.health.server.modules.ContinenceService
+import com.health.server.modules.CycleService
+import com.health.server.modules.EntryStore
+import com.health.server.modules.MedsService
+import com.health.server.modules.MindService
+import com.health.server.modules.ModuleService
 import com.health.server.util.Http
 import com.health.server.util.Passwords
 import com.health.server.util.Random
@@ -51,6 +57,14 @@ class Services(
     val fit = FitImporter(ingest)
     val foodDatabase = OpenFoodFacts(http, db, clock, foodDatabaseUrls)
     val foods = FoodStore(db, clock)
+    val entries = EntryStore(db, box, clock)
+    val modules = ModuleService(
+        mind = MindService(entries, profiles, settings, days, clock),
+        cycle = CycleService(entries, profiles, days, clock),
+        continence = ContinenceService(entries, profiles, records, days, clock),
+        meds = MedsService(db, box, entries, profiles, clock),
+        clock = clock,
+    ).also { days.extras = it }
 
     override fun close() {
         db.close()

@@ -147,6 +147,10 @@ private fun validated(settings: ServerSettings): ServerSettings {
         throw ApiError.badRequest("The issuer must be a web address")
     }
     return settings.copy(
+        crisisResources = settings.crisisResources.map { r ->
+            r.copy(name = r.name.trim().take(120), contact = r.contact.trim().take(200), region = r.region?.trim()?.take(120)?.ifBlank { null },
+                url = r.url?.trim()?.takeIf { it.startsWith("https://") || it.startsWith("http://") }?.take(300), note = r.note?.trim()?.take(300)?.ifBlank { null })
+        }.filter { it.name.isNotEmpty() && it.contact.isNotEmpty() }.take(40),
         serverName = settings.serverName.trim().take(80).ifBlank { "SuperAwesomeMagicalHealth" },
         publicUrl = publicUrl,
         oidc = oidc.copy(

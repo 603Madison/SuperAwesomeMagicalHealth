@@ -23,6 +23,10 @@ object InsightRules {
         val isToday: Boolean,
         val hourNow: Int,
         val restingCalories: Double?,
+        /** Where the person is in their cycle, if they track it: a warmer, faster heart after ovulation is expected. */
+        val cyclePhase: com.health.api.CyclePhase? = null,
+        /** The health modules' insights, ranked with these. */
+        val extra: List<Pair<Int, Insight>> = emptyList(),
     )
 
     private class Ranked(val priority: Int, val insight: Insight)
@@ -46,7 +50,10 @@ object InsightRules {
         val rhrBase = Scoring.median(recent.mapNotNull { it.restingHr })
         if (today.restingHr != null && rhrBase != null && recent.count { it.restingHr != null } >= 3) {
             val diff = today.restingHr - rhrBase
-            if (diff >= 4) {
+            val luteal = c.cyclePhase == com.health.api.CyclePhase.LUTEAL
+            if (diff >= 4 && luteal && diff < 7) {
+                out += Ranked(40, Insight("info", "Resting heart rate is up ${diff.roundToInt()} bpm", "A few beats higher is common in the second half of a cycle.", "heart", com.health.api.Module.CYCLE))
+            } else if (diff >= 4) {
                 add(85, "warn", "heart", "Resting heart rate is up ${diff.roundToInt()} bpm", "Alcohol, a late meal, stress, illness or a hard workout can all raise it. Listen to your body today.")
             } else if (diff <= -3) {
                 add(50, "good", "heart", "Resting heart rate ${(-diff).roundToInt()} bpm below your usual", "A sign your body is well recovered.")
@@ -63,7 +70,9 @@ object InsightRules {
 
         // Temperature.
         Scoring.temperatureDeviation(today, c.history.takeLast(30))?.let { dev ->
-            if (abs(dev) >= 0.6) {
+            if (c.cyclePhase == com.health.api.CyclePhase.LUTEAL && dev in 0.2..0.8) {
+                out += Ranked(38, Insight("info", "Temperature ${Scoring.signed(dev)} °C from your usual", "As expected after ovulation: it usually falls again around your period.", "thermometer", com.health.api.Module.CYCLE))
+            } else if (abs(dev) >= 0.6) {
                 add(88, "warn", "thermometer", "Temperature ${Scoring.signed(dev)} °C from your usual", if (dev > 0) "A raised temperature can mean you're coming down with something, or your cycle, alcohol or a warm room. Worth keeping an eye on." else "A lower temperature than usual; often just a cool room.")
             }
         }
@@ -133,6 +142,7 @@ object InsightRules {
             add(30, "info", "sparkles", "Learning your baseline", "Readiness compares your heart to your own usual; it needs a few nights of data first.")
         }
 
-        return out.sortedByDescending { it.priority }.take(4).map { it.insight }
+        c.extra.forEach { (priority, insight) -> out += Ranked(priority, insight) }
+        return out.sortedByDescending { it.priority }.take(5).map { it.insight }
     }
 }

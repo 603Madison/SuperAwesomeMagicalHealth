@@ -194,7 +194,10 @@ fun Route.authRoutes(services: Services) {
                 request.allowLogging -> SessionKind.MCP_WRITE to "AI connector (can log)"
                 else -> SessionKind.MCP to "AI connector"
             }
-            val token = services.sessions.create(user.id, kind, request.name.trim().take(80).ifBlank { name })
+            // Sensitive modules only for the person's own links, and only the ones they chose.
+            val scope = if (request.allAccounts) emptySet() else request.modules.filter { it.sensitive }.toSet()
+            val label = name + scope.takeIf { it.isNotEmpty() }?.joinToString(", ", " + ") { it.label }.orEmpty()
+            val token = services.sessions.create(user.id, kind, request.name.trim().take(80).ifBlank { label }, scope)
             call.respond(ConnectorLink("${publicBase(services, call)}/mcp/$token", token))
         }
         delete("/sessions/{id}") {

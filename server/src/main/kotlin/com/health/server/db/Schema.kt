@@ -154,6 +154,29 @@ object Schema {
             fetched_at INTEGER NOT NULL
         );
         """,
+        // 2: the health modules. Their entries are sealed (encrypted) JSON; connector links get a scope.
+        """
+        ALTER TABLE sessions ADD COLUMN scope TEXT;
+        CREATE TABLE entries (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            date TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            data TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX entries_kind_date ON entries(user_id, kind, date);
+        CREATE TABLE medications (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            data TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX medications_user ON medications(user_id);
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

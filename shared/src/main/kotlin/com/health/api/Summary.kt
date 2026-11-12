@@ -82,7 +82,14 @@ data class SleepSummary(
 
 /** Something worth knowing about the day: [tone] is "good", "info" or "warn". */
 @Serializable
-data class Insight(val tone: String, val title: String, val body: String, val icon: String = "sparkles")
+data class Insight(
+    val tone: String,
+    val title: String,
+    val body: String,
+    val icon: String = "sparkles",
+    /** The health module it comes from, if any (shown only where that module may be seen). */
+    val module: Module? = null,
+)
 
 /** Everything about one day, for the Today page. */
 @Serializable

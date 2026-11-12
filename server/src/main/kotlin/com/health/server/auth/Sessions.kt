@@ -5,6 +5,7 @@ import com.health.server.util.Random
 import com.health.server.util.hex
 import com.health.server.util.sha256
 import com.health.api.SessionInfo
+import com.health.api.Module
 import com.health.api.SessionKind
 import com.health.api.User
 
@@ -14,13 +15,14 @@ import com.health.api.User
  * for browsers, a year for the app (which may spend weeks offline) and for upload keys.
  */
 class SessionStore(private val db: Database, private val clock: () -> Long = System::currentTimeMillis) {
-    suspend fun create(userId: String, kind: SessionKind, name: String): String {
+    suspend fun create(userId: String, kind: SessionKind, name: String, scope: Set<Module> = emptySet()): String {
         val token = Random.token()
         val now = clock()
         db.tx {
             update(
-                "INSERT INTO sessions (id, user_id, kind, name, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO sessions (id, user_id, kind, name, created_at, last_seen_at, expires_at, scope) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 idOf(token), userId, kind, name.take(120).ifBlank { kind.name.lowercase() }, now, now, now + lifetime(kind),
+                scope.joinToString(",") { it.name }.ifEmpty { null },
             )
         }
         return token
@@ -33,7 +35,7 @@ class SessionStore(private val db: Database, private val clock: () -> Long = Sys
         val now = clock()
         return db.tx {
             val found = one(
-                """SELECT s.id AS s_id, s.kind, s.name, s.created_at AS s_created, s.last_seen_at, s.expires_at, u.*
+                """SELECT s.id AS s_id, s.kind, s.name, s.created_at AS s_created, s.last_seen_at, s.expires_at, s.scope, u.*
                    FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?""",
                 id,
             ) { row ->
@@ -45,6 +47,7 @@ class SessionStore(private val db: Database, private val clock: () -> Long = Sys
                     lastSeenAt = row.long("last_seen_at"),
                     expiresAt = row.long("expires_at"),
                     current = true,
+                    scope = scopeOf(row.stringOrNull("scope")),
                 )
             } ?: return@tx null
             val (user, session) = found
@@ -70,6 +73,7 @@ class SessionStore(private val db: Database, private val clock: () -> Long = Sys
                 lastSeenAt = row.long("last_seen_at"),
                 expiresAt = row.long("expires_at"),
                 current = row.string("id") == currentId,
+                scope = scopeOf(row.stringOrNull("scope")),
             )
         }
     }
@@ -91,5 +95,7 @@ class SessionStore(private val db: Database, private val clock: () -> Long = Sys
         fun lifetime(kind: SessionKind) = if (kind == SessionKind.WEB) WEB_LIFETIME_MS else APP_LIFETIME_MS
 
         fun idOf(token: String): String = sha256(token).hex()
+
+        fun scopeOf(text: String?): List<Module> = text.orEmpty().split(',').mapNotNull { name -> Module.entries.firstOrNull { it.name == name } }
     }
 }

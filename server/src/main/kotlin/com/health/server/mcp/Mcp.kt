@@ -2,6 +2,16 @@ package com.health.server.mcp
 
 import com.health.api.ApiJson
 import com.health.api.CheckIn
+import com.health.api.ContinenceEntry
+import com.health.api.ContinenceKind
+import com.health.api.CycleDay
+import com.health.api.DoseLog
+import com.health.api.DoseStatus
+import com.health.api.Flow
+import com.health.api.LeakSize
+import com.health.api.Module
+import com.health.api.MoodEntry
+import com.health.api.Screener
 import com.health.api.DaySummary
 import com.health.api.ErrorBody
 import com.health.api.Food
@@ -80,10 +90,13 @@ fun Route.mcpRoutes(services: Services) {
     suspend fun ApplicationCall.serve(token: String?) {
         val (user, session) = token?.let { services.sessions.resolve(it) }?.takeIf { it.second.kind.isConnector }
             ?: return respond(HttpStatusCode.NotFound, ErrorBody("That connector link isn't valid (any more): make a new one in Settings"))
+        val everyone = session.kind == SessionKind.MCP_ALL && user.isAdmin
         val caller = McpServer.Caller(
             user,
-            everyone = session.kind == SessionKind.MCP_ALL && user.isAdmin,
+            everyone = everyone,
             canLog = session.kind == SessionKind.MCP_WRITE,
+            // An every-account link never reads the sensitive modules.
+            scope = if (session.kind == SessionKind.MCP_ALL) emptySet() else session.scope.filter { it.sensitive }.toSet(),
         )
         val body = runCatching { ApiJson.parseToJsonElement(receiveText()) }.getOrNull()
             ?: return respondJson(McpServer.error(JsonNull, -32700, "That isn't JSON"))
@@ -124,7 +137,7 @@ private suspend fun ApplicationCall.respondJson(element: JsonElement) {
 /** The protocol: initialize, ping, and the tools. */
 class McpServer(private val services: Services) {
     /** Who's asking: the link's account, whether it sees every account, and whether it may log entries. */
-    class Caller(val user: User, val everyone: Boolean, val canLog: Boolean)
+    class Caller(val user: User, val everyone: Boolean, val canLog: Boolean, val scope: Set<Module> = emptySet())
 
     private class Tool(
         val name: String,
@@ -132,6 +145,8 @@ class McpServer(private val services: Services) {
         val description: String,
         val inputSchema: JsonObject,
         val writes: Boolean = false,
+        /** A sensitive module the link must have been given. */
+        val module: Module? = null,
         val run: suspend (Caller, JsonObject) -> String,
     )
 
@@ -160,7 +175,7 @@ class McpServer(private val services: Services) {
         }
     }
 
-    private fun toolsFor(caller: Caller) = tools.filter { !it.writes || caller.canLog }
+    private fun toolsFor(caller: Caller) = tools.filter { (!it.writes || caller.canLog) && (it.module == null || it.module in caller.scope) }
 
     private fun initialize(params: JsonObject, caller: Caller): JsonObject {
         val asked = (params["protocolVersion"] as? JsonPrimitive)?.contentOrNull
@@ -174,14 +189,16 @@ class McpServer(private val services: Services) {
             }
             put(
                 "instructions",
-                "A self-hosted fitness and health server (SuperAwesomeMagicalHealth): wearables (Colmi rings, Pebble, Garmin, " +
+                "A self-hosted health server (SuperAwesomeMagicalHealth): wearables (Colmi rings, Pebble, Garmin, " +
                     "anything in Health Connect or Gadgetbridge) send heart rate, HRV, sleep, steps and workouts through a phone " +
                     "app, and people log food, water, weight and check-ins. It works out Oura-style readiness, sleep and activity " +
                     "scores against each person's own baseline. Start with status (what's connected, what's missing), then day " +
                     "for a day in full, trends for weeks and months, and sleep, workouts and food_log for detail. For device " +
                     "troubleshooting use devices and sync_check (gaps, duplicates, stale syncs) and readings for raw data" +
                     (if (caller.user.isAdmin) "; recent_warnings and server_log show the server's own log" else "") + ". " +
-                    (if (caller.canLog) "This link may also log entries (log_food, log_water, log_weight, log_workout, check_in): confirm amounts with the person before logging. " else "") +
+                    (if (caller.scope.isNotEmpty()) "It may also read ${caller.scope.joinToString { it.label }} (${toolsFor(caller).filter { it.module != null && !it.writes }.joinToString { it.name }}): treat these with particular care and kindness. " else "") +
+                    (if (caller.canLog) "This link may also log entries (${toolsFor(caller).filter { it.writes }.joinToString { it.name }}): confirm what to log with the person first. " else "") +
+                    (if (Module.MIND in caller.scope) "If the person mentions thoughts of harming themselves, gently share the support lines from the mind tool and encourage reaching out. " else "") +
                     "This is personal health data: it's for the person's own understanding, not medical advice.",
             )
         }
@@ -190,7 +207,15 @@ class McpServer(private val services: Services) {
     private suspend fun callTool(id: JsonElement, caller: Caller, params: JsonObject): JsonObject {
         val name = (params["name"] as? JsonPrimitive)?.contentOrNull
         val tool = toolsFor(caller).firstOrNull { it.name == name }
-            ?: return error(id, -32602, if (tools.any { it.name == name }) "This link can only read; make one that may log entries in Settings" else "No tool named $name")
+            ?: return error(
+                id, -32602,
+                when {
+                    tools.any { it.name == name && it.module != null && it.module !in caller.scope } ->
+                        "This link wasn't given ${tools.first { it.name == name }.module!!.label}; make one that includes it in Settings"
+                    tools.any { it.name == name } -> "This link can only read; make one that may log entries in Settings"
+                    else -> "No tool named $name"
+                },
+            )
         val arguments = params["arguments"] as? JsonObject ?: JsonObject(emptyMap())
         log.info("AI connector of {}{}: {} {}", caller.user.username, if (caller.everyone) " (every account)" else "", name, arguments)
         val (text, failed) = try {
@@ -246,7 +271,7 @@ class McpServer(private val services: Services) {
             schema(dateProperty, account),
         ) { caller, args ->
             val user = accountOf(caller, args)
-            formatDay(services.days.summary(user.id, args.string("date") ?: "today"), services.profiles.get(user.id).units)
+            formatDay(services.days.summary(user.id, args.string("date") ?: "today"), services.profiles.get(user.id).units, caller.scope.takeIf { user.id == caller.user.id }.orEmpty())
         },
         Tool(
             "trends", "Trends",
@@ -258,7 +283,7 @@ class McpServer(private val services: Services) {
             val user = accountOf(caller, args)
             val days = services.profiles.days(user.id)
             val to = args.string("to")?.let { days.parse(it, services.clock()) }
-            trendsTable(services.days.trends(user.id, null, to, args.int("days")?.coerceIn(1, 365) ?: 30).days)
+            trendsTable(services.days.trends(user.id, null, to, args.int("days")?.coerceIn(1, 365) ?: 30).days, caller.scope.takeIf { user.id == caller.user.id }.orEmpty())
         },
         Tool(
             "sleep", "Sleep",
@@ -342,6 +367,43 @@ class McpServer(private val services: Services) {
                 .takeLast(args.int("limit")?.coerceIn(1, 2000) ?: 200).joinToString("\n").takeLast(MAX_TEXT).ifBlank { "Nothing logged that matches." }
         },
 
+        // ---- Health modules (links given them) ----
+        Tool(
+            "mind", "Mood and mind",
+            "Mood over recent days (1 low to 5 great, with energy and anxiety), the feelings and situations named most, " +
+                "what seems to go with better days, recent mood notes, PHQ-9 and GAD-7 check-in results, calm practice, " +
+                "and the support lines set on this server.",
+            schema(daysProperty(30, 365)),
+            module = Module.MIND,
+        ) { caller, args -> mindText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 30) },
+        Tool(
+            "journal", "Journal",
+            "The person's journal entries (free writing, gratitude, thought records), newest first. Private: only read when they ask about it.",
+            schema(daysProperty(14, 365)),
+            module = Module.MIND,
+        ) { caller, args -> journalText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 14) },
+        Tool(
+            "cycle", "Cycle",
+            "Periods and cycle: logged days (flow, symptoms, pain, temperature), past cycles with their lengths, averages, " +
+                "today's cycle day and phase, and the prediction for the next period and fertile window (estimates only).",
+            schema("months" to intProperty("How many months back (default 6, at most 36)")),
+            module = Module.CYCLE,
+        ) { caller, args -> cycleText(caller.user, args.int("months")?.coerceIn(1, 36) ?: 6) },
+        Tool(
+            "continence", "Bladder and bowel",
+            "The bladder and bowel diary: each toilet trip, leak, bowel movement, pad change and pelvic floor session, " +
+                "with daily counts, night-time trips, fluid logged, triggers for leaks and patterns.",
+            schema(daysProperty(7, 90)),
+            module = Module.CONTINENCE,
+        ) { caller, args -> continenceText(caller.user, args.int("days")?.coerceIn(1, 90) ?: 7) },
+        Tool(
+            "medications", "Medications",
+            "Medications and supplements with their schedules, today's doses (taken, skipped, due), adherence over a week, " +
+                "injection and patch site rotation, low stock, and lab results over time.",
+            schema(dateProperty),
+            module = Module.MEDICATIONS,
+        ) { caller, args -> medsText(caller.user, args.string("date") ?: "today") },
+
         // ---- Logging (links made with logging allowed) ----
         Tool(
             "log_food", "Log food",
@@ -414,6 +476,114 @@ class McpServer(private val services: Services) {
                 ),
             )
             "Logged ${saved.name ?: saved.type.label} for $minutes minutes starting ${formatTime(services.profiles.days(user.id), saved.start)}."
+        },
+        Tool(
+            "log_mood", "Log mood",
+            "Logs how the person feels now: mood 1 (very low) to 5 (great), with optional energy and anxiety (1–5), feelings, context and a note.",
+            schema(
+                "mood" to intProperty("1 very low … 5 great"),
+                "energy" to intProperty("1–5"),
+                "anxiety" to intProperty("1 calm … 5 very anxious"),
+                "feelings" to stringArray("Feelings, e.g. calm, anxious, proud"),
+                "context" to stringArray("What it's about, e.g. work, family, sleep"),
+                "note" to stringProperty("A note"),
+                required = listOf("mood"),
+            ),
+            writes = true,
+            module = Module.MIND,
+        ) { caller, args ->
+            val saved = services.modules.mind.saveMood(
+                caller.user.id,
+                MoodEntry(
+                    at = services.clock(), mood = args.int("mood") ?: error("How's the mood, 1 to 5?"), energy = args.int("energy"), anxiety = args.int("anxiety"),
+                    feelings = args.strings("feelings"), context = args.strings("context"), note = args.string("note"),
+                ),
+            )
+            "Logged mood ${saved.mood}/5 for ${saved.date}."
+        },
+        Tool(
+            "log_cycle_day", "Log cycle day",
+            "Logs a day of the cycle: flow (SPOTTING, LIGHT, MEDIUM, HEAVY, or NONE to clear it), symptoms, pain 0–10, basal temperature (°C) and a note. Adds to what's already logged that day.",
+            schema(
+                dateProperty,
+                "flow" to enumProperty("Bleeding", Flow.entries.map { it.name } + "NONE"),
+                "symptoms" to stringArray("e.g. cramps, headache, bloating"),
+                "pain" to intProperty("0–10"),
+                "temperature" to numberProperty("Basal body temperature, °C"),
+                "note" to stringProperty("A note"),
+            ),
+            writes = true,
+            module = Module.CYCLE,
+        ) { caller, args ->
+            val user = caller.user
+            val date = services.profiles.days(user.id).parse(args.string("date") ?: "today", services.clock())
+            val before = services.modules.cycle.logged(user.id, date, date).firstOrNull() ?: CycleDay(date.toString())
+            val flowArg = args.string("flow")?.uppercase()
+            val saved = services.modules.cycle.put(
+                user.id,
+                before.copy(
+                    flow = when (flowArg) { null -> before.flow; "NONE" -> null; else -> runCatching { Flow.valueOf(flowArg) }.getOrElse { error("Flow is SPOTTING, LIGHT, MEDIUM, HEAVY or NONE") } },
+                    symptoms = (before.symptoms + args.strings("symptoms")).distinct(),
+                    pain = args.int("pain") ?: before.pain,
+                    temperature = args.number("temperature") ?: before.temperature,
+                    note = args.string("note") ?: before.note,
+                ),
+            )
+            "Logged ${saved.date}: ${cycleDayText(saved)}."
+        },
+        Tool(
+            "log_continence", "Log bladder or bowel",
+            "Logs a diary entry: kind URINATION (toilet trip), LEAK, BOWEL, PAD_CHANGE or PELVIC_FLOOR, with optional urgency 0–3, leak size, triggers, Bristol type 1–7, volume and time.",
+            schema(
+                "kind" to enumProperty("What happened", ContinenceKind.entries.map { it.name }),
+                "at" to stringProperty("When: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "urgency" to intProperty("0 none … 3 couldn't wait"),
+                "leak" to enumProperty("Leak size", LeakSize.entries.map { it.name }),
+                "triggers" to stringArray("e.g. cough, sneeze, urge"),
+                "bristol" to intProperty("Bristol stool type, 1–7"),
+                "volume_ml" to intProperty("Measured volume, ml"),
+                "reps" to intProperty("Pelvic floor repetitions"),
+                required = listOf("kind"),
+            ),
+            writes = true,
+            module = Module.CONTINENCE,
+        ) { caller, args ->
+            val kind = args.string("kind")?.uppercase()?.let { runCatching { ContinenceKind.valueOf(it) }.getOrNull() } ?: error("Which kind?")
+            val saved = services.modules.continence.save(
+                caller.user.id,
+                ContinenceEntry(
+                    at = args.string("at")?.let { instantOf(caller.user, it) } ?: services.clock(), kind = kind, urgency = args.int("urgency"),
+                    leak = args.string("leak")?.uppercase()?.let { runCatching { LeakSize.valueOf(it) }.getOrNull() },
+                    triggers = args.strings("triggers"), bristol = args.int("bristol"), volumeMl = args.int("volume_ml"), reps = args.int("reps"),
+                ),
+            )
+            "Logged ${saved.kind.label.lowercase()} at ${formatTime(services.profiles.days(caller.user.id), saved.at)}."
+        },
+        Tool(
+            "log_dose", "Log a dose",
+            "Marks a medication dose as taken (or skipped): give the medication's name; it matches the nearest scheduled dose today if there is one.",
+            schema(
+                "medication" to stringProperty("The medication's name"),
+                "status" to enumProperty("Taken or skipped", listOf("TAKEN", "SKIPPED")),
+                "at" to stringProperty("When: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "site" to stringProperty("For injections and patches: where"),
+                required = listOf("medication"),
+            ),
+            writes = true,
+            module = Module.MEDICATIONS,
+        ) { caller, args ->
+            val user = caller.user
+            val name = args.string("medication") ?: error("Which medication?")
+            val med = services.modules.meds.list(user.id).firstOrNull { it.name.equals(name, ignoreCase = true) }
+                ?: services.modules.meds.list(user.id).firstOrNull { it.name.contains(name, ignoreCase = true) }
+                ?: error("No medication called $name")
+            val at = args.string("at")?.let { instantOf(user, it) } ?: services.clock()
+            val days = services.profiles.days(user.id)
+            val slot = services.modules.meds.day(user.id, days.dateOf(at)).due
+                .filter { it.medicationId == med.id && it.log == null }.minByOrNull { kotlin.math.abs(it.scheduledFor - at) }
+            val status = if (args.string("status")?.uppercase() == "SKIPPED") DoseStatus.SKIPPED else DoseStatus.TAKEN
+            val saved = services.modules.meds.logDose(user.id, DoseLog(med.id!!, at, status, slot?.scheduledFor, site = args.string("site") ?: slot?.nextSite))
+            "Logged ${med.name} as ${saved.status.name.lowercase()} at ${formatTime(days, saved.at)}${saved.site?.let { ", $it" } ?: ""}${slot?.let { " (the ${formatTime(days, it.scheduledFor).substringAfter(' ')} dose)" } ?: ""}."
         },
         Tool(
             "check_in", "Check in",
@@ -498,7 +668,7 @@ class McpServer(private val services: Services) {
         appendLine("Nights recorded in the last 7 days: ${sleep.size}. Workouts: ${workouts.size}.")
     }
 
-    private fun formatDay(d: DaySummary, units: Units): String = buildString {
+    private fun formatDay(d: DaySummary, units: Units, scope: Set<Module>): String = buildString {
         appendLine("${d.date}${if (!d.hasData) " (nothing recorded)" else ""}")
         fun score(name: String, s: Score?) {
             if (s == null) {
@@ -532,14 +702,30 @@ class McpServer(private val services: Services) {
         d.weightKg?.let { appendLine("Weight: ${weight(it, units)}${d.bodyFat?.let { f -> ", body fat %.1f%%".format(f) } ?: ""}") }
         d.checkIn?.takeIf { it.mood != null || it.energy != null || it.stress != null || it.soreness != null || it.tags.isNotEmpty() || it.note != null }
             ?.let { appendLine("Check-in: ${checkInText(it)}") }
-        if (d.insights.isNotEmpty()) {
+        val m = d.modules
+        if (Module.MIND in scope) m.mind?.let { appendLine("Mood: ${it.mood?.let { v -> "%.1f/5".format(v) } ?: "not logged"} (${it.entries} entries)${it.anxiety?.let { a -> ", anxiety %.1f/5".format(a) } ?: ""}${if (it.mindfulMinutes > 0) ", ${num(it.mindfulMinutes)} min calm practice" else ""}") }
+        if (Module.CYCLE in scope) m.cycle?.let { c ->
+            appendLine("Cycle: ${c.cycleDay?.let { "day $it" } ?: "no recent period logged"}, ${c.phase.label.lowercase()}${c.daysUntilPeriod?.let { u -> if (u >= 0) ", period in about $u days" else ", period ${-u} days later than expected" } ?: ""}${c.logged?.let { l -> "; logged: " + cycleDayText(l) } ?: ""}")
+        }
+        if (Module.CONTINENCE in scope) m.continence?.let { appendLine("Bladder and bowel: ${it.voids} toilet trips (${it.nightVoids} at night), ${it.leaks} leaks, ${it.bowel} bowel movements, ${it.pelvicFloor} pelvic floor sessions") }
+        if (Module.MEDICATIONS in scope) m.meds?.let { md ->
+            appendLine("Medications: ${md.due.count { it.log?.status == DoseStatus.TAKEN }} of ${md.due.size} scheduled doses taken${md.adherence7d?.let { a -> " ($a% over 7 days)" } ?: ""}")
+        }
+        val shown = d.insights.filter { it.module == null || it.module in scope }
+        if (shown.isNotEmpty()) {
             appendLine("Insights shown:")
-            d.insights.forEach { appendLine("  - [${it.tone}] ${it.title}: ${it.body}") }
+            shown.forEach { appendLine("  - [${it.tone}] ${it.title}: ${it.body}") }
         }
     }
 
-    private fun trendsTable(rows: List<com.health.api.TrendDay>): String = buildString {
-        appendLine("date\treadiness\tsleep_score\tactivity_score\tsteps\tactive_kcal\tresting_hr\thrv_ms\tsleep_min\tdeep_min\trem_min\tspo2\ttemp_dev\tweight_kg\tkcal_eaten\tprotein_g\tcarbs_g\tfat_g\twater_ml\tworkouts")
+    private fun trendsTable(rows: List<com.health.api.TrendDay>, scope: Set<Module>): String = buildString {
+        val extra = buildList {
+            if (Module.MIND in scope) addAll(listOf("mood", "anxiety", "calm_min"))
+            if (Module.CYCLE in scope) add("flow")
+            if (Module.CONTINENCE in scope) addAll(listOf("voids", "night_voids", "leaks"))
+            if (Module.MEDICATIONS in scope) addAll(listOf("doses_taken", "doses_due"))
+        }
+        appendLine("date\treadiness\tsleep_score\tactivity_score\tsteps\tactive_kcal\tresting_hr\thrv_ms\tsleep_min\tdeep_min\trem_min\tspo2\ttemp_dev\tweight_kg\tkcal_eaten\tprotein_g\tcarbs_g\tfat_g\twater_ml\tworkouts" + extra.joinToString("") { "\t$it" })
         rows.forEach { r ->
             fun d(v: Double?, digits: Int = 0) = v?.let { if (digits == 0) it.roundToInt().toString() else String.format(Locale.ROOT, "%.${digits}f", it) } ?: ""
             appendLine(
@@ -548,6 +734,13 @@ class McpServer(private val services: Services) {
                     r.steps?.toString().orEmpty(), d(r.activeCalories), d(r.restingHeartRate, 1), d(r.hrv), r.sleepMinutes?.toString().orEmpty(),
                     r.deepMinutes?.toString().orEmpty(), r.remMinutes?.toString().orEmpty(), d(r.spo2, 1), d(r.temperatureDeviation, 2),
                     d(r.weightKg, 2), d(r.calories), d(r.protein), d(r.carbs), d(r.fat), r.waterMl?.toString().orEmpty(), r.workouts.toString(),
+                ).plus(
+                    buildList {
+                        if (Module.MIND in scope) addAll(listOf(d(r.mood, 1), d(r.anxiety, 1), d(r.mindfulMinutes)))
+                        if (Module.CYCLE in scope) add(r.flow?.name?.lowercase().orEmpty())
+                        if (Module.CONTINENCE in scope) addAll(listOf(r.voids?.toString().orEmpty(), r.nightVoids?.toString().orEmpty(), r.leaks?.toString().orEmpty()))
+                        if (Module.MEDICATIONS in scope) addAll(listOf(r.dosesTaken?.toString().orEmpty(), r.dosesDue?.toString().orEmpty()))
+                    },
                 ).joinToString("\t"),
             )
         }
@@ -742,6 +935,142 @@ class McpServer(private val services: Services) {
         return "Logged ${entry.name} to ${meal.label.lowercase()} on ${entry.date}: ${nutrientText(entry.nutrients)}."
     }
 
+    // ---- Health modules ----
+
+    private suspend fun mindText(user: User, count: Int): String = buildString {
+        val m = services.modules.mind
+        val summary = m.summary(user.id, count)
+        appendLine("Mood over the last $count days: average ${summary.averageMood?.let { "%.1f".format(it) } ?: "not logged"} of 5; calm practice ${num(summary.mindfulMinutes)} minutes.")
+        summary.days.filter { it.mood != null }.takeLast(31).forEach { d ->
+            appendLine("  ${d.date}: mood %.1f${d.anxiety?.let { a -> ", anxiety %.1f".format(a) } ?: ""}${d.energy?.let { e -> ", energy %.1f".format(e) } ?: ""}".format(d.mood))
+        }
+        if (summary.feelings.isNotEmpty()) appendLine("Feelings named most: ${summary.feelings.joinToString { "${it.name} (${it.count})" }}")
+        if (summary.context.isNotEmpty()) appendLine("About: ${summary.context.joinToString { "${it.name} (${it.count})" }}")
+        summary.patterns.forEach { appendLine("Pattern: ${it.title}. ${it.body}") }
+        val notes = m.moods(user.id, count).filter { it.note != null }.take(15)
+        if (notes.isNotEmpty()) {
+            appendLine("Mood notes:")
+            val days = services.profiles.days(user.id)
+            notes.forEach { appendLine("  ${formatTime(days, it.at)} (${it.mood}/5): ${it.note}") }
+        }
+        val results = m.screenerResults(user.id, 365)
+        if (results.isNotEmpty()) {
+            appendLine("Check-ins:")
+            results.take(10).forEach { appendLine("  ${it.date}: ${if (it.screener == Screener.PHQ9) "PHQ-9" else "GAD-7"} ${it.score} (${it.severity})${if (it.flagged) "; answered the self-harm question above \"not at all\"" else ""}") }
+        }
+        val sessions = m.sessions(user.id, count)
+        if (sessions.isNotEmpty()) appendLine("Calm practice: ${sessions.groupBy { it.kind }.entries.joinToString { (k, v) -> "$k ×${v.size}" }}")
+        appendLine("Support lines on this server: ${m.resources().joinToString("; ") { "${it.name} (${it.region ?: "any"}): ${it.contact}" }}")
+    }
+
+    private suspend fun journalText(user: User, count: Int): String {
+        val entries = services.modules.mind.journal(user.id, count)
+        if (entries.isEmpty()) return "No journal entries in the last $count days."
+        val days = services.profiles.days(user.id)
+        return entries.joinToString("\n\n") { e ->
+            buildString {
+                append("${formatTime(days, e.at)} [${e.kind.label}]${e.title?.let { " $it" } ?: ""}")
+                e.prompt?.let { append("\nPrompt: $it") }
+                if (e.text.isNotBlank()) append("\n${e.text}")
+                if (e.gratitude.isNotEmpty()) append("\nGrateful for: ${e.gratitude.joinToString("; ")}")
+                e.thought?.let { t ->
+                    append("\nSituation: ${t.situation}\nThought: ${t.thought}${t.beliefBefore?.let { b -> " ($b%)" } ?: ""}")
+                    t.feelings?.let { append("\nFeelings: $it") }
+                    t.evidenceFor?.let { append("\nEvidence for: $it") }
+                    t.evidenceAgainst?.let { append("\nEvidence against: $it") }
+                    t.balancedThought?.let { append("\nBalanced thought: $it${t.beliefAfter?.let { b -> " (belief in the first thought now $b%)" } ?: ""}") }
+                }
+            }
+        }
+    }
+
+    private fun cycleDayText(d: CycleDay): String = listOfNotNull(
+        d.flow?.label?.lowercase()?.let { "flow $it" }, d.symptoms.takeIf { it.isNotEmpty() }?.joinToString(", "),
+        d.pain?.let { "pain $it/10" }, d.mucus?.label?.lowercase()?.let { "mucus $it" }, d.ovulationTest?.label?.lowercase()?.let { "ovulation test $it" },
+        d.temperature?.let { "BBT %.2f °C".format(it) }, d.note,
+    ).joinToString("; ").ifEmpty { "nothing" }
+
+    private suspend fun cycleText(user: User, months: Int): String = buildString {
+        val o = services.modules.cycle.overview(user.id, months)
+        appendLine(
+            "Today: ${o.cycleDay?.let { "cycle day $it" } ?: "no recent period logged"}, phase ${o.phase.label.lowercase()}" +
+                (o.daysUntilPeriod?.let { if (it >= 0) ", next period in about $it days" else ", period ${-it} days later than expected" } ?: "") + ".",
+        )
+        appendLine("Averages: cycle ${o.averageCycle?.let { "%.1f days".format(it) } ?: "unknown"}, period ${o.averagePeriod?.let { "%.1f days".format(it) } ?: "unknown"}${o.variation?.let { ", cycles vary by ±%.1f days".format(it) } ?: ""}.")
+        o.prediction?.let { p ->
+            appendLine("Prediction (${p.confidence} confidence): next period ${p.nextPeriod} (between ${p.earliest} and ${p.latest}); estimated fertile window ${p.fertileStart} to ${p.fertileEnd}, ovulation about ${p.ovulation}.")
+        }
+        appendLine(o.caveat)
+        if (o.cycles.isNotEmpty()) {
+            appendLine("Cycles:")
+            o.cycles.reversed().take(12).forEach { c -> appendLine("  from ${c.start}: ${c.length?.let { "$it days" } ?: "current"}, period ${c.periodLength} days${c.ovulation?.let { ", temperature rise suggests ovulation around $it" } ?: ""}") }
+        }
+        val logged = o.days.takeLast(60)
+        if (logged.isNotEmpty()) {
+            appendLine("Logged days:")
+            logged.forEach { appendLine("  ${it.date}: ${cycleDayText(it)}") }
+        }
+    }
+
+    private suspend fun continenceText(user: User, count: Int): String = buildString {
+        val c = services.modules.continence
+        val s = c.summary(user.id, count)
+        appendLine("Over $count days: ${s.averageVoids?.let { "%.1f toilet trips a day".format(it) } ?: "no trips logged"}, ${s.averageNightVoids?.let { "%.1f at night".format(it) } ?: "-"}, ${s.averageLeaks?.let { "%.1f leaks a day".format(it) } ?: "-"}${s.averageInterval?.let { "; longest daytime gap averages ${Scoring.hm(it)}" } ?: ""}.")
+        if (s.triggers.isNotEmpty()) appendLine("Leak triggers: ${s.triggers.joinToString { "${it.name} (${it.count})" }}")
+        s.patterns.forEach { appendLine("Pattern: ${it.title}. ${it.body}") }
+        appendLine("date\ttrips\tnight\tleaks\tbowel\tpads\tpelvic_floor\tvoided_ml\tfluid_ml\turgent")
+        s.days.forEach { d -> appendLine("${d.date}\t${d.voids}\t${d.nightVoids}\t${d.leaks}\t${d.bowel}\t${d.pads}\t${d.pelvicFloor}\t${d.voidedMl ?: ""}\t${d.fluidMl}\t${d.urgentTrips}") }
+        val days = services.profiles.days(user.id)
+        val entries = c.list(user.id, count).reversed()
+        if (entries.isNotEmpty()) {
+            appendLine("Diary:")
+            entries.forEach { e ->
+                appendLine("  ${formatTime(days, e.at)}${if (e.night) " (night)" else ""}: ${e.kind.label}" + listOfNotNull(
+                    e.volumeMl?.let { "$it ml" }, e.urgency?.let { "urgency $it/3" }, e.leak?.label?.lowercase()?.let { "leak: $it" },
+                    e.triggers.takeIf { it.isNotEmpty() }?.joinToString(", "), e.bristol?.let { "Bristol type $it" },
+                    "pain".takeIf { e.pain }, "blood".takeIf { e.blood }, e.reps?.let { "$it reps" }, e.holdSeconds?.let { "${it}s holds" }, e.note,
+                ).joinToString(", ", ", ").ifEmpty { "" }.let { if (it == ", ") "" else it })
+            }
+        }
+    }
+
+    private suspend fun medsText(user: User, dateText: String): String = buildString {
+        val meds = services.modules.meds
+        val days = services.profiles.days(user.id)
+        val date = days.parse(dateText, services.clock())
+        val list = meds.list(user.id, all = true)
+        if (list.isEmpty()) appendLine("No medications added.")
+        list.forEach { m ->
+            val s = m.schedule
+            val schedule = when (s.kind) {
+                com.health.api.ScheduleKind.DAILY -> "daily at ${s.times.joinToString()}"
+                com.health.api.ScheduleKind.WEEKLY -> "weekly on ${s.weekdays.joinToString { java.time.DayOfWeek.of(it).name.lowercase().replaceFirstChar(Char::uppercase) }} at ${s.times.joinToString()}"
+                com.health.api.ScheduleKind.EVERY_N_DAYS -> "every ${s.everyDays} days from ${s.startDate ?: "the start"} at ${s.times.joinToString()}"
+                com.health.api.ScheduleKind.AS_NEEDED -> "as needed"
+            }
+            appendLine("- ${m.name}${m.dose?.let { " $it" } ?: ""} (${m.form.label.lowercase()}), $schedule${m.purpose?.let { ", for $it" } ?: ""}${if (!m.active) " [stopped]" else ""}${m.stock?.let { ", $it left" } ?: ""}${m.sites.takeIf { it.isNotEmpty() }?.let { "; sites: ${it.joinToString()}" } ?: ""}")
+        }
+        val day = meds.day(user.id, date)
+        if (day.due.isNotEmpty()) {
+            appendLine("Doses on $date:")
+            day.due.forEach { d ->
+                val state = d.log?.let { "${it.status.name.lowercase()} at ${formatTime(days, it.at).substringAfter(' ')}${it.site?.let { s -> ", $s" } ?: ""}" }
+                    ?: if (d.scheduledFor < services.clock()) "not marked yet" else "due"
+                appendLine("  ${formatTime(days, d.scheduledFor).substringAfter(' ')} ${d.name}: $state${if (d.log == null) d.nextSite?.let { ", next site $it" } ?: "" else ""}")
+            }
+        }
+        day.extra.forEach { e -> appendLine("  extra: ${list.firstOrNull { it.id == e.medicationId }?.name ?: "?"} at ${formatTime(days, e.at)}") }
+        day.adherence7d?.let { appendLine("Taken $it% of scheduled doses over the last 7 days.") }
+        day.lowStock.forEach { appendLine("Running low: ${it.name} (${it.stock} left)") }
+        val labs = meds.labs(user.id, 3650)
+        if (labs.isNotEmpty()) {
+            appendLine("Lab results:")
+            labs.groupBy { it.name }.forEach { (name, results) ->
+                appendLine("  $name: " + results.take(8).joinToString("; ") { r -> "${r.date} ${num(r.value)} ${r.unit}${if (r.low != null || r.high != null) " (range ${r.low?.let(::num) ?: "?"}–${r.high?.let(::num) ?: "?"})" else ""}" })
+            }
+        }
+    }
+
     // ---- Helpers ----
 
     private val startedAt = services.clock()
@@ -846,6 +1175,11 @@ class McpServer(private val services: Services) {
         }
 
         private fun stringProperty(description: String) = buildJsonObject { put("type", "string"); put("description", description) }
+        private fun stringArray(description: String) = buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "string") })
+            put("description", description)
+        }
         private fun intProperty(description: String) = buildJsonObject { put("type", "integer"); put("description", description) }
         private fun numberProperty(description: String) = buildJsonObject { put("type", "number"); put("description", description) }
         private fun boolProperty(description: String) = buildJsonObject { put("type", "boolean"); put("description", description) }
@@ -858,6 +1192,7 @@ class McpServer(private val services: Services) {
         private fun JsonObject.string(name: String) = (this[name] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         private fun JsonObject.int(name: String) = (this[name] as? JsonPrimitive)?.let { it.intOrNull ?: it.contentOrNull?.toDoubleOrNull()?.roundToInt() }
         private fun JsonObject.number(name: String) = (this[name] as? JsonPrimitive)?.let { it.doubleOrNull ?: it.contentOrNull?.toDoubleOrNull() }?.takeIf { it.isFinite() }
+        private fun JsonObject.strings(name: String) = (this[name] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> s.isNotEmpty() } }.orEmpty()
         private fun JsonObject.bool(name: String) = (this[name] as? JsonPrimitive)?.let { it.booleanOrNull ?: it.contentOrNull?.toBooleanStrictOrNull() }
 
         /** "3h 12m", "2d 4h", "45m". */
