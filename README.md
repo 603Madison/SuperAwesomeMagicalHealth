@@ -6,9 +6,12 @@ Your own health server. Wearables (Colmi rings, Pebble, Garmin, anything in Heal
 Connect or Gadgetbridge) send heart rate, HRV, sleep, steps and workouts in through the phone app;
 you log food, water, weight and how you feel; and the server turns it into Oura-style
 **readiness, sleep and activity scores** against your own baseline, with plain-English insights,
-trends and calorie targets. Turn on what else you want to keep track of: **mood and mental
-health**, **your cycle**, a **bladder and bowel diary**, and **medications** with reminders.
-Everything stays on your server, and the private parts are encrypted there.
+trends, stress and resilience, and calorie targets. Turn on what else you want to keep track
+of: **mood and mental health**, **your cycle** (and pregnancy, after a birth, perimenopause and
+menopause), a **bladder and bowel diary**, **medications** with reminders, **blood pressure and
+glucose**, **symptoms and migraines**, **habits**, **hormone therapy** and **appointments**. Get
+a **weekly digest**, make a **report for your doctor**, and let someone who cares for you **see
+what you choose**. Everything stays on your server, and the private parts are encrypted there.
 
 It's part of the SuperAwesomeMagical family (Music, Weather, Cockpit Manager) and looks like it:
 Lexend, rounded cards over a soft glow, and the **Aurora** theme (purple and green) by default,
@@ -17,11 +20,13 @@ with Violet, Ocean and Ember, light and dark.
 - **Server** (`server/`): Kotlin and Ktor with SQLite, in one container for Podman or Docker.
   Signs people in with **Authentik** (or any OpenID Connect provider), with a local
   **break-glass admin** that always works.
-- **Web app** (`web/`): React, served by the server. Today, Sleep, Activity, Food, Body, Mind,
-  Cycle, Bladder & bowel, Medications, Trends, Devices, Settings and Admin.
+- **Web app** (`web/`): React, served by the server: every feature, Trends, Reports, Devices,
+  Settings and Admin, with reminders by browser notification.
 - **Android app** (`android/`): logs food (with barcode scanning), weight, workouts, mood,
   periods, toilet trips and doses (with reminders), shows your days and trends, and carries data
   from your wearables to the server.
+- **Pebble watch app** (`pebble/`): today's scores, and one-tap mood, water, coffee, bathroom,
+  doses, habits, hot flashes and symptoms.
 - **AI connector** (MCP): bring your data to the AI of your choice, to ask about it, spot
   patterns, log meals by chat, and troubleshoot device syncs.
 
@@ -38,11 +43,18 @@ they're based on, measured against *your* usual rather than a population average
 - **Activity**: daily goals, moving every hour, weekly goals, training frequency and volume, and
   recovery days.
 
+**Stress and resilience**: through the day, quarter hours are stressed, engaged, relaxed or
+restored, from your heart rate and HRV against your own baseline (or your watch's own stress
+readings); resilience is how well recovery (sleep, and calm time awake) has balanced stress over
+two weeks, from limited to exceptional.
+
 **Insights** pick out what matters each day: a resting heart rate up 5 bpm, a short night against
 your usual, sleep debt, low protein by the evening, a weight trend heading the right way.
 
 **Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
-quick-add calories, make your own foods, copy yesterday's breakfast, and track water. Calorie
+quick-add calories, make your own foods, copy yesterday's breakfast, and track water and
+**drinks**: caffeine (and how much is likely still in you at bedtime) and alcohol, with how both
+went with your sleep and HRV. Calorie
 targets come from your resting energy (Mifflin–St Jeor, with the female or male formula, or the
 average of both, as fits your body), your devices' active calories, and the weight change you're
 aiming for.
@@ -54,7 +66,7 @@ is harmless.
 ## Features you turn on
 
 Settings › **Features**: each person picks what they use. Activity, sleep, food and body are on
-to start; these are opt-in, encrypted on the server (AES-GCM, with a key file kept beside the
+to start. These are opt-in, encrypted on the server (AES-GCM, with a key file kept beside the
 database), and shown to an AI connector only if the person says so when making its link:
 
 - **Mind**: log mood (with energy, anxiety, feelings and what it's about) as often as you like,
@@ -74,8 +86,59 @@ database), and shown to an AI connector only if the person says so when making i
   sleep; patterns worth knowing; a guided **pelvic floor exercise**; and a printable **3-day
   bladder diary** for your doctor.
 - **Medications**: medications and supplements on daily, weekly, every-few-days or as-needed
-  schedules; Take and Skip, reminders on the phone, adherence, doses left, **injection and patch
-  site rotation**, and **lab results** charted over time.
+  schedules; Take and Skip, reminders (again if a dose isn't marked; refills), adherence, doses
+  left, **injection and patch site rotation**, and **lab results** charted over time.
+- **Symptoms & pain**: symptoms with severity, body areas, triggers and what helped, and
+  **migraines** with aura, timing and medication. What went with them in your own data: short
+  nights, stressful days, caffeine, alcohol, your cycle, and falling **air pressure** (from
+  Open-Meteo, for a rough place you set, if the admin allows it).
+- **Hormone therapy**, of any kind: hormone medications with how long you've been on them and
+  every **dose change**, your **levels against the target ranges your clinician set**, and when
+  labs are next due.
+- **Appointments**: who, when and where, reminders before, **questions to ask** (suggested from
+  what you've logged since the last one, from every feature that's on), and notes afterwards.
+- **Life stages**, with the cycle: **pregnancy** (week, due date, a kick counter, a contraction
+  timer that knows the 5-1-1 pattern), **after a birth** (feeds, and the **EPDS** check-in in
+  Mind), **perimenopause** and **after menopause** (hot flashes, months since the last period;
+  predictions widen or pause to suit).
+
+And two that aren't private, so they aren't encrypted:
+
+- **Blood pressure & glucose**: from Bluetooth monitors and meters through the phone app, Health
+  Connect, or by hand; categories, your own targets, time in range and an A1c estimate.
+- **Habits**: ticked by hand or by what's already recorded (steps, sleep, water, a mood logged,
+  every dose taken, no alcohol…). Streaks count **weeks** that reach your aim, so a rest day never
+  breaks one.
+
+## Reminders, the weekly digest, and sharing
+
+- **Reminders** come to the phone (they work offline), to browsers (web push, with Taken and
+  Snooze), to the watch, and to webhooks: doses (again if not marked, and "missed" for webhooks),
+  refills, habits and appointments, with quiet hours and **no medication names on a locked
+  screen** unless you want them.
+- **The weekly digest**: your week against the one before, on the day and hour you choose, in the
+  apps and by email (the admin sets up mail; private features go in the email only if you say).
+- **Sharing**: let another account on your server (a partner, a parent, a carer) **see** the
+  features you pick, read-only. They switch to "Viewing Alex" and can't change anything; you can
+  see when they last looked and stop sharing any time.
+
+## Reports, export, webhooks and Home Assistant
+
+- **A report for your doctor**: a PDF for the dates you choose, with averages, charts and what
+  changed, feature by feature; private features only if you tick them.
+- **Export everything**: CSV files, and a FHIR R4 bundle for health record systems.
+- **Webhooks**: the server calls a URL when something happens (morning scores ready, readiness
+  low, a dose due or missed, blood pressure high, glucose low, a device's battery low…), signed
+  with HMAC. Home Assistant's webhook trigger works as it is, and a **Home Assistant key** reads
+  today's numbers for REST sensors: see [docs/home-assistant.md](docs/home-assistant.md).
+
+## The Pebble watch app
+
+`pebble/` has a native app for the Pebble Time 2 and other Pebbles. It shows today's scores and
+logs mood, water, coffee, bladder and bowel, doses, habits, hot flashes and symptoms in one tap.
+Install the `.pbw` from a [release](https://github.com/603Madison/SuperAwesomeMagicalHealth/releases),
+open its settings in the Pebble app, type your server's address and sign in. Taps made while the
+server is unreachable wait on your phone and send later. See [pebble/README.md](pebble/README.md).
 
 ## Getting the app
 

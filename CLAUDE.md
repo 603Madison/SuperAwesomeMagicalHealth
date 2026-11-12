@@ -11,13 +11,23 @@
   `insights/Scoring.kt`; `DayService` caches each day's `DayStats` in `day_cache`, so **every
   write path must call `days.changed…`** for the days it touches (raise `DayStats.VERSION` when
   the way days are worked out changes). The MCP server is `mcp/Mcp.kt`.
+- Server features by package: `modules/` (mind, cycle, continence, medications), `tracking/`
+  (vitals, drinks, symptoms with the weather, habits; stress in `insights/Stress.kt`), `care/`
+  (hormone therapy, life stages, appointments, sharing via the `X-SAMH-View` header, allowlisted
+  per path in `SharedView`), `platform/` (scheduler, web push, webhooks, Home Assistant and watch
+  keys, digest and mail, PDF report, CSV/FHIR export). Each feature plugs into digests, reports,
+  exports, reminders and appointment questions through `platform/FeatureHooks`, listed in
+  `Services.hooks`. `IntegrationTest` covers the features working together.
 - `web/`: React + Vite + TypeScript, built into the server's jar.
+- `pebble/`: the Pebble watch app (C + PebbleKit JS, `node --test pebble/test/*.test.js`).
+- `fdroid/`: the F-Droid repository's listing, build script and page (see Releases).
 - `android/`: Jetpack Compose, signs in to the server; device conduits in `devices/`, sync in
   `sync/`.
 - Health modules (`Module` in `shared/…/Modules.kt`, `server/…/modules/`): each person turns them
-  on in `Profile.modules`. The sensitive ones (mind, cycle, continence, medications) keep their
-  entries sealed in the `entries` and `medications` tables (`EntryStore`, `SecretBox`), add their
-  part of a day through `ModuleService` (Today, Trends, insights tagged with their `module`), and
+  on in `Profile.modules`. The sensitive ones (mind, cycle, continence, medications, symptoms,
+  hormones, appointments) keep their entries sealed in the `entries` and `medications` tables
+  (`EntryStore`, `SecretBox`), add their part of a day (Today, Trends, insights tagged with their
+  `module`), and
   are only visible to AI connector links whose `scope` names them; every-account links never see
   them. Keep it that way, and keep the copy for these modules kind, plain and never gendered.
 
