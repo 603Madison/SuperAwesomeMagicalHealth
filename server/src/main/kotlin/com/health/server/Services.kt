@@ -67,10 +67,21 @@ class Services(
         clock = clock,
     ).also { days.extras = it }
 
+    // Hormone therapy, life stages, appointments and sharing (care/).
+    val hormones = com.health.server.care.HormonesService(modules.meds, entries, profiles, clock).also { modules.meds.onChanged = it::medicationChanged }
+    val lifeStages = com.health.server.care.LifeStageService(entries, profiles, modules.cycle, modules.mind, db, clock).also { modules.cycle.stageOf = it::stageOf }
+    val appointments = com.health.server.care.AppointmentsService(entries, profiles, { hooks }, clock)
+    val sharing = com.health.server.care.SharingService(db, users, profiles, clock)
+    init {
+        modules.care = com.health.server.care.CareDay(hormones, lifeStages, appointments)
+    }
+
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(
             // Add each feature's service here.
+            hormones, lifeStages, appointments,
+            *com.health.server.care.CoreQuestions.all(modules.mind, modules.cycle, modules.continence, modules.meds, days, clock).toTypedArray(),
         )
     }
 

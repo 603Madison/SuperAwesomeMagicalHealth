@@ -31,6 +31,9 @@ class MedsService(
 ) {
     private fun context(userId: String, id: String) = "medication:$userId:$id"
 
+    /** Told of every saved medication, with how it was before (null for a new one): hormone therapy keeps a dose history. */
+    var onChanged: (suspend (userId: String, before: Medication?, after: Medication) -> Unit)? = null
+
     suspend fun list(userId: String, all: Boolean = false): List<Medication> = db.tx {
         query("SELECT id, data FROM medications WHERE user_id = ?${if (all) "" else " AND active = 1"} ORDER BY created_at", userId) { it.string("id") to it.string("data") }
     }.mapNotNull { (id, data) ->
@@ -42,6 +45,7 @@ class MedsService(
     suspend fun save(userId: String, med: Medication, id: String? = null): Medication {
         val clean = validated(med)
         val medId = id ?: Random.id()
+        val before = if (id != null && onChanged != null) list(userId, all = true).firstOrNull { it.id == id } else null
         val sealed = box.seal(ApiJson.encodeToString(Medication.serializer(), clean.copy(id = null)), context(userId, medId))
         db.tx {
             if (id != null) {
@@ -52,6 +56,7 @@ class MedsService(
                 update("INSERT INTO medications (id, user_id, data, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", medId, userId, sealed, clean.active, clock(), clock())
             }
         }
+        onChanged?.invoke(userId, before, clean.copy(id = medId))
         return clean.copy(id = medId)
     }
 
@@ -173,6 +178,9 @@ class MedsService(
                 sites = med.sites.map { it.trim().take(60) }.filter { it.isNotEmpty() }.distinct().take(20),
                 stock = med.stock?.coerceIn(0, 100_000),
                 schedule = s.copy(times = times, weekdays = s.weekdays.distinct().sorted()),
+                startedOn = med.startedOn?.trim()?.ifBlank { null }?.also {
+                    runCatching { LocalDate.parse(it) }.getOrElse { throw ApiError.badRequest("Dates look like 2026-01-31") }
+                },
                 id = null,
             )
         }

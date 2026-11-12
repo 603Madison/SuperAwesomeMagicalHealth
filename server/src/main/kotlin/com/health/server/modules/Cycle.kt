@@ -23,6 +23,9 @@ class CycleService(
     private val days: DayService,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    /** The person's life stage, when it isn't simply tracking a cycle (care/LifeStages): predictions pause or widen. */
+    var stageOf: (suspend (userId: String) -> com.health.api.LifeStageInfo?)? = null
+
     suspend fun put(userId: String, day: CycleDay): CycleDay {
         val date = runCatching { LocalDate.parse(day.date) }.getOrElse { throw ApiError.badRequest("Dates look like 2026-01-31") }
         day.pain?.let { if (it !in 0..10) throw ApiError.badRequest("Pain is from 0 to 10") }
@@ -60,7 +63,8 @@ class CycleService(
         val nightly = days.stats(userId, tempFrom, today, zone).mapNotNull { s ->
             (s.tempDeviation ?: s.skinTemp)?.let { DatedValue(s.date, it) }
         }
-        return CycleMath.analyze(logged, nightly, today)
+        val overview = CycleMath.analyze(logged, nightly, today)
+        return stageOf?.invoke(userId)?.let { com.health.server.care.LifeStages.adjust(overview, it) } ?: overview
     }
 
     suspend fun today(userId: String, date: LocalDate): CycleToday {

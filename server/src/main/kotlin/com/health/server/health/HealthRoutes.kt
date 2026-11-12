@@ -17,6 +17,7 @@ import com.health.server.Services
 import com.health.server.auth.principal
 import com.health.server.auth.publicBase
 import com.health.server.auth.requireUser
+import com.health.server.care.viewScope
 import com.health.server.insights.DayService
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
@@ -41,7 +42,8 @@ fun Route.healthRoutes(services: Services) {
     route("/api/profile") {
         get {
             val user = call.requireUser(services)
-            call.respond(services.profiles.get(user.id))
+            val profile = services.profiles.get(user.id)
+            call.respond(call.viewScope?.let { com.health.server.care.SharedView.limit(profile, it.modules) } ?: profile)
         }
         put {
             val user = call.requireUser(services)
@@ -55,21 +57,22 @@ fun Route.healthRoutes(services: Services) {
 
     get("/api/day/{date}") {
         val user = call.requireUser(services)
-        call.respond(services.days.summary(user.id, call.parameters["date"].orEmpty()))
+        val summary = services.days.summary(user.id, call.parameters["date"].orEmpty())
+        // Someone viewing shared data sees only the features shared with them.
+        call.respond(call.viewScope?.let { com.health.server.care.SharedView.limit(summary, it.modules) } ?: summary)
     }
 
     get("/api/trends") {
         val user = call.requireUser(services)
         val q = call.request.queryParameters
         val days = services.profiles.days(user.id)
-        call.respond(
-            services.days.trends(
-                user.id,
-                q["from"]?.let { days.parse(it, services.clock()) },
-                q["to"]?.let { days.parse(it, services.clock()) },
-                q["days"]?.toIntOrNull(),
-            ),
+        val trends = services.days.trends(
+            user.id,
+            q["from"]?.let { days.parse(it, services.clock()) },
+            q["to"]?.let { days.parse(it, services.clock()) },
+            q["days"]?.toIntOrNull(),
         )
+        call.respond(call.viewScope?.let { v -> trends.copy(days = trends.days.map { com.health.server.care.SharedView.limit(it, v.modules) }) } ?: trends)
     }
 
     get("/api/series") {
