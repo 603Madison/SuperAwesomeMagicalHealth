@@ -66,7 +66,7 @@ class ServerException(val code: Int, message: String) : IOException(message)
  */
 class ServerApi(
     private val http: OkHttpClient,
-    private val base: () -> String,
+    internal val base: () -> String,
     private val token: () -> String?,
     private val onSignedOut: () -> Unit = {},
 ) {
@@ -268,16 +268,16 @@ class ServerApi(
 
     suspend fun deleteLab(id: String) = delete("/api/labs/${enc(id)}")
 
-    // ---- Plumbing ----
+    // ---- Plumbing (internal, so each feature's calls can live in its own file as extensions) ----
 
-    private suspend fun <T> get(url: String, serializer: KSerializer<T>, auth: Boolean = true): T = send("GET", url, null, serializer, auth)
+    internal suspend fun <T> get(url: String, serializer: KSerializer<T>, auth: Boolean = true): T = send("GET", url, null, serializer, auth)
 
-    private suspend fun <T> post(path: String, body: T, serializer: KSerializer<T>): T =
+    internal suspend fun <T> post(path: String, body: T, serializer: KSerializer<T>): T =
         send("POST", "${base()}$path", ApiJson.encodeToString(serializer, body), serializer)
 
-    private suspend fun delete(path: String) = send("DELETE", "${base()}$path", null, Unit.serializer())
+    internal suspend fun delete(path: String) = send("DELETE", "${base()}$path", null, Unit.serializer())
 
-    private suspend fun <T> send(method: String, url: String, body: String?, serializer: KSerializer<T>, auth: Boolean = true): T =
+    internal suspend fun <T> send(method: String, url: String, body: String?, serializer: KSerializer<T>, auth: Boolean = true): T =
         withContext(Dispatchers.IO) {
             val response = try {
                 http.newCall(request(method, url, body, auth)).execute()
@@ -310,7 +310,7 @@ class ServerApi(
         }
     }
 
-    private fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+    internal fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     @Serializable
     private data class NameBody(val name: String)
