@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { Activity as ActivityIcon, LogOut, Moon, Salad, Settings as SettingsIcon, Shield, Sun, TrendingUp, Watch, Weight } from "lucide-react";
+import { Activity as ActivityIcon, Brain, CalendarHeart, Droplet, LogOut, Moon, Pill, Salad, Settings as SettingsIcon, Shield, Sun, TrendingUp, Watch, Weight } from "lucide-react";
+import type { Module } from "./lib/types";
+import { Mind } from "./pages/Mind";
+import { Cycle } from "./pages/Cycle";
+import { Continence } from "./pages/Continence";
+import { Meds } from "./pages/Meds";
 import { session, useSession } from "./lib/session";
 import { IconButton, Spinner, Toasts } from "./components/ui";
 import { Login } from "./pages/Login";
@@ -38,8 +43,17 @@ function Root() {
   return <Shell />;
 }
 
+/** The modules this person uses (the defaults until their profile has loaded). */
+export function useModules(): Module[] {
+  // One array for the defaults: a new one each time would look like a change on every render.
+  return useSession((s) => s.profile?.modules ?? DEFAULT_MODULES);
+}
+
+const DEFAULT_MODULES: Module[] = ["ACTIVITY", "SLEEP", "NUTRITION", "BODY"];
+
 function Shell() {
   const user = useSession((s) => s.user)!;
+  const on = useModules();
   return (
     <div className="shell">
       <nav className="sidebar" aria-label="Main">
@@ -48,10 +62,14 @@ function Shell() {
           <span>SuperAwesome<wbr />MagicalHealth</span>
         </div>
         <NavLink to="/" end className="nav-link"><Sun size={20} /> <span>Today</span></NavLink>
-        <NavLink to="/sleep" className="nav-link"><Moon size={20} /> <span>Sleep</span></NavLink>
-        <NavLink to="/activity" className="nav-link"><ActivityIcon size={20} /> <span>Activity</span></NavLink>
-        <NavLink to="/food" className="nav-link"><Salad size={20} /> <span>Food</span></NavLink>
-        <NavLink to="/body" className="nav-link nav-optional"><Weight size={20} /> <span>Body</span></NavLink>
+        {on.includes("SLEEP") && <NavLink to="/sleep" className="nav-link nav-optional"><Moon size={20} /> <span>Sleep</span></NavLink>}
+        {on.includes("ACTIVITY") && <NavLink to="/activity" className="nav-link nav-optional"><ActivityIcon size={20} /> <span>Activity</span></NavLink>}
+        {on.includes("NUTRITION") && <NavLink to="/food" className="nav-link"><Salad size={20} /> <span>Food</span></NavLink>}
+        {on.includes("BODY") && <NavLink to="/body" className="nav-link nav-optional"><Weight size={20} /> <span>Body</span></NavLink>}
+        {on.includes("MIND") && <NavLink to="/mind" className="nav-link"><Brain size={20} /> <span>Mind</span></NavLink>}
+        {on.includes("CYCLE") && <NavLink to="/cycle" className="nav-link nav-optional"><CalendarHeart size={20} /> <span>Cycle</span></NavLink>}
+        {on.includes("CONTINENCE") && <NavLink to="/bladder" className="nav-link nav-optional"><Droplet size={20} /> <span>Bladder &amp; bowel</span></NavLink>}
+        {on.includes("MEDICATIONS") && <NavLink to="/meds" className="nav-link nav-optional"><Pill size={20} /> <span>Medications</span></NavLink>}
         <NavLink to="/trends" className="nav-link"><TrendingUp size={20} /> <span>Trends</span></NavLink>
         <NavLink to="/devices" className="nav-link nav-optional"><Watch size={20} /> <span>Devices</span></NavLink>
         <NavLink to="/settings" className="nav-link"><SettingsIcon size={20} /> <span>Settings</span></NavLink>
@@ -71,6 +89,10 @@ function Shell() {
           <Route path="/food" element={<Food />} />
           <Route path="/body" element={<Body />} />
           <Route path="/trends" element={<Trends />} />
+          <Route path="/mind" element={<Mind />} />
+          <Route path="/cycle" element={<Cycle />} />
+          <Route path="/bladder" element={<Continence />} />
+          <Route path="/meds" element={<Meds />} />
           <Route path="/devices" element={<Devices />} />
           <Route path="/settings" element={<Settings />} />
           {user.role === "ADMIN" && <Route path="/admin" element={<Admin />} />}

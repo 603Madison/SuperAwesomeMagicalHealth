@@ -176,6 +176,21 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
       </section>
 
       <section className="panel">
+        <h2>Support lines</h2>
+        <p className="muted">Shown in Mind whenever someone asks for support, or a check-in suggests they might need it. Set them for where your people live.</p>
+        {settings.crisisResources.map((r, i) => (
+          <div key={i} className="resource-row">
+            <input value={r.name} placeholder="Name" aria-label="Name" onChange={(e) => setSettings({ ...settings, crisisResources: settings.crisisResources.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)) })} />
+            <input value={r.contact} placeholder="How to reach it, e.g. Call or text 988" aria-label="Contact" onChange={(e) => setSettings({ ...settings, crisisResources: settings.crisisResources.map((x, k) => (k === i ? { ...x, contact: e.target.value } : x)) })} />
+            <input value={r.region ?? ""} placeholder="Where" aria-label="Region" onChange={(e) => setSettings({ ...settings, crisisResources: settings.crisisResources.map((x, k) => (k === i ? { ...x, region: e.target.value || undefined } : x)) })} />
+            <input value={r.url ?? ""} placeholder="https://…" aria-label="Website" onChange={(e) => setSettings({ ...settings, crisisResources: settings.crisisResources.map((x, k) => (k === i ? { ...x, url: e.target.value || undefined } : x)) })} />
+            <Button variant="ghost" aria-label="Remove" onClick={() => setSettings({ ...settings, crisisResources: settings.crisisResources.filter((_, k) => k !== i) })}><Trash2 size={16} /></Button>
+          </div>
+        ))}
+        <div><Button onClick={() => setSettings({ ...settings, crisisResources: [...settings.crisisResources, { name: "", contact: "" }] })}><Plus size={18} /> Add a line</Button></div>
+      </section>
+
+      <section className="panel">
         <h2>Single sign-on (OpenID Connect)</h2>
         <p className="muted">
           For Authentik: create an OAuth2/OpenID Provider (confidential client) and an Application for it, and add this

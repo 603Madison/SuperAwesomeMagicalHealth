@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, BatteryLow, Droplet, Dumbbell, Egg, Flame, Footprints, Heart, Moon, Scale, Sparkles, Thermometer, Zap, type LucideIcon } from "lucide-react";
+import { Activity, BatteryLow, CalendarHeart, Droplet, Dumbbell, Egg, Flame, Footprints, Heart, Moon, Pill, Scale, Sparkles, Thermometer, Zap, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { localInput, toKg, useUnits, weightValue, WORKOUT_TYPES } from "../lib/format";
 import type { CheckIn, Workout, WorkoutType } from "../lib/types";
@@ -9,6 +9,7 @@ import { Button, errorToast, Field, Modal, toast } from "./ui";
 export const INSIGHT_ICONS: Record<string, LucideIcon> = {
   zap: Zap, "battery-low": BatteryLow, heart: Heart, activity: Activity, thermometer: Thermometer, moon: Moon,
   footprints: Footprints, dumbbell: Dumbbell, egg: Egg, flame: Flame, droplet: Droplet, scale: Scale, sparkles: Sparkles,
+  pill: Pill, calendar: CalendarHeart,
 };
 
 export function WeightDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {

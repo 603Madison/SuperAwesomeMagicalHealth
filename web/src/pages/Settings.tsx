@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
-import { Bot, Copy, KeyRound, LogOut, Monitor, Shield, Smartphone, Watch, Weight } from "lucide-react";
+import { Activity, Bot, CalendarHeart, Copy, Droplet, KeyRound, Lock, LogOut, Monitor, Moon, Pill, Shield, Smartphone, Watch, Weight } from "lucide-react";
+import { useModules } from "../App";
+import type { Module } from "../lib/types";
 import { NavLink } from "react-router-dom";
 import { api } from "../lib/api";
 import { KG_PER_LB, toKg, when } from "../lib/format";
 import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
-import type { Goals, Profile as ProfileModel } from "../lib/types";
+import { SENSITIVE, type Goals, type Profile as ProfileModel } from "../lib/types";
 import { Button, Field, IconButton, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 
 export function Settings() {
   const user = useSession((s) => s.user)!;
   const profile = useSession((s) => s.profile);
+  const on = useModules();
   // A new connector link or upload key shows in the list of sign-ins at once.
   const [signIns, setSignIns] = useState(0);
   return (
@@ -18,10 +21,21 @@ export function Settings() {
       <PageHeader title="Settings" />
       {/* Phones show five tabs; the rest of the app is a tap away here. */}
       <nav className="phone-only more-links" aria-label="More">
-        <NavLink to="/body" className="chip"><Weight size={18} /> Body</NavLink>
+        {on.includes("SLEEP") && <NavLink to="/sleep" className="chip"><Moon size={18} /> Sleep</NavLink>}
+        {on.includes("ACTIVITY") && <NavLink to="/activity" className="chip"><Activity size={18} /> Activity</NavLink>}
+        {on.includes("BODY") && <NavLink to="/body" className="chip"><Weight size={18} /> Body</NavLink>}
+        {on.includes("CYCLE") && <NavLink to="/cycle" className="chip"><CalendarHeart size={18} /> Cycle</NavLink>}
+        {on.includes("CONTINENCE") && <NavLink to="/bladder" className="chip"><Droplet size={18} /> Bladder &amp; bowel</NavLink>}
+        {on.includes("MEDICATIONS") && <NavLink to="/meds" className="chip"><Pill size={18} /> Medications</NavLink>}
         <NavLink to="/devices" className="chip"><Watch size={18} /> Devices</NavLink>
         {user.role === "ADMIN" && <NavLink to="/admin" className="chip"><Shield size={18} /> Admin</NavLink>}
       </nav>
+
+      <section className="panel">
+        <h2>Features</h2>
+        <p className="muted">Turn on the parts you want. The rest stay out of your way.</p>
+        {profile ? <Features profile={profile} /> : <Spinner />}
+      </section>
 
       <section className="panel">
         <h2>You and your goals</h2>
@@ -50,6 +64,35 @@ export function Settings() {
         <h2>Signed in on</h2>
         <SignIns key={signIns} />
       </section>
+    </div>
+  );
+}
+
+const FEATURES: { id: Module; name: string; about: string }[] = [
+  { id: "ACTIVITY", name: "Activity", about: "Steps, calories, workouts and the activity score." },
+  { id: "SLEEP", name: "Sleep", about: "Nights, sleep stages and the sleep score." },
+  { id: "NUTRITION", name: "Food", about: "A food diary with calories, protein, carbs, fat and water." },
+  { id: "BODY", name: "Body", about: "Weight and body fat." },
+  { id: "MIND", name: "Mind", about: "Mood, a private journal, anxiety and depression check-ins, calming tools, and support when you need it." },
+  { id: "CYCLE", name: "Cycle", about: "Periods, symptoms and predictions, with your ring's temperature where it has one." },
+  { id: "CONTINENCE", name: "Bladder & bowel", about: "A diary of toilet trips, leaks and bowel movements, and pelvic floor exercises." },
+  { id: "MEDICATIONS", name: "Medications", about: "Medications and supplements, reminders, injection-site rotation and lab results." },
+];
+
+function Features({ profile }: { profile: ProfileModel }) {
+  const [busy, setBusy] = useState(false);
+  const toggle = async (id: Module, enabled: boolean) => {
+    setBusy(true);
+    const modules = enabled ? [...profile.modules, id] : profile.modules.filter((m) => m !== id);
+    try { session.setProfile(await api.saveProfile({ ...profile, modules })); } catch (e) { errorToast(e); }
+    setBusy(false);
+  };
+  return (
+    <div className="form-stack">
+      {FEATURES.map((f) => (
+        <Toggle key={f.id} disabled={busy} checked={profile.modules.includes(f.id)} onChange={(v) => void toggle(f.id, v)}
+          label={f.name} help={<>{f.about}{SENSITIVE.includes(f.id) && <><br /><Lock size={11} style={{ verticalAlign: -1 }} /> Encrypted on the server; AI connectors only see it if you allow them.</>}</>} />
+      ))}
     </div>
   );
 }
@@ -244,7 +287,7 @@ export function SignIns({ only }: { only?: string[] }) {
             {s.kind === "APP" ? <Smartphone size={20} /> : s.kind.startsWith("MCP") ? <Bot size={20} /> : s.kind === "UPLOAD" ? <KeyRound size={20} /> : <Monitor size={20} />}
             <div className="source-text">
               <div className="source-name">{s.name}{s.current && <span className="badge">This browser</span>}</div>
-              <div className="source-sub">{KIND_TEXT[s.kind]} {when(s.createdAt)} · last used {when(s.lastSeenAt)}</div>
+              <div className="source-sub">{KIND_TEXT[s.kind]} {when(s.createdAt)} · last used {when(s.lastSeenAt)}{s.scope?.length ? ` · can see ${s.scope.map((m) => FEATURES.find((f) => f.id === m)?.name).join(", ")}` : ""}</div>
             </div>
             {!s.current && (
               <IconButton label={s.kind === "WEB" || s.kind === "APP" ? "Sign out this device" : "Remove this key"} onClick={async () => {
@@ -269,6 +312,9 @@ function Connector({ onMade }: { onMade: () => void }) {
   const [busy, setBusy] = useState(false);
   const [logging, setLogging] = useState(false);
   const [everyone, setEveryone] = useState(false);
+  const on = useModules();
+  const [scope, setScope] = useState<Module[]>([]);
+  const sensitive = FEATURES.filter((f) => SENSITIVE.includes(f.id) && on.includes(f.id));
   return (
     <div className="form-stack">
       <p className="muted">
@@ -292,14 +338,24 @@ function Connector({ onMade }: { onMade: () => void }) {
         <>
           <Toggle checked={logging} onChange={(v) => { setLogging(v); if (v) setEveryone(false); }} label="Let it log entries"
             help="It may also log food, water, weight, workouts and check-ins for you (say, from a photo of your lunch). Off: it only reads." />
+          {sensitive.length > 0 && !everyone && (
+            <Field label="Also let it see" help="Off unless you choose: these stay private otherwise.">
+              <div className="tag-list">
+                {sensitive.map((f) => (
+                  <button key={f.id} type="button" className={`chip ${scope.includes(f.id) ? "is-on" : ""}`} aria-pressed={scope.includes(f.id)}
+                    onClick={() => setScope(scope.includes(f.id) ? scope.filter((x) => x !== f.id) : [...scope, f.id])}><Lock size={14} /> {f.name}</button>
+                ))}
+              </div>
+            </Field>
+          )}
           {admin && (
             <Toggle checked={everyone} onChange={(v) => { setEveryone(v); if (v) setLogging(false); }} label="See every account (admins)"
-              help="Reads every account's data and the server's log, to troubleshoot anyone's devices. Read-only." />
+              help="Reads every account's activity, sleep, food and devices, and the server's log, to troubleshoot anyone's devices. Read-only, and never the private modules." />
           )}
           <div>
             <Button busy={busy} onClick={async () => {
               setBusy(true);
-              try { setLink((await api.connector(logging, admin && everyone)).url); onMade(); } catch (e) { errorToast(e); }
+              try { setLink((await api.connector(logging, admin && everyone, everyone ? [] : scope)).url); onMade(); } catch (e) { errorToast(e); }
               setBusy(false);
             }}><Bot size={18} /> Make a connector link</Button>
           </div>

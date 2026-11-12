@@ -78,7 +78,10 @@ class ModuleService(
                     insights += 35 to Insight("good", "All medications taken", "Nice and steady.", "pill", Module.MEDICATIONS)
                 }
                 m.lowStock.firstOrNull()?.let { low ->
-                    insights += 65 to Insight("info", "Running low on ${low.name}", "${low.stock} doses left: time to order more.", "pill", Module.MEDICATIONS)
+                    insights += 65 to Insight(
+                        "info", if (low.stock == 0) "Out of ${low.name}" else "Running low on ${low.name}",
+                        if (low.stock == 0) "Time to order more." else "${low.stock} ${if (low.stock == 1) "dose" else "doses"} left: time to order more.", "pill", Module.MEDICATIONS,
+                    )
                 }
             }
         } else null

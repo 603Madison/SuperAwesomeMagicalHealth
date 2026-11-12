@@ -1,6 +1,8 @@
 import type {
   AdminSettings, AuthConfig, CheckIn, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
+  ContinenceEntry, ContinenceSummary, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
+  MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
 } from "./types";
 
 /** An error from the server, with a message meant for people. */
@@ -67,7 +69,8 @@ export const api = {
   changePassword: (current: string, next: string) => post<unknown>("/api/me/password", { current, new: next }),
   sessions: () => get<SessionInfo[]>("/api/me/sessions"),
   revokeSession: (id: string) => del<unknown>(`/api/me/sessions/${q(id)}`),
-  connector: (allowLogging: boolean, allAccounts: boolean) => post<{ url: string; token: string }>("/api/me/connectors", { allowLogging, allAccounts }),
+  connector: (allowLogging: boolean, allAccounts: boolean, modules: Module[]) =>
+    post<{ url: string; token: string }>("/api/me/connectors", { allowLogging, allAccounts, modules }),
 
   profile: () => get<Profile>("/api/profile"),
   saveProfile: (profile: Profile) => put<Profile>("/api/profile", profile),
@@ -109,6 +112,40 @@ export const api = {
     files.forEach((f) => form.append("file", f, f.name));
     return post<{ workouts: number; samples: number; sleep: number; message: string }>("/api/import/fit", form);
   },
+
+  moods: (days = 30) => get<MoodEntry[]>(`/api/mind/moods?days=${days}`),
+  saveMood: (m: MoodEntry) => (m.id ? put<MoodEntry>(`/api/mind/moods/${q(m.id)}`, m) : post<MoodEntry>("/api/mind/moods", m)),
+  deleteMood: (id: string) => del<unknown>(`/api/mind/moods/${q(id)}`),
+  journal: (days = 90) => get<JournalEntry[]>(`/api/mind/journal?days=${days}`),
+  saveJournal: (j: JournalEntry) => (j.id ? put<JournalEntry>(`/api/mind/journal/${q(j.id)}`, j) : post<JournalEntry>("/api/mind/journal", j)),
+  deleteJournal: (id: string) => del<unknown>(`/api/mind/journal/${q(id)}`),
+  screeners: () => get<ScreenerDefinition[]>("/api/mind/screeners"),
+  screenerResults: (days = 365) => get<ScreenerResult[]>(`/api/mind/screeners/results?days=${days}`),
+  submitScreener: (screener: string, answers: number[]) => post<ScreenerResult>("/api/mind/screeners/results", { screener, at: Date.now(), answers }),
+  deleteScreener: (id: string) => del<unknown>(`/api/mind/screeners/results/${q(id)}`),
+  mindSessions: (days = 30) => get<MindfulnessSession[]>(`/api/mind/sessions?days=${days}`),
+  saveSession: (s: Omit<MindfulnessSession, "id" | "date">) => post<MindfulnessSession>("/api/mind/sessions", s),
+  mindSummary: (days = 30) => get<MindSummary>(`/api/mind/summary?days=${days}`),
+  resources: () => get<CrisisResource[]>("/api/mind/resources"),
+
+  cycle: (months = 12) => get<CycleOverview>(`/api/cycle?months=${months}`),
+  saveCycleDay: (day: CycleDay) => put<CycleDay>(`/api/cycle/days/${q(day.date)}`, day),
+  deleteCycleDay: (date: string) => del<unknown>(`/api/cycle/days/${q(date)}`),
+
+  continence: (days = 7) => get<ContinenceEntry[]>(`/api/continence/entries?days=${days}`),
+  saveContinence: (e: ContinenceEntry) => (e.id ? put<ContinenceEntry>(`/api/continence/entries/${q(e.id)}`, e) : post<ContinenceEntry>("/api/continence/entries", e)),
+  deleteContinence: (id: string) => del<unknown>(`/api/continence/entries/${q(id)}`),
+  continenceSummary: (days = 14) => get<ContinenceSummary>(`/api/continence/summary?days=${days}`),
+
+  meds: (all = false) => get<Medication[]>(`/api/meds${all ? "?all=true" : ""}`),
+  saveMed: (m: Medication) => (m.id ? put<Medication>(`/api/meds/${q(m.id)}`, m) : post<Medication>("/api/meds", m)),
+  deleteMed: (id: string) => del<unknown>(`/api/meds/${q(id)}`),
+  medsDay: (date: string) => get<MedsDay>(`/api/meds/day/${q(date)}`),
+  logDose: (d: DoseLog) => post<DoseLog>("/api/meds/doses", d),
+  deleteDose: (id: string) => del<unknown>(`/api/meds/doses/${q(id)}`),
+  labs: () => get<LabResult[]>("/api/labs"),
+  saveLab: (l: LabResult) => post<LabResult>("/api/labs", l),
+  deleteLab: (id: string) => del<unknown>(`/api/labs/${q(id)}`),
 
   users: () => get<User[]>("/api/admin/users"),
   createUser: (username: string, displayName: string, password: string, role: string) =>

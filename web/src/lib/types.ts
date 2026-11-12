@@ -24,6 +24,7 @@ export interface SessionInfo {
   lastSeenAt: number;
   expiresAt: number;
   current: boolean;
+  scope?: Module[];
 }
 
 export interface AuthConfig {
@@ -201,6 +202,7 @@ export interface Profile {
   units: Units;
   timezone: string;
   goals: Goals;
+  modules: Module[];
 }
 
 export interface Contributor {
@@ -242,6 +244,7 @@ export interface Insight {
   title: string;
   body: string;
   icon: string;
+  module?: Module;
 }
 
 export interface DaySummary {
@@ -277,6 +280,7 @@ export interface DaySummary {
   heartRate: Point[];
   goals: Goals;
   hasData: boolean;
+  modules: ModulesToday;
 }
 
 export interface TrendDay {
@@ -302,6 +306,15 @@ export interface TrendDay {
   waterMl?: number;
   workouts: number;
   workoutMinutes: number;
+  mood?: number;
+  anxiety?: number;
+  mindfulMinutes?: number;
+  flow?: Flow;
+  voids?: number;
+  nightVoids?: number;
+  leaks?: number;
+  dosesTaken?: number;
+  dosesDue?: number;
 }
 
 export interface Trends {
@@ -328,6 +341,7 @@ export interface ServerSettings {
   publicUrl: string;
   localLogin: boolean;
   foodDatabase: boolean;
+  crisisResources: CrisisResource[];
   oidc: OidcSettings;
 }
 
@@ -337,4 +351,287 @@ export interface AdminSettings {
   redirectUri: string;
   fromEnvironment: string[];
   version: string;
+}
+
+// ---- Health modules (shared/src/main/kotlin/com/health/api/Modules.kt) ----
+
+export type Module = "ACTIVITY" | "SLEEP" | "NUTRITION" | "BODY" | "MIND" | "CYCLE" | "CONTINENCE" | "MEDICATIONS";
+
+export const SENSITIVE: Module[] = ["MIND", "CYCLE", "CONTINENCE", "MEDICATIONS"];
+
+export interface MoodEntry {
+  at: number;
+  mood: number;
+  energy?: number;
+  anxiety?: number;
+  feelings: string[];
+  context: string[];
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export type JournalKind = "FREE" | "GRATITUDE" | "THOUGHT_RECORD";
+
+export interface ThoughtRecord {
+  situation: string;
+  thought: string;
+  feelings?: string;
+  beliefBefore?: number;
+  evidenceFor?: string;
+  evidenceAgainst?: string;
+  balancedThought?: string;
+  beliefAfter?: number;
+}
+
+export interface JournalEntry {
+  at: number;
+  kind: JournalKind;
+  title?: string;
+  text: string;
+  prompt?: string;
+  gratitude: string[];
+  thought?: ThoughtRecord;
+  id?: string;
+  date?: string;
+}
+
+export type Screener = "PHQ9" | "GAD7";
+
+export interface ScreenerDefinition {
+  id: Screener;
+  title: string;
+  about: string;
+  question: string;
+  items: string[];
+  options: string[];
+  bands: { from: number; label: string }[];
+  source: string;
+}
+
+export interface ScreenerResult {
+  screener: Screener;
+  at: number;
+  answers: number[];
+  score: number;
+  severity: string;
+  flagged: boolean;
+  id?: string;
+  date?: string;
+}
+
+export interface MindfulnessSession {
+  at: number;
+  minutes: number;
+  kind: string;
+  moodBefore?: number;
+  moodAfter?: number;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface CrisisResource {
+  name: string;
+  contact: string;
+  region?: string;
+  url?: string;
+  note?: string;
+}
+
+export interface MindDay {
+  date: string;
+  mood?: number;
+  energy?: number;
+  anxiety?: number;
+  entries: number;
+  mindfulMinutes: number;
+  journal: number;
+}
+
+export interface Count {
+  name: string;
+  count: number;
+}
+
+export interface MindSummary {
+  days: MindDay[];
+  averageMood?: number;
+  feelings: Count[];
+  context: Count[];
+  patterns: Insight[];
+  latest: ScreenerResult[];
+  mindfulMinutes: number;
+}
+
+export type Flow = "SPOTTING" | "LIGHT" | "MEDIUM" | "HEAVY";
+export type OvulationTest = "NEGATIVE" | "POSITIVE" | "PEAK";
+export type Mucus = "DRY" | "STICKY" | "CREAMY" | "WATERY" | "EGG_WHITE";
+export type CyclePhase = "PERIOD" | "FOLLICULAR" | "FERTILE" | "LUTEAL" | "UNKNOWN";
+
+export interface CycleDay {
+  date: string;
+  flow?: Flow;
+  symptoms: string[];
+  pain?: number;
+  mucus?: Mucus;
+  ovulationTest?: OvulationTest;
+  temperature?: number;
+  note?: string;
+}
+
+export interface Cycle {
+  start: string;
+  length?: number;
+  periodLength: number;
+  ovulation?: string;
+}
+
+export interface CyclePrediction {
+  nextPeriod: string;
+  earliest: string;
+  latest: string;
+  fertileStart?: string;
+  fertileEnd?: string;
+  ovulation?: string;
+  confidence: "low" | "medium" | "high";
+}
+
+export interface CycleOverview {
+  days: CycleDay[];
+  cycles: Cycle[];
+  averageCycle?: number;
+  averagePeriod?: number;
+  variation?: number;
+  prediction?: CyclePrediction;
+  cycleDay?: number;
+  phase: CyclePhase;
+  daysUntilPeriod?: number;
+  temperatures: { date: string; value: number }[];
+  caveat: string;
+}
+
+export type ContinenceKind = "URINATION" | "LEAK" | "BOWEL" | "PAD_CHANGE" | "PELVIC_FLOOR";
+export type LeakSize = "DROPS" | "SMALL" | "MEDIUM" | "LARGE";
+
+export interface ContinenceEntry {
+  at: number;
+  kind: ContinenceKind;
+  volumeMl?: number;
+  urgency?: number;
+  leak?: LeakSize;
+  triggers: string[];
+  bristol?: number;
+  pain: boolean;
+  blood: boolean;
+  reps?: number;
+  holdSeconds?: number;
+  note?: string;
+  id?: string;
+  date?: string;
+  night: boolean;
+}
+
+export interface ContinenceDay {
+  date: string;
+  voids: number;
+  nightVoids: number;
+  leaks: number;
+  bowel: number;
+  pads: number;
+  pelvicFloor: number;
+  voidedMl?: number;
+  fluidMl: number;
+  urgentTrips: number;
+}
+
+export interface ContinenceSummary {
+  days: ContinenceDay[];
+  averageVoids?: number;
+  averageNightVoids?: number;
+  averageLeaks?: number;
+  triggers: Count[];
+  averageInterval?: number;
+  patterns: Insight[];
+}
+
+export type MedForm = "PILL" | "CAPSULE" | "LIQUID" | "INJECTION" | "PATCH" | "GEL" | "SPRAY" | "INHALER" | "CREAM" | "DROPS" | "IMPLANT" | "SUPPLEMENT" | "OTHER";
+export type ScheduleKind = "DAILY" | "WEEKLY" | "EVERY_N_DAYS" | "AS_NEEDED";
+
+export interface MedSchedule {
+  kind: ScheduleKind;
+  times: string[];
+  everyDays: number;
+  weekdays: number[];
+  startDate?: string;
+}
+
+export interface Medication {
+  name: string;
+  dose?: string;
+  form: MedForm;
+  schedule: MedSchedule;
+  purpose?: string;
+  notes?: string;
+  sites: string[];
+  reminders: boolean;
+  active: boolean;
+  stock?: number;
+  id?: string;
+}
+
+export interface DoseLog {
+  medicationId: string;
+  at: number;
+  status: "TAKEN" | "SKIPPED";
+  scheduledFor?: number;
+  site?: string;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface DueDose {
+  medicationId: string;
+  name: string;
+  dose?: string;
+  form: MedForm;
+  scheduledFor: number;
+  log?: DoseLog;
+  nextSite?: string;
+}
+
+export interface MedsDay {
+  date: string;
+  due: DueDose[];
+  asNeeded: Medication[];
+  extra: DoseLog[];
+  adherence7d?: number;
+  lowStock: Medication[];
+}
+
+export interface LabResult {
+  name: string;
+  value: number;
+  unit: string;
+  at: number;
+  low?: number;
+  high?: number;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface CycleToday {
+  cycleDay?: number;
+  phase: CyclePhase;
+  daysUntilPeriod?: number;
+  logged?: CycleDay;
+}
+
+export interface ModulesToday {
+  mind?: MindDay;
+  cycle?: CycleToday;
+  continence?: ContinenceDay;
+  meds?: MedsDay;
 }

@@ -4,6 +4,7 @@ import { hm, isoDate, num, shortDate, useUnits, weightValue } from "../lib/forma
 import { useSession } from "../lib/session";
 import type { TrendDay } from "../lib/types";
 import { BarChart, LineChart, scoreFloor } from "../components/charts";
+import { useModules } from "../App";
 import { Card, ErrorNotice, PageHeader, Segmented, Spinner, useLoad } from "../components/ui";
 
 interface Series {
@@ -22,11 +23,12 @@ interface Series {
 
 export function Trends() {
   const [days, setDays] = useState(30);
+  const on = useModules();
   const units = useUnits();
   const goals = useSession((s) => s.profile?.goals);
   const { data, error, loading, reload } = useLoad(() => api.trends(days), [days]);
   const unit = units === "IMPERIAL" ? "lb" : "kg";
-  const series: Series[] = [
+  const all: Series[] = [
     { title: "Readiness", value: (d) => d.readiness, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c2)", score: true, band: [85, 100] },
     { title: "Sleep score", value: (d) => d.sleepScore, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c1)", score: true, band: [85, 100] },
     { title: "Activity score", value: (d) => d.activityScore, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c3)", score: true, band: [85, 100] },
@@ -39,7 +41,22 @@ export function Trends() {
     { title: "Weight", value: (d) => (d.weightKg != null ? weightValue(d.weightKg, units) : null), format: (v) => `${v.toFixed(1)} ${unit}`, kind: "line", color: "var(--c1)" },
     { title: "Temperature", value: (d) => d.temperatureDeviation, format: (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} °C`, kind: "line", color: "var(--c3)", note: "Against your usual" },
     { title: "Blood oxygen", value: (d) => d.spo2, format: (v) => `${v.toFixed(0)}%`, kind: "line", color: "var(--c2)" },
+    ...(on.includes("MIND") ? [
+      { title: "Mood", value: (d: TrendDay) => d.mood, format: (v: number) => `${v.toFixed(1)} of 5`, kind: "line" as const, color: "var(--c2)", domain: [1, 5] as [number, number] },
+      { title: "Anxiety", value: (d: TrendDay) => d.anxiety, format: (v: number) => `${v.toFixed(1)} of 5`, kind: "line" as const, color: "var(--c3)", domain: [1, 5] as [number, number], note: "Lower is calmer" },
+    ] : []),
+    ...(on.includes("CONTINENCE") ? [
+      { title: "Toilet trips", value: (d: TrendDay) => d.voids, format: (v: number) => `${v} trips`, kind: "bar" as const, color: "var(--c1)" },
+      { title: "Leaks", value: (d: TrendDay) => d.leaks, format: (v: number) => `${v} leaks`, kind: "bar" as const, color: "var(--c3)" },
+    ] : []),
+    ...(on.includes("MEDICATIONS") ? [
+      { title: "Doses taken", value: (d: TrendDay) => (d.dosesDue ? Math.round(((d.dosesTaken ?? 0) / d.dosesDue) * 100) : null), format: (v: number) => `${v}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
+    ] : []),
   ];
+  const series = all.filter((s) => (s.title !== "Steps" && s.title !== "Activity score") || on.includes("ACTIVITY"))
+    .filter((s) => (s.title !== "Time asleep" && s.title !== "Sleep score") || on.includes("SLEEP"))
+    .filter((s) => (s.title !== "Calories eaten" && s.title !== "Protein") || on.includes("NUTRITION"))
+    .filter((s) => s.title !== "Weight" || on.includes("BODY"));
 
   return (
     <div className="page">
