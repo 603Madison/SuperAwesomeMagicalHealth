@@ -26,7 +26,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Server tests
         env:
-          SAMF_SERVER_ONLY: "1"
+          SAMH_SERVER_ONLY: "1"
         run: ./gradlew --no-daemon :server:test :server:installDist
 
   android:
@@ -42,7 +42,7 @@ jobs:
         run: ./gradlew --no-daemon :android:testDebugUnitTest :android:lintDebug :android:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: SuperAwesomeMagicalFitness-debug-apk
+          name: SuperAwesomeMagicalHealth-debug-apk
           path: android/build/outputs/apk/debug/*.apk
           retention-days: 7
       - uses: actions/upload-artifact@v4

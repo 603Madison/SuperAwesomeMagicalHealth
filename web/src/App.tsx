@@ -45,7 +45,7 @@ function Shell() {
       <nav className="sidebar" aria-label="Main">
         <div className="brand">
           <img src="/icon.svg" alt="" width={32} height={32} />
-          <span>SuperAwesome<wbr />MagicalFitness</span>
+          <span>SuperAwesome<wbr />MagicalHealth</span>
         </div>
         <NavLink to="/" end className="nav-link"><Sun size={20} /> <span>Today</span></NavLink>
         <NavLink to="/sleep" className="nav-link"><Moon size={20} /> <span>Sleep</span></NavLink>

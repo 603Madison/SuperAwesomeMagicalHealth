@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.fitness.app"
+    namespace = "com.health.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.superawesomemagical.fitness"
+        applicationId = "app.superawesomemagical.health"
         minSdk = 28
         targetSdk = 36
         // The whole project's version: the server and its container image use it too.
@@ -30,7 +30,7 @@ android {
             create("release") {
                 storeFile = rootProject.file(keystorePath)
                 storePassword = signingValue("storePassword", "RELEASE_KEYSTORE_PASSWORD")
-                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS") ?: "fitness"
+                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS") ?: "health"
                 keyPassword = signingValue("keyPassword", "RELEASE_KEY_PASSWORD") ?: storePassword
             }
         }

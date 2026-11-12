@@ -5,10 +5,10 @@ plugins {
 }
 
 // One version for the whole project: the Android app's versionName.
-val samfVersion: String = Regex("versionName = \"([^\"]+)\"")
+val samhVersion: String = Regex("versionName = \"([^\"]+)\"")
     .find(rootProject.file("android/build.gradle.kts").readText())?.groupValues?.get(1) ?: "dev"
 
-version = samfVersion
+version = samhVersion
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -22,16 +22,16 @@ kotlin {
 }
 
 application {
-    mainClass.set("com.fitness.server.MainKt")
-    applicationName = "samf-server"
+    mainClass.set("com.health.server.MainKt")
+    applicationName = "samh-server"
 }
 
 // The web app, built by `npm run build` in web/ into web/dist, is served from the jar.
 val webDist = rootProject.layout.projectDirectory.dir("web/dist")
 
 tasks.processResources {
-    inputs.property("version", samfVersion)
-    filesMatching("samf-version.properties") { expand("version" to samfVersion) }
+    inputs.property("version", samhVersion)
+    filesMatching("samh-version.properties") { expand("version" to samhVersion) }
     from(webDist) { into("web") }
 }
 

@@ -234,7 +234,7 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data: T |
   return { data, error, loading, reload: () => setTick((t) => t + 1), setData };
 }
 
-// ---- Fitness pieces ----
+// ---- Health pieces ----
 
 /** A rounded card on the surface, with an optional heading row. */
 export function Card({ title, icon, action, children, className = "", onClick }: { title?: ReactNode; icon?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; onClick?: () => void }) {

@@ -167,11 +167,11 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
         <h2>Server</h2>
         <div className="form-stack">
           <Field label="Server name" help="Shown on the sign-in page."><input value={settings.serverName} onChange={(e) => setSettings({ ...settings, serverName: e.target.value })} /></Field>
-          <Field label="Public address" help={`The address people reach this server at, e.g. https://fitness.example.com. Needed for single sign-on behind a proxy.${lockedNote("SAMF_PUBLIC_URL")}`}>
+          <Field label="Public address" help={`The address people reach this server at, e.g. https://health.example.com. Needed for single sign-on behind a proxy.${lockedNote("SAMH_PUBLIC_URL")}`}>
             <input value={settings.publicUrl} placeholder={window.location.origin} onChange={(e) => setSettings({ ...settings, publicUrl: e.target.value })} />
           </Field>
           <Toggle label="People can sign in with a password" help="Off: everyone but the break-glass admin signs in through single sign-on." checked={settings.localLogin} onChange={(localLogin) => setSettings({ ...settings, localLogin })} />
-          <Toggle label="Look foods up in Open Food Facts" help={`Food searches and scanned barcodes are sent to openfoodfacts.org (nothing about who asked). Off: people use their own foods only.${lockedNote("SAMF_FOOD_DATABASE")}`} checked={settings.foodDatabase} onChange={(foodDatabase) => setSettings({ ...settings, foodDatabase })} />
+          <Toggle label="Look foods up in Open Food Facts" help={`Food searches and scanned barcodes are sent to openfoodfacts.org (nothing about who asked). Off: people use their own foods only.${lockedNote("SAMH_FOOD_DATABASE")}`} checked={settings.foodDatabase} onChange={(foodDatabase) => setSettings({ ...settings, foodDatabase })} />
         </div>
       </section>
 
@@ -187,11 +187,11 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
         </div>
         <div className="form-stack">
           <Toggle label="Turn on single sign-on" checked={oidc.enabled} onChange={(enabled) => setOidc({ enabled })} />
-          <Field label="Issuer" help={`Authentik: https://auth.example.com/application/o/<application slug>/${lockedNote("SAMF_OIDC_ISSUER")}`}>
-            <input value={oidc.issuer} onChange={(e) => setOidc({ issuer: e.target.value })} placeholder="https://auth.example.com/application/o/fitness/" />
+          <Field label="Issuer" help={`Authentik: https://auth.example.com/application/o/<application slug>/${lockedNote("SAMH_OIDC_ISSUER")}`}>
+            <input value={oidc.issuer} onChange={(e) => setOidc({ issuer: e.target.value })} placeholder="https://auth.example.com/application/o/health/" />
           </Field>
           <div className="two-col">
-            <Field label="Client ID" help={lockedNote("SAMF_OIDC_CLIENT_ID") || undefined}><input value={oidc.clientId} onChange={(e) => setOidc({ clientId: e.target.value })} /></Field>
+            <Field label="Client ID" help={lockedNote("SAMH_OIDC_CLIENT_ID") || undefined}><input value={oidc.clientId} onChange={(e) => setOidc({ clientId: e.target.value })} /></Field>
             <Field label="Client secret" help={initial.oidcClientSecretSet ? "Saved. Leave empty to keep it." : "Not set."}>
               <input type="password" autoComplete="new-password" value={secret} onChange={(e) => setSecret(e.target.value)} />
             </Field>
@@ -201,8 +201,8 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
             <Field label="Scopes"><input value={oidc.scopes} onChange={(e) => setOidc({ scopes: e.target.value })} /></Field>
           </div>
           <div className="two-col">
-            <Field label="Group allowed to sign in" help="Blank: anyone the provider lets through."><input value={oidc.userGroup} onChange={(e) => setOidc({ userGroup: e.target.value })} placeholder="fitness-users" /></Field>
-            <Field label="Admin group" help="Members are admins; everyone else is a user. Blank: set roles here."><input value={oidc.adminGroup} onChange={(e) => setOidc({ adminGroup: e.target.value })} placeholder="fitness-admins" /></Field>
+            <Field label="Group allowed to sign in" help="Blank: anyone the provider lets through."><input value={oidc.userGroup} onChange={(e) => setOidc({ userGroup: e.target.value })} placeholder="health-users" /></Field>
+            <Field label="Admin group" help="Members are admins; everyone else is a user. Blank: set roles here."><input value={oidc.adminGroup} onChange={(e) => setOidc({ adminGroup: e.target.value })} placeholder="health-admins" /></Field>
           </div>
           <div className="two-col">
             <Field label="Username claim"><input value={oidc.usernameClaim} onChange={(e) => setOidc({ usernameClaim: e.target.value })} /></Field>

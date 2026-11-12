@@ -40,7 +40,7 @@ export function Login() {
     <div className="login-page">
       <div className="login-card">
         <img src="/icon.svg" alt="" className="login-logo" width={72} height={72} />
-        <h1>{config?.serverName ?? "SuperAwesomeMagicalFitness"}</h1>
+        <h1>{config?.serverName ?? "SuperAwesomeMagicalHealth"}</h1>
         <p className="login-sub">Your health, your server</p>
         {error && <div className="notice notice-error" role="alert">{error}</div>}
         {config?.oidc && (

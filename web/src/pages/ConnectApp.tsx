@@ -6,7 +6,7 @@ import { useSession } from "../lib/session";
 import { Button } from "../components/ui";
 
 /** Where the app sends the code (its own address, registered on the phone). */
-const APP_REDIRECT = "samfitness://signed-in";
+const APP_REDIRECT = "samhealth://signed-in";
 
 /**
  * The Android app's sign-in: the app opens this page in a browser tab; once the person is signed
@@ -43,7 +43,7 @@ export function ConnectApp() {
         {!valid ? (
           <>
             <h1>That link isn't right</h1>
-            <p className="login-sub">Start signing in from the SuperAwesomeMagicalFitness app again.</p>
+            <p className="login-sub">Start signing in from the SuperAwesomeMagicalHealth app again.</p>
           </>
         ) : done ? (
           <>
@@ -54,7 +54,7 @@ export function ConnectApp() {
           <>
             <h1>Sign in to the app?</h1>
             <p className="login-sub">
-              The SuperAwesomeMagicalFitness app on {device} wants to sign in to {config?.serverName ?? "this server"} as{" "}
+              The SuperAwesomeMagicalHealth app on {device} wants to sign in to {config?.serverName ?? "this server"} as{" "}
               <strong>{user?.displayName}</strong> ({user?.username}). It will see and add to your health data, and send in data from your wearables.
             </p>
             {error && <div className="notice notice-error">{error}</div>}

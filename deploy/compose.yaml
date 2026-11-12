@@ -1,9 +1,9 @@
-# SuperAwesomeMagicalFitness server: `podman compose up -d` (or `docker compose up -d`).
+# SuperAwesomeMagicalHealth server: `podman compose up -d` (or `docker compose up -d`).
 # Everything it keeps (accounts, health data, food log, saved sign-ins, its encryption key) is in ./data.
 services:
-  superawesomemagicalfitness:
-    image: ghcr.io/603madison/superawesomemagicalfitness:latest
-    container_name: superawesomemagicalfitness
+  superawesomemagicalhealth:
+    image: ghcr.io/603madison/superawesomemagicalhealth:latest
+    container_name: superawesomemagicalhealth
     restart: unless-stopped
     ports:
       - "8090:8080"
@@ -12,16 +12,16 @@ services:
       - ./data:/data:Z
     environment:
       # The address people use, needed for single sign-on behind a reverse proxy.
-      # SAMF_PUBLIC_URL: https://fitness.example.com
-      # SAMF_TRUST_PROXY: "true"
+      # SAMH_PUBLIC_URL: https://health.example.com
+      # SAMH_TRUST_PROXY: "true"
       # Behind Cloudflare, so each visitor's own address is known:
-      # SAMF_CLIENT_IP_HEADER: CF-Connecting-IP
+      # SAMH_CLIENT_IP_HEADER: CF-Connecting-IP
       # The break-glass admin's first password (otherwise one is generated and logged once).
-      # SAMF_ADMIN_PASSWORD: change-me-please
+      # SAMH_ADMIN_PASSWORD: change-me-please
       # Single sign-on with Authentik, if you'd rather set it here than on the admin page:
-      # SAMF_OIDC_ISSUER: https://auth.example.com/application/o/superawesomemagicalfitness/
-      # SAMF_OIDC_CLIENT_ID: ...
-      # SAMF_OIDC_CLIENT_SECRET: ...
-      # SAMF_OIDC_USER_GROUP: fitness-users
-      # SAMF_OIDC_ADMIN_GROUP: fitness-admins
+      # SAMH_OIDC_ISSUER: https://auth.example.com/application/o/superawesomemagicalhealth/
+      # SAMH_OIDC_CLIENT_ID: ...
+      # SAMH_OIDC_CLIENT_SECRET: ...
+      # SAMH_OIDC_USER_GROUP: health-users
+      # SAMH_OIDC_ADMIN_GROUP: health-admins
       TZ: America/New_York

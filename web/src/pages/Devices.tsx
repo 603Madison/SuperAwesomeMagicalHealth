@@ -57,7 +57,7 @@ export function Devices() {
       <h2 className="section-title">Bring in data</h2>
       <div className="how-to">
         <Card title="Phone app (Android)" icon={<Smartphone size={18} />}>
-          <p>Sign in to this server from the SuperAwesomeMagicalFitness app. It carries data in from your wearables in the background:</p>
+          <p>Sign in to this server from the SuperAwesomeMagicalHealth app. It carries data in from your wearables in the background:</p>
           <p><strong>Colmi rings</strong> (R02–R12, Colmi Ring 2 and other QRing rings) directly over Bluetooth: heart rate, steps, calories and sleep stages.</p>
           <p><strong>Health Connect</strong>: anything that writes to it, like Garmin Connect, Fitbit, Samsung Health or Gadgetbridge.</p>
           <p><strong>Gadgetbridge</strong>'s database export, for the devices it supports.</p>

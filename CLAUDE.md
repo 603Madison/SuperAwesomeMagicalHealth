@@ -44,7 +44,7 @@ after UI changes, and screenshot the web app (Playwright) after web changes.
 One version for everything: `versionName`/`versionCode` in `android/build.gradle.kts` (the
 server and image read it). Bump both, write `release-notes/vX.Y.Z.md`, push, and run the
 **Release** workflow with `version: vX.Y.Z`: it builds the signed APK, publishes the GitHub
-release and pushes the image to `ghcr.io/603madison/superawesomemagicalfitness`.
+release and pushes the image to `ghcr.io/603madison/superawesomemagicalhealth`.
 
 The APK must always be signed with the same key, or installed copies can't update. The key is
 not in git: CI reads `RELEASE_KEYSTORE_BASE64` and `RELEASE_KEYSTORE_PASSWORD` from repository
@@ -52,7 +52,7 @@ secrets, local builds read `keystore/release.properties` (git-ignored). Never ge
 replacement for an existing key. To make the first one (once):
 
 ```bash
-keytool -genkeypair -v -keystore release.jks -alias fitness -keyalg RSA -keysize 4096 -validity 36500
+keytool -genkeypair -v -keystore release.jks -alias health -keyalg RSA -keysize 4096 -validity 36500
 ```
 
 ```bash
@@ -68,7 +68,7 @@ base64 -w0 release.jks
   script in `~/.gradle/init.d/` (see SuperAwesomeMagicalMusic's CLAUDE.md for the script).
 - Robolectric: add `-Drobolectric.dependency.repo.url=https://maven-central.storage-download.googleapis.com/maven2`
   to `JAVA_TOOL_OPTIONS`.
-- Server-only Gradle runs: `SAMF_SERVER_ONLY=1` leaves the Android module out.
+- Server-only Gradle runs: `SAMH_SERVER_ONLY=1` leaves the Android module out.
 - Container builds: `dockerd` can be started in the background. Pull base images from
   `mirror.gcr.io/library/…` and tag them as `docker.io/library/…`. Builds need `--network host`,
   and every stage that downloads needs the sandbox's CA bundle (`/root/.ccr/ca-bundle.crt`;

@@ -19,7 +19,7 @@ export function setSignedOutHandler(handler: () => void) {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   // Every change carries this header, which other sites' pages can't send.
-  if (method !== "GET") headers["X-SAMF"] = "1";
+  if (method !== "GET") headers["X-SAMH"] = "1";
   const isForm = body instanceof FormData;
   if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   let response: Response;

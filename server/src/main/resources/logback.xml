@@ -5,7 +5,7 @@
         </encoder>
     </appender>
     <!-- The latest lines, in memory, for the AI connector's log tools (see RecentLog). -->
-    <appender name="RECENT" class="com.fitness.server.util.RecentLog"/>
+    <appender name="RECENT" class="com.health.server.util.RecentLog"/>
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="RECENT"/>

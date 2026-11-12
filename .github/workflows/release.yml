@@ -75,19 +75,19 @@ jobs:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: |
           ./gradlew --no-daemon :android:assembleRelease
-          cp android/build/outputs/apk/release/android-release.apk "SuperAwesomeMagicalFitness-$TAG.apk"
-          sha256sum SuperAwesomeMagicalFitness-*.apk
+          cp android/build/outputs/apk/release/android-release.apk "SuperAwesomeMagicalHealth-$TAG.apk"
+          sha256sum SuperAwesomeMagicalHealth-*.apk
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --depth=1 origin "${{ github.sha }}"
-          git show "${{ github.sha }}:release-notes/$TAG.md" > notes.md 2>/dev/null || echo "SuperAwesomeMagicalFitness $TAG" > notes.md
+          git show "${{ github.sha }}:release-notes/$TAG.md" > notes.md 2>/dev/null || echo "SuperAwesomeMagicalHealth $TAG" > notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "SuperAwesomeMagicalFitness-$TAG.apk" --clobber
+            gh release upload "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" --clobber
           else
-            gh release create "$TAG" "SuperAwesomeMagicalFitness-$TAG.apk" --target "$COMMIT" --title "SuperAwesomeMagicalFitness $TAG" --notes-file notes.md
+            gh release create "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" --target "$COMMIT" --title "SuperAwesomeMagicalHealth $TAG" --notes-file notes.md
           fi
 
   # The server and web app, for amd64 and arm64 (a Raspberry Pi), at

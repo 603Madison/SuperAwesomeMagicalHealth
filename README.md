@@ -1,6 +1,6 @@
-# SuperAwesomeMagicalFitness
+# SuperAwesomeMagicalHealth
 
-Your own fitness and health server. Wearables (Colmi rings, Pebble, Garmin, anything in Health
+Your own health server. Wearables (Colmi rings, Pebble, Garmin, anything in Health
 Connect or Gadgetbridge) send heart rate, HRV, sleep, steps and workouts in through the phone app;
 you log food, water, weight and how you feel; and the server turns it into Oura-style
 **readiness, sleep and activity scores** against your own baseline, with plain-English insights,
@@ -48,17 +48,17 @@ is harmless.
 
 ## Running it
 
-The image is `ghcr.io/603madison/superawesomemagicalfitness`. Everything it keeps is in `/data`.
+The image is `ghcr.io/603madison/superawesomemagicalhealth`. Everything it keeps is in `/data`.
 
 ### Podman (Quadlet, the systemd way, shows in Cockpit)
 
 ```bash
 mkdir -p ~/.config/containers/systemd
-cp deploy/superawesomemagicalfitness.container ~/.config/containers/systemd/
+cp deploy/superawesomemagicalhealth.container ~/.config/containers/systemd/
 ```
 
 ```bash
-systemctl --user daemon-reload && systemctl --user start superawesomemagicalfitness
+systemctl --user daemon-reload && systemctl --user start superawesomemagicalhealth
 ```
 
 ```bash
@@ -68,7 +68,7 @@ loginctl enable-linger $USER
 The first start logs the break-glass admin's password once:
 
 ```bash
-journalctl --user -u superawesomemagicalfitness | grep -A3 "break-glass"
+journalctl --user -u superawesomemagicalhealth | grep -A3 "break-glass"
 ```
 
 Then open `http://<server>:8090`. `AutoUpdate=registry` lets `podman auto-update` keep it current.
@@ -79,23 +79,23 @@ Then open `http://<server>:8090`. `AutoUpdate=registry` lets `podman auto-update
 cd deploy && podman compose up -d
 ```
 
-(`docker compose up -d` works the same.) Set `SAMF_ADMIN_PASSWORD` in `compose.yaml` to choose the
+(`docker compose up -d` works the same.) Set `SAMH_ADMIN_PASSWORD` in `compose.yaml` to choose the
 break-glass admin's first password instead of reading it from the log.
 
 ### Lost the admin password?
 
 ```bash
-podman exec superawesomemagicalfitness /opt/samf/bin/samf-server reset-admin-password
+podman exec superawesomemagicalhealth /opt/samh/bin/samh-server reset-admin-password
 ```
 
 ## Single sign-on with Authentik
 
 1. In Authentik, create an **OAuth2/OpenID Provider** (confidential client, signing key set) and
-   an **Application** for it, with the slug `superawesomemagicalfitness`.
-2. In SuperAwesomeMagicalFitness, sign in as the break-glass admin and open **Admin**. Copy the
+   an **Application** for it, with the slug `superawesomemagicalhealth`.
+2. In SuperAwesomeMagicalHealth, sign in as the break-glass admin and open **Admin**. Copy the
    **redirect URI** shown there into the provider's redirect URIs
-   (`https://fitness.example.com/api/auth/oidc/callback`).
-3. Fill in the issuer (`https://auth.example.com/application/o/superawesomemagicalfitness/`),
+   (`https://health.example.com/api/auth/oidc/callback`).
+3. Fill in the issuer (`https://auth.example.com/application/o/superawesomemagicalhealth/`),
    client ID and secret, press **Check the issuer**, turn single sign-on on and save.
 4. Optionally name a **group allowed to sign in** and an **admin group**; Authentik sends groups
    in the `groups` claim. People get an account the first time they sign in (unless you turn that
@@ -104,21 +104,21 @@ podman exec superawesomemagicalfitness /opt/samf/bin/samf-server reset-admin-pas
 Turning off **People can sign in with a password** leaves only the break-glass admin able to use
 one, so there's always a way in if Authentik is down.
 
-Behind a reverse proxy, set `SAMF_PUBLIC_URL` and `SAMF_TRUST_PROXY=true`.
+Behind a reverse proxy, set `SAMH_PUBLIC_URL` and `SAMH_TRUST_PROXY=true`.
 
 ## Settings from the environment
 
 | Variable | |
 |---|---|
-| `SAMF_DATA_DIR` | Where everything is kept (`/data` in the image) |
-| `SAMF_PORT`, `SAMF_HOST` | Where it listens (8080, all addresses) |
-| `SAMF_ADMIN_USERNAME`, `SAMF_ADMIN_PASSWORD` | The break-glass admin, made at first start |
-| `SAMF_PUBLIC_URL` | The address people use (for sign-in redirects and links) |
-| `SAMF_TRUST_PROXY`, `SAMF_PROXIES`, `SAMF_CLIENT_IP_HEADER` | Behind reverse proxies (and Cloudflare's `CF-Connecting-IP`) |
-| `SAMF_OIDC_ISSUER`, `SAMF_OIDC_CLIENT_ID`, `SAMF_OIDC_CLIENT_SECRET` | Single sign-on (turns it on) |
-| `SAMF_OIDC_BUTTON_LABEL`, `SAMF_OIDC_SCOPES`, `SAMF_OIDC_USER_GROUP`, `SAMF_OIDC_ADMIN_GROUP` | Its details |
-| `SAMF_LOCAL_LOGIN` | `false`: only the break-glass admin uses a password |
-| `SAMF_FOOD_DATABASE` | `false`: don't ask Open Food Facts (searches and barcodes stay on the server) |
+| `SAMH_DATA_DIR` | Where everything is kept (`/data` in the image) |
+| `SAMH_PORT`, `SAMH_HOST` | Where it listens (8080, all addresses) |
+| `SAMH_ADMIN_USERNAME`, `SAMH_ADMIN_PASSWORD` | The break-glass admin, made at first start |
+| `SAMH_PUBLIC_URL` | The address people use (for sign-in redirects and links) |
+| `SAMH_TRUST_PROXY`, `SAMH_PROXIES`, `SAMH_CLIENT_IP_HEADER` | Behind reverse proxies (and Cloudflare's `CF-Connecting-IP`) |
+| `SAMH_OIDC_ISSUER`, `SAMH_OIDC_CLIENT_ID`, `SAMH_OIDC_CLIENT_SECRET` | Single sign-on (turns it on) |
+| `SAMH_OIDC_BUTTON_LABEL`, `SAMH_OIDC_SCOPES`, `SAMH_OIDC_USER_GROUP`, `SAMH_OIDC_ADMIN_GROUP` | Its details |
+| `SAMH_LOCAL_LOGIN` | `false`: only the break-glass admin uses a password |
+| `SAMH_FOOD_DATABASE` | `false`: don't ask Open Food Facts (searches and barcodes stay on the server) |
 
 Settings given here win at every start; the rest are on the Admin page.
 
@@ -174,7 +174,7 @@ cd web && npm ci && npm run build
 ```
 
 ```bash
-podman build -t superawesomemagicalfitness .
+podman build -t superawesomemagicalhealth .
 ```
 
 `npm run dev` in `web/` serves the web app on :5173 against a server on :8080.

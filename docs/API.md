@@ -1,11 +1,11 @@
 # The server's API
 
-Everything is JSON, with the models in `shared/src/main/kotlin/com/fitness/api/` (the web app's
+Everything is JSON, with the models in `shared/src/main/kotlin/com/health/api/` (the web app's
 copies are in `web/src/lib/types.ts`). Units are metric (kg, cm, metres, kcal, ml, °C); instants
 are epoch milliseconds; days are the person's local dates, `YYYY-MM-DD`, in their profile's time
 zone (`today` works wherever a date does).
 
-**Signing in.** The web app uses a session cookie and sends `X-SAMF: 1` with every change (other
+**Signing in.** The web app uses a session cookie and sends `X-SAMH: 1` with every change (other
 sites' pages can't add it). The Android app sends `Authorization: Bearer <token>`. Upload keys
 (also bearer tokens) only work for `POST /api/ingest` and `POST /api/import/fit`.
 
@@ -30,7 +30,7 @@ Errors come back as `{"error": "A message meant for people"}` with a fitting sta
 | `POST /api/me/connectors` | `ConnectorRequest` → `ConnectorLink`: an AI connector (MCP) link, shown once |
 
 The app's browser sign-in: open `<server>/connect-app?challenge=<S256 of verifier>&state=<random>&device=<name>`
-in a Custom Tab; the page sends the person to `samfitness://signed-in?code=…&state=…`; the app
+in a Custom Tab; the page sends the person to `samhealth://signed-in?code=…&state=…`; the app
 then calls `POST /api/auth/app/token` with the code and its verifier.
 
 ## Profile and days

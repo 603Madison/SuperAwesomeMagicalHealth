@@ -44,7 +44,7 @@
 
     <!-- Home servers are often plain HTTP on the home network. -->
     <application
-        android:name=".FitnessApp"
+        android:name=".HealthApp"
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -52,7 +52,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Fitness"
+        android:theme="@style/Theme.Health"
         android:usesCleartextTraffic="true"
         tools:targetApi="s">
 
@@ -70,7 +70,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="samfitness" android:host="signed-in" />
+                <data android:scheme="samhealth" android:host="signed-in" />
             </intent-filter>
         </activity>
 
@@ -94,7 +94,7 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- WorkManager is set up by FitnessApp (Configuration.Provider). -->
+        <!-- WorkManager is set up by HealthApp (Configuration.Provider). -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

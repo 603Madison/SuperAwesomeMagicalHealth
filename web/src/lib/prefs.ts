@@ -20,7 +20,7 @@ export const PALETTES: { id: Palette; name: string; swatch: [string, string] }[]
   { id: "ember", name: "Ember", swatch: ["#b4471a", "#9c3f60"] },
 ];
 
-const KEY = "samf.prefs";
+const KEY = "samh.prefs";
 
 function load(): Prefs {
   const defaults: Prefs = { boldText: false, palette: "aurora", scheme: "system" };

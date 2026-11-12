@@ -251,7 +251,7 @@ function Welcome() {
   return (
     <Card>
       <Empty icon={<Watch size={36} />} title="Let's bring in your data">
-        <p>Sign in to the SuperAwesomeMagicalFitness app on your phone to carry data in from a Colmi ring, Health Connect (Garmin, Fitbit, Pebble through Gadgetbridge…) or Gadgetbridge. Or upload Garmin .FIT files here. Meanwhile, you can log food, weight and workouts by hand.</p>
+        <p>Sign in to the SuperAwesomeMagicalHealth app on your phone to carry data in from a Colmi ring, Health Connect (Garmin, Fitbit, Pebble through Gadgetbridge…) or Gadgetbridge. Or upload Garmin .FIT files here. Meanwhile, you can log food, weight and workouts by hand.</p>
         <div className="button-row" style={{ justifyContent: "center", marginTop: 12 }}>
           <Button variant="primary" onClick={() => navigate("/devices")}><Watch size={18} /> Devices</Button>
           <Button onClick={() => navigate("/settings")}><Plus size={18} /> Set up your profile</Button>

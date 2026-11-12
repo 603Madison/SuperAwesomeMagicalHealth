@@ -1,4 +1,4 @@
-// The API's models: the web app's copies of shared/src/main/kotlin/com/fitness/api/*.kt.
+// The API's models: the web app's copies of shared/src/main/kotlin/com/health/api/*.kt.
 
 export type Role = "ADMIN" | "USER";
 export type SessionKind = "WEB" | "APP" | "UPLOAD" | "MCP" | "MCP_WRITE" | "MCP_ALL";
