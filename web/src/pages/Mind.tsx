@@ -6,6 +6,8 @@ import type { CrisisResource, JournalEntry, JournalKind, MoodEntry, ScreenerDefi
 import { LineChart } from "../components/charts";
 import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
+import { useModules } from "../App";
+import { useReadOnly } from "../lib/viewing";
 
 export const FACES = ["😣", "🙁", "😐", "🙂", "😄"];
 const FACE_LABELS = ["Very low", "Low", "Okay", "Good", "Great"];
@@ -30,6 +32,11 @@ export function Mind() {
   const [tool, setTool] = useState<Tool | null>(null);
   const [screener, setScreener] = useState<ScreenerDefinition | null>(null);
   const [writing, setWriting] = useState<JournalEntry | "new" | null>(null);
+  const readOnly = useReadOnly();
+  const cycleOn = useModules().includes("CYCLE");
+  // The EPDS is offered while pregnant and after a birth (from Cycle's life stage).
+  const stage = useLoad(() => (cycleOn ? api.lifeStage().then((i) => i.stage).catch(() => null) : Promise.resolve(null)), [cycleOn]);
+  const perinatal = stage.data === "PREGNANT" || stage.data === "POSTPARTUM";
   const reload = () => { summary.reload(); moods.reload(); };
   const s = summary.data;
 
@@ -39,7 +46,7 @@ export function Mind() {
         <Button variant="tonal" onClick={() => setSupport(true)}><LifeBuoy size={18} /> I need support</Button>
       } />
 
-      <Card title="How are you feeling?" icon={<Heart size={18} />}>
+      {!readOnly && <Card title="How are you feeling?" icon={<Heart size={18} />}>
         <div className="scale scale-large" role="group" aria-label="Log your mood">
           {FACES.map((f, i) => (
             <button key={i} type="button" onClick={() => setLogging(i + 1)} aria-label={`${FACE_LABELS[i]}: log it`}>
@@ -47,18 +54,20 @@ export function Mind() {
             </button>
           ))}
         </div>
-      </Card>
+      </Card>}
 
-      <h2 className="section-title">Calm tools</h2>
-      <div className="tool-grid">
-        {TOOLS.map((t) => (
-          <button key={t.id} className="tool-card" onClick={() => setTool(t)}>
-            <span className="tool-icon">{t.kind === "breathing" ? <Wind size={22} /> : t.kind === "grounding" ? <Sparkles size={22} /> : <Brain size={22} />}</span>
-            <strong>{t.name}</strong>
-            <span>{t.blurb}</span>
-          </button>
-        ))}
-      </div>
+      {!readOnly && <>
+        <h2 className="section-title">Calm tools</h2>
+        <div className="tool-grid">
+          {TOOLS.map((t) => (
+            <button key={t.id} className="tool-card" onClick={() => setTool(t)}>
+              <span className="tool-icon">{t.kind === "breathing" ? <Wind size={22} /> : t.kind === "grounding" ? <Sparkles size={22} /> : <Brain size={22} />}</span>
+              <strong>{t.name}</strong>
+              <span>{t.blurb}</span>
+            </button>
+          ))}
+        </div>
+      </>}
 
       <div className="section-head">
         <h2 className="section-title">Your mood</h2>
@@ -117,10 +126,10 @@ export function Mind() {
 
       <h2 className="section-title">Check-ins</h2>
       <div className="grid grid-2">
-        {(screeners.data ?? []).map((d) => {
+        {(screeners.data ?? []).filter((d) => d.id !== "EPDS" || perinatal).map((d) => {
           const latest = s?.latest.find((r) => r.screener === d.id);
           return (
-            <Card key={d.id} title={d.title} icon={<ClipboardList size={18} />} action={<Button onClick={() => setScreener(d)}>Take it</Button>}>
+            <Card key={d.id} title={d.title} icon={<ClipboardList size={18} />} action={!readOnly && <Button onClick={() => setScreener(d)}>Take it</Button>}>
               <p className="muted small">{d.about}</p>
               {latest ? <p><strong>{latest.score}</strong> · {latest.severity} <span className="muted small">{shortDate(latest.date!)}</span></p> : <p className="muted small">Not taken yet. It takes about two minutes.</p>}
             </Card>
@@ -130,7 +139,7 @@ export function Mind() {
 
       <div className="section-head">
         <h2 className="section-title">Journal</h2>
-        <Button onClick={() => setWriting("new")}><Plus size={18} /> Write</Button>
+        {!readOnly && <Button onClick={() => setWriting("new")}><Plus size={18} /> Write</Button>}
       </div>
       <p className="muted small" style={{ marginTop: -6 }}>Private and encrypted on the server.</p>
       {journal.data && journal.data.length === 0 && <Card><Empty icon={<BookOpen size={36} />} title="Nothing written yet">A few lines a day is plenty. Try a prompt, a gratitude list or a thought record.</Empty></Card>}
@@ -356,7 +365,11 @@ function ScreenerDialog({ definition, onClose, onDone }: { definition: ScreenerD
       <Modal title={definition.title} onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
         <div className="big-number">{result.score}<small>{result.severity}</small></div>
         <p className="muted">{definition.bands.map((b, i) => `${b.from}${definition.bands[i + 1] ? `–${definition.bands[i + 1].from - 1}` : "+"} ${b.label.toLowerCase()}`).join(" · ")}</p>
-        <p>{result.score >= 10 ? "That's a lot to carry. It's worth talking to your doctor or a therapist about how you've been feeling; this score is a good way to start that conversation." : "Thanks for checking in. Doing it every few weeks shows how things change."}</p>
+        <p>{result.score >= 10
+          ? definition.id === "EPDS"
+            ? "That's a lot to carry, and you don't have to carry it alone. It's worth talking to your midwife, health visitor or doctor about how you've been feeling: they see this often, and it gets better with support."
+            : "That's a lot to carry. It's worth talking to your doctor or a therapist about how you've been feeling; this score is a good way to start that conversation."
+          : "Thanks for checking in. Doing it every few weeks shows how things change."}</p>
         <p className="muted small">A check-in isn't a diagnosis. {definition.source}</p>
       </Modal>
     );
@@ -370,7 +383,7 @@ function ScreenerDialog({ definition, onClose, onDone }: { definition: ScreenerD
           <li key={i}>
             <p>{item}</p>
             <div className="screener-options" role="radiogroup" aria-label={item}>
-              {definition.options.map((o, v) => (
+              {(definition.itemOptions?.[i] ?? definition.options).map((o, v) => (
                 <button key={v} type="button" role="radio" aria-checked={answers[i] === v} className={`chip ${answers[i] === v ? "is-on" : ""}`} onClick={() => setAnswers(answers.map((a, k) => (k === i ? v : a)))}>{o}</button>
               ))}
             </div>

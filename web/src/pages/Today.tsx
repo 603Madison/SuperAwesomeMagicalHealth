@@ -1,15 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity as ActivityIcon, CalendarHeart, Check, Droplet, Dumbbell, GlassWater, Heart, HeartPulse, Moon, Pill, Plus, Salad, Smile, Sparkles, Watch, Weight } from "lucide-react";
+import {
+  Activity as ActivityIcon, CalendarClock, CalendarHeart, Coffee, Droplet, Droplets, Dumbbell, GlassWater, Heart, HeartPulse, Moon, Plus, Salad,
+  Smile, Sparkles, Stethoscope, Watch, Weight,
+} from "lucide-react";
 import { useModules } from "../App";
-import { FACES, MoodDialog } from "./Mind";
+import { MoodDialog } from "./Mind";
 import { api } from "../lib/api";
 import { clock, dayLabel, distance, hm, num, today, useUnits, weight, workoutLabel } from "../lib/format";
 import { useSession } from "../lib/session";
+import { useReadOnly } from "../lib/viewing";
 import type { DaySummary, Score } from "../lib/types";
 import { BarChart, Hypnogram, LineChart, Meter, ScoreRing, StageLegend } from "../components/charts";
 import { Button, Card, DateNav, Empty, ErrorNotice, Modal, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
 import { CheckInDialog, INSIGHT_ICONS, SleepDialog, WeightDialog, WorkoutDialog } from "../components/LogDialogs";
+import { BloodPressureDialog, GlucoseDialog } from "./Vitals";
+import { SymptomDialog } from "./Symptoms";
+import { DrinkDialog, quickDrink } from "./Drinks";
+import { DigestCard, ModuleCards, StressCard } from "./TodayCards";
 
 const RINGS: { key: "readiness" | "sleep" | "activity"; label: string; color: string }[] = [
   { key: "readiness", label: "Readiness", color: "var(--c2)" },
@@ -21,13 +29,16 @@ export function Today() {
   const [date, setDate] = useState(today());
   const { data, error, loading, reload } = useLoad(() => api.day(date), [date]);
   const user = useSession((s) => s.user)!;
-  const [open, setOpen] = useState<"weight" | "workout" | "sleep" | "checkin" | null>(null);
+  const [open, setOpen] = useState<"weight" | "workout" | "sleep" | "checkin" | "bp" | "glucose" | "symptom" | "drink" | null>(null);
   const [score, setScore] = useState<{ title: string; score: Score } | null>(null);
   const [mood, setMood] = useState<number | null>(null);
   const on = useModules();
+  const readOnly = useReadOnly();
+  const glucoseUnit = useSession((s) => s.profile?.vitalsTargets?.glucoseUnit) ?? "MMOL_L";
   const rings = RINGS.filter((r) => r.key === "readiness" ? on.includes("SLEEP") || on.includes("ACTIVITY") : r.key === "sleep" ? on.includes("SLEEP") : on.includes("ACTIVITY"));
   const m = data?.modules;
-  const moduleData = !!(m && (m.mind || m.cycle?.cycleDay != null || m.continence || m.meds));
+  const moduleData = !!(m && (m.mind || m.cycle?.cycleDay != null || m.continence || m.meds || m.vitals?.bloodPressure || m.vitals?.glucose
+    || m.habits?.length || m.symptoms?.entries.length || m.symptoms?.migraines.length || m.lifeStage || m.appointments?.length));
   const navigate = useNavigate();
   const hour = new Date().getHours();
   const greeting = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -66,17 +77,24 @@ export function Today() {
             })}
           </section>}
 
-          <div className="quick">
+          {!readOnly && <div className="quick">
             {on.includes("NUTRITION") && <button className="chip" onClick={() => navigate(`/food?date=${date}`)}><Salad size={18} /> Log food</button>}
             {on.includes("NUTRITION") && <button className="chip" onClick={addWater}><GlassWater size={18} /> +250 ml water</button>}
+            {on.includes("NUTRITION") && <button className="chip" onClick={async () => { try { await quickDrink("COFFEE", date); reload(); } catch (e) { errorToast(e); } }}><Coffee size={18} /> Coffee</button>}
             {on.includes("MIND") && <button className="chip" onClick={() => setMood(3)}><Heart size={18} /> Mood</button>}
-            {on.includes("CYCLE") && <button className="chip" onClick={() => navigate("/cycle")}><CalendarHeart size={18} /> Period</button>}
+            {on.includes("VITALS") && <button className="chip" onClick={() => setOpen("bp")}><HeartPulse size={18} /> Blood pressure</button>}
+            {on.includes("VITALS") && <button className="chip" onClick={() => setOpen("glucose")}><Droplets size={18} /> Glucose</button>}
+            {on.includes("SYMPTOMS") && <button className="chip" onClick={() => setOpen("symptom")}><Stethoscope size={18} /> Symptom</button>}
+            {on.includes("CYCLE") && <button className="chip" onClick={() => navigate("/cycle")}><CalendarHeart size={18} /> {m?.lifeStage && m.lifeStage.stage !== "CYCLING" && m.lifeStage.stage !== "TRYING" ? "Cycle" : "Period"}</button>}
             {on.includes("CONTINENCE") && <button className="chip" onClick={() => navigate("/bladder")}><Droplet size={18} /> Bladder</button>}
             {on.includes("BODY") && <button className="chip" onClick={() => setOpen("weight")}><Weight size={18} /> Weight</button>}
             {on.includes("ACTIVITY") && <button className="chip" onClick={() => setOpen("workout")}><Dumbbell size={18} /> Workout</button>}
             {on.includes("SLEEP") && <button className="chip" onClick={() => setOpen("sleep")}><Moon size={18} /> Add a night</button>}
+            {on.includes("APPOINTMENTS") && <button className="chip" onClick={() => navigate("/appointments")}><CalendarClock size={18} /> Appointment</button>}
             <button className={`chip ${data.checkIn?.mood ? "is-on" : ""}`} onClick={() => setOpen("checkin")}><Smile size={18} /> Check in</button>
-          </div>
+          </div>}
+
+          {!readOnly && date === today() && <DigestCard />}
 
           {data.insights.length > 0 && (
             <section className="insights" aria-label="Insights">
@@ -92,12 +110,16 @@ export function Today() {
             </section>
           )}
 
-          <ModuleCards day={data} date={date} on={on} onChanged={reload} onMood={setMood} />
-          {!data.hasData && !moduleData && date === today() ? <Welcome /> : <DayCards day={data} on={on} onOpenScore={(title, s) => setScore({ title, score: s })} />}
+          <ModuleCards day={data} date={date} on={on} readOnly={readOnly} onChanged={reload} onMood={setMood} onSymptom={() => setOpen("symptom")} />
+          {!data.hasData && !moduleData && date === today() && !readOnly ? <Welcome /> : <DayCards day={data} on={on} onOpenScore={(title, s) => setScore({ title, score: s })} onDrink={readOnly ? undefined : () => setOpen("drink")} />}
         </div>
       )}
 
       {score && <ScoreDialog title={score.title} score={score.score} onClose={() => setScore(null)} />}
+      {open === "bp" && <BloodPressureDialog onClose={() => setOpen(null)} onSaved={reload} />}
+      {open === "glucose" && <GlucoseDialog unit={glucoseUnit} onClose={() => setOpen(null)} onSaved={reload} />}
+      {open === "symptom" && <SymptomDialog initial={{ symptom: "" }} onClose={() => setOpen(null)} onSaved={reload} />}
+      {open === "drink" && <DrinkDialog date={date} onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "weight" && <WeightDialog onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "workout" && <WorkoutDialog onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "sleep" && <SleepDialog onClose={() => setOpen(null)} onSaved={reload} />}
@@ -107,62 +129,7 @@ export function Today() {
   );
 }
 
-function ModuleCards({ day, date, on, onChanged, onMood }: { day: DaySummary; date: string; on: string[]; onChanged: () => void; onMood: (n: number) => void }) {
-  const navigate = useNavigate();
-  const { mind, cycle, continence, meds } = day.modules;
-  const showMind = on.includes("MIND");
-  if (!showMind && !cycle && !continence && !meds) return null;
-  const take = async (medicationId: string, scheduledFor: number, site?: string) => {
-    try { await api.logDose({ medicationId, at: Date.now(), status: "TAKEN", scheduledFor, site }); toast("Taken"); onChanged(); } catch (e) { errorToast(e); }
-  };
-  return (
-    <div className="grid grid-2" style={{ marginBottom: 16 }}>
-      {meds && meds.due.length > 0 && (
-        <Card title="Medications" icon={<Pill size={18} />} action={<Button variant="ghost" onClick={() => navigate("/meds")}>All</Button>}>
-          <ul className="rows">
-            {meds.due.map((d) => (
-              <li key={`${d.medicationId}-${d.scheduledFor}`} className="row">
-                <div className={`row-icon ${d.log?.status === "TAKEN" ? "is-done" : ""}`}>{d.log?.status === "TAKEN" ? <Check size={18} /> : <Pill size={18} />}</div>
-                <div className="row-main">
-                  <div className="row-title">{d.name}{d.dose ? ` · ${d.dose}` : ""}</div>
-                  <div className="row-sub">{clock(d.scheduledFor)}{d.log ? ` · ${d.log.status === "TAKEN" ? "taken" : "skipped"}` : d.nextSite ? ` · ${d.nextSite} next` : ""}</div>
-                </div>
-                {!d.log && date === today() && <Button onClick={() => take(d.medicationId, d.scheduledFor, d.nextSite)}><Check size={16} /> Take</Button>}
-              </li>
-            ))}
-          </ul>
-          {meds.adherence7d != null && <p className="muted small">{meds.adherence7d}% of doses taken this week</p>}
-        </Card>
-      )}
-      {showMind && (
-        <Card title="Mood" icon={<Heart size={18} />} action={<Button variant="ghost" onClick={() => navigate("/mind")}>Mind</Button>}>
-          {mind?.mood != null ? <div className="big-number">{FACES[Math.round(mind.mood) - 1]}<small>{mind.mood.toFixed(1)} of 5 · {mind.entries} {mind.entries === 1 ? "entry" : "entries"}</small></div> : <p className="muted">How are you feeling?</p>}
-          <div className="scale" role="group" aria-label="Log your mood">{FACES.map((f, i) => <button key={i} type="button" aria-label={`Mood ${i + 1} of 5`} onClick={() => onMood(i + 1)}>{f}</button>)}</div>
-        </Card>
-      )}
-      {cycle && (
-        <Card title="Cycle" icon={<CalendarHeart size={18} />} onClick={() => navigate("/cycle")}>
-          <div className="stats">
-            <Stat label="Cycle day" value={cycle.cycleDay ?? "–"} sub={cycle.phase === "UNKNOWN" ? "Log a period to start" : cycle.phase === "FERTILE" ? "Fertile window (estimate)" : cycle.phase[0] + cycle.phase.slice(1).toLowerCase()} />
-            <Stat label="Next period" value={cycle.daysUntilPeriod == null ? "–" : cycle.daysUntilPeriod === 0 ? "Today" : cycle.daysUntilPeriod > 0 ? `${cycle.daysUntilPeriod} days` : `${-cycle.daysUntilPeriod} days late`} />
-          </div>
-          {cycle.logged && <p className="muted small">Logged: {[cycle.logged.flow?.toLowerCase(), ...cycle.logged.symptoms].filter(Boolean).join(", ")}</p>}
-        </Card>
-      )}
-      {continence && (
-        <Card title="Bladder & bowel" icon={<Droplet size={18} />} onClick={() => navigate("/bladder")}>
-          <div className="stats">
-            <Stat label="Trips" value={continence.voids} sub={continence.nightVoids ? `${continence.nightVoids} at night` : undefined} />
-            <Stat label="Leaks" value={continence.leaks} />
-            <Stat label="Pelvic floor" value={continence.pelvicFloor} sub="sessions" />
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function DayCards({ day, on, onOpenScore }: { day: DaySummary; on: string[]; onOpenScore: (title: string, s: Score) => void }) {
+function DayCards({ day, on, onOpenScore, onDrink }: { day: DaySummary; on: string[]; onOpenScore: (title: string, s: Score) => void; onDrink?: () => void }) {
   const units = useUnits();
   const navigate = useNavigate();
   const goalSteps = day.goals.steps;
@@ -170,8 +137,10 @@ function DayCards({ day, on, onOpenScore }: { day: DaySummary; on: string[]; onO
   const target = day.nutritionTarget;
   const eaten = day.nutrition;
   const burned = (day.restingCalories ?? 0) + day.activeCalories;
+  const drinks = day.drinks;
   return (
     <div className="grid grid-2">
+      {on.includes("ACTIVITY") && (day.stressDay || day.resilience) && <StressCard stress={day.stressDay} resilience={day.resilience} className="span-2" />}
       {on.includes("ACTIVITY") && <Card title="Activity" icon={<ActivityIcon size={18} />} action={day.activity && <Button variant="ghost" onClick={() => onOpenScore("Activity", day.activity!)}>Details</Button>}>
         <div className="stats">
           <Stat label="Steps" value={num(day.steps)} sub={goalSteps ? `of ${num(goalSteps)}` : undefined} />
@@ -234,6 +203,13 @@ function DayCards({ day, on, onOpenScore }: { day: DaySummary; on: string[]; onO
             <div className="macro"><span className="macro-name"><GlassWater size={14} /> Water</span><Meter value={day.waterMl} max={target.waterMl} color="var(--c3)" label="Water" /><span className="macro-amount"><strong>{num(day.waterMl)}</strong> / {num(target.waterMl)} ml</span></div>
           </>
         )}
+        {drinks && (drinks.caffeineMg > 0 || drinks.standardDrinks > 0) && (
+          <p className="muted small drinks-line">
+            <Coffee size={14} /> {num(drinks.caffeineMg)} mg caffeine{drinks.caffeineAtBedtimeMg != null && drinks.caffeineMg > 0 ? ` (~${num(drinks.caffeineAtBedtimeMg)} mg left at bedtime)` : ""}
+            {drinks.standardDrinks > 0 ? ` · ${num(drinks.standardDrinks, 1)} standard ${drinks.standardDrinks === 1 ? "drink" : "drinks"}` : ""}
+          </p>
+        )}
+        {onDrink && <div><Button variant="ghost" onClick={(e) => { e.stopPropagation(); onDrink(); }}><Coffee size={16} /> A drink</Button></div>}
       </Card>}
 
       {(day.workouts.length > 0 || day.weightKg != null || day.checkIn) && (

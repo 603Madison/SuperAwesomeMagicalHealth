@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { hm, isoDate, num, shortDate, useUnits, weightValue } from "../lib/format";
 import { useSession } from "../lib/session";
+import { DEFAULT_TARGETS, glucoseValue, unitLabel } from "../lib/vitals";
 import type { TrendDay } from "../lib/types";
 import { BarChart, LineChart, scoreFloor } from "../components/charts";
 import { useModules } from "../App";
@@ -19,6 +20,9 @@ interface Series {
   goal?: number;
   band?: [number, number];
   note?: string;
+  /** A second line (blood pressure's bottom number). */
+  extra?: { value: (d: TrendDay) => number | null | undefined; color: string; name: string };
+  name?: string;
 }
 
 export function Trends() {
@@ -28,6 +32,7 @@ export function Trends() {
   const goals = useSession((s) => s.profile?.goals);
   const { data, error, loading, reload } = useLoad(() => api.trends(days), [days]);
   const unit = units === "IMPERIAL" ? "lb" : "kg";
+  const vt = useSession((s) => s.profile?.vitalsTargets) ?? DEFAULT_TARGETS;
   const all: Series[] = [
     { title: "Readiness", value: (d) => d.readiness, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c2)", score: true, band: [85, 100] },
     { title: "Sleep score", value: (d) => d.sleepScore, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c1)", score: true, band: [85, 100] },
@@ -52,6 +57,31 @@ export function Trends() {
     ...(on.includes("MEDICATIONS") ? [
       { title: "Doses taken", value: (d: TrendDay) => (d.dosesDue ? Math.round(((d.dosesTaken ?? 0) / d.dosesDue) * 100) : null), format: (v: number) => `${v}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
     ] : []),
+    ...(on.includes("ACTIVITY") ? [
+      { title: "Stressed time", value: (d: TrendDay) => d.stressedMinutes, format: (v: number) => hm(v), kind: "bar" as const, color: "var(--c3)", note: "Daytime minutes your body showed stress" },
+      { title: "Restored time", value: (d: TrendDay) => d.restoredMinutes, format: (v: number) => hm(v), kind: "bar" as const, color: "var(--c2)", note: "Calm, recovering time while awake" },
+    ] : []),
+    ...(on.includes("NUTRITION") ? [
+      { title: "Caffeine", value: (d: TrendDay) => d.caffeineMg, format: (v: number) => `${num(v)} mg`, kind: "bar" as const, color: "var(--c3)", goal: 400, note: "400 mg a day is a common upper limit for adults" },
+      { title: "Alcohol", value: (d: TrendDay) => d.standardDrinks, format: (v: number) => `${num(v, 1)} drinks`, kind: "bar" as const, color: "var(--c1)", note: "Standard drinks of 14 g" },
+    ] : []),
+    ...(on.includes("VITALS") ? [
+      {
+        title: "Blood pressure", name: "Top", value: (d: TrendDay) => d.systolic, format: (v: number) => `${Math.round(v)}`, kind: "line" as const, color: "var(--c1)",
+        extra: { name: "Bottom", value: (d: TrendDay) => d.diastolic, color: "var(--c2)" },
+        band: [vt.diastolicHigh, vt.systolicHigh] as [number, number], note: "Daily averages, mmHg: top and bottom numbers",
+      },
+      { title: "Glucose", value: (d: TrendDay) => (d.glucose != null ? glucoseValue(d.glucose, vt.glucoseUnit) : null), format: (v: number) => `${vt.glucoseUnit === "MG_DL" ? Math.round(v) : v.toFixed(1)} ${unitLabel(vt.glucoseUnit)}`, kind: "line" as const, color: "var(--c1)", band: [glucoseValue(vt.glucoseLow, vt.glucoseUnit), glucoseValue(vt.glucoseHigh, vt.glucoseUnit)] as [number, number] },
+    ] : []),
+    ...(on.includes("SYMPTOMS") ? [
+      { title: "Symptoms", value: (d: TrendDay) => d.symptomWorst, format: (v: number) => `${v} of 10`, kind: "bar" as const, color: "var(--c3)", domain: [0, 10] as [number, number], note: "The worst symptom each day" },
+    ] : []),
+    ...(on.includes("HABITS") ? [
+      { title: "Habits done", value: (d: TrendDay) => (d.habitsDue ? Math.round(((d.habitsDone ?? 0) / d.habitsDue) * 100) : null), format: (v: number) => `${v}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
+    ] : []),
+    ...(on.includes("CYCLE") ? [
+      { title: "Hot flashes", value: (d: TrendDay) => d.hotFlashes, format: (v: number) => `${v}`, kind: "bar" as const, color: "var(--c3)" },
+    ] : []),
   ];
   const series = all.filter((s) => (s.title !== "Steps" && s.title !== "Activity score") || on.includes("ACTIVITY"))
     .filter((s) => (s.title !== "Time asleep" && s.title !== "Sleep score") || on.includes("SLEEP"))
@@ -75,7 +105,8 @@ export function Trends() {
               <Card key={s.title} title={s.title} action={<span className="muted small">average <strong>{s.format(avg)}</strong></span>}>
                 {s.kind === "line"
                   ? <LineChart
-                      label={`${s.title} each day`} color={s.color} band={s.band} dots={data.days.length <= 31} area={!s.score}
+                      label={`${s.title} each day`} color={s.color} band={s.band} dots={data.days.length <= 31} area={!s.score && !s.extra} name={s.name}
+                      extra={s.extra ? [{ name: s.extra.name, color: s.extra.color, points: data.days.map((d) => ({ x: new Date(`${d.date}T12:00`).getTime(), y: s.extra!.value(d) ?? null })) }] : []}
                       yMin={s.score ? scoreFloor(data.days.map(s.value)) : s.domain?.[0]} yMax={s.score ? 100 : s.domain?.[1]}
                       points={data.days.map((d) => ({ x: new Date(`${d.date}T12:00`).getTime(), y: s.value(d) ?? null }))}
                       formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={s.format}

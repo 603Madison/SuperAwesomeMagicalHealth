@@ -1,7 +1,7 @@
 // The API's models: the web app's copies of shared/src/main/kotlin/com/health/api/*.kt.
 
 export type Role = "ADMIN" | "USER";
-export type SessionKind = "WEB" | "APP" | "UPLOAD" | "MCP" | "MCP_WRITE" | "MCP_ALL";
+export type SessionKind = "WEB" | "APP" | "UPLOAD" | "MCP" | "MCP_WRITE" | "MCP_ALL" | "INTEGRATION" | "WATCH";
 
 export interface User {
   id: string;
@@ -78,7 +78,7 @@ export interface Workout {
   manual?: boolean;
 }
 
-export type DeviceKind = "COLMI_RING" | "PEBBLE" | "GARMIN" | "HEALTH_CONNECT" | "GADGETBRIDGE" | "FIT_FILE" | "PHONE" | "MANUAL" | "OTHER";
+export type DeviceKind = "COLMI_RING" | "PEBBLE" | "GARMIN" | "HEALTH_CONNECT" | "GADGETBRIDGE" | "FIT_FILE" | "PHONE" | "BP_MONITOR" | "GLUCOSE_METER" | "MANUAL" | "OTHER";
 
 export interface Device {
   id: string;
@@ -203,6 +203,10 @@ export interface Profile {
   timezone: string;
   goals: Goals;
   modules: Module[];
+  reminders: ReminderPrefs;
+  digest: DigestPrefs;
+  place?: Place | null;
+  vitalsTargets: VitalsTargets;
 }
 
 export interface Contributor {
@@ -266,12 +270,15 @@ export interface DaySummary {
   respiratoryRate?: number;
   temperatureDeviation?: number;
   stress?: number;
+  stressDay?: StressDay;
+  resilience?: Resilience;
   sleepSummary?: SleepSummary;
   naps: SleepSummary[];
   workouts: Workout[];
   nutrition: Nutrients;
   nutritionTarget?: NutritionTarget;
   waterMl: number;
+  drinks?: DrinksDay;
   weightKg?: number;
   bodyFat?: number;
   checkIn?: CheckIn;
@@ -315,6 +322,18 @@ export interface TrendDay {
   leaks?: number;
   dosesTaken?: number;
   dosesDue?: number;
+  stressedMinutes?: number;
+  restoredMinutes?: number;
+  caffeineMg?: number;
+  standardDrinks?: number;
+  systolic?: number;
+  diastolic?: number;
+  glucose?: number;
+  symptomWorst?: number;
+  migraine?: boolean;
+  habitsDone?: number;
+  habitsDue?: number;
+  hotFlashes?: number;
 }
 
 export interface Trends {
@@ -355,9 +374,11 @@ export interface AdminSettings {
 
 // ---- Health modules (shared/src/main/kotlin/com/health/api/Modules.kt) ----
 
-export type Module = "ACTIVITY" | "SLEEP" | "NUTRITION" | "BODY" | "MIND" | "CYCLE" | "CONTINENCE" | "MEDICATIONS";
+export type Module =
+  | "ACTIVITY" | "SLEEP" | "NUTRITION" | "BODY" | "MIND" | "CYCLE" | "CONTINENCE" | "MEDICATIONS"
+  | "VITALS" | "HABITS" | "SYMPTOMS" | "HORMONES" | "APPOINTMENTS";
 
-export const SENSITIVE: Module[] = ["MIND", "CYCLE", "CONTINENCE", "MEDICATIONS"];
+export const SENSITIVE: Module[] = ["MIND", "CYCLE", "CONTINENCE", "MEDICATIONS", "SYMPTOMS", "HORMONES", "APPOINTMENTS"];
 
 export interface MoodEntry {
   at: number;
@@ -396,7 +417,7 @@ export interface JournalEntry {
   date?: string;
 }
 
-export type Screener = "PHQ9" | "GAD7";
+export type Screener = "PHQ9" | "GAD7" | "EPDS";
 
 export interface ScreenerDefinition {
   id: Screener;
@@ -407,6 +428,11 @@ export interface ScreenerDefinition {
   options: string[];
   bands: { from: number; label: string }[];
   source: string;
+  /** Where each question has its own answers (the EPDS). */
+  itemOptions?: string[][];
+  itemScores?: number[][];
+  /** The question about self-harm. */
+  flagItem?: number;
 }
 
 export interface ScreenerResult {
@@ -578,6 +604,8 @@ export interface Medication {
   active: boolean;
   stock?: number;
   id?: string;
+  hormone?: boolean;
+  startedOn?: string;
 }
 
 export interface DoseLog {
@@ -634,4 +662,500 @@ export interface ModulesToday {
   cycle?: CycleToday;
   continence?: ContinenceDay;
   meds?: MedsDay;
+  vitals?: VitalsToday;
+  habits?: HabitStatus[];
+  symptoms?: SymptomsDay;
+  hormones?: HormonesToday;
+  lifeStage?: LifeStageToday;
+  appointments?: Appointment[];
+}
+
+// ---- Blood pressure and glucose, drinks, symptoms, stress, habits, hormones, life stages, appointments
+//      (shared/src/main/kotlin/com/health/api/Tracking.kt) ----
+
+export interface BloodPressure {
+  at: number;
+  systolic: number;
+  diastolic: number;
+  pulse?: number;
+  arm?: string;
+  note?: string;
+  id?: string;
+  date?: string;
+  source?: string;
+}
+
+export type BpCategory = "LOW" | "NORMAL" | "ELEVATED" | "STAGE_1" | "STAGE_2" | "CRISIS";
+export type GlucoseContext = "FASTING" | "BEFORE_MEAL" | "AFTER_MEAL" | "BEDTIME" | "OTHER" | "CGM";
+export type GlucoseUnit = "MMOL_L" | "MG_DL";
+
+export interface GlucoseReading {
+  at: number;
+  mmolL: number;
+  context: GlucoseContext;
+  note?: string;
+  id?: string;
+  date?: string;
+  source?: string;
+}
+
+export interface VitalsTargets {
+  systolicHigh: number;
+  diastolicHigh: number;
+  glucoseLow: number;
+  glucoseHigh: number;
+  glucoseUnit: GlucoseUnit;
+}
+
+export interface VitalsSummary {
+  days: number;
+  bloodPressure: BloodPressure[];
+  glucose: GlucoseReading[];
+  systolicAverage?: number;
+  diastolicAverage?: number;
+  category?: BpCategory;
+  glucoseAverage?: number;
+  fastingAverage?: number;
+  timeBelow?: number;
+  timeInRange?: number;
+  timeAbove?: number;
+  gmi?: number;
+  targets: VitalsTargets;
+  patterns: Insight[];
+}
+
+export interface VitalsToday {
+  bloodPressure?: BloodPressure;
+  category?: BpCategory;
+  glucose?: GlucoseReading;
+  timeInRange?: number;
+  targets: VitalsTargets;
+}
+
+export type DrinkKind =
+  | "WATER" | "COFFEE" | "ESPRESSO" | "TEA" | "GREEN_TEA" | "ENERGY_DRINK" | "SODA" | "DECAF"
+  | "BEER" | "WINE" | "SPIRITS" | "COCKTAIL" | "OTHER";
+
+export interface Drink {
+  at: number;
+  kind: DrinkKind;
+  volumeMl: number;
+  caffeineMg: number;
+  alcoholG: number;
+  name?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface DrinksDay {
+  date: string;
+  drinks: Drink[];
+  caffeineMg: number;
+  alcoholG: number;
+  standardDrinks: number;
+  lastCaffeineAt?: number;
+  caffeineAtBedtimeMg?: number;
+  fluidMl: number;
+}
+
+export interface DrinksSummary {
+  days: DrinksDay[];
+  averageCaffeineMg?: number;
+  averageStandardDrinks?: number;
+  patterns: Insight[];
+}
+
+export interface SymptomEntry {
+  at: number;
+  symptom: string;
+  severity: number;
+  bodyAreas: string[];
+  durationMinutes?: number;
+  triggers: string[];
+  relief: string[];
+  reliefHelped?: number;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface Migraine {
+  start: number;
+  end?: number;
+  severity: number;
+  aura: boolean;
+  symptoms: string[];
+  triggers: string[];
+  medications: string[];
+  reliefHelped?: number;
+  missedPlans: boolean;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface Correlation {
+  factor: string;
+  text: string;
+  withRate: number;
+  withoutRate: number;
+  days: number;
+}
+
+export interface SymptomsDay {
+  date: string;
+  entries: SymptomEntry[];
+  migraines: Migraine[];
+  worst?: number;
+}
+
+export interface SymptomsSummary {
+  days: SymptomsDay[];
+  counts: Count[];
+  migraineDays: number;
+  triggers: Count[];
+  correlations: Correlation[];
+  weather: boolean;
+}
+
+export interface Place {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
+export type StressState = "STRESSED" | "ENGAGED" | "RELAXED" | "RESTORED";
+
+export interface StressSpan {
+  start: number;
+  end: number;
+  state: StressState;
+}
+
+export interface StressDay {
+  date: string;
+  stressedMinutes: number;
+  engagedMinutes: number;
+  relaxedMinutes: number;
+  restoredMinutes: number;
+  summary: string;
+  spans: StressSpan[];
+}
+
+export type ResilienceLevel = "LIMITED" | "ADEQUATE" | "SOLID" | "STRONG" | "EXCEPTIONAL";
+
+export interface Resilience {
+  level: ResilienceLevel;
+  contributors: Contributor[];
+  trend: "up" | "down" | "steady";
+}
+
+export type HabitSource =
+  | "MANUAL" | "STEPS_GOAL" | "SLEEP_GOAL" | "WATER_GOAL" | "WORKOUT" | "MOOD_LOGGED" | "JOURNAL" | "MINDFUL"
+  | "MEDS_TAKEN" | "PELVIC_FLOOR" | "NO_ALCOHOL" | "CAFFEINE_CUTOFF";
+
+export interface Habit {
+  name: string;
+  icon: string;
+  source: HabitSource;
+  timesPerWeek: number;
+  perDay: number;
+  reminderTime?: string;
+  active: boolean;
+  id?: string;
+}
+
+export interface HabitStatus {
+  habit: Habit;
+  date: string;
+  count: number;
+  done: boolean;
+  weekDone: number;
+  streakWeeks: number;
+  streakDays: number;
+  /** The last 14 days, oldest first: true done, false missed, null before it began. */
+  recent: (boolean | null)[];
+}
+
+export interface HabitTick {
+  date: string;
+  count: number;
+}
+
+export interface DoseChange {
+  medicationId: string;
+  at: number;
+  from?: string;
+  to: string;
+  note?: string;
+  id?: string;
+}
+
+export interface LabTarget {
+  name: string;
+  unit: string;
+  low?: number;
+  high?: number;
+  note?: string;
+}
+
+export interface HormoneSettings {
+  labsEveryWeeks?: number | null;
+  targets: LabTarget[];
+}
+
+export interface LabSeries {
+  name: string;
+  unit: string;
+  target?: LabTarget;
+  results: LabResult[];
+}
+
+export interface HormoneMed {
+  medication: Medication;
+  since?: string;
+  changes: DoseChange[];
+}
+
+export interface HormoneOverview {
+  medications: HormoneMed[];
+  labs: LabSeries[];
+  settings: HormoneSettings;
+  lastLabs?: string;
+  nextLabsDue?: string;
+}
+
+export interface HormonesToday {
+  medications: number;
+  nextLabsDue?: string;
+  outOfRange: string[];
+}
+
+export type LifeStage = "CYCLING" | "TRYING" | "PREGNANT" | "POSTPARTUM" | "PERIMENOPAUSE" | "MENOPAUSE";
+
+export interface LifeStageInfo {
+  stage: LifeStage;
+  dueDate?: string;
+  lastPeriod?: string;
+  birthDate?: string;
+  since?: string;
+}
+
+export interface KickSession {
+  start: number;
+  end?: number;
+  kicks: number;
+  id?: string;
+}
+
+export interface Contraction {
+  start: number;
+  end?: number;
+  id?: string;
+}
+
+export type FeedKind = "LEFT" | "RIGHT" | "BOTH" | "BOTTLE" | "PUMP";
+
+export interface Feed {
+  start: number;
+  end?: number;
+  kind: FeedKind;
+  amountMl?: number;
+  note?: string;
+  id?: string;
+}
+
+export interface HotFlash {
+  at: number;
+  intensity: number;
+  night: boolean;
+  id?: string;
+}
+
+export interface PregnancyStatus {
+  week: number;
+  day: number;
+  trimester: number;
+  dueDate: string;
+  daysToGo: number;
+}
+
+export interface LifeStageOverview {
+  info: LifeStageInfo;
+  pregnancy?: PregnancyStatus;
+  weeksSinceBirth?: number;
+  monthsSinceLastPeriod?: number;
+  kicks: KickSession[];
+  contractions: Contraction[];
+  contractionsPattern?: string;
+  feeds: Feed[];
+  hotFlashes: HotFlash[];
+  hotFlashesPerDay?: number;
+  tips: Insight[];
+}
+
+export interface LifeStageToday {
+  stage: LifeStage;
+  headline: string;
+  pregnancy?: PregnancyStatus;
+  feedsToday: number;
+  lastFeed?: Feed;
+  hotFlashesToday: number;
+}
+
+export interface AppointmentQuestion {
+  text: string;
+  done: boolean;
+  suggested: boolean;
+}
+
+export interface Appointment {
+  at: number;
+  title: string;
+  durationMinutes?: number;
+  with?: string;
+  place?: string;
+  questions: AppointmentQuestion[];
+  notes?: string;
+  remindBefore: number[];
+  id?: string;
+  date?: string;
+}
+
+export interface SuggestedQuestion {
+  text: string;
+  why: string;
+  module?: Module;
+}
+
+// ---- Sharing, reminders, digest, webhooks, push, reports, watch (shared/…/Platform.kt) ----
+
+export interface Share {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  viewerId: string;
+  viewerName: string;
+  modules: Module[];
+  createdAt: number;
+  lastViewedAt?: number;
+}
+
+export interface Shares {
+  given: Share[];
+  received: Share[];
+}
+
+export interface ReminderPrefs {
+  remindAgainMinutes: number;
+  remindAgainTimes: number;
+  missedAfterMinutes: number;
+  refillDays: number;
+  refillTime: string;
+  showNames: boolean;
+  quietFrom?: string | null;
+  quietTo?: string | null;
+  habits: boolean;
+  appointments: boolean;
+}
+
+export interface DigestPrefs {
+  enabled: boolean;
+  day: number;
+  hour: number;
+  email?: string | null;
+  emailEnabled: boolean;
+  emailModules: Module[];
+}
+
+export interface DigestSection {
+  title: string;
+  module?: Module;
+  tone: "good" | "info" | "warn";
+  lines: string[];
+}
+
+export interface Digest {
+  weekStart: string;
+  weekEnd: string;
+  generatedAt: number;
+  headline: string;
+  sections: DigestSection[];
+}
+
+export type WebhookEvent =
+  | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
+  | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST";
+
+export interface Webhook {
+  name: string;
+  url: string;
+  events: WebhookEvent[];
+  enabled: boolean;
+  includeDetails: boolean;
+  id?: string;
+  createdAt?: number;
+  lastDelivery?: WebhookDelivery;
+  secret?: string;
+}
+
+export interface WebhookDelivery {
+  at: number;
+  event: WebhookEvent;
+  ok: boolean;
+  status?: number;
+  error?: string;
+  webhookId?: string;
+}
+
+export interface IntegrationKey {
+  id: string;
+  name: string;
+  token: string;
+  url: string;
+}
+
+export interface PushKey {
+  publicKey: string;
+}
+
+export interface PushSubscriptionInfo {
+  id: string;
+  name: string;
+  createdAt: number;
+  lastOkAt?: number;
+}
+
+export interface ReminderAction {
+  action: "taken" | "skip" | "snooze" | "open";
+  title: string;
+}
+
+export interface PushMessage {
+  title: string;
+  body: string;
+  tag: string;
+  url: string;
+  actions: ReminderAction[];
+  medicationId?: string;
+  scheduledFor?: number;
+}
+
+export type ReportSectionKey =
+  | "OVERVIEW" | "SLEEP" | "ACTIVITY" | "STRESS" | "BODY" | "NUTRITION" | "VITALS" | "MEDICATIONS" | "HORMONES"
+  | "MIND" | "CYCLE" | "CONTINENCE" | "SYMPTOMS" | "HABITS" | "APPOINTMENTS";
+
+export interface WatchToday {
+  date: string;
+  readiness?: number;
+  sleep?: number;
+  activity?: number;
+  steps: number;
+  stepGoal: number;
+  waterMl: number;
+  waterGoal: number;
+  modules: Module[];
+  doses: { medicationId: string; scheduledFor: number; name: string; time: string; taken: boolean }[];
+  habits: { id: string; name: string; done: boolean }[];
+  stress?: StressState;
 }

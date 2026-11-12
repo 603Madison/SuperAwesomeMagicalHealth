@@ -3,7 +3,12 @@ import type {
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
   ContinenceEntry, ContinenceSummary, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
+  Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
+  HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
+  LifeStageOverview, Migraine, Place, PushKey, PushMessage, PushSubscriptionInfo, ReportSectionKey, Shares, Share,
+  SuggestedQuestion, SymptomEntry, SymptomsSummary, VitalsSummary, Webhook, WebhookDelivery,
 } from "./types";
+import { viewingOwner } from "./viewing";
 
 /** An error from the server, with a message meant for people. */
 export class ApiError extends Error {
@@ -18,10 +23,23 @@ export function setSignedOutHandler(handler: () => void) {
   onSignedOut = handler;
 }
 
+/** The paths that hold a person's health data: the ones someone they share with may read. */
+const SHARED_PATHS = [
+  "/api/day/", "/api/trends", "/api/series", "/api/food/", "/api/measurements", "/api/workouts", "/api/sleep", "/api/checkins/",
+  "/api/mind/", "/api/cycle", "/api/continence/", "/api/meds", "/api/labs", "/api/vitals/", "/api/drinks", "/api/symptoms/",
+  "/api/habits", "/api/hormones", "/api/appointments",
+];
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   // Every change carries this header, which other sites' pages can't send.
   if (method !== "GET") headers["X-SAMH"] = "1";
+  // Viewing someone's shared data: reads of their data say whose, and nothing of theirs can change.
+  const owner = viewingOwner();
+  if (owner && SHARED_PATHS.some((p) => path.startsWith(p))) {
+    if (method !== "GET") throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
+    headers["X-SAMH-View"] = owner;
+  }
   const isForm = body instanceof FormData;
   if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   let response: Response;
@@ -49,6 +67,29 @@ function safeJson(text: string): unknown {
   } catch {
     return null;
   }
+}
+
+/** A file from the server (a PDF, a zip), saved by the browser as [name]. */
+async function download(path: string, name: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, { credentials: "same-origin" });
+  } catch {
+    throw new ApiError(0, "Can't reach the server");
+  }
+  if (!response.ok) {
+    const data = safeJson(await response.text());
+    const message = (data && typeof data === "object" && "error" in data && typeof data.error === "string") ? data.error : `The server answered ${response.status}`;
+    throw new ApiError(response.status, message);
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 const get = <T>(path: string) => request<T>("GET", path);
@@ -146,6 +187,96 @@ export const api = {
   labs: () => get<LabResult[]>("/api/labs"),
   saveLab: (l: LabResult) => post<LabResult>("/api/labs", l),
   deleteLab: (id: string) => del<unknown>(`/api/labs/${q(id)}`),
+
+  // Blood pressure and glucose
+  bloodPressure: (days = 30) => get<BloodPressure[]>(`/api/vitals/bp?days=${days}`),
+  addBloodPressure: (bp: BloodPressure) => post<BloodPressure>("/api/vitals/bp", bp),
+  deleteBloodPressure: (id: string) => del<unknown>(`/api/vitals/bp/${q(id)}`),
+  glucose: (days = 14) => get<GlucoseReading[]>(`/api/vitals/glucose?days=${days}`),
+  addGlucose: (g: GlucoseReading) => post<GlucoseReading>("/api/vitals/glucose", g),
+  deleteGlucose: (id: string) => del<unknown>(`/api/vitals/glucose/${q(id)}`),
+  vitalsSummary: (days = 30) => get<VitalsSummary>(`/api/vitals/summary?days=${days}`),
+
+  // Drinks
+  drinksDay: (date: string) => get<DrinksDay>(`/api/drinks/${q(date)}`),
+  saveDrink: (d: Drink) => (d.id ? put<Drink>(`/api/drinks/${q(d.id)}`, d) : post<Drink>("/api/drinks", d)),
+  deleteDrink: (id: string) => del<unknown>(`/api/drinks/${q(id)}`),
+  drinksSummary: (days = 30) => get<DrinksSummary>(`/api/drinks/summary?days=${days}`),
+
+  // Symptoms and migraines
+  symptoms: (days = 30) => get<SymptomEntry[]>(`/api/symptoms/entries?days=${days}`),
+  saveSymptom: (e: SymptomEntry) => (e.id ? put<SymptomEntry>(`/api/symptoms/entries/${q(e.id)}`, e) : post<SymptomEntry>("/api/symptoms/entries", e)),
+  deleteSymptom: (id: string) => del<unknown>(`/api/symptoms/entries/${q(id)}`),
+  migraines: (days = 90) => get<Migraine[]>(`/api/symptoms/migraines?days=${days}`),
+  saveMigraine: (m: Migraine) => (m.id ? put<Migraine>(`/api/symptoms/migraines/${q(m.id)}`, m) : post<Migraine>("/api/symptoms/migraines", m)),
+  deleteMigraine: (id: string) => del<unknown>(`/api/symptoms/migraines/${q(id)}`),
+  symptomsSummary: (days = 90) => get<SymptomsSummary>(`/api/symptoms/summary?days=${days}`),
+  places: (query: string) => get<Place[]>(`/api/places?q=${q(query)}`),
+
+  // Habits
+  habits: (all = false) => get<Habit[]>(`/api/habits${all ? "?all=true" : ""}`),
+  saveHabit: (h: Habit) => (h.id ? put<Habit>(`/api/habits/${q(h.id)}`, h) : post<Habit>("/api/habits", h)),
+  deleteHabit: (id: string) => del<unknown>(`/api/habits/${q(id)}`),
+  habitsToday: (date?: string) => get<HabitStatus[]>(`/api/habits/today${date ? `?date=${q(date)}` : ""}`),
+  tickHabit: (id: string, tick: HabitTick) => put<HabitTick>(`/api/habits/${q(id)}/ticks`, tick),
+  habitHistory: (id: string, days = 90) => get<HabitTick[]>(`/api/habits/${q(id)}/history?days=${days}`),
+
+  // Hormone therapy
+  hormones: () => get<HormoneOverview>("/api/hormones"),
+  saveHormoneSettings: (s: HormoneSettings) => put<HormoneSettings>("/api/hormones/settings", s),
+  addDoseChange: (c: DoseChange) => post<DoseChange>("/api/hormones/changes", c),
+  deleteDoseChange: (id: string) => del<unknown>(`/api/hormones/changes/${q(id)}`),
+
+  // Life stages
+  lifeStage: () => get<LifeStageInfo>("/api/cycle/stage"),
+  saveLifeStage: (info: LifeStageInfo) => put<LifeStageInfo>("/api/cycle/stage", info),
+  lifeStageOverview: (days = 30) => get<LifeStageOverview>(`/api/cycle/stage/overview?days=${days}`),
+  saveKicks: (k: KickSession) => (k.id ? put<KickSession>(`/api/cycle/kicks/${q(k.id)}`, k) : post<KickSession>("/api/cycle/kicks", k)),
+  deleteKicks: (id: string) => del<unknown>(`/api/cycle/kicks/${q(id)}`),
+  saveContraction: (c: Contraction) => (c.id ? put<Contraction>(`/api/cycle/contractions/${q(c.id)}`, c) : post<Contraction>("/api/cycle/contractions", c)),
+  deleteContraction: (id: string) => del<unknown>(`/api/cycle/contractions/${q(id)}`),
+  saveFeed: (f: Feed) => (f.id ? put<Feed>(`/api/cycle/feeds/${q(f.id)}`, f) : post<Feed>("/api/cycle/feeds", f)),
+  deleteFeed: (id: string) => del<unknown>(`/api/cycle/feeds/${q(id)}`),
+  addHotFlash: (h: HotFlash) => post<HotFlash>("/api/cycle/hot-flashes", h),
+  deleteHotFlash: (id: string) => del<unknown>(`/api/cycle/hot-flashes/${q(id)}`),
+
+  // Appointments
+  appointments: (days = 365, upcoming = false) => get<Appointment[]>(`/api/appointments?days=${days}${upcoming ? "&upcoming=true" : ""}`),
+  saveAppointment: (a: Appointment) => (a.id ? put<Appointment>(`/api/appointments/${q(a.id)}`, a) : post<Appointment>("/api/appointments", a)),
+  deleteAppointment: (id: string) => del<unknown>(`/api/appointments/${q(id)}`),
+  appointmentSuggestions: (id: string) => get<SuggestedQuestion[]>(`/api/appointments/${q(id)}/suggestions`),
+
+  // Sharing
+  shares: () => get<Shares>("/api/shares"),
+  share: (username: string, modules: Module[]) => post<Share>("/api/shares", { username, modules }),
+  changeShare: (id: string, modules: Module[]) => put<Share>(`/api/shares/${q(id)}`, { modules }),
+  deleteShare: (id: string) => del<unknown>(`/api/shares/${q(id)}`),
+
+  // Browser notifications, reminders, the digest, webhooks, Home Assistant
+  pushKey: () => get<PushKey>("/api/push/key"),
+  pushSubscriptions: () => get<PushSubscriptionInfo[]>("/api/push/subscriptions"),
+  addPushSubscription: (endpoint: string, p256dh: string, auth: string, name: string) =>
+    post<PushSubscriptionInfo>("/api/push/subscriptions", { endpoint, p256dh, auth, name }),
+  deletePushSubscription: (id: string) => del<unknown>(`/api/push/subscriptions/${q(id)}`),
+  testPush: () => post<unknown>("/api/push/test"),
+  upcomingReminders: (hours = 24) => get<PushMessage[]>(`/api/reminders/upcoming?hours=${hours}`),
+  latestDigest: () => get<Digest>("/api/digest/latest"),
+  digest: (week: string) => get<Digest>(`/api/digest?week=${q(week)}`),
+  emailDigest: () => post<unknown>("/api/digest/email-test"),
+  webhooks: () => get<Webhook[]>("/api/webhooks"),
+  saveWebhook: (w: Webhook) => (w.id ? put<Webhook>(`/api/webhooks/${q(w.id)}`, w) : post<Webhook>("/api/webhooks", w)),
+  deleteWebhook: (id: string) => del<unknown>(`/api/webhooks/${q(id)}`),
+  testWebhook: (id: string) => post<unknown>(`/api/webhooks/${q(id)}/test`),
+  webhookDeliveries: () => get<WebhookDelivery[]>("/api/webhooks/deliveries"),
+  integrationKeys: () => get<IntegrationKey[]>("/api/integrations/keys"),
+  addIntegrationKey: (name: string) => post<IntegrationKey>("/api/integrations/keys", { name }),
+  deleteIntegrationKey: (id: string) => del<unknown>(`/api/integrations/keys/${q(id)}`),
+
+  // Reports, export and the watch
+  downloadReport: (from: string, to: string, sections: ReportSectionKey[]) =>
+    download(`/api/report.pdf?from=${q(from)}&to=${q(to)}&sections=${sections.join(",")}`, `health-report-${from}-to-${to}.pdf`),
+  downloadExport: (from: string, to: string) => download(`/api/export.zip?from=${q(from)}&to=${q(to)}`, `health-export-${from}-to-${to}.zip`),
+  watchKey: () => post<{ token: string; url?: string }>("/api/watch/keys"),
 
   users: () => get<User[]>("/api/admin/users"),
   createUser: (username: string, displayName: string, password: string, role: string) =>
