@@ -1,6 +1,18 @@
 package com.health.app.e2e
 
 import com.health.api.CheckIn
+import com.health.api.ContinenceEntry
+import com.health.api.ContinenceKind
+import com.health.api.CycleDay
+import com.health.api.DoseLog
+import com.health.api.Flow
+import com.health.api.LeakSize
+import com.health.api.MedSchedule
+import com.health.api.Medication
+import com.health.api.Module
+import com.health.api.MoodEntry
+import com.health.api.Screener
+import com.health.api.ScreenerResult
 import com.health.api.DeviceInfo
 import com.health.api.DeviceKind
 import com.health.api.FoodEntryInput
@@ -32,6 +44,8 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -43,7 +57,7 @@ import java.time.ZoneId
 /**
  * The app against the real server, in-process: signing in, a ring's packets read by the app's
  * own parser and sent in, and the day the server makes of them; then food, water, weight and a
- * check-in, as the app sends them.
+ * check-in, as the app sends them; and the health modules, turned on and off.
  */
 class EndToEndTest {
     private lateinit var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>
@@ -135,5 +149,65 @@ class EndToEndTest {
         val trends = api.trends(7)
         assertEquals(7, trends.days.size)
         assertEquals(2000, trends.days.first { it.date == day.toString() }.steps)
+    }
+
+    @Test
+    fun `the app turns on the health modules, logs to each and sees them on Today`() = runBlocking {
+        token = api.login(base, "admin", "e2e-password", "Test phone").token
+        api.saveProfile(Profile(timezone = zone.id))
+        // Off until the person turns them on.
+        assertEquals(Module.DEFAULT, api.profile().modules)
+        val today = LocalDate.now(zone)
+        assertNull(api.day(today.toString()).modules.mind)
+        api.saveProfile(api.profile().copy(modules = Module.entries.toSet()))
+
+        // Mind: a mood, and a PHQ-9 scored and flagged by the server.
+        api.addMood(MoodEntry(at = System.currentTimeMillis(), mood = 4, feelings = listOf("calm")))
+        assertEquals(listOf("calm"), api.moods(7).single().feelings)
+        assertEquals(setOf(Screener.PHQ9, Screener.GAD7), api.screeners().map { it.id }.toSet())
+        val phq = api.submitScreener(ScreenerResult(Screener.PHQ9, System.currentTimeMillis(), List(9) { 1 }))
+        assertEquals(9, phq.score)
+        // Any answer but "not at all" to the last question (thoughts of self-harm) brings up support.
+        assertTrue(phq.flagged)
+        assertTrue(api.day(today.toString()).insights.any { it.module == Module.MIND })
+        assertTrue(api.crisisResources().isNotEmpty())
+
+        // Cycle: two periods 28 days apart, so the next one is due today.
+        for (start in listOf(today.minusDays(56), today.minusDays(28))) {
+            for (i in 0L until 4L) api.saveCycleDay(CycleDay(start.plusDays(i).toString(), flow = Flow.MEDIUM, symptoms = listOf("cramps")))
+        }
+        val cycle = api.cycle()
+        assertEquals(28.0, cycle.averageCycle!!, 0.01)
+        assertEquals(today.toString(), cycle.prediction!!.nextPeriod)
+
+        // Bladder and bowel: a toilet trip and a small leak.
+        val now = System.currentTimeMillis()
+        val earlier = maxOf(today.atStartOfDay(zone).toInstant().toEpochMilli(), now - 3_600_000) // still today
+        api.addContinence(ContinenceEntry(earlier, ContinenceKind.URINATION, volumeMl = 300))
+        api.addContinence(ContinenceEntry((earlier + now) / 2, ContinenceKind.LEAK, leak = LeakSize.DROPS, triggers = listOf("cough")))
+        assertEquals(2, api.continence(1).size)
+
+        // Medications: twice a day, one dose taken, stock counted down.
+        val med = api.addMedication(Medication("Vitamin D", dose = "1000 IU", schedule = MedSchedule(times = listOf("08:00", "20:00")), stock = 30))
+        val due = api.medsDay(today.toString()).due
+        assertEquals(2, due.size)
+        api.logDose(DoseLog(med.id!!, now, scheduledFor = due.first().scheduledFor))
+        val meds = api.medsDay(today.toString())
+        assertNotNull(meds.due.first().log)
+        assertEquals(29, api.medications().single().stock)
+
+        // Today has each module's part; turning one off takes it away again.
+        val day = api.day(today.toString())
+        assertEquals(4.0, day.modules.mind!!.mood!!, 0.01)
+        assertEquals(0, day.modules.cycle!!.daysUntilPeriod)
+        assertEquals(1, day.modules.continence!!.leaks)
+        assertEquals(1, day.modules.meds!!.due.count { it.log != null })
+        api.saveProfile(api.profile().copy(modules = api.profile().modules - Module.MIND - Module.CYCLE))
+        val after = api.day(today.toString())
+        assertNull(after.modules.mind)
+        assertNull(after.modules.cycle)
+        assertTrue(after.insights.none { it.module == Module.MIND || it.module == Module.CYCLE })
+        // The entries are kept for when it's turned back on.
+        assertEquals(1, api.moods(7).size)
     }
 }

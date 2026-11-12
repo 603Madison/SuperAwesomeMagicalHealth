@@ -218,7 +218,8 @@ class MindService(
         /** The crisis lines the server starts with; admins change them for where their people are. */
         val DEFAULT_RESOURCES = listOf(
             CrisisResource("988 Suicide & Crisis Lifeline", "Call or text 988", "United States", "https://988lifeline.org"),
-            CrisisResource("Trans Lifeline", "Call 877-565-8860 (US) or 877-330-6366 (Canada)", "United States and Canada", "https://translifeline.org", "Peer support run by and for trans people"),
+            CrisisResource("Trans Lifeline", "Call 877-565-8860", "United States", "https://translifeline.org", "Peer support run by and for trans people"),
+            CrisisResource("Trans Lifeline", "Call 877-330-6366", "Canada", "https://translifeline.org", "Peer support run by and for trans people"),
             CrisisResource("Crisis Text Line", "Text HOME to 741741", "United States", "https://www.crisistextline.org"),
             CrisisResource("9-8-8 Suicide Crisis Helpline", "Call or text 988", "Canada", "https://988.ca"),
             CrisisResource("Samaritans", "Call 116 123", "United Kingdom and Ireland", "https://www.samaritans.org"),
