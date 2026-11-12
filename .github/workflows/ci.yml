@@ -1,7 +1,8 @@
 name: Checks
 
-# Every push and pull request: the server's tests, the web app's type check and build, and the
-# Android app's tests, lint and debug APK (kept as a build artifact for a week).
+# Every push and pull request: the server's tests, the web app's type check and build, the
+# Android app's tests, lint and debug APK, and the Pebble watch app's tests and build (the APK and
+# the watch app are kept as build artifacts for a week).
 on:
   push:
   pull_request:
@@ -52,3 +53,29 @@ jobs:
           path: android/build/outputs/screenshots/
           retention-days: 7
           if-no-files-found: ignore
+
+  pebble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Watch app logic tests
+        run: node --test pebble/test/*.test.js
+      - uses: astral-sh/setup-uv@v6
+      # The Pebble SDK from Core Devices (pebble-tool, then the SDK with its ARM toolchain),
+      # pinned so builds are repeatable; raise both together.
+      - name: Pebble SDK
+        run: |
+          uv tool install pebble-tool==5.2.0 --python 3.13
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+          "$(uv tool dir --bin)/pebble" sdk install 4.44
+      - name: Build the watch app
+        working-directory: pebble
+        run: pebble build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SuperAwesomeMagicalHealth-watch
+          path: pebble/build/*.pbw
+          retention-days: 7

@@ -1,0 +1,51 @@
+{
+  "name": "superawesomemagicalhealth-watch",
+  "author": "SuperAwesomeMagical",
+  "version": "0.1.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "pebble": {
+    "displayName": "SAM Health",
+    "uuid": "2e1a857d-2fe9-4aa5-96b4-b13deb8335e2",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": ["basalt", "chalk", "diorite", "emery", "flint", "gabbro"],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": ["configurable"],
+    "messageKeys": [
+      "Status",
+      "Message",
+      "Modules",
+      "Readiness",
+      "Sleep",
+      "Activity",
+      "Steps",
+      "StepGoal",
+      "Water",
+      "WaterGoal",
+      "Stress",
+      "Doses",
+      "Habits",
+      "Action",
+      "Value",
+      "Index",
+      "Refresh"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  }
+}
