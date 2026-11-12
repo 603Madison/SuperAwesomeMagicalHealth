@@ -873,6 +873,7 @@ button.row:hover { background: var(--surface-2); }
 .suggestions { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 16px; background: color-mix(in srgb, var(--primary) 7%, var(--surface-2)); }
 .suggestions h4 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.92rem; }
 .suggestions h4 svg { color: var(--primary); }
+.suggestions .row-title, .suggestions .row-sub { white-space: normal; }
 
 /* Life stages */
 .stage-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

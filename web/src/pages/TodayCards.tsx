@@ -21,7 +21,19 @@ export function ModuleCards({ day, date, on, readOnly, onChanged, onMood, onSymp
   day: DaySummary; date: string; on: string[]; readOnly: boolean; onChanged: () => void; onMood: (n: number) => void; onSymptom: () => void;
 }) {
   const navigate = useNavigate();
-  const { mind, cycle, continence, meds, vitals, habits, symptoms, hormones, lifeStage, appointments } = day.modules;
+  // Only the features that are on (or shared): the server leaves the rest out too.
+  const m = day.modules;
+  const has = (id: string) => on.includes(id);
+  const mind = has("MIND") ? m.mind : undefined;
+  const cycle = has("CYCLE") ? m.cycle : undefined;
+  const continence = has("CONTINENCE") ? m.continence : undefined;
+  const meds = has("MEDICATIONS") ? m.meds : undefined;
+  const vitals = has("VITALS") ? m.vitals : undefined;
+  const habits = has("HABITS") ? m.habits : undefined;
+  const symptoms = has("SYMPTOMS") ? m.symptoms : undefined;
+  const hormones = has("HORMONES") ? m.hormones : undefined;
+  const lifeStage = has("CYCLE") ? m.lifeStage : undefined;
+  const appointments = has("APPOINTMENTS") ? m.appointments : undefined;
   const glucoseUnit = useSession((s) => s.profile?.vitalsTargets?.glucoseUnit) ?? vitals?.targets.glucoseUnit ?? "MMOL_L";
   const showMind = on.includes("MIND");
   const take = async (medicationId: string, scheduledFor: number, site?: string) => {

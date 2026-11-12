@@ -9,7 +9,7 @@ import { MoodDialog } from "./Mind";
 import { api } from "../lib/api";
 import { clock, dayLabel, distance, hm, num, today, useUnits, weight, workoutLabel } from "../lib/format";
 import { useSession } from "../lib/session";
-import { useReadOnly } from "../lib/viewing";
+import { useReadOnly, useViewing } from "../lib/viewing";
 import type { DaySummary, Score } from "../lib/types";
 import { BarChart, Hypnogram, LineChart, Meter, ScoreRing, StageLegend } from "../components/charts";
 import { Button, Card, DateNav, Empty, ErrorNotice, Modal, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
@@ -34,6 +34,7 @@ export function Today() {
   const [mood, setMood] = useState<number | null>(null);
   const on = useModules();
   const readOnly = useReadOnly();
+  const viewing = useViewing((s) => s.share);
   const glucoseUnit = useSession((s) => s.profile?.vitalsTargets?.glucoseUnit) ?? "MMOL_L";
   const rings = RINGS.filter((r) => r.key === "readiness" ? on.includes("SLEEP") || on.includes("ACTIVITY") : r.key === "sleep" ? on.includes("SLEEP") : on.includes("ACTIVITY"));
   const m = data?.modules;
@@ -55,7 +56,7 @@ export function Today() {
     <div className="page today">
       <header className="page-header">
         <div>
-          <h1>{date === today() ? `${greeting}, ${user.displayName.split(" ")[0]}` : dayLabel(date)}</h1>
+          <h1>{viewing ? `${viewing.ownerName}'s ${date === today() ? "day" : dayLabel(date).toLowerCase()}` : date === today() ? `${greeting}, ${user.displayName.split(" ")[0]}` : dayLabel(date)}</h1>
           <p className="page-subtitle">{new Date(`${date}T12:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
         </div>
         <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
@@ -96,9 +97,9 @@ export function Today() {
 
           {!readOnly && date === today() && <DigestCard />}
 
-          {data.insights.length > 0 && (
+          {data.insights.some((i) => !i.module || on.includes(i.module)) && (
             <section className="insights" aria-label="Insights">
-              {data.insights.map((i, n) => {
+              {data.insights.filter((i) => !i.module || on.includes(i.module)).map((i, n) => {
                 const Icon = INSIGHT_ICONS[i.icon] ?? Sparkles;
                 return (
                   <article key={n} className={`insight tone-${i.tone}`}>

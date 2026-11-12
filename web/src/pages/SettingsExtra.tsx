@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, BellOff, Copy, Eye, Home, Lock, LogOut, Mail, Pencil, Plus, Send, Trash2, UserPlus, Webhook as WebhookIcon } from "lucide-react";
+import { Bell, Copy, Eye, Home, Lock, LogOut, Mail, Pencil, Plus, Send, Trash2, UserPlus, Webhook as WebhookIcon } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
 import { disablePush, enablePush, pushEnabledHere, pushPermission, pushSupported, thisBrowserPushId } from "../lib/push";
@@ -121,7 +121,7 @@ function BrowserPush() {
         <ul className="device-list">
           {browsers.data.map((b) => (
             <li key={b.id} className="device-row">
-              {b.id === here ? <Bell size={20} /> : <BellOff size={20} style={{ opacity: 0 }} aria-hidden />}
+              <Bell size={20} />
               <div className="source-text">
                 <div className="source-name">{b.name || "A browser"}{b.id === here && <span className="badge">This browser</span>}</div>
                 <div className="source-sub">Added {when(b.createdAt)}{b.lastOkAt ? ` · last reminder ${when(b.lastOkAt)}` : ""}</div>

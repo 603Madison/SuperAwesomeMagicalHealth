@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
 import type { Module } from "./lib/types";
@@ -108,19 +108,21 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Today />} />
           <Route path="/trends" element={<Trends />} />
-          {on.includes("SLEEP") && <Route path="/sleep" element={<Sleep />} />}
-          {on.includes("ACTIVITY") && <Route path="/activity" element={<Activity />} />}
-          {on.includes("NUTRITION") && <Route path="/food" element={<Food />} />}
-          {on.includes("BODY") && <Route path="/body" element={<Body />} />}
-          {on.includes("MIND") && <Route path="/mind" element={<Mind />} />}
-          {on.includes("CYCLE") && <Route path="/cycle" element={<Cycle />} />}
-          {on.includes("CONTINENCE") && <Route path="/bladder" element={<Continence />} />}
-          {on.includes("MEDICATIONS") && <Route path="/meds" element={<Meds />} />}
-          {on.includes("VITALS") && <Route path="/vitals" element={<Vitals />} />}
-          {on.includes("HABITS") && <Route path="/habits" element={<Habits />} />}
-          {on.includes("SYMPTOMS") && <Route path="/symptoms" element={<Symptoms />} />}
-          {on.includes("HORMONES") && <Route path="/hormones" element={<Hormones />} />}
-          {on.includes("APPOINTMENTS") && <Route path="/appointments" element={<Appointments />} />}
+          {/* Every feature's page is always reachable by its link (the profile may still be loading);
+              while viewing someone's data, only the ones they shared. */}
+          <Route path="/sleep" element={<Shared id="SLEEP"><Sleep /></Shared>} />
+          <Route path="/activity" element={<Shared id="ACTIVITY"><Activity /></Shared>} />
+          <Route path="/food" element={<Shared id="NUTRITION"><Food /></Shared>} />
+          <Route path="/body" element={<Shared id="BODY"><Body /></Shared>} />
+          <Route path="/mind" element={<Shared id="MIND"><Mind /></Shared>} />
+          <Route path="/cycle" element={<Shared id="CYCLE"><Cycle /></Shared>} />
+          <Route path="/bladder" element={<Shared id="CONTINENCE"><Continence /></Shared>} />
+          <Route path="/meds" element={<Shared id="MEDICATIONS"><Meds /></Shared>} />
+          <Route path="/vitals" element={<Shared id="VITALS"><Vitals /></Shared>} />
+          <Route path="/habits" element={<Shared id="HABITS"><Habits /></Shared>} />
+          <Route path="/symptoms" element={<Shared id="SYMPTOMS"><Symptoms /></Shared>} />
+          <Route path="/hormones" element={<Shared id="HORMONES"><Hormones /></Shared>} />
+          <Route path="/appointments" element={<Shared id="APPOINTMENTS"><Appointments /></Shared>} />
           {!viewing && <Route path="/reports" element={<Reports />} />}
           {!viewing && <Route path="/digest" element={<DigestPage />} />}
           {!viewing && <Route path="/devices" element={<Devices />} />}
@@ -131,6 +133,13 @@ function Shell() {
       </main>
     </div>
   );
+}
+
+/** A feature's page, unless someone else's data is showing and they didn't share that feature. */
+function Shared({ id, children }: { id: Module; children: ReactNode }) {
+  const viewing = useViewing((s) => s.share);
+  if (viewing && !viewing.modules.includes(id)) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 /** "Viewing Alex": whose data is showing, from the people who shared theirs with this account. */

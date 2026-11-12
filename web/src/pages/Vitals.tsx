@@ -58,7 +58,6 @@ export function Vitals() {
                 </div>
                 <LineChart
                   label="Blood pressure readings" name="Top" color="var(--c1)" dots={bp.length <= 40} area={false}
-                  band={[targets.diastolicHigh, targets.systolicHigh]}
                   points={bp.map((r) => ({ x: r.at, y: r.systolic }))}
                   extra={[{ name: "Bottom", color: "var(--c2)", points: bp.map((r) => ({ x: r.at, y: r.diastolic })) }]}
                   formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${Math.round(y)}`}
@@ -66,7 +65,6 @@ export function Vitals() {
                 <ul className="legend">
                   <li><span className="legend-key" style={{ background: "var(--c1)" }} />Systolic (top number)</li>
                   <li><span className="legend-key" style={{ background: "var(--c2)" }} />Diastolic (bottom number)</li>
-                  <li><span className="legend-key band-key" />Between your two targets</li>
                 </ul>
               </>
             )}

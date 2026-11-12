@@ -69,7 +69,7 @@ export function Symptoms() {
         <div className="grid grid-2">
           <Card title="At a glance" className="span-2">
             <div className="stats">
-              <Stat label="Days with symptoms" value={s.days.filter((d) => d.entries.length > 0 || d.migraines.length > 0).length} sub={`in the last ${days} days`} />
+              <Stat label="Days with symptoms" value={s.days.filter((d) => d.worst != null || d.entries.length > 0 || d.migraines.length > 0).length} sub={`in the last ${days} days`} />
               <Stat label="Migraine days" value={s.migraineDays} />
               {s.counts[0] && <Stat label="Most often" value={s.counts[0].name} sub={`${s.counts[0].count} times`} />}
             </div>

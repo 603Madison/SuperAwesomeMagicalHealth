@@ -87,7 +87,7 @@ export function Cycle() {
                       <div className="row-title">{new Date(`${c.start}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</div>
                       <div className="row-sub">Period {c.periodLength} days{c.ovulation ? ` · temperature rise around ${shortDate(c.ovulation)}` : ""}</div>
                     </div>
-                    <div className="row-end">{c.length ? `${c.length} days` : "Now"}</div>
+                    <div className="row-end">{c.length ? `${c.length} days` : predict ? "Now" : ""}</div>
                   </li>
                 ))}
               </ul>

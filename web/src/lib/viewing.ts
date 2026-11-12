@@ -6,9 +6,9 @@ import type { Share } from "./types";
  * While viewing, every GET carries `X-SAMH-View`, nothing can be changed, and only the shared
  * features show. Kept for this tab only, so a reload stays on the same view.
  */
-export const useViewing = create<{ share: Share | null }>(() => ({ share: load() }));
-
 const KEY = "samh.viewing";
+
+export const useViewing = create<{ share: Share | null }>(() => ({ share: load() }));
 
 function load(): Share | null {
   try {

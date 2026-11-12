@@ -276,7 +276,7 @@ export const api = {
   downloadReport: (from: string, to: string, sections: ReportSectionKey[]) =>
     download(`/api/report.pdf?from=${q(from)}&to=${q(to)}&sections=${sections.join(",")}`, `health-report-${from}-to-${to}.pdf`),
   downloadExport: (from: string, to: string) => download(`/api/export.zip?from=${q(from)}&to=${q(to)}`, `health-export-${from}-to-${to}.zip`),
-  watchKey: () => post<{ token: string; url?: string }>("/api/watch/keys"),
+  watchKey: () => post<IntegrationKey>("/api/watch/keys"),
 
   users: () => get<User[]>("/api/admin/users"),
   createUser: (username: string, displayName: string, password: string, role: string) =>

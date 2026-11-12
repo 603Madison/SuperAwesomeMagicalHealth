@@ -1139,6 +1139,8 @@ export interface PushMessage {
   actions: ReminderAction[];
   medicationId?: string;
   scheduledFor?: number;
+  /** When it's for (in /api/reminders/upcoming). */
+  at?: number;
 }
 
 export type ReportSectionKey =

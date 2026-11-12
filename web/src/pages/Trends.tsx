@@ -55,7 +55,7 @@ export function Trends() {
       { title: "Leaks", value: (d: TrendDay) => d.leaks, format: (v: number) => `${v} leaks`, kind: "bar" as const, color: "var(--c3)" },
     ] : []),
     ...(on.includes("MEDICATIONS") ? [
-      { title: "Doses taken", value: (d: TrendDay) => (d.dosesDue ? Math.round(((d.dosesTaken ?? 0) / d.dosesDue) * 100) : null), format: (v: number) => `${v}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
+      { title: "Doses taken", value: (d: TrendDay) => (d.dosesDue ? Math.round(((d.dosesTaken ?? 0) / d.dosesDue) * 100) : null), format: (v: number) => `${Math.round(v)}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
     ] : []),
     ...(on.includes("ACTIVITY") ? [
       { title: "Stressed time", value: (d: TrendDay) => d.stressedMinutes, format: (v: number) => hm(v), kind: "bar" as const, color: "var(--c3)", note: "Daytime minutes your body showed stress" },
@@ -69,18 +69,18 @@ export function Trends() {
       {
         title: "Blood pressure", name: "Top", value: (d: TrendDay) => d.systolic, format: (v: number) => `${Math.round(v)}`, kind: "line" as const, color: "var(--c1)",
         extra: { name: "Bottom", value: (d: TrendDay) => d.diastolic, color: "var(--c2)" },
-        band: [vt.diastolicHigh, vt.systolicHigh] as [number, number], note: "Daily averages, mmHg: top and bottom numbers",
+        note: `Daily averages, mmHg: top and bottom numbers (your target: under ${vt.systolicHigh}/${vt.diastolicHigh})`,
       },
       { title: "Glucose", value: (d: TrendDay) => (d.glucose != null ? glucoseValue(d.glucose, vt.glucoseUnit) : null), format: (v: number) => `${vt.glucoseUnit === "MG_DL" ? Math.round(v) : v.toFixed(1)} ${unitLabel(vt.glucoseUnit)}`, kind: "line" as const, color: "var(--c1)", band: [glucoseValue(vt.glucoseLow, vt.glucoseUnit), glucoseValue(vt.glucoseHigh, vt.glucoseUnit)] as [number, number] },
     ] : []),
     ...(on.includes("SYMPTOMS") ? [
-      { title: "Symptoms", value: (d: TrendDay) => d.symptomWorst, format: (v: number) => `${v} of 10`, kind: "bar" as const, color: "var(--c3)", domain: [0, 10] as [number, number], note: "The worst symptom each day" },
+      { title: "Symptoms", value: (d: TrendDay) => d.symptomWorst, format: (v: number) => `${num(v, v % 1 ? 1 : 0)} of 10`, kind: "bar" as const, color: "var(--c3)", domain: [0, 10] as [number, number], note: "The worst symptom each day" },
     ] : []),
     ...(on.includes("HABITS") ? [
-      { title: "Habits done", value: (d: TrendDay) => (d.habitsDue ? Math.round(((d.habitsDone ?? 0) / d.habitsDue) * 100) : null), format: (v: number) => `${v}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
+      { title: "Habits done", value: (d: TrendDay) => (d.habitsDue ? Math.round(((d.habitsDone ?? 0) / d.habitsDue) * 100) : null), format: (v: number) => `${Math.round(v)}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
     ] : []),
     ...(on.includes("CYCLE") ? [
-      { title: "Hot flashes", value: (d: TrendDay) => d.hotFlashes, format: (v: number) => `${v}`, kind: "bar" as const, color: "var(--c3)" },
+      { title: "Hot flashes", value: (d: TrendDay) => d.hotFlashes, format: (v: number) => num(v, v % 1 ? 1 : 0), kind: "bar" as const, color: "var(--c3)" },
     ] : []),
   ];
   const series = all.filter((s) => (s.title !== "Steps" && s.title !== "Activity score") || on.includes("ACTIVITY"))
@@ -101,8 +101,12 @@ export function Trends() {
             const values = data.days.map(s.value).filter((v): v is number => v != null);
             if (values.length === 0) return null;
             const avg = values.reduce((a, b) => a + b, 0) / values.length;
+            const extraValues = s.extra ? data.days.map(s.extra.value).filter((v): v is number => v != null) : [];
+            const average = extraValues.length
+              ? `${s.format(avg)}/${s.format(extraValues.reduce((a, b) => a + b, 0) / extraValues.length)}`
+              : s.format(avg);
             return (
-              <Card key={s.title} title={s.title} action={<span className="muted small">average <strong>{s.format(avg)}</strong></span>}>
+              <Card key={s.title} title={s.title} action={<span className="muted small">average <strong>{average}</strong></span>}>
                 {s.kind === "line"
                   ? <LineChart
                       label={`${s.title} each day`} color={s.color} band={s.band} dots={data.days.length <= 31} area={!s.score && !s.extra} name={s.name}

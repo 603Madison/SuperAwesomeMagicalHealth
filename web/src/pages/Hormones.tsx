@@ -122,10 +122,13 @@ function HormoneMedCard({ med, readOnly, onChanged }: { med: HormoneMed; readOnl
   );
 }
 
+/** A lab value: whole numbers as they are, others to one decimal. */
+const labNum = (n: number) => num(n, n % 1 ? 1 : 0);
+
 function rangeText(t?: LabTarget): string | null {
   if (!t || (t.low == null && t.high == null)) return null;
-  if (t.low != null && t.high != null) return `${num(t.low, 1)}–${num(t.high, 1)} ${t.unit}`;
-  return t.low != null ? `over ${num(t.low, 1)} ${t.unit}` : `under ${num(t.high!, 1)} ${t.unit}`;
+  if (t.low != null && t.high != null) return `${labNum(t.low)}–${labNum(t.high)} ${t.unit}`;
+  return t.low != null ? `over ${labNum(t.low)} ${t.unit}` : `under ${labNum(t.high!)} ${t.unit}`;
 }
 
 function LevelCard({ series, readOnly, onAdd }: { series: LabSeries; readOnly: boolean; onAdd: () => void }) {
@@ -147,7 +150,10 @@ function LevelCard({ series, readOnly, onAdd }: { series: LabSeries; readOnly: b
       {results.length > 1 && (
         <LineChart label={`${series.name} over time`} color="var(--c1)" dots area={false} height={150} band={band}
           points={results.map((r) => ({ x: r.at, y: r.value }))}
-          formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${num(y, 1)} ${series.unit}`} />
+          formatX={(x) => (results[results.length - 1].at - results[0].at > 300 * 86_400_000
+            ? new Date(x).toLocaleDateString(undefined, { month: "short", year: "numeric" })
+            : shortDate(isoDate(new Date(x))))}
+          formatY={(y) => `${labNum(y)} ${series.unit}`} />
       )}
       {t?.note && <p className="muted small">{t.note}</p>}
     </Card>
