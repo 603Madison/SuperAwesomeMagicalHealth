@@ -33,20 +33,24 @@ class HabitsService(
     private val drinks: DrinksService,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    /** A habit with the day it began. */
+    /** A habit with the day it began: when it was made, or its first tick if that's earlier (days ticked afterwards count). */
     class Kept(val habit: Habit, val since: LocalDate)
 
     suspend fun list(userId: String, all: Boolean = false): List<Habit> = kept(userId, all).map { it.habit }
 
     suspend fun kept(userId: String, all: Boolean = false): List<Kept> {
         val zone = profiles.days(userId)
+        class Row(val id: String, val data: String, val created: Long, val firstTick: String?)
         return db.tx {
             query(
-                "SELECT id, data, active, created_at FROM habits WHERE user_id = ?${if (all) "" else " AND active = 1"} ORDER BY sort, created_at",
+                "SELECT h.id, h.data, h.created_at, (SELECT MIN(c.date) FROM habit_checks c WHERE c.habit_id = h.id AND c.count > 0) AS first_tick " +
+                    "FROM habits h WHERE h.user_id = ?${if (all) "" else " AND h.active = 1"} ORDER BY h.sort, h.created_at",
                 userId,
-            ) { r -> Triple(r.string("id"), r.string("data"), r.long("created_at")) }
-        }.mapNotNull { (id, data, created) ->
-            runCatching { ApiJson.decodeFromString(Habit.serializer(), data) }.getOrNull()?.let { Kept(it.copy(id = id), zone.dateOf(created)) }
+            ) { r -> Row(r.string("id"), r.string("data"), r.long("created_at"), r.stringOrNull("first_tick")) }
+        }.mapNotNull { row ->
+            val made = zone.dateOf(row.created)
+            val since = row.firstTick?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.takeIf { it.isBefore(made) } ?: made
+            runCatching { ApiJson.decodeFromString(Habit.serializer(), row.data) }.getOrNull()?.let { Kept(it.copy(id = row.id), since) }
         }
     }
 

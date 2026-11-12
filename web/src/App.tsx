@@ -105,7 +105,8 @@ function Shell() {
 
       <main className="content">
         {viewing && <ViewingBanner />}
-        <Routes>
+        {/* A new key when whose data shows changes, so every page loads afresh for that person. */}
+        <Routes key={viewing?.ownerId ?? "mine"}>
           <Route path="/" element={<Today />} />
           <Route path="/trends" element={<Trends />} />
           {/* Every feature's page is always reachable by its link (the profile may still be loading);

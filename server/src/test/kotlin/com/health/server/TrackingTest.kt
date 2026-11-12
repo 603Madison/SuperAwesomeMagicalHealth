@@ -39,6 +39,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -415,6 +416,17 @@ class TrackingTest {
         assertEquals("habit:${stretch.str("id")}:$today", due.key)
         assertEquals("Stretch", due.title)
         assertNotNull(walk["id"])
+    }
+
+    @Test
+    fun `days ticked before a habit was made count towards it`() = serverTest(services()) { s ->
+        val admin = adminBrowser()
+        val stretch = admin.postJson("/api/habits", """{"name":"Stretch","timesPerWeek":7}""").obj().str("id")
+        for (back in 1L..9L) admin.putJson("/api/habits/$stretch/ticks", """{"date":"${today.minusDays(back)}","count":1}""")
+        val status = admin.get("/api/habits/today").json().jsonArray.map { it.jsonObject }.single()
+        assertEquals(9, status["streakDays"]!!.jsonPrimitive.int)
+        val recent = status["recent"]!!.jsonArray.map { it.jsonPrimitive.contentOrNull }
+        assertEquals(listOf("null", "null", "null", "null", "true", "true", "true", "true", "true", "true", "true", "true", "true", "false"), recent.map { it ?: "null" })
     }
 
     // ---- The API and the AI connector ----
