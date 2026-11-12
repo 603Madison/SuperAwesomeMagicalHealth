@@ -162,6 +162,7 @@ Connect) count too.
 | `GET /api/symptoms/summary?days=90` | `SymptomsSummary`: counts, triggers, and what went with symptoms (sleep, cycle, caffeine, alcohol, stress, air pressure) |
 
 Air pressure comes from Open-Meteo for `Profile.place`, when the admin allows it (`weather`).
+`GET /api/places?q=Leeds` finds places (`[Place]`) for the profile, through the server.
 
 ### Stress and resilience
 
