@@ -34,6 +34,8 @@ data class ServerSettings(
     val localLogin: Boolean = true,
     /** Look foods up in Open Food Facts (the search terms and barcodes go to openfoodfacts.org). */
     val foodDatabase: Boolean = true,
+    /** Air pressure for symptom patterns, and place search (a rough place goes to open-meteo.com). */
+    val weather: Boolean = true,
     /** Where people can turn for support, shown in Mind: set them for where your people live. */
     val crisisResources: List<com.health.api.CrisisResource> = com.health.server.modules.MindService.DEFAULT_RESOURCES,
     val oidc: OidcSettings = OidcSettings(),

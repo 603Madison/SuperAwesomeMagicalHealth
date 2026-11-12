@@ -13,6 +13,8 @@ enum class EntryKind {
     MOOD, JOURNAL, SCREENER, MINDFUL, CYCLE_DAY, CONTINENCE, DOSE, LAB,
     // Hormone therapy, life stages and appointments (care/).
     HORMONE_SETTINGS, DOSE_CHANGE, LIFE_STAGE, KICKS, CONTRACTION, FEED, HOT_FLASH, APPOINTMENT,
+    // Symptoms and migraines (tracking/Symptoms.kt).
+    SYMPTOM, MIGRAINE,
 }
 
 /** An entry as stored: its row's id, day and time, and what it holds. */

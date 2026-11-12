@@ -36,16 +36,21 @@ class Ingest(
         val skipped = batch.samples.size - samples.size
         if (skipped > 0) log.debug("Skipped {} readings from {} that didn't look right", skipped, batch.device.name)
 
+        if (batch.bloodPressure.size + batch.glucose.size > MAX_SAMPLES) throw ApiError.badRequest("Send at most $MAX_SAMPLES readings at a time")
+        // Blood pressure and glucose readings: dated in the person's own time zone.
+        val zone = if (batch.bloodPressure.isEmpty() && batch.glucose.isEmpty()) null else profiles.days(userId)
+        var readings = 0
         val deviceId = db.tx {
             val id = devices.upsert(this, userId, batch.device, synced = true)
             records.putSamples(this, userId, id, samples)
             records.putSleep(this, userId, id, sleep, manual = false)
             records.putWorkouts(this, userId, id, workouts, manual = false)
+            if (zone != null) readings = com.health.server.tracking.VitalsService.putFromDevice(this, userId, id, zone, batch.bloodPressure, batch.glucose, now)
             id
         }
         val times = samples.flatMap { listOfNotNull(it.start, it.end) } + sleep.flatMap { listOf(it.start, it.end) } + workouts.flatMap { listOf(it.start, it.end) }
         if (times.isNotEmpty()) days.changed(userId, times.min(), times.max())
-        return IngestResult(deviceId, samples.size, sleep.size, workouts.size)
+        return IngestResult(deviceId, samples.size, sleep.size, workouts.size, readings)
     }
 
     /** Readings entered by hand: kept on the person's own "Entered by hand" device. */

@@ -24,6 +24,17 @@ import com.health.server.modules.MedsService
 import com.health.server.modules.MindService
 import com.health.server.modules.ModuleService
 import com.health.server.platform.FeatureHooks
+import com.health.server.tracking.DrinksHooks
+import com.health.server.tracking.DrinksService
+import com.health.server.tracking.HabitsHooks
+import com.health.server.tracking.HabitsService
+import com.health.server.tracking.StressHooks
+import com.health.server.tracking.SymptomsHooks
+import com.health.server.tracking.SymptomsService
+import com.health.server.tracking.TrackingService
+import com.health.server.tracking.VitalsHooks
+import com.health.server.tracking.VitalsService
+import com.health.server.tracking.Weather
 import com.health.server.util.Http
 import com.health.server.util.Passwords
 import com.health.server.util.Random
@@ -76,12 +87,24 @@ class Services(
         modules.care = com.health.server.care.CareDay(hormones, lifeStages, appointments)
     }
 
+    // Blood pressure and glucose, drinks, symptoms and migraines, habits; the weather for symptom patterns.
+    val weather = Weather(db, http, settings, clock)
+    val tracking: TrackingService = run {
+        val vitals = VitalsService(db, records, profiles, clock)
+        val drinks = DrinksService(db, profiles, records, days, clock)
+        val symptoms = SymptomsService(entries, profiles, days, drinks, modules.cycle, weather, clock)
+        val habits = HabitsService(db, profiles, days, modules, drinks, clock)
+        TrackingService(vitals, drinks, symptoms, habits, weather, days, clock).also { days.parts += it }
+    }
+
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(
             // Add each feature's service here.
             hormones, lifeStages, appointments,
             *com.health.server.care.CoreQuestions.all(modules.mind, modules.cycle, modules.continence, modules.meds, days, clock).toTypedArray(),
+            VitalsHooks(tracking.vitals, clock), DrinksHooks(tracking.drinks), SymptomsHooks(tracking.symptoms),
+            HabitsHooks(tracking.habits), StressHooks(days),
         )
     }
 

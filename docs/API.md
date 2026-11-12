@@ -142,8 +142,9 @@ show on a locked screen.
 | `GET /api/vitals/summary?days=30` | `VitalsSummary`: averages, category, time in range, GMI, patterns |
 
 Targets are `Profile.vitalsTargets`. Monitors send readings in `IngestBatch.bloodPressure` and
-`IngestBatch.glucose`; samples of the `BLOOD_PRESSURE_*` and `BLOOD_GLUCOSE` metrics (from Health
-Connect) count too.
+`IngestBatch.glucose` (`IngestResult.readings` counts them; a resend replaces them); samples of the
+`BLOOD_PRESSURE_*` and `BLOOD_GLUCOSE` metrics (from Health Connect) count too. Only readings
+entered by hand can be deleted.
 
 ### Drinks (with food)
 
