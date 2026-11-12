@@ -164,7 +164,7 @@ class EndToEndTest {
         // Mind: a mood, and a PHQ-9 scored and flagged by the server.
         api.addMood(MoodEntry(at = System.currentTimeMillis(), mood = 4, feelings = listOf("calm")))
         assertEquals(listOf("calm"), api.moods(7).single().feelings)
-        assertEquals(setOf(Screener.PHQ9, Screener.GAD7), api.screeners().map { it.id }.toSet())
+        assertEquals(setOf(Screener.PHQ9, Screener.GAD7, Screener.EPDS), api.screeners().map { it.id }.toSet())
         val phq = api.submitScreener(ScreenerResult(Screener.PHQ9, System.currentTimeMillis(), List(9) { 1 }))
         assertEquals(9, phq.score)
         // Any answer but "not at all" to the last question (thoughts of self-harm) brings up support.

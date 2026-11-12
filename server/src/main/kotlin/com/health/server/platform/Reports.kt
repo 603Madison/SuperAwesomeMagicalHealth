@@ -75,8 +75,9 @@ class ReportService(private val services: Services) {
 
         fun render(name: String, units: Units, from: LocalDate, to: LocalDate, sections: List<ReportSection>, zone: ZoneId, now: Long): ByteArray {
             PDDocument().use { doc ->
-                val regular = loadFont(doc, "/fonts/Lexend-Regular.ttf") ?: PDType1Font(Standard14Fonts.FontName.HELVETICA)
-                val bold = loadFont(doc, "/fonts/Lexend-SemiBold.ttf") ?: PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD)
+                // Not under /fonts: the Android app's tests have the server on their classpath, and Robolectric reads /fonts as Android's own.
+                val regular = loadFont(doc, "/report-fonts/Lexend-Regular.ttf") ?: PDType1Font(Standard14Fonts.FontName.HELVETICA)
+                val bold = loadFont(doc, "/report-fonts/Lexend-SemiBold.ttf") ?: PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD)
                 val size = if (units == Units.IMPERIAL) PDRectangle.LETTER else PDRectangle.A4
                 val pdf = Layout(doc, size, regular, bold)
                 pdf.cover(name, from, to, now, zone)
