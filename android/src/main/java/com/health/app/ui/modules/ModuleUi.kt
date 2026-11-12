@@ -68,6 +68,7 @@ object ModuleInfo {
         Module.CYCLE -> Icons.Rounded.CalendarMonth
         Module.CONTINENCE -> Icons.Rounded.Wc
         Module.MEDICATIONS -> Icons.Rounded.Medication
+        Module.VITALS, Module.HABITS, Module.SYMPTOMS, Module.HORMONES, Module.APPOINTMENTS -> Icons.Rounded.Medication
     }
 
     fun description(module: Module): String = when (module) {
@@ -79,6 +80,11 @@ object ModuleInfo {
         Module.CYCLE -> "Periods, symptoms and predictions."
         Module.CONTINENCE -> "A diary of toilet trips, leaks and pelvic floor exercises."
         Module.MEDICATIONS -> "Doses, reminders, injection sites and lab results."
+        Module.VITALS -> "Blood pressure and glucose, from a monitor or by hand."
+        Module.HABITS -> "Habits with streaks that forgive a rest day."
+        Module.SYMPTOMS -> "Symptoms, pain and migraines, and what goes with them."
+        Module.HORMONES -> "Dose history, levels against your targets, and when labs are due."
+        Module.APPOINTMENTS -> "Appointments, questions to ask, and notes afterwards."
     }
 
     /** The route each opt-in module's screen lives at. */

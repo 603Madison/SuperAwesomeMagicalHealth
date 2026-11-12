@@ -22,6 +22,16 @@ enum class Module(val label: String, val sensitive: Boolean) {
     CONTINENCE("Bladder & bowel", true),
     /** Medications and supplements, doses, reminders, injection-site rotation, lab results. */
     MEDICATIONS("Medications", true),
+    /** Blood pressure and glucose, from monitors or entered by hand. */
+    VITALS("Blood pressure & glucose", false),
+    /** Habits with forgiving streaks, ticked by hand or by what's recorded. */
+    HABITS("Habits", false),
+    /** Symptoms, pain and migraines, and what goes with them. */
+    SYMPTOMS("Symptoms & pain", true),
+    /** Hormone therapy: dose history, levels against the person's own targets, when labs are due. */
+    HORMONES("Hormone therapy", true),
+    /** Appointments, with questions to ask and notes afterwards. */
+    APPOINTMENTS("Appointments", true),
     ;
 
     companion object {
@@ -81,8 +91,9 @@ data class JournalEntry(
     val date: String? = null,
 )
 
+/** PHQ-9 (depression), GAD-7 (anxiety), and the EPDS (Edinburgh, during pregnancy and after a birth). */
 @Serializable
-enum class Screener { PHQ9, GAD7 }
+enum class Screener { PHQ9, GAD7, EPDS }
 
 /** A questionnaire's text and scoring, as the server serves it so every app asks the same thing. */
 @Serializable
@@ -96,6 +107,12 @@ data class ScreenerDefinition(
     /** Score bands: (lowest score, label). */
     val bands: List<ScoreBand>,
     val source: String,
+    /** Where each question has its own answers (the EPDS): those, in the order shown. */
+    val itemOptions: List<List<String>>? = null,
+    /** And what each of those answers scores (some questions count in reverse). */
+    val itemScores: List<List<Int>>? = null,
+    /** The question about self-harm: any answer scoring above 0 shows support straight away. */
+    val flagItem: Int? = null,
 )
 
 @Serializable
@@ -109,7 +126,7 @@ data class ScreenerResult(
     val answers: List<Int>,
     val score: Int = 0,
     val severity: String = "",
-    /** PHQ-9's last question answered above "not at all": support is shown straight away. */
+    /** The self-harm question ([ScreenerDefinition.flagItem]) answered above "never": support is shown straight away. */
     val flagged: Boolean = false,
     val id: String? = null,
     val date: String? = null,
@@ -348,6 +365,10 @@ data class Medication(
     /** Doses left, if counted; the app warns when it's low. */
     val stock: Int? = null,
     val id: String? = null,
+    /** Part of hormone therapy (shown there, with its dose history), when that feature is on. */
+    val hormone: Boolean = false,
+    /** When it was first started, "YYYY-MM-DD". */
+    val startedOn: String? = null,
 )
 
 @Serializable
@@ -415,6 +436,14 @@ data class ModulesToday(
     val cycle: CycleToday? = null,
     val continence: ContinenceDay? = null,
     val meds: MedsDay? = null,
+    val vitals: VitalsToday? = null,
+    val habits: List<HabitStatus>? = null,
+    val symptoms: SymptomsDay? = null,
+    val hormones: HormonesToday? = null,
+    /** Pregnancy, after a birth, perimenopause and after (with the cycle). */
+    val lifeStage: LifeStageToday? = null,
+    /** In the next seven days. */
+    val appointments: List<Appointment>? = null,
 )
 
 @Serializable

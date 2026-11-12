@@ -23,6 +23,7 @@ import com.health.server.modules.EntryStore
 import com.health.server.modules.MedsService
 import com.health.server.modules.MindService
 import com.health.server.modules.ModuleService
+import com.health.server.platform.FeatureHooks
 import com.health.server.util.Http
 import com.health.server.util.Passwords
 import com.health.server.util.Random
@@ -65,6 +66,13 @@ class Services(
         meds = MedsService(db, box, entries, profiles, clock),
         clock = clock,
     ).also { days.extras = it }
+
+    /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
+    val hooks: List<FeatureHooks> by lazy {
+        listOf<FeatureHooks>(
+            // Add each feature's service here.
+        )
+    }
 
     override fun close() {
         db.close()

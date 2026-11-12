@@ -306,6 +306,7 @@ private fun CheckInsCard(state: MindState, onCheck: (Screener) -> Unit) {
 fun screenerName(s: Screener) = when (s) {
     Screener.PHQ9 -> "Low mood (PHQ-9)"
     Screener.GAD7 -> "Anxiety (GAD-7)"
+    Screener.EPDS -> "Edinburgh (EPDS)"
 }
 
 /** Logging a mood: the face, and if wanted energy, anxiety, feelings, what it's about and a note. */

@@ -32,12 +32,13 @@ data class User(
 }
 
 /**
- * A browser, the app, an upload key (which can only send data in), or an AI connector link (MCP):
- * read-only, able to log entries too, or (an admin's) seeing every account.
+ * A browser, the app, an upload key (which can only send data in), an AI connector link (MCP):
+ * read-only, able to log entries too, or (an admin's) seeing every account; a Home Assistant key
+ * (reads /api/integrations/state only); or the watch app (/api/watch/… only).
  */
 @Serializable
 enum class SessionKind {
-    WEB, APP, UPLOAD, MCP, MCP_WRITE, MCP_ALL;
+    WEB, APP, UPLOAD, MCP, MCP_WRITE, MCP_ALL, INTEGRATION, WATCH;
 
     val isConnector: Boolean get() = this == MCP || this == MCP_WRITE || this == MCP_ALL
 }
@@ -49,7 +50,7 @@ data class ConnectorRequest(
     /** An admin's link that sees every account (read-only, and never sensitive modules). */
     val allAccounts: Boolean = false,
     val name: String = "",
-    /** The sensitive modules (mind, cycle, bladder and bowel, medications) it may read. */
+    /** The sensitive modules (mind, cycle, bladder and bowel, medications, symptoms, hormones, appointments) it may read. */
     val modules: Set<Module> = emptySet(),
 )
 

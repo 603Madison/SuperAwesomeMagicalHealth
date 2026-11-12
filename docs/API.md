@@ -85,7 +85,8 @@ whenever it likes. Batches over 20,000 samples are refused; send them in parts.
 ## Health modules
 
 Each person turns modules on and off in `Profile.modules` (`ACTIVITY`, `SLEEP`, `NUTRITION`,
-`BODY` to start; `MIND`, `CYCLE`, `CONTINENCE`, `MEDICATIONS` opt-in). A module's endpoints work
+`BODY` to start; `MIND`, `CYCLE`, `CONTINENCE`, `MEDICATIONS`, `VITALS`, `HABITS`, `SYMPTOMS`,
+`HORMONES` and `APPOINTMENTS` opt-in). A module's endpoints work
 whether or not it's on; the apps show only the ones that are. Entries in the sensitive modules are
 encrypted on the server. `GET /api/day/{date}` includes `modules` (a `ModulesToday`) for the
 modules that are on, and `TrendDay` carries their daily numbers.
@@ -127,6 +128,131 @@ from `at`, in the person's time zone.
 | `GET /api/meds/day/{date}` | `MedsDay`: each scheduled dose with its log and the next injection or patch site |
 | `GET /api/meds/doses?days=30` · `POST` · `DELETE /{id}` | `DoseLog` (marking a scheduled dose: send its `scheduledFor`) |
 | `GET /api/labs?days=3650` · `POST` · `DELETE /{id}` | `LabResult` |
+
+Reminders: `Profile.reminders` (`ReminderPrefs`) sets how every device reminds: again after N
+minutes if a dose isn't marked, when it counts as missed, refills, quiet hours, and whether names
+show on a locked screen.
+
+### Blood pressure and glucose
+
+| | |
+|---|---|
+| `GET /api/vitals/bp?days=30` · `POST` · `DELETE /{id}` | `BloodPressure` |
+| `GET /api/vitals/glucose?days=14` · `POST` · `DELETE /{id}` | `GlucoseReading` (mmol/L; the apps convert) |
+| `GET /api/vitals/summary?days=30` | `VitalsSummary`: averages, category, time in range, GMI, patterns |
+
+Targets are `Profile.vitalsTargets`. Monitors send readings in `IngestBatch.bloodPressure` and
+`IngestBatch.glucose`; samples of the `BLOOD_PRESSURE_*` and `BLOOD_GLUCOSE` metrics (from Health
+Connect) count too.
+
+### Drinks (with food)
+
+| | |
+|---|---|
+| `GET /api/drinks/{date}` | `DrinksDay` |
+| `POST /api/drinks` · `PUT /{id}` · `DELETE /{id}` | `Drink` |
+| `GET /api/drinks/summary?days=30` | `DrinksSummary`: averages and how caffeine and alcohol went with sleep |
+
+### Symptoms and migraines
+
+| | |
+|---|---|
+| `GET /api/symptoms/entries?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `SymptomEntry` |
+| `GET /api/symptoms/migraines?days=90` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Migraine` (an open one has no `end`) |
+| `GET /api/symptoms/summary?days=90` | `SymptomsSummary`: counts, triggers, and what went with symptoms (sleep, cycle, caffeine, alcohol, stress, air pressure) |
+
+Air pressure comes from Open-Meteo for `Profile.place`, when the admin allows it (`weather`).
+
+### Stress and resilience
+
+`DaySummary.stressDay` and `DaySummary.resilience`; `TrendDay.stressedMinutes` and
+`restoredMinutes`. Worked out from daytime heart rate and HRV against the person's own baseline,
+or from the device's stress readings (Garmin, Colmi).
+
+### Habits
+
+| | |
+|---|---|
+| `GET /api/habits` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Habit` (`?all=true` includes ones turned off) |
+| `GET /api/habits/today?date=` | `[HabitStatus]` |
+| `PUT /api/habits/{id}/ticks` | `HabitTick` (sets the day's count; 0 clears it) |
+| `GET /api/habits/{id}/history?days=90` | `[HabitTick]` |
+
+### Hormone therapy
+
+| | |
+|---|---|
+| `GET /api/hormones` | `HormoneOverview`: hormone medications with dose history, labs against targets, when labs are due |
+| `PUT /api/hormones/settings` | `HormoneSettings` |
+| `POST /api/hormones/changes` · `DELETE /api/hormones/changes/{id}` | `DoseChange` (also recorded when a hormone medication's dose or schedule is edited) |
+
+Medications are marked with `Medication.hormone`.
+
+### Life stages (with the cycle)
+
+| | |
+|---|---|
+| `GET /api/cycle/stage` · `PUT` | `LifeStageInfo` |
+| `GET /api/cycle/stage/overview?days=30` | `LifeStageOverview` |
+| `POST /api/cycle/kicks` · `PUT /{id}` · `DELETE /{id}` | `KickSession` |
+| `POST /api/cycle/contractions` · `PUT /{id}` · `DELETE /{id}` | `Contraction` |
+| `POST /api/cycle/feeds` · `PUT /{id}` · `DELETE /{id}` | `Feed` |
+| `POST /api/cycle/hot-flashes` · `DELETE /{id}` | `HotFlash` |
+
+While pregnant or after a birth, Mind offers the EPDS check-in.
+
+### Appointments
+
+| | |
+|---|---|
+| `GET /api/appointments?days=365&upcoming=true` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Appointment` |
+| `GET /api/appointments/{id}/suggestions` | `[SuggestedQuestion]` from what was logged since the last appointment |
+
+## Sharing
+
+| | |
+|---|---|
+| `GET /api/shares` | `Shares`: who sees this account, and whose this account sees |
+| `POST /api/shares` · `PUT /{id}` · `DELETE /{id}` | `ShareRequest` / `ShareChange` (the owner, or the viewer leaving) |
+
+A viewer sends `X-SAMH-View: <ownerId>` with GET requests to see the owner's data, limited to the
+shared features (`/api/day` and `/api/trends` leave the rest out). Anything else with the header is
+refused.
+
+## Reminders, digest, webhooks and Home Assistant
+
+| | |
+|---|---|
+| `GET /api/push/key` | `PushKey`: the server's VAPID public key |
+| `POST /api/push/subscriptions` · `GET` · `DELETE /{id}` | `PushSubscriptionInput` / `PushSubscriptionInfo` |
+| `POST /api/push/test` | Sends a test notification to this account's browsers |
+| `GET /api/reminders/upcoming?hours=24` | `[PushMessage]`: what's coming (the phone app plans its alarms from meds itself) |
+| `GET /api/digest/latest` · `GET /api/digest?week=YYYY-MM-DD` | `Digest` |
+| `POST /api/digest/email-test` | Sends the latest digest to `Profile.digest.email` |
+| `GET /api/webhooks` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Webhook` (the `secret` comes back once, on POST) |
+| `POST /api/webhooks/{id}/test` · `GET /api/webhooks/deliveries` | Sends a `test` event · the last deliveries |
+| `POST /api/integrations/keys` · `GET` · `DELETE /{id}` | `IntegrationKey` for Home Assistant |
+| `GET /api/integrations/state` | With an integration key: today's numbers as flat JSON for REST sensors |
+
+Webhook calls are `POST` with a `WebhookPayload` body and `X-SAMH-Signature: sha256=<hex>`, the
+HMAC-SHA256 of the body with the hook's secret. The admin sets up mail (SMTP) for digests.
+
+## Reports and export
+
+| | |
+|---|---|
+| `GET /api/report.pdf?from=&to=&sections=SLEEP,VITALS,…` | A PDF for a doctor (sections: `ReportSectionKey`; default, every feature that's on) |
+| `GET /api/export.zip?from=&to=` | CSV files of everything, and `fhir.json` (a FHIR R4 Bundle) |
+| `GET /api/export/fhir?from=&to=` | The FHIR Bundle alone (`application/fhir+json`) |
+
+## The watch app
+
+| | |
+|---|---|
+| `GET /pebble/config?return_to=` | The watch app's settings page: after signing in, makes a `WATCH` key and returns to the watch |
+| `GET /api/watch/today` | `WatchToday` (with a `WATCH` key, or any app sign-in) |
+| `POST /api/watch/log` | `WatchLog`: one tap from the watch |
+| `POST /api/ingest` | A `WATCH` key may also send data in, like an upload key |
 
 ## The AI connector (MCP)
 

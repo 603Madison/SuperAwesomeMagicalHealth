@@ -109,6 +109,8 @@ enum class DeviceKind(val label: String) {
     GADGETBRIDGE("Gadgetbridge"),
     FIT_FILE("FIT files"),
     PHONE("Phone"),
+    BP_MONITOR("Blood pressure monitor"),
+    GLUCOSE_METER("Glucose meter"),
     MANUAL("Entered by hand"),
     OTHER("Other device"),
 }
@@ -151,10 +153,12 @@ data class IngestBatch(
     val samples: List<Sample> = emptyList(),
     val sleep: List<SleepSession> = emptyList(),
     val workouts: List<Workout> = emptyList(),
+    val bloodPressure: List<BloodPressure> = emptyList(),
+    val glucose: List<GlucoseReading> = emptyList(),
 )
 
 @Serializable
-data class IngestResult(val deviceId: String, val samples: Int, val sleep: Int, val workouts: Int)
+data class IngestResult(val deviceId: String, val samples: Int, val sleep: Int, val workouts: Int, val readings: Int = 0)
 
 /** A key that can only upload data, for a watch app or a script. Shown once. */
 @Serializable

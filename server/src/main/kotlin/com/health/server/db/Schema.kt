@@ -177,6 +177,124 @@ object Schema {
         );
         CREATE INDEX medications_user ON medications(user_id);
         """,
+        // 3: blood pressure and glucose, drinks, habits, weather, sharing, webhooks, browser
+        // notifications, reminders sent, weekly digests. (Symptoms, hormone therapy, life stages
+        // and appointments are sealed entries, in `entries`.)
+        """
+        CREATE TABLE vitals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            v1 REAL NOT NULL,
+            v2 REAL,
+            v3 REAL,
+            context TEXT,
+            note TEXT,
+            device_id TEXT REFERENCES devices(id) ON DELETE CASCADE,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX vitals_user ON vitals(user_id, kind, at);
+        CREATE UNIQUE INDEX vitals_device ON vitals(device_id, kind, at) WHERE device_id IS NOT NULL;
+        CREATE TABLE drinks (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            date TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            volume_ml INTEGER NOT NULL,
+            caffeine_mg REAL NOT NULL DEFAULT 0,
+            alcohol_g REAL NOT NULL DEFAULT 0,
+            name TEXT,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX drinks_user ON drinks(user_id, date);
+        CREATE TABLE habits (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            data TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            sort INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX habits_user ON habits(user_id);
+        CREATE TABLE habit_checks (
+            habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            date TEXT NOT NULL,
+            count INTEGER NOT NULL,
+            PRIMARY KEY (habit_id, date)
+        );
+        CREATE TABLE weather (
+            place TEXT NOT NULL,
+            date TEXT NOT NULL,
+            data TEXT NOT NULL,
+            fetched_at INTEGER NOT NULL,
+            PRIMARY KEY (place, date)
+        );
+        CREATE TABLE shares (
+            id TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            viewer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            modules TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            last_viewed_at INTEGER,
+            UNIQUE (owner_id, viewer_id)
+        );
+        CREATE INDEX shares_viewer ON shares(viewer_id);
+        CREATE TABLE webhooks (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            secret TEXT NOT NULL,
+            events TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            include_details INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX webhooks_user ON webhooks(user_id);
+        CREATE TABLE webhook_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            webhook_id TEXT NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            at INTEGER NOT NULL,
+            event TEXT NOT NULL,
+            ok INTEGER NOT NULL,
+            status INTEGER,
+            error TEXT
+        );
+        CREATE INDEX webhook_deliveries_hook ON webhook_deliveries(webhook_id, at);
+        CREATE TABLE push_subscriptions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            name TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            last_ok_at INTEGER,
+            failures INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX push_user ON push_subscriptions(user_id);
+        CREATE TABLE reminders_sent (
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            PRIMARY KEY (user_id, key)
+        );
+        CREATE TABLE digests (
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            week TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            emailed_at INTEGER,
+            PRIMARY KEY (user_id, week)
+        );
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

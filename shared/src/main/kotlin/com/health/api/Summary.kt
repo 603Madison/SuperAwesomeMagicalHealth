@@ -41,6 +41,11 @@ data class Profile(
     val goals: Goals = Goals(),
     /** The parts of the app this person uses (see [Module]). */
     val modules: Set<Module> = Module.DEFAULT,
+    val reminders: ReminderPrefs = ReminderPrefs(),
+    val digest: DigestPrefs = DigestPrefs(),
+    /** Roughly where the person is, for the weather (optional). */
+    val place: Place? = null,
+    val vitalsTargets: VitalsTargets = VitalsTargets(),
 )
 
 /** One part of a score, as Oura shows them: its own 0–100 and what it's based on. */
@@ -112,13 +117,19 @@ data class DaySummary(
     val spo2: Double? = null,
     val respiratoryRate: Double? = null,
     val temperatureDeviation: Double? = null,
+    /** The device's own stress reading, 0–100, where it gives one. */
     val stress: Double? = null,
+    /** The day while awake: stressed, engaged, relaxed and restored minutes. */
+    val stressDay: StressDay? = null,
+    val resilience: Resilience? = null,
     val sleepSummary: SleepSummary? = null,
     val naps: List<SleepSummary> = emptyList(),
     val workouts: List<Workout> = emptyList(),
     val nutrition: Nutrients = Nutrients(),
     val nutritionTarget: NutritionTarget? = null,
     val waterMl: Int = 0,
+    /** Coffee, tea, alcohol and the rest (with the food). */
+    val drinks: DrinksDay? = null,
     val weightKg: Double? = null,
     val bodyFat: Double? = null,
     val checkIn: CheckIn? = null,
@@ -169,6 +180,19 @@ data class TrendDay(
     val leaks: Int? = null,
     val dosesTaken: Int? = null,
     val dosesDue: Int? = null,
+    val stressedMinutes: Int? = null,
+    val restoredMinutes: Int? = null,
+    val caffeineMg: Double? = null,
+    val standardDrinks: Double? = null,
+    val systolic: Double? = null,
+    val diastolic: Double? = null,
+    val glucose: Double? = null,
+    /** The worst symptom that day, 0–10. */
+    val symptomWorst: Int? = null,
+    val migraine: Boolean? = null,
+    val habitsDone: Int? = null,
+    val habitsDue: Int? = null,
+    val hotFlashes: Int? = null,
 )
 
 @Serializable
