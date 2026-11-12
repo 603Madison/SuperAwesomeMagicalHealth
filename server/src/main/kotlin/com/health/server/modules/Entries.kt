@@ -9,7 +9,11 @@ import kotlinx.serialization.KSerializer
 import java.time.LocalDate
 
 /** The kinds of entry the health modules keep. */
-enum class EntryKind { MOOD, JOURNAL, SCREENER, MINDFUL, CYCLE_DAY, CONTINENCE, DOSE, LAB }
+enum class EntryKind {
+    MOOD, JOURNAL, SCREENER, MINDFUL, CYCLE_DAY, CONTINENCE, DOSE, LAB,
+    // Symptoms and migraines (tracking/Symptoms.kt).
+    SYMPTOM, MIGRAINE,
+}
 
 /** An entry as stored: its row's id, day and time, and what it holds. */
 data class Stored<T>(val id: String, val date: LocalDate, val at: Long, val value: T)

@@ -2,6 +2,7 @@ package com.health.server.insights
 
 import com.health.api.Aggregation
 import com.health.api.CyclePhase
+import com.health.api.DrinksDay
 import com.health.api.Flow
 import com.health.api.Insight
 import com.health.api.ModulesToday
@@ -55,11 +56,13 @@ data class DayStats(
     val workouts: Int = 0,
     val workoutMinutes: Int = 0,
     val hasData: Boolean = false,
+    /** Quarter hours awake and still, for daytime stress (see [Stress]). */
+    val stressWindows: List<StressWindow> = emptyList(),
     val version: Int = VERSION,
 ) {
     companion object {
         /** Raised whenever the way days are worked out changes, so kept ones are worked out again. */
-        const val VERSION = 1
+        const val VERSION = 2
     }
 }
 
@@ -69,7 +72,20 @@ interface DayExtras {
     suspend fun trends(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, ModuleTrend>
 }
 
-data class DayExtrasResult(val modules: ModulesToday, val insights: List<Pair<Int, Insight>>, val cyclePhase: CyclePhase?)
+data class DayExtrasResult(
+    val modules: ModulesToday,
+    val insights: List<Pair<Int, Insight>>,
+    val cyclePhase: CyclePhase?,
+    /** Coffee, tea and alcohol (with the food). */
+    val drinks: DrinksDay? = null,
+)
+
+/** Several parts' days as one: each fills in what it knows. */
+fun ModulesToday.merge(o: ModulesToday) = ModulesToday(
+    mind = mind ?: o.mind, cycle = cycle ?: o.cycle, continence = continence ?: o.continence, meds = meds ?: o.meds,
+    vitals = vitals ?: o.vitals, habits = habits ?: o.habits, symptoms = symptoms ?: o.symptoms, hormones = hormones ?: o.hormones,
+    lifeStage = lifeStage ?: o.lifeStage, appointments = appointments ?: o.appointments,
+)
 
 /** A day's numbers from the health modules, for trends. */
 data class ModuleTrend(
@@ -82,7 +98,25 @@ data class ModuleTrend(
     val leaks: Int? = null,
     val dosesTaken: Int? = null,
     val dosesDue: Int? = null,
-)
+    // Blood pressure and glucose, drinks, symptoms and habits (tracking/).
+    val systolic: Double? = null,
+    val diastolic: Double? = null,
+    val glucose: Double? = null,
+    val caffeineMg: Double? = null,
+    val standardDrinks: Double? = null,
+    val symptomWorst: Int? = null,
+    val migraine: Boolean? = null,
+    val habitsDone: Int? = null,
+    val habitsDue: Int? = null,
+) {
+    fun merge(o: ModuleTrend) = ModuleTrend(
+        mood = mood ?: o.mood, anxiety = anxiety ?: o.anxiety, mindfulMinutes = mindfulMinutes ?: o.mindfulMinutes, flow = flow ?: o.flow,
+        voids = voids ?: o.voids, nightVoids = nightVoids ?: o.nightVoids, leaks = leaks ?: o.leaks, dosesTaken = dosesTaken ?: o.dosesTaken,
+        dosesDue = dosesDue ?: o.dosesDue, systolic = systolic ?: o.systolic, diastolic = diastolic ?: o.diastolic, glucose = glucose ?: o.glucose,
+        caffeineMg = caffeineMg ?: o.caffeineMg, standardDrinks = standardDrinks ?: o.standardDrinks, symptomWorst = symptomWorst ?: o.symptomWorst,
+        migraine = migraine ?: o.migraine, habitsDone = habitsDone ?: o.habitsDone, habitsDue = habitsDue ?: o.habitsDue,
+    )
+}
 
 /** Days: their numbers, scores and insights, and trends over weeks. */
 class DayService(
@@ -93,6 +127,25 @@ class DayService(
 ) {
     /** The health modules, once they exist (they need this service themselves). */
     var extras: DayExtras? = null
+
+    /** More parts of each day (blood pressure, habits, symptoms, drinks…), added once they exist. */
+    val parts = mutableListOf<DayExtras>()
+
+    private fun allExtras(): List<DayExtras> = listOfNotNull(extras) + parts
+
+    private suspend fun extrasToday(userId: String, profile: Profile, date: LocalDate): DayExtrasResult? {
+        val results = allExtras().map { it.today(userId, profile, date) }
+        if (results.isEmpty()) return null
+        return results.reduce { a, b ->
+            DayExtrasResult(a.modules.merge(b.modules), a.insights + b.insights, a.cyclePhase ?: b.cyclePhase, a.drinks ?: b.drinks)
+        }
+    }
+
+    private suspend fun extrasTrends(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, ModuleTrend> {
+        val out = mutableMapOf<String, ModuleTrend>()
+        allExtras().forEach { part -> part.trends(userId, profile, from, to).forEach { (date, t) -> out[date] = out[date]?.merge(t) ?: t } }
+        return out
+    }
 
     // ---- Keeping days up to date ----
 
@@ -177,6 +230,14 @@ class DayService(
 
         val workouts = records.workouts(userId, start, end)
         val (nutrition, water) = food(userId, date)
+        // Tonight's sleep (which ends tomorrow) closes the day's waking hours.
+        val tonight = records.sleep(userId, end, end + 16 * HOUR).filter { it.start < end }.minOfOrNull { it.start }
+        val windows = stressWindows(
+            today, workouts.map { it.start until it.end }, sessions.map { it.start until it.end },
+            wakeStart = main?.end?.takeIf { it in start until end } ?: (start + 7 * HOUR),
+            wakeEnd = minOf(end, clock(), tonight ?: Long.MAX_VALUE),
+            dayStart = start,
+        )
 
         val stats = DayStats(
             date = date.toString(),
@@ -204,6 +265,7 @@ class DayService(
             waterMl = water,
             workouts = workouts.size,
             workoutMinutes = workouts.sumOf { ((it.end - it.start) / 60_000).toInt() },
+            stressWindows = windows,
         )
         return stats.copy(hasData = today.isNotEmpty() || nights.isNotEmpty() || workouts.isNotEmpty() || nutrition != null || water > 0)
     }
@@ -211,7 +273,9 @@ class DayService(
     private suspend fun food(userId: String, date: LocalDate): Pair<Nutrients?, Int> = db.tx {
         val entries = query("SELECT nutrients FROM food_entries WHERE user_id = ? AND date = ?", userId, date.toString()) { it.string("nutrients") }
             .mapNotNull { runCatching { ApiJson.decodeFromString(Nutrients.serializer(), it) }.getOrNull() }
-        val water = long("SELECT COALESCE(SUM(ml), 0) FROM water WHERE user_id = ? AND date = ?", userId, date.toString()).toInt()
+        val water = long("SELECT COALESCE(SUM(ml), 0) FROM water WHERE user_id = ? AND date = ?", userId, date.toString()).toInt() +
+            // Drinks count towards water, all but alcohol.
+            long("SELECT COALESCE(SUM(volume_ml), 0) FROM drinks WHERE user_id = ? AND date = ? AND alcohol_g = 0", userId, date.toString()).toInt()
         (if (entries.isEmpty()) null else entries.reduce(Nutrients::plus)) to water
     }
 
@@ -250,12 +314,18 @@ class DayService(
         val heart = records.samples(userId, start, end, listOf(Metric.HEART_RATE))
         val workouts = records.workouts(userId, start, end)
         val checkIn = checkIn(userId, date)
-        val more = extras?.today(userId, profile, date)
+        val more = extrasToday(userId, profile, date)
+        val isToday = date == days.today(clock())
+        val stressDays = stressDays(history)
+        val stressDay = stressDays.last()
+        val sleepScores = history.map { Scoring.sleep(it.sleep, goals, days.zone)?.score }
+        val resilience = Stress.resilience(stressDays.takeLast(14), sleepScores.takeLast(14), stressDays.dropLast(14).takeLast(14), sleepScores.dropLast(14).takeLast(14))
+        val stressInsights = stressInsights(stressDay, resilience, isToday)
         val insights = InsightRules.insights(
             InsightRules.Context(
                 today = today, history = before, profile = profile, target = target, readiness = readiness, sleep = sleep,
                 isToday = date == days.today(clock()), hourNow = days.hourOf(clock()), restingCalories = resting,
-                cyclePhase = more?.cyclePhase, extra = more?.insights.orEmpty(),
+                cyclePhase = more?.cyclePhase, extra = more?.insights.orEmpty() + stressInsights,
             ),
         )
         // Resting energy counts up through the day: all of it for a day that's over, the part so far for today.
@@ -282,12 +352,15 @@ class DayService(
             respiratoryRate = today.respiratoryRate,
             temperatureDeviation = Scoring.temperatureDeviation(today, before.takeLast(30)),
             stress = today.stress,
+            stressDay = stressDay,
+            resilience = resilience,
             sleepSummary = today.sleep,
             naps = today.naps,
             workouts = workouts,
             nutrition = today.nutrition ?: Nutrients(),
             nutritionTarget = target,
             waterMl = today.waterMl,
+            drinks = more?.drinks,
             weightKg = today.weightKg,
             bodyFat = today.bodyFat,
             checkIn = checkIn,
@@ -326,12 +399,13 @@ class DayService(
         val all = stats(userId, first.minusDays(HISTORY_DAYS), last, days)
         val offset = HISTORY_DAYS.toInt()
         val goals = profile.goals
-        val modules = extras?.trends(userId, profile, first, last).orEmpty()
+        val modules = extrasTrends(userId, profile, first, last)
         val rows = all.indices.drop(offset).map { i ->
             val day = all[i]
             val before = all.subList(maxOf(0, i - offset), i)
             val sleep = Scoring.sleep(day.sleep, goals, days.zone)
             val date = LocalDate.parse(day.date)
+            val stress = Stress.day(day.date, day.stressWindows, Stress.baseline(day, before))
             TrendDay(
                 date = day.date,
                 readiness = Scoring.readiness(day, before, goals, sleep?.score)?.score,
@@ -355,11 +429,16 @@ class DayService(
                 waterMl = day.waterMl.takeIf { it > 0 },
                 workouts = day.workouts,
                 workoutMinutes = day.workoutMinutes,
+                stressedMinutes = stress?.stressedMinutes,
+                restoredMinutes = stress?.restoredMinutes,
             ).let { row ->
                 modules[day.date]?.let { m ->
                     row.copy(
                         mood = m.mood, anxiety = m.anxiety, mindfulMinutes = m.mindfulMinutes, flow = m.flow, voids = m.voids,
                         nightVoids = m.nightVoids, leaks = m.leaks, dosesTaken = m.dosesTaken, dosesDue = m.dosesDue,
+                        systolic = m.systolic, diastolic = m.diastolic, glucose = m.glucose, caffeineMg = m.caffeineMg,
+                        standardDrinks = m.standardDrinks, symptomWorst = m.symptomWorst, migraine = m.migraine,
+                        habitsDone = m.habitsDone, habitsDue = m.habitsDue,
                     )
                 } ?: row
             }
@@ -379,6 +458,20 @@ class DayService(
         }
     }
 
+    /** Each day's stress against its own baseline (the days before it), aligned with [history]. */
+    private fun stressDays(history: List<DayStats>): List<com.health.api.StressDay?> =
+        history.indices.map { i -> Stress.day(history[i].date, history[i].stressWindows, Stress.baseline(history[i], history.subList(0, i))) }
+
+    private fun stressInsights(day: com.health.api.StressDay?, resilience: com.health.api.Resilience?, isToday: Boolean): List<Pair<Int, Insight>> = buildList {
+        when (day?.summary) {
+            "Stressful" -> add(54 to Insight("info", "A stressful day", "${Scoring.hm(day.stressedMinutes)} stressed${if (isToday) " so far" else ""}. A short walk, time outside or a few minutes of slow breathing can help you reset.", "activity"))
+            "Restored" -> add(32 to Insight("good", "A restful day", "${Scoring.hm(day.restoredMinutes)} of calm, restoring time.", "sparkles"))
+        }
+        if (resilience != null && resilience.trend == "down" && resilience.level <= com.health.api.ResilienceLevel.ADEQUATE) {
+            add(44 to Insight("info", "Resilience is ${resilience.level.label.lowercase()}", "Stress has outweighed recovery lately. Extra sleep and calm time during the day help it build back up.", "battery-low"))
+        }
+    }
+
     private suspend fun checkIn(userId: String, date: LocalDate) = db.tx {
         one("SELECT data FROM checkins WHERE user_id = ? AND date = ?", userId, date.toString()) { it.string("data") }
     }?.let { runCatching { ApiJson.decodeFromString(com.health.api.CheckIn.serializer(), it) }.getOrNull() }
@@ -392,6 +485,31 @@ class DayService(
         private const val HOUR = 3_600_000L
         /** Days of history behind each score: baselines look back a month. */
         const val HISTORY_DAYS = 30L
+
+        /** The day's quarter hours awake and still, with their heart rate, HRV and stress readings. */
+        fun stressWindows(
+            samples: List<StoredSample>, workouts: List<LongRange>, sleep: List<LongRange>, wakeStart: Long, wakeEnd: Long, dayStart: Long,
+        ): List<StressWindow> {
+            if (wakeEnd - wakeStart < Stress.WINDOW_MS) return emptyList()
+            val byWindow = samples.groupBy { (it.start - dayStart).floorDiv(Stress.WINDOW_MS) }
+            val busy = workouts + sleep
+            val out = mutableListOf<StressWindow>()
+            var index = (wakeStart - dayStart + Stress.WINDOW_MS - 1).floorDiv(Stress.WINDOW_MS)
+            while (dayStart + (index + 1) * Stress.WINDOW_MS <= wakeEnd) {
+                val from = dayStart + index * Stress.WINDOW_MS
+                val to = from + Stress.WINDOW_MS
+                val list = byWindow[index].orEmpty()
+                index++
+                if (busy.any { it.first < to && from < it.last }) continue
+                if (list.filter { it.metric == Metric.STEPS }.sumOf { it.value } > Stress.ACTIVE_STEPS) continue
+                fun avg(metric: Metric) = list.filter { it.metric == metric }.map { it.value }.takeIf { it.isNotEmpty() }?.average()?.let { (it * 10).roundToInt() / 10.0 }
+                val hr = avg(Metric.HEART_RATE)
+                val device = avg(Metric.STRESS)
+                if (hr == null && device == null) continue
+                out += StressWindow(from, hr, avg(Metric.HRV), device)
+            }
+            return out
+        }
 
         /** Active calories on recent days with any, for estimating what's burned. */
         fun averageActive(history: List<DayStats>): Double? =

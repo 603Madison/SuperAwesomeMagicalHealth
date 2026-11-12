@@ -51,7 +51,12 @@ class ProfileStore(private val db: Database, private val clock: () -> Long = Sys
             check(g.workoutsPerWeek in 0..21, "Workouts a week: up to 21")
             check(g.targetWeightKg.let { it == null || it in 25.0..400.0 }, "A target weight is in kilograms, 25 to 400")
             check(g.weeklyChangeKg in -1.5..1.0, "Aim to change at most 1.5 kg a week")
-            return profile.copy(timezone = profile.timezone.trim())
+            // Blood pressure and glucose targets, and the place for the weather.
+            val v = profile.vitalsTargets
+            check(v.systolicHigh in 90..200 && v.diastolicHigh in 50..130, "Blood pressure targets look like 130/80")
+            check(v.glucoseLow in 2.0..8.0 && v.glucoseHigh in 5.0..25.0 && v.glucoseLow < v.glucoseHigh, "A glucose range is in mmol/L, like 3.9 to 10")
+            profile.place?.let { p -> check(p.latitude in -90.0..90.0 && p.longitude in -180.0..180.0, "That place's position doesn't look right") }
+            return profile.copy(timezone = profile.timezone.trim(), place = profile.place?.let { it.copy(name = it.name.trim().take(120)) })
         }
     }
 }

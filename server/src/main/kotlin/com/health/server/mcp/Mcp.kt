@@ -1,6 +1,17 @@
 package com.health.server.mcp
 
 import com.health.api.ApiJson
+import com.health.api.BloodPressure
+import com.health.api.Drink
+import com.health.api.DrinkKind
+import com.health.api.GlucoseContext
+import com.health.api.GlucoseReading
+import com.health.api.GlucoseUnit
+import com.health.api.HabitTick
+import com.health.api.Migraine
+import com.health.api.SymptomEntry
+import com.health.server.tracking.DrinksService
+import com.health.server.tracking.VitalsService
 import com.health.api.CheckIn
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
@@ -404,6 +415,39 @@ class McpServer(private val services: Services) {
             module = Module.MEDICATIONS,
         ) { caller, args -> medsText(caller.user, args.string("date") ?: "today") },
 
+        // ---- Blood pressure and glucose, drinks, symptoms, stress, habits (tracking/) ----
+        Tool(
+            "vitals", "Blood pressure and glucose",
+            "Blood pressure and glucose readings (newest first) with each one's category, averages, time in range, an A1c " +
+                "estimate from a sensor, the person's own targets, and patterns (morning against evening, after meals, lows).",
+            schema(daysProperty(30, 365), account),
+        ) { caller, args -> vitalsText(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 30) },
+        Tool(
+            "drinks", "Drinks",
+            "Drinks by day: caffeine (mg, and when the last was), alcohol (standard drinks of 14 g), other drinks (which count " +
+                "towards water); averages, and how caffeine and alcohol went with sleep and HRV.",
+            schema(daysProperty(14, 365), account),
+        ) { caller, args -> drinksText(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 14) },
+        Tool(
+            "stress", "Stress and resilience",
+            "Daytime stress by day: minutes stressed, engaged, relaxed and restored while awake and still (from heart rate and " +
+                "HRV against the person's baseline, or the device's own stress readings), and resilience over two weeks with what it's made of.",
+            schema(daysProperty(14, 90), account),
+        ) { caller, args -> stressText(accountOf(caller, args), args.int("days")?.coerceIn(1, 90) ?: 14) },
+        Tool(
+            "habits", "Habits",
+            "Habits with their status on a day: done or not, days done this week against the aim, week streaks and day streaks " +
+                "(which forgive one missed day in seven), and the last two weeks.",
+            schema(dateProperty, account),
+        ) { caller, args -> habitsText(accountOf(caller, args), args.string("date") ?: "today") },
+        Tool(
+            "symptoms", "Symptoms and migraines",
+            "Symptoms, pain and migraines: each entry with its severity (0–10), triggers and what helped; counts; and what went " +
+                "with symptom days in the person's own data (short nights, stress, alcohol, caffeine, the cycle, falling air pressure).",
+            schema(daysProperty(30, 365)),
+            module = Module.SYMPTOMS,
+        ) { caller, args -> symptomsText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 30) },
+
         // ---- Logging (links made with logging allowed) ----
         Tool(
             "log_food", "Log food",
@@ -614,6 +658,134 @@ class McpServer(private val services: Services) {
             )
             "Checked in for ${saved.date}: ${checkInText(saved)}."
         },
+
+        // ---- Logging blood pressure, glucose, drinks, symptoms and habits (tracking/) ----
+        Tool(
+            "log_blood_pressure", "Log blood pressure",
+            "Logs a blood pressure reading: systolic and diastolic in mmHg, with the pulse if known.",
+            schema(
+                "systolic" to intProperty("The top number, mmHg"),
+                "diastolic" to intProperty("The bottom number, mmHg"),
+                "pulse" to intProperty("Beats a minute"),
+                "arm" to enumProperty("Which arm", listOf("left", "right")),
+                "at" to stringProperty("When: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "note" to stringProperty("A note"),
+                required = listOf("systolic", "diastolic"),
+            ),
+            writes = true,
+        ) { caller, args ->
+            val user = caller.user
+            val saved = services.tracking.vitals.saveBloodPressure(
+                user.id,
+                BloodPressure(
+                    at = args.string("at")?.let { instantOf(user, it) } ?: services.clock(), systolic = args.int("systolic") ?: error("The top number?"),
+                    diastolic = args.int("diastolic") ?: error("The bottom number?"), pulse = args.int("pulse"), arm = args.string("arm"), note = args.string("note"),
+                ),
+            )
+            "Logged ${saved.systolic}/${saved.diastolic}${saved.pulse?.let { ", pulse $it" } ?: ""} (${VitalsService.category(saved.systolic, saved.diastolic).label.lowercase()}) at ${formatTime(services.profiles.days(user.id), saved.at)}."
+        },
+        Tool(
+            "log_glucose", "Log glucose",
+            "Logs a blood glucose reading, in mmol/L or mg/dL, with when it was taken (fasting, before or after a meal, bedtime).",
+            schema(
+                "value" to numberProperty("The reading"),
+                "unit" to enumProperty("Its unit (default the person's own)", listOf("mmol/L", "mg/dL")),
+                "context" to enumProperty("When it was taken", GlucoseContext.entries.filter { it != GlucoseContext.CGM }.map { it.name }),
+                "at" to stringProperty("When: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "note" to stringProperty("A note"),
+                required = listOf("value"),
+            ),
+            writes = true,
+        ) { caller, args ->
+            val user = caller.user
+            val targets = services.profiles.get(user.id).vitalsTargets
+            val value = args.number("value") ?: error("What was the reading?")
+            val mgdl = when (args.string("unit")?.lowercase()) { "mg/dl" -> true; "mmol/l" -> false; else -> targets.glucoseUnit == GlucoseUnit.MG_DL || value > 40 }
+            val saved = services.tracking.vitals.saveGlucose(
+                user.id,
+                GlucoseReading(
+                    at = args.string("at")?.let { instantOf(user, it) } ?: services.clock(), mmolL = if (mgdl) value / VitalsService.MG_PER_MMOL else value,
+                    context = args.string("context")?.uppercase()?.let { runCatching { GlucoseContext.valueOf(it) }.getOrNull() } ?: GlucoseContext.OTHER,
+                    note = args.string("note"),
+                ),
+            )
+            "Logged ${VitalsService.glucoseText(saved.mmolL, targets.glucoseUnit)} (${saved.context.label.lowercase()}) at ${formatTime(services.profiles.days(user.id), saved.at)}."
+        },
+        Tool(
+            "log_drink", "Log a drink",
+            "Logs a drink: coffee, tea, alcohol and the rest. Caffeine and alcohol are filled in from the kind and size unless given.",
+            schema(
+                "kind" to enumProperty("What kind", DrinkKind.entries.map { it.name }),
+                "ml" to intProperty("How much, in ml (default a usual serving)"),
+                "caffeine_mg" to numberProperty("Caffeine in mg, if known"),
+                "alcohol_g" to numberProperty("Alcohol in grams, if known (a standard drink is 14 g)"),
+                "name" to stringProperty("A name, e.g. Flat white"),
+                "at" to stringProperty("When: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                required = listOf("kind"),
+            ),
+            writes = true,
+        ) { caller, args ->
+            val user = caller.user
+            val kind = args.string("kind")?.uppercase()?.let { runCatching { DrinkKind.valueOf(it) }.getOrNull() } ?: error("Which kind of drink?")
+            val ml = args.int("ml") ?: kind.defaultMl
+            val saved = services.tracking.drinks.save(
+                user.id,
+                Drink(
+                    at = args.string("at")?.let { instantOf(user, it) } ?: services.clock(), kind = kind, volumeMl = ml,
+                    caffeineMg = args.number("caffeine_mg") ?: (ml * kind.caffeineMgPer100Ml / 100).roundToInt().toDouble(),
+                    alcoholG = args.number("alcohol_g") ?: (ml * kind.alcoholPercent / 100 * 0.789 * 10).roundToInt() / 10.0,
+                    name = args.string("name"),
+                ),
+            )
+            "Logged ${saved.name ?: saved.kind.label.lowercase()}, ${saved.volumeMl} ml${if (saved.caffeineMg > 0) ", ${saved.caffeineMg.roundToInt()} mg caffeine" else ""}${if (saved.alcoholG > 0) ", ${DrinksService.drinksText((saved.alcoholG / DrinksService.STANDARD_DRINK_G * 10).roundToInt() / 10.0)}" else ""}."
+        },
+        Tool(
+            "log_symptom", "Log a symptom",
+            "Logs a symptom with its severity 0–10, triggers and what helped. A symptom called migraine logs a migraine (with aura if said).",
+            schema(
+                "symptom" to stringProperty("e.g. headache, back pain, fatigue, migraine"),
+                "severity" to intProperty("0 none … 10 worst imaginable"),
+                "triggers" to stringArray("What seemed to bring it on"),
+                "relief" to stringArray("What was tried, e.g. ibuprofen, rest"),
+                "aura" to boolProperty("For a migraine: with aura"),
+                "at" to stringProperty("When it started: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "note" to stringProperty("A note"),
+                required = listOf("symptom", "severity"),
+            ),
+            writes = true,
+            module = Module.SYMPTOMS,
+        ) { caller, args ->
+            val user = caller.user
+            val at = args.string("at")?.let { instantOf(user, it) } ?: services.clock()
+            val name = args.string("symptom") ?: error("Which symptom?")
+            val severity = args.int("severity") ?: error("How bad, 0 to 10?")
+            if (name.equals("migraine", ignoreCase = true)) {
+                val saved = services.tracking.symptoms.saveMigraine(user.id, Migraine(at, severity = severity, aura = args.bool("aura") ?: false, triggers = args.strings("triggers"), medications = args.strings("relief"), note = args.string("note")))
+                "Logged a migraine starting ${formatTime(services.profiles.days(user.id), saved.start)}, ${saved.severity}/10."
+            } else {
+                val saved = services.tracking.symptoms.save(user.id, SymptomEntry(at, name, severity, triggers = args.strings("triggers"), relief = args.strings("relief"), note = args.string("note")))
+                "Logged ${saved.symptom}, ${saved.severity}/10, at ${formatTime(services.profiles.days(user.id), saved.at)}."
+            }
+        },
+        Tool(
+            "tick_habit", "Tick a habit",
+            "Marks a habit done on a day (by its name), or sets how many times it was done.",
+            schema(
+                "habit" to stringProperty("The habit's name"),
+                dateProperty,
+                "count" to intProperty("Times done that day (default enough for done; 0 clears it)"),
+                required = listOf("habit"),
+            ),
+            writes = true,
+        ) { caller, args ->
+            val user = caller.user
+            val name = args.string("habit") ?: error("Which habit?")
+            val all = services.tracking.habits.list(user.id)
+            val habit = all.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: all.firstOrNull { it.name.contains(name, ignoreCase = true) } ?: error("No habit called $name")
+            val date = services.profiles.days(user.id).parse(args.string("date") ?: "today", services.clock())
+            val tick = services.tracking.habits.tick(user.id, habit.id!!, HabitTick(date.toString(), args.int("count") ?: habit.perDay))
+            if (tick.count == 0) "Cleared ${habit.name} on ${tick.date}." else "Ticked ${habit.name} on ${tick.date}${if (habit.perDay > 1) " (${tick.count} of ${habit.perDay})" else ""}."
+        },
     )
 
     // ---- Tools ----
@@ -711,6 +883,22 @@ class McpServer(private val services: Services) {
         if (Module.MEDICATIONS in scope) m.meds?.let { md ->
             appendLine("Medications: ${md.due.count { it.log?.status == DoseStatus.TAKEN }} of ${md.due.size} scheduled doses taken${md.adherence7d?.let { a -> " ($a% over 7 days)" } ?: ""}")
         }
+        // Blood pressure and glucose, drinks, stress, habits, symptoms (tracking/).
+        m.vitals?.let { v ->
+            val parts = listOfNotNull(
+                v.bloodPressure?.let { "blood pressure ${it.systolic}/${it.diastolic}${v.category?.let { c -> " (${c.label.lowercase()})" } ?: ""}" },
+                v.glucose?.let { "glucose ${VitalsService.glucoseText(it.mmolL, v.targets.glucoseUnit)}" },
+                v.timeInRange?.let { "$it% in range" },
+            )
+            if (parts.isNotEmpty()) appendLine("Vitals: ${parts.joinToString(", ")}")
+        }
+        d.drinks?.let { dr -> appendLine("Drinks: caffeine ${dr.caffeineMg.roundToInt()} mg${dr.caffeineAtBedtimeMg?.let { b -> " (about ${b.roundToInt()} mg left at bedtime)" } ?: ""}, ${DrinksService.drinksText(dr.standardDrinks)} of alcohol, ${dr.fluidMl} ml other drinks") }
+        d.stressDay?.let { s -> appendLine("Stress: ${s.summary.lowercase()} (stressed ${Scoring.hm(s.stressedMinutes)}, engaged ${Scoring.hm(s.engagedMinutes)}, relaxed ${Scoring.hm(s.relaxedMinutes)}, restored ${Scoring.hm(s.restoredMinutes)})") }
+        d.resilience?.let { r -> appendLine("Resilience: ${r.level.label.lowercase()} (${r.trend}); ${r.contributors.joinToString("; ") { "${it.label} ${it.score} (${it.value})" }}") }
+        m.habits?.let { list -> appendLine("Habits: ${list.joinToString("; ") { "${it.habit.name} ${if (it.done) "done" else "not yet"}, ${it.weekDone}/${it.habit.timesPerWeek} this week, ${it.streakWeeks}-week streak" }}") }
+        if (Module.SYMPTOMS in scope) m.symptoms?.let { s ->
+            appendLine("Symptoms: ${(s.entries.map { "${it.symptom} ${it.severity}/10" } + s.migraines.map { "migraine ${it.severity}/10${if (it.end == null) " (ongoing)" else ""}" }).joinToString(", ")}")
+        }
         val shown = d.insights.filter { it.module == null || it.module in scope }
         if (shown.isNotEmpty()) {
             appendLine("Insights shown:")
@@ -725,7 +913,19 @@ class McpServer(private val services: Services) {
             if (Module.CONTINENCE in scope) addAll(listOf("voids", "night_voids", "leaks"))
             if (Module.MEDICATIONS in scope) addAll(listOf("doses_taken", "doses_due"))
         }
-        appendLine("date\treadiness\tsleep_score\tactivity_score\tsteps\tactive_kcal\tresting_hr\thrv_ms\tsleep_min\tdeep_min\trem_min\tspo2\ttemp_dev\tweight_kg\tkcal_eaten\tprotein_g\tcarbs_g\tfat_g\twater_ml\tworkouts" + extra.joinToString("") { "\t$it" })
+        // Blood pressure and glucose, drinks, stress and habits where there are any; symptoms where the link may see them.
+        fun d1(v: Double?) = v?.let { String.format(Locale.ROOT, "%.1f", it) }.orEmpty()
+        val tracked = listOf<Pair<String, (com.health.api.TrendDay) -> String>>(
+            "systolic" to { r -> r.systolic?.roundToInt()?.toString().orEmpty() }, "diastolic" to { r -> r.diastolic?.roundToInt()?.toString().orEmpty() },
+            "glucose_mmol" to { r -> d1(r.glucose) }, "caffeine_mg" to { r -> r.caffeineMg?.roundToInt()?.toString().orEmpty() },
+            "alcohol_drinks" to { r -> d1(r.standardDrinks) }, "stressed_min" to { r -> r.stressedMinutes?.toString().orEmpty() },
+            "restored_min" to { r -> r.restoredMinutes?.toString().orEmpty() }, "habits_done" to { r -> r.habitsDone?.toString().orEmpty() },
+            "habits_due" to { r -> r.habitsDue?.toString().orEmpty() },
+        ).filter { (_, value) -> rows.any { value(it).isNotEmpty() } } + if (Module.SYMPTOMS in scope) listOf<Pair<String, (com.health.api.TrendDay) -> String>>(
+            "symptom_worst" to { r -> r.symptomWorst?.toString().orEmpty() }, "migraine" to { r -> if (r.migraine == true) "yes" else "" },
+        ) else emptyList()
+        val trackedHeader = tracked.joinToString("") { "\t${it.first}" }
+        appendLine("date\treadiness\tsleep_score\tactivity_score\tsteps\tactive_kcal\tresting_hr\thrv_ms\tsleep_min\tdeep_min\trem_min\tspo2\ttemp_dev\tweight_kg\tkcal_eaten\tprotein_g\tcarbs_g\tfat_g\twater_ml\tworkouts" + extra.joinToString("") { "\t$it" } + trackedHeader)
         rows.forEach { r ->
             fun d(v: Double?, digits: Int = 0) = v?.let { if (digits == 0) it.roundToInt().toString() else String.format(Locale.ROOT, "%.${digits}f", it) } ?: ""
             appendLine(
@@ -741,7 +941,7 @@ class McpServer(private val services: Services) {
                         if (Module.CONTINENCE in scope) addAll(listOf(r.voids?.toString().orEmpty(), r.nightVoids?.toString().orEmpty(), r.leaks?.toString().orEmpty()))
                         if (Module.MEDICATIONS in scope) addAll(listOf(r.dosesTaken?.toString().orEmpty(), r.dosesDue?.toString().orEmpty()))
                     },
-                ).joinToString("\t"),
+                ).plus(tracked.map { (_, value) -> value(r) }).joinToString("\t"),
             )
         }
     }
@@ -1074,6 +1274,93 @@ class McpServer(private val services: Services) {
     // ---- Helpers ----
 
     private val startedAt = services.clock()
+
+    // ---- Blood pressure and glucose, drinks, stress, habits, symptoms (tracking/) ----
+
+    private suspend fun vitalsText(user: User, count: Int): String = buildString {
+        val s = services.tracking.vitals.summary(user.id, count)
+        val days = services.profiles.days(user.id)
+        val unit = s.targets.glucoseUnit
+        if (s.bloodPressure.isEmpty() && s.glucose.isEmpty()) return "No blood pressure or glucose readings in the last $count days."
+        appendLine("Targets: blood pressure under ${s.targets.systolicHigh}/${s.targets.diastolicHigh}; glucose ${VitalsService.glucoseText(s.targets.glucoseLow, unit)} to ${VitalsService.glucoseText(s.targets.glucoseHigh, unit)}.")
+        if (s.bloodPressure.isNotEmpty()) {
+            appendLine("Blood pressure: ${s.bloodPressure.size} readings, average ${s.systolicAverage?.roundToInt()}/${s.diastolicAverage?.roundToInt()} (${s.category?.label?.lowercase()}).")
+            s.bloodPressure.take(60).forEach { r ->
+                appendLine("- ${formatTime(days, r.at)}: ${r.systolic}/${r.diastolic} (${VitalsService.category(r.systolic, r.diastolic).label.lowercase()})${r.pulse?.let { ", pulse $it" } ?: ""}${r.arm?.let { ", $it arm" } ?: ""}${r.note?.let { "; $it" } ?: ""} [${r.source}]")
+            }
+        }
+        if (s.glucose.isNotEmpty()) {
+            appendLine("Glucose: ${s.glucose.size} readings, average ${VitalsService.glucoseText(s.glucoseAverage!!, unit)}; in range ${s.timeInRange}%, below ${s.timeBelow}%, above ${s.timeAbove}%" +
+                (s.fastingAverage?.let { "; fasting average ${VitalsService.glucoseText(it, unit)}" } ?: "") + (s.gmi?.let { "; GMI $it%" } ?: "") + ".")
+            s.glucose.take(80).forEach { r -> appendLine("- ${formatTime(days, r.at)}: ${VitalsService.glucoseText(r.mmolL, unit)} (${r.context.label.lowercase()})${r.note?.let { "; $it" } ?: ""} [${r.source}]") }
+        }
+        s.patterns.forEach { appendLine("Pattern: ${it.title}: ${it.body}") }
+    }
+
+    private suspend fun drinksText(user: User, count: Int): String = buildString {
+        val s = services.tracking.drinks.summary(user.id, count)
+        val days = services.profiles.days(user.id)
+        val logged = s.days.filter { it.drinks.isNotEmpty() }
+        if (logged.isEmpty()) return "No drinks logged in the last $count days."
+        appendLine("Averages on days with drinks logged: caffeine ${s.averageCaffeineMg?.roundToInt() ?: 0} mg, alcohol ${s.averageStandardDrinks ?: 0.0} standard drinks (14 g).")
+        logged.reversed().forEach { d ->
+            appendLine("- ${d.date}: caffeine ${d.caffeineMg.roundToInt()} mg${d.lastCaffeineAt?.let { " (last at ${formatTime(days, it).substringAfter(' ')})" } ?: ""}, ${DrinksService.drinksText(d.standardDrinks)} of alcohol, ${d.fluidMl} ml other drinks: " +
+                d.drinks.joinToString(", ") { "${it.name ?: it.kind.label.lowercase()} ${it.volumeMl} ml" })
+        }
+        s.patterns.forEach { appendLine("Pattern: ${it.title}: ${it.body}") }
+    }
+
+    private suspend fun stressText(user: User, count: Int): String = buildString {
+        val rows = services.days.trends(user.id, null, null, count).days.filter { it.stressedMinutes != null }
+        val today = services.days.summary(user.id, "today")
+        if (rows.isEmpty()) return "Not enough daytime heart rate (or stress readings) to work out stress in the last $count days. It needs a ring or watch worn during the day."
+        appendLine("date\tstressed_min\trestored_min")
+        rows.forEach { appendLine("${it.date}\t${it.stressedMinutes}\t${it.restoredMinutes}") }
+        today.stressDay?.let { s -> appendLine("Today: ${s.summary.lowercase()}; stressed ${Scoring.hm(s.stressedMinutes)}, engaged ${Scoring.hm(s.engagedMinutes)}, relaxed ${Scoring.hm(s.relaxedMinutes)}, restored ${Scoring.hm(s.restoredMinutes)}.") }
+        today.resilience?.let { r -> appendLine("Resilience: ${r.level.label.lowercase()} (${r.trend}). ${r.contributors.joinToString("; ") { "${it.label}: ${it.score} (${it.value})" }}.") }
+            ?: appendLine("Resilience needs a week or more of daytime stress first.")
+    }
+
+    private suspend fun habitsText(user: User, dateText: String): String = buildString {
+        val date = services.profiles.days(user.id).parse(dateText, services.clock())
+        val list = services.tracking.habits.statuses(user.id, date)
+        if (list.isEmpty()) return "No habits set up."
+        appendLine("Habits on $date (the last 14 days oldest first: x done, . missed):")
+        list.forEach { s ->
+            val h = s.habit
+            appendLine(
+                "- ${h.name} (${h.source.label.lowercase()}, aim ${h.timesPerWeek} days a week${if (h.perDay > 1) ", ${h.perDay} times a day" else ""}): " +
+                    "${if (s.done) "done" else "not yet"}${if (h.perDay > 1) " (${s.count}/${h.perDay})" else ""}; ${s.weekDone} this week; " +
+                    "${s.streakWeeks}-week streak, ${s.streakDays}-day streak; ${s.recent.joinToString("") { when (it) { true -> "x"; false -> "."; null -> " " } }}",
+            )
+        }
+    }
+
+    private suspend fun symptomsText(user: User, count: Int): String = buildString {
+        val s = services.tracking.symptoms.summary(user.id, count)
+        val days = services.profiles.days(user.id)
+        val logged = s.days.filter { it.entries.isNotEmpty() || it.migraines.isNotEmpty() }
+        if (logged.isEmpty()) return "No symptoms or migraines logged in the last $count days."
+        appendLine("Symptom days: ${logged.size} of $count; migraine days: ${s.migraineDays}.")
+        if (s.counts.isNotEmpty()) appendLine("Most logged: ${s.counts.take(8).joinToString { "${it.name} (${it.count})" }}.")
+        if (s.triggers.isNotEmpty()) appendLine("Triggers noted: ${s.triggers.take(8).joinToString { "${it.name} (${it.count})" }}.")
+        if (s.correlations.isNotEmpty()) {
+            appendLine("What went with symptom days${if (s.weather) " (air pressure included)" else ""}:")
+            s.correlations.forEach { appendLine("- ${it.text}") }
+        }
+        logged.reversed().forEach { d ->
+            d.migraines.forEach { m ->
+                appendLine("- Migraine ${formatTime(days, m.start)}${m.end?.let { " to ${formatTime(days, it)}" } ?: " (ongoing)"}: ${m.severity}/10${if (m.aura) ", aura" else ""}" +
+                    (if (m.symptoms.isNotEmpty()) ", ${m.symptoms.joinToString()}" else "") + (if (m.triggers.isNotEmpty()) "; triggers ${m.triggers.joinToString()}" else "") +
+                    (if (m.medications.isNotEmpty()) "; took ${m.medications.joinToString()}" else "") + (m.reliefHelped?.let { "; helped $it/3" } ?: "") + (m.note?.let { "; $it" } ?: ""))
+            }
+            d.entries.reversed().forEach { e ->
+                appendLine("- ${formatTime(days, e.at)}: ${e.symptom} ${e.severity}/10" + (if (e.bodyAreas.isNotEmpty()) " (${e.bodyAreas.joinToString()})" else "") +
+                    (if (e.triggers.isNotEmpty()) "; triggers ${e.triggers.joinToString()}" else "") + (if (e.relief.isNotEmpty()) "; tried ${e.relief.joinToString()}" else "") +
+                    (e.reliefHelped?.let { "; helped $it/3" } ?: "") + (e.note?.let { "; $it" } ?: ""))
+            }
+        }
+    }
 
     private fun requireAdmin(caller: Caller) {
         if (!caller.user.isAdmin) error("The server's log is for admins; this connector belongs to ${caller.user.username}")
