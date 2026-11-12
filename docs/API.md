@@ -86,7 +86,7 @@ whenever it likes. Batches over 20,000 samples are refused; send them in parts.
 
 Each person turns modules on and off in `Profile.modules` (`ACTIVITY`, `SLEEP`, `NUTRITION`,
 `BODY` to start; `MIND`, `CYCLE`, `CONTINENCE`, `MEDICATIONS`, `VITALS`, `HABITS`, `SYMPTOMS`,
-`HORMONES` and `APPOINTMENTS` opt-in). A module's endpoints work
+`HORMONES`, `APPOINTMENTS`, `NEURO`, `TRANSITION` and `PHOTOS` opt-in). A module's endpoints work
 whether or not it's on; the apps show only the ones that are. Entries in the sensitive modules are
 encrypted on the server. `GET /api/day/{date}` includes `modules` (a `ModulesToday`) for the
 modules that are on, and `TrendDay` carries their daily numbers.
@@ -214,6 +214,114 @@ the chosen option's index (0–3), and `itemScores` turns them into points (some
 |---|---|
 | `GET /api/appointments?days=365&upcoming=true` · `POST` · `GET /{id}` · `PUT /{id}` · `DELETE /{id}` | `Appointment` (without `upcoming`: the last `days` and everything ahead) |
 | `GET /api/appointments/{id}/suggestions` | `[SuggestedQuestion]` from what was logged since the last appointment (or 30 days), by every feature that's on; ones already on the list are left out |
+
+## Conditions and goals
+
+Each person picks the conditions and goals they live with or want to keep track of; each turns on
+the features and the fields within them that fit (`Fields` in `shared/…/Conditions.kt`), so the
+apps show only what's useful. Kept encrypted.
+
+| | |
+|---|---|
+| `GET /api/conditions/catalog` | `[ConditionDefinition]`: conditions (bladder and bowel, periods and hormones, neurodivergence, mental health, chronic illness…), goals (weight, fitness, sleep…) and life (transition, pregnancy, menopause) |
+| `GET /api/conditions` · `PUT` | `MyConditions` (a PUT turns on the features they need; it never turns features off) |
+| `GET /api/fields` · `PUT` | `FieldLayout` / `FieldChoices`: which fields show, and why |
+
+### Bladder and bowel, in detail
+
+| | |
+|---|---|
+| `GET /api/continence/settings` · `PUT` | `ContinenceSettings` (quick buttons, own triggers, activities and places, custom fields, the usual product, night hours, bladder training) |
+| `GET /api/continence/progress?weeks=12` | `ContinenceProgress`: getting better or worse, week by week |
+| `GET /api/continence/check-ins?days=180` · `POST` · `DELETE /{id}` | `ContinenceCheckIn` (weekly bother) |
+
+`ContinenceEntry` carries the detail fields; a `PAD_CHANGE` (or an entry with `count`) takes products
+off its supply's count; `padWeightG` with the supply's dry weight sets `lossG`. Bladder training
+reminds through `FeatureHooks.reminders` (push, the phone, webhooks).
+
+### Supplies
+
+| | |
+|---|---|
+| `GET /api/supplies` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Supply` (`?all=true` includes ones put away) |
+| `GET /api/supplies/status` | `[SupplyStatus]`: on hand, used a day, days left, low |
+| `POST /api/supplies/{id}/adjust` · `GET /api/supplies/{id}/log?days=90` | `SupplyAdjustment` (restocked, counted, gave away; used ones come from the diary) |
+
+Low supplies show on Today (`ModulesToday.lowSupplies`) and remind once a day (like refills).
+
+### Cycle settings
+
+| | |
+|---|---|
+| `GET /api/cycle/settings` · `PUT` | `CycleSettings` (own symptoms, moods and pain areas, custom fields, lengths, reminders, neutral wording) |
+
+`CycleDay` carries the detail fields; `products` with a `supplyId` come off that supply's count.
+
+### Autism & ADHD
+
+| | |
+|---|---|
+| `GET /api/neuro/profile` · `PUT` | `NeuroProfile` (about me) |
+| `GET /api/neuro/events?days=90` · `POST` · `PUT /{id}` · `DELETE /{id}` | `OverloadEvent` |
+| `GET /api/neuro/energy?days=30` · `PUT /api/neuro/energy/{date}` | `EnergyDay` |
+| `GET /api/neuro/check-ins?days=30` · `POST` · `DELETE /{id}` | `NeuroCheckIn` |
+| `GET /api/neuro/focus?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `FocusSession` |
+| `GET /api/neuro/routines` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Routine` |
+| `GET /api/neuro/routines/runs?days=14` · `PUT /api/neuro/routines/{id}/runs/{date}` | `RoutineRun` |
+| `GET /api/neuro/cards` · `PUT` | `[CommunicationCard]` (the server offers kind defaults until the person changes them) |
+| `GET /api/neuro/summary?days=30` | `NeuroSummary`: patterns, burnout signs, time estimates |
+
+### Transition
+
+| | |
+|---|---|
+| `GET /api/transition` | `TransitionOverview` |
+| `GET /api/transition/profile` · `PUT` | `TransitionProfile` |
+| `GET /api/transition/templates` | `[MilestoneTemplate]` |
+| `GET /api/transition/milestones` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Milestone` |
+| `GET /api/transition/changes` · `POST` · `PUT /{id}` · `DELETE /{id}` | `BodyChange` |
+| `GET /api/transition/voice?days=180` · `POST` · `DELETE /{id}` | `VoiceSession` |
+| `GET /api/transition/hair-removal?days=365` · `POST` · `DELETE /{id}` | `HairRemovalSession` |
+| `GET /api/transition/moments?days=90` · `POST` · `DELETE /{id}` | `GenderMoment` |
+
+Body measurements are `Metric.WAIST`, `HIPS`, `CHEST`, `BUST`, `UNDERBUST`, `SHOULDERS`, `NECK`,
+`UPPER_ARM`, `THIGH`, `CALF` through `/api/measurements` (in cm), like weight.
+
+### Progress photos
+
+| | |
+|---|---|
+| `GET /api/photos?album=&days=` | `[Photo]` |
+| `GET /api/photos/albums` | `[PhotoAlbum]` |
+| `POST /api/photos` | multipart: `file` (JPEG, PNG or WebP, up to 20 MB) and `photo` (`Photo` as JSON) |
+| `GET /api/photos/{id}/image` · `GET /api/photos/{id}/thumb` | The picture (`Cache-Control: private, no-store`) |
+| `PUT /api/photos/{id}` · `DELETE /api/photos/{id}` | `Photo` |
+
+Photos are re-encoded on upload (dropping location and camera details), encrypted in the data
+folder, never shown to AI connectors or the assistant, and seen by a share only if it includes
+`PHOTOS`.
+
+### Export to other apps
+
+`GET /api/export/fit?from=&to=` is a zip of Garmin FIT files (workouts, and weight with body fat)
+for Garmin Connect, Strava and the like. The phone app writes to **Health Connect** (each kind of
+data chosen by the person), which Samsung Health, Google Fit and other apps read; it never reads
+back what it wrote.
+
+## The AI assistant
+
+Off unless the admin turns it on (with an Anthropic API key), and then only for people who opt
+in. What it looks at is sent to Anthropic, under Anthropic's commercial terms and privacy policy.
+
+| | |
+|---|---|
+| `GET /api/admin/ai` · `PUT` | `AiSettings` (turning it on needs the admin's acknowledgement) |
+| `PUT /api/admin/ai/key` · `DELETE` · `POST /api/admin/ai/test` | `AiKey`, kept sealed and never returned |
+| `GET /api/ai/status` | `AiStatus` |
+| `PUT /api/ai/consent` · `DELETE` | `AiConsent` |
+| `POST /api/ai/chat` | `AiChatRequest` → `AiChatReply` (with what it looked at) |
+| `POST /api/ai/breakdown` | `AiBreakdownRequest` → `AiBreakdownReply` (a task's text only) |
+| `GET /api/ai/audit?days=30` | `[AiAuditEntry]` |
 
 ## Sharing
 
