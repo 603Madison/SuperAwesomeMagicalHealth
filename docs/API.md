@@ -236,8 +236,10 @@ apps show only what's useful. Kept encrypted.
 | `GET /api/continence/check-ins?days=180` · `POST` · `DELETE /{id}` | `ContinenceCheckIn` (weekly bother) |
 
 `ContinenceEntry` carries the detail fields; a `PAD_CHANGE` (or an entry with `count`) takes products
-off its supply's count; `padWeightG` with the supply's dry weight sets `lossG`. Bladder training
-reminds through `FeatureHooks.reminders` (push, the phone, webhooks).
+off its supply's count; `padWeightG` with the supply's dry weight sets `lossG`. `ContinenceDay` counts
+the day: `bowelLeaks`, `wetNights`, `products`, `leakedThrough`, `catheters`, `catheterMl` and `lossG`.
+Bladder training reminds through `FeatureHooks.reminders` (push, the phone, the `bladder.training`
+webhook), with discreet lock-screen words.
 
 ### Supplies
 
@@ -247,13 +249,18 @@ reminds through `FeatureHooks.reminders` (push, the phone, webhooks).
 | `GET /api/supplies/status` | `[SupplyStatus]`: on hand, used a day, days left, low |
 | `POST /api/supplies/{id}/adjust` · `GET /api/supplies/{id}/log?days=90` | `SupplyAdjustment` (restocked, counted, gave away; used ones come from the diary) |
 
-Low supplies show on Today (`ModulesToday.lowSupplies`) and remind once a day (like refills).
+Low supplies show on Today (`ModulesToday.lowSupplies`) and remind once a day (like refills; the
+`supplies.low` webhook).
 
 ### Cycle settings
 
 | | |
 |---|---|
 | `GET /api/cycle/settings` · `PUT` | `CycleSettings` (own symptoms, moods and pain areas, custom fields, lengths, reminders, neutral wording) |
+
+Reminders before a period, when it's late, and a daily nudge go out as `cycle.reminder`. With
+neutral wording on (or the fertility field hidden), Today and the AI connector leave out fertility
+words.
 
 `CycleDay` carries the detail fields; `products` with a `supplyId` come off that supply's count.
 
@@ -333,7 +340,9 @@ in. What it looks at is sent to Anthropic, under Anthropic's commercial terms an
 A viewer sends `X-SAMH-View: <ownerId>` with GET requests to see the owner's data, limited to the
 shared features (and to those the owner has on): `/api/day` and `/api/trends` leave the rest out,
 `/api/profile` gives only units, time zone, goals and the features shared, and each feature's own
-endpoints need it shared (`/api/series` and `/api/measurements` by their `metric`). Anything else
+endpoints need it shared (`/api/series` and `/api/measurements` by their `metric`; photos only with
+`PHOTOS`). `/api/fields` gives only the shared features' fields, without the conditions behind them;
+`/api/conditions` is never shared. Anything else
 with the header (a change, or `/api/me`, devices, settings, admin, reports, exports) is refused with
 403. Shares go to existing accounts by username, and only for the features picked.
 
@@ -355,7 +364,8 @@ with the header (a change, or `/api/me`, devices, settings, admin, reports, expo
 | `GET /api/admin/smtp` · `PUT` · `POST /api/admin/smtp/test` | Admins: `{settings, passwordSet}` · `{settings, password?}` · `{to}` |
 
 Every minute the server sends what's due: doses (and again, every `remindAgainMinutes` while
-unmarked), refills, appointments, habits and the weekly digest, by browser push (names only if
+unmarked), refills, appointments, habits, routines, bladder training, low supplies, cycle reminders
+and the weekly digest, by browser push (names only if
 `ReminderPrefs.showNames`; nothing but doses in quiet hours) and to webhooks subscribed to the
 event. A push is a `PushMessage` (JSON, encrypted per RFC 8291); "taken" and "skip" actions carry
 `medicationId` and `scheduledFor` for `POST /api/meds/doses`.
