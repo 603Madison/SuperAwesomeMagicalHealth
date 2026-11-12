@@ -196,6 +196,8 @@ data class PushMessage(
     /** For "taken"/"skip": the dose. */
     val medicationId: String? = null,
     val scheduledFor: Long? = null,
+    /** When it's for (in /api/reminders/upcoming). */
+    val at: Long? = null,
 )
 
 // ---------------------------------------------------------------- Reports and export

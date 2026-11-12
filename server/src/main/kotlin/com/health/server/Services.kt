@@ -23,6 +23,7 @@ import com.health.server.modules.EntryStore
 import com.health.server.modules.MedsService
 import com.health.server.modules.MindService
 import com.health.server.modules.ModuleService
+import com.health.server.platform.CoreHooks
 import com.health.server.platform.FeatureHooks
 import com.health.server.tracking.DrinksHooks
 import com.health.server.tracking.DrinksService
@@ -35,6 +36,7 @@ import com.health.server.tracking.TrackingService
 import com.health.server.tracking.VitalsHooks
 import com.health.server.tracking.VitalsService
 import com.health.server.tracking.Weather
+import com.health.server.platform.Platform
 import com.health.server.util.Http
 import com.health.server.util.Passwords
 import com.health.server.util.Random
@@ -100,6 +102,7 @@ class Services(
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(
+            *CoreHooks.all(this).toTypedArray(),
             // Add each feature's service here.
             hormones, lifeStages, appointments,
             *com.health.server.care.CoreQuestions.all(modules.mind, modules.cycle, modules.continence, modules.meds, days, clock).toTypedArray(),
@@ -107,6 +110,9 @@ class Services(
             HabitsHooks(tracking.habits), StressHooks(days),
         )
     }
+
+    /** Reminders, push, webhooks, digests, reports, exports and the watch. */
+    val platform: Platform by lazy { Platform(this) }
 
     override fun close() {
         db.close()

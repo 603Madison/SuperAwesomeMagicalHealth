@@ -52,6 +52,8 @@ dependencies {
     implementation(libs.nimbus.jose.jwt)
     implementation(libs.logback.classic)
     implementation(libs.garmin.fit)
+    implementation(libs.pdfbox)
+    implementation(libs.angus.mail)
 
     testImplementation(libs.junit)
     testImplementation(libs.ktor.server.test.host)

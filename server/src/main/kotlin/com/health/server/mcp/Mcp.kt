@@ -377,6 +377,18 @@ class McpServer(private val services: Services) {
             RecentLog.latest(warningsOnly = args.bool("warnings_only") ?: false).filter { contains == null || contains in it.lowercase() }
                 .takeLast(args.int("limit")?.coerceIn(1, 2000) ?: 200).joinToString("\n").takeLast(MAX_TEXT).ifBlank { "Nothing logged that matches." }
         },
+        Tool(
+            "webhook_deliveries", "Webhook deliveries",
+            "The account's webhooks (where each points, what it sends) and their latest calls, newest first: when, which " +
+                "event, whether it worked, and the HTTP status or error. For when Home Assistant or another hook isn't firing.",
+            schema("limit" to intProperty("How many calls (default 30, at most 200)")),
+        ) { caller, args -> com.health.server.platform.PlatformMcp.deliveries(services, caller.user, args.int("limit")?.coerceIn(1, 200) ?: 30) },
+        Tool(
+            "notifications_status", "Notifications status",
+            "Reminders for the account: browsers signed up for notifications (and when each last took one), webhooks, when " +
+                "the reminder round last ran, reminders due in the next day, whether email is set up, and the latest weekly digest.",
+            schema(),
+        ) { caller, _ -> com.health.server.platform.PlatformMcp.status(services, caller.user) },
 
         // ---- Health modules (links given them) ----
         Tool(

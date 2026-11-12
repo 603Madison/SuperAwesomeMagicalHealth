@@ -39,6 +39,10 @@ data class ServerSettings(
     /** Where people can turn for support, shown in Mind: set them for where your people live. */
     val crisisResources: List<com.health.api.CrisisResource> = com.health.server.modules.MindService.DEFAULT_RESOURCES,
     val oidc: OidcSettings = OidcSettings(),
+    /** Mail for weekly digests (the password is set apart, at /api/admin/smtp). */
+    val smtp: com.health.server.platform.SmtpSettings = com.health.server.platform.SmtpSettings(),
+    /** Let webhooks call addresses on private networks (Home Assistant usually lives on one). */
+    val webhooksPrivateNetworks: Boolean = true,
 )
 
 /** The server's settings, kept in the database and changed from the admin page. */

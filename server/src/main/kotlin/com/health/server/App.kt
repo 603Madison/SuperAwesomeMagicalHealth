@@ -11,6 +11,7 @@ import com.health.server.mcp.mcpRoutes
 import com.health.server.care.careRoutes
 import com.health.server.modules.moduleRoutes
 import com.health.server.tracking.trackingRoutes
+import com.health.server.platform.platformRoutes
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -93,6 +94,7 @@ fun Application.module(services: Services) {
         moduleRoutes(services)
         careRoutes(services)
         trackingRoutes(services)
+        platformRoutes(services)
         route("/api/{...}") {
             handle { call.respond(HttpStatusCode.NotFound, ErrorBody("No such API")) }
         }

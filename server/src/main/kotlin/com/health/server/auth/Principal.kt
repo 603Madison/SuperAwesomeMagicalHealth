@@ -55,7 +55,8 @@ suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean =
     return found?.takeIf { it.session.kind.opensApi(allowUpload) }
 }
 
-private fun SessionKind.opensApi(allowUpload: Boolean) = this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && this == SessionKind.UPLOAD)
+private fun SessionKind.opensApi(allowUpload: Boolean) =
+    this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && (this == SessionKind.UPLOAD || this == SessionKind.WATCH))
 
 /**
  * The account a request is about: the signed-in person's own, or, with `X-SAMH-View: <ownerId>`,
