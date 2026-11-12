@@ -26,7 +26,8 @@ Errors come back as `{"error": "A message meant for people"}` with a fitting sta
 | `GET /api/me` | `Me` |
 | `PATCH /api/me` | `{displayName}` → `User` |
 | `POST /api/me/password` | `{current, new}` |
-| `GET /api/me/sessions` · `DELETE /api/me/sessions/{id}` | Signed-in browsers, apps and upload keys |
+| `GET /api/me/sessions` · `DELETE /api/me/sessions/{id}` | Signed-in browsers, apps, upload keys and connector links |
+| `POST /api/me/connectors` | `ConnectorRequest` → `ConnectorLink`: an AI connector (MCP) link, shown once |
 
 The app's browser sign-in: open `<server>/connect-app?challenge=<S256 of verifier>&state=<random>&device=<name>`
 in a Custom Tab; the page sends the person to `samfitness://signed-in?code=…&state=…`; the app
@@ -72,7 +73,7 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 |---|---|
 | `GET /api/devices` | `[Device]` |
 | `PATCH /api/devices/{id}` | `{name}` → `Device` |
-| `DELETE /api/devices/{id}?data=true` | Forgets a device (and, with `data=true`, what it recorded) |
+| `DELETE /api/devices/{id}` | Forgets a device and everything it recorded |
 | `POST /api/devices/upload-keys` | `UploadKeyRequest` → `UploadKey` (shown once) |
 | `POST /api/ingest` | `IngestBatch` → `IngestResult` |
 | `POST /api/import/fit` | multipart `file` (one or more `.fit`) → `FitImportResult` |
@@ -80,6 +81,14 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 `POST /api/ingest` is idempotent: a sample is identified by device, metric and start time, a
 sleep session and a workout by device and start time, so the app can resend a whole day
 whenever it likes. Batches over 20,000 samples are refused; send them in parts.
+
+## The AI connector (MCP)
+
+`POST /mcp/<token>` (or `POST /mcp` with `Authorization: Bearer <token>`) speaks the Model
+Context Protocol over Streamable HTTP, answering each JSON-RPC request with plain JSON. Tokens
+come from `POST /api/me/connectors`: `MCP` links read the account's data, `MCP_WRITE` links can
+also log entries, and an admin's `MCP_ALL` link reads every account and the server's log.
+`tools/list` describes each tool.
 
 ## Admin
 

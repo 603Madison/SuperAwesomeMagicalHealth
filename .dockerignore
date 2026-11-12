@@ -1,0 +1,15 @@
+# Only what the image build needs goes to the builder.
+**/build/
+**/node_modules/
+web/dist/
+.gradle/
+.kotlin/
+.git/
+.claude/
+android/src/
+docs/
+release-notes/
+keystore/
+local.properties
+*.apk
+*.jks

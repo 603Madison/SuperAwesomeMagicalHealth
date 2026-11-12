@@ -105,4 +105,8 @@ dependencies {
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+    // The end-to-end test runs the real server in-process.
+    testImplementation(project(":server"))
+    testImplementation(libs.ktor.server.core)
+    testImplementation(libs.ktor.server.netty)
 }
