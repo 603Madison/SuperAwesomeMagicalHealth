@@ -1,0 +1,82 @@
+name: F-Droid repository
+
+# Builds the F-Droid repository from the signed APKs of the latest releases, signs its index with
+# the app's own key (the RELEASE_KEYSTORE_* secrets), and publishes it with its page to GitHub
+# Pages through the gh-pages branch: https://603madison.github.io/SuperAwesomeMagicalHealth/
+# The Release workflow runs it after each release; run it by hand to rebuild the page.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fdroid
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install fdroidserver
+        run: pip install fdroidserver==2.4.5
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Add RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD under Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | tr -d ' \n\r' | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Fetch the latest releases' APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p apks
+          TAGS=$(gh release list --limit 3 --exclude-drafts --json tagName --jq '.[].tagName')
+          if [ -z "$TAGS" ]; then
+            echo "::error::There's no release yet: run the Release workflow first"
+            exit 1
+          fi
+          for tag in $TAGS; do
+            gh release download "$tag" --pattern "SuperAwesomeMagicalHealth-$tag.apk" --dir apks || echo "No APK in $tag"
+          done
+          LATEST=$(echo "$TAGS" | head -n1)
+          echo "LATEST=$LATEST" >> "$GITHUB_ENV"
+          if gh release view "$LATEST" --json assets --jq '.assets[].name' | grep -qx "SuperAwesomeMagicalHealth-watch-$LATEST.pbw"; then
+            echo "WATCH=https://github.com/${{ github.repository }}/releases/download/$LATEST/SuperAwesomeMagicalHealth-watch-$LATEST.pbw" >> "$GITHUB_ENV"
+          fi
+          ls -la apks
+
+      - name: Build the repository and its page
+        env:
+          FDROID_KEYSTORE_PASS: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          python3 fdroid/build.py --apks apks --keystore "$RUNNER_TEMP/release.jks" --out site \
+            --notes "release-notes/$LATEST.md" ${WATCH:+--watch "$WATCH"}
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Publish to GitHub Pages
+        run: |
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "F-Droid repository for $LATEST"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
+          echo "Published https://603madison.github.io/SuperAwesomeMagicalHealth/" >> "$GITHUB_STEP_SUMMARY"

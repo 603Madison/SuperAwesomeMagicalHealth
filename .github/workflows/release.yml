@@ -102,6 +102,14 @@ jobs:
             gh release create "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" "SuperAwesomeMagicalHealth-watch-$TAG.pbw" --target "$COMMIT" --title "SuperAwesomeMagicalHealth $TAG" --notes-file notes.md
           fi
 
+  # The F-Droid repository on GitHub Pages, with this release in it.
+  fdroid:
+    needs: release
+    uses: ./.github/workflows/fdroid.yml
+    secrets: inherit
+    permissions:
+      contents: write
+
   # The server and web app, for amd64 and arm64 (a Raspberry Pi), at
   # ghcr.io/<owner>/superawesomemagicalhealth:<version> and :latest, whatever the repository is called.
   image:

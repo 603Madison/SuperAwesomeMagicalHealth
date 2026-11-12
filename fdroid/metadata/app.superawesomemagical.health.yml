@@ -1,0 +1,9 @@
+# The app's listing in this F-Droid repository (built by .github/workflows/fdroid.yml).
+Categories:
+  - Sports & Health
+License: GPL-3.0-only
+WebSite: https://github.com/603Madison/SuperAwesomeMagicalHealth
+SourceCode: https://github.com/603Madison/SuperAwesomeMagicalHealth
+IssueTracker: https://github.com/603Madison/SuperAwesomeMagicalHealth/issues
+Changelog: https://github.com/603Madison/SuperAwesomeMagicalHealth/releases
+AutoName: SuperAwesomeMagicalHealth

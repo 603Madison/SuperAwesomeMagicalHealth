@@ -1,5 +1,7 @@
 # SuperAwesomeMagicalHealth
 
+<a href="https://603madison.github.io/SuperAwesomeMagicalHealth/"><img src="docs/images/get-it-on-fdroid.png" alt="Get it on F-Droid" height="80"></a>
+
 Your own health server. Wearables (Colmi rings, Pebble, Garmin, anything in Health
 Connect or Gadgetbridge) send heart rate, HRV, sleep, steps and workouts in through the phone app;
 you log food, water, weight and how you feel; and the server turns it into Oura-style
@@ -74,6 +76,21 @@ database), and shown to an AI connector only if the person says so when making i
 - **Medications**: medications and supplements on daily, weekly, every-few-days or as-needed
   schedules; Take and Skip, reminders on the phone, adherence, doses left, **injection and patch
   site rotation**, and **lab results** charted over time.
+
+## Getting the app
+
+**With F-Droid** (and updates from then on): open
+[the F-Droid page](https://603madison.github.io/SuperAwesomeMagicalHealth/) on your phone and tap
+**Add to F-Droid**, or in F-Droid go to Settings › Repositories › **+** and add
+
+```
+https://603madison.github.io/SuperAwesomeMagicalHealth/fdroid/repo?fingerprint=0E7544D531E710F53AA540D01256556AD42A62D7ABDC64CF0424339FFBEBB580
+```
+
+Then install SuperAwesomeMagicalHealth from it. The repository's fingerprint is the app's own
+signing key, so it's the same app as the APK on each
+[release](https://github.com/603Madison/SuperAwesomeMagicalHealth/releases), which you can also
+install directly. Every release updates the repository (`.github/workflows/fdroid.yml`).
 
 ## Running it
 
@@ -216,4 +233,5 @@ podman build -t superawesomemagicalhealth .
 ## Licence
 
 GPL-3.0-only. Lexend is under the SIL Open Font License (`licenses/Lexend-OFL.txt`). Food data
-from Open Food Facts is under the Open Database License.
+from Open Food Facts is under the Open Database License. The "Get it on F-Droid" badge is F-Droid's
+artwork, under CC BY-SA 3.0.

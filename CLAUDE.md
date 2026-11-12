@@ -49,8 +49,11 @@ after UI changes, and screenshot the web app (Playwright) after web changes.
 
 One version for everything: `versionName`/`versionCode` in `android/build.gradle.kts` (the
 server and image read it). Bump both, write `release-notes/vX.Y.Z.md`, push, and run the
-**Release** workflow with `version: vX.Y.Z`: it builds the signed APK, publishes the GitHub
-release and pushes the image to `ghcr.io/603madison/superawesomemagicalhealth`.
+**Release** workflow with `version: vX.Y.Z`: it builds the signed APK and the Pebble watch app,
+publishes the GitHub release, pushes the image to `ghcr.io/603madison/superawesomemagicalhealth`,
+and rebuilds the F-Droid repository on GitHub Pages (`fdroid/`, `.github/workflows/fdroid.yml`;
+its index is signed with the same key, so the repository's fingerprint is the app's). The owner
+has asked Claude to run, watch and fix the workflows itself.
 
 The APK must always be signed with the same key, or installed copies can't update. The key is
 not in git: CI reads `RELEASE_KEYSTORE_BASE64` and `RELEASE_KEYSTORE_PASSWORD` from repository

@@ -1,0 +1,13 @@
+<p>The phone app for <b>SuperAwesomeMagicalHealth</b>, a health server you run yourself. Your data stays on your server, and the private parts are encrypted there.</p>
+<p><b>Scores like Oura's.</b> Readiness, sleep and activity against your own baseline, with plain-English insights, stress and resilience, and trends over weeks and months.</p>
+<p><b>Your wearables, on your server.</b> Colmi rings over Bluetooth, Pebble and Garmin through Gadgetbridge, anything in Health Connect, and blood pressure monitors and glucose meters. The app carries their readings to your server.</p>
+<p><b>Log what matters to you.</b> Food (with barcode scanning), water, coffee and alcohol, weight, workouts, and how you feel. Turn on what else you want to keep track of:</p>
+<ul>
+<li>Mood, a private journal, check-ins (PHQ-9, GAD-7) and calming tools, with support lines one tap away</li>
+<li>Your cycle, with predictions, and pregnancy, after a birth, perimenopause and menopause</li>
+<li>A bladder and bowel diary with pelvic floor exercises</li>
+<li>Medications with reminders, injection-site rotation and lab results</li>
+<li>Blood pressure and glucose, symptoms and migraines, habits, hormone therapy and appointments</li>
+</ul>
+<p><b>Reminders that work offline</b>, a weekly digest, reports for your doctor, and read-only sharing with someone who cares for you.</p>
+<p>You need a SuperAwesomeMagicalHealth server to sign in to: it runs in Podman or Docker (see the source code's README).</p>
