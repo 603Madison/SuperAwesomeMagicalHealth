@@ -39,6 +39,8 @@ data class Profile(
     /** IANA time zone, e.g. America/New_York: where the person's days begin and end. */
     val timezone: String = "",
     val goals: Goals = Goals(),
+    /** The parts of the app this person uses (see [Module]). */
+    val modules: Set<Module> = Module.DEFAULT,
 )
 
 /** One part of a score, as Oura shows them: its own 0–100 and what it's based on. */
@@ -121,6 +123,8 @@ data class DaySummary(
     val goals: Goals = Goals(),
     /** Whether anything at all was recorded or entered that day. */
     val hasData: Boolean = false,
+    /** Mood, cycle, bladder and bowel, and medications, for the modules that are on. */
+    val modules: ModulesToday = ModulesToday(),
 )
 
 /** One day's numbers, for charts over weeks and months. Absent values weren't measured. */
@@ -148,6 +152,16 @@ data class TrendDay(
     val waterMl: Int? = null,
     val workouts: Int = 0,
     val workoutMinutes: Int = 0,
+    /** The modules' numbers, where they're on and anything was logged. */
+    val mood: Double? = null,
+    val anxiety: Double? = null,
+    val mindfulMinutes: Double? = null,
+    val flow: Flow? = null,
+    val voids: Int? = null,
+    val nightVoids: Int? = null,
+    val leaks: Int? = null,
+    val dosesTaken: Int? = null,
+    val dosesDue: Int? = null,
 )
 
 @Serializable

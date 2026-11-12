@@ -46,9 +46,11 @@ enum class SessionKind {
 data class ConnectorRequest(
     /** Let the AI log food, water, weight, workouts and check-ins (not only read). */
     val allowLogging: Boolean = false,
-    /** An admin's link that sees every account (read-only). */
+    /** An admin's link that sees every account (read-only, and never sensitive modules). */
     val allAccounts: Boolean = false,
     val name: String = "",
+    /** The sensitive modules (mind, cycle, bladder and bowel, medications) it may read. */
+    val modules: Set<Module> = emptySet(),
 )
 
 @Serializable
@@ -64,6 +66,8 @@ data class SessionInfo(
     val lastSeenAt: Long,
     val expiresAt: Long,
     val current: Boolean = false,
+    /** For connector links: the sensitive modules it may read. */
+    val scope: List<Module> = emptyList(),
 )
 
 @Serializable

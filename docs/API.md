@@ -82,13 +82,60 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 sleep session and a workout by device and start time, so the app can resend a whole day
 whenever it likes. Batches over 20,000 samples are refused; send them in parts.
 
+## Health modules
+
+Each person turns modules on and off in `Profile.modules` (`ACTIVITY`, `SLEEP`, `NUTRITION`,
+`BODY` to start; `MIND`, `CYCLE`, `CONTINENCE`, `MEDICATIONS` opt-in). A module's endpoints work
+whether or not it's on; the apps show only the ones that are. Entries in the sensitive modules are
+encrypted on the server. `GET /api/day/{date}` includes `modules` (a `ModulesToday`) for the
+modules that are on, and `TrendDay` carries their daily numbers.
+
+Lists take `?days=N` (the last N days, today included). Every entry's `date` is set by the server
+from `at`, in the person's time zone.
+
+### Mind
+
+| | |
+|---|---|
+| `GET /api/mind/moods?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `MoodEntry` |
+| `GET /api/mind/journal?days=90` · `POST` · `PUT /{id}` · `DELETE /{id}` | `JournalEntry` |
+| `GET /api/mind/screeners` | `[ScreenerDefinition]`: PHQ-9 and GAD-7, their questions and bands |
+| `GET /api/mind/screeners/results?days=365` · `POST` · `DELETE /{id}` | `ScreenerResult` (post `screener`, `at`, `answers`; the server scores it) |
+| `GET /api/mind/sessions?days=30` · `POST` · `DELETE /{id}` | `MindfulnessSession` |
+| `GET /api/mind/summary?days=30` | `MindSummary`: daily averages, feelings, patterns, latest screeners |
+| `GET /api/mind/resources` | `[CrisisResource]`, as the server's admin set them |
+
+### Cycle
+
+| | |
+|---|---|
+| `GET /api/cycle?months=12` | `CycleOverview`: logged days, cycles, averages, the prediction, today's phase |
+| `PUT /api/cycle/days/{date}` · `DELETE /api/cycle/days/{date}` | `CycleDay` (a PUT replaces the day) |
+
+### Bladder and bowel
+
+| | |
+|---|---|
+| `GET /api/continence/entries?days=7` · `POST` · `PUT /{id}` · `DELETE /{id}` | `ContinenceEntry` |
+| `GET /api/continence/summary?days=14` | `ContinenceSummary`: per-day counts, averages, triggers, patterns |
+
+### Medications
+
+| | |
+|---|---|
+| `GET /api/meds` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Medication` (`?all=true` includes ones turned off) |
+| `GET /api/meds/day/{date}` | `MedsDay`: each scheduled dose with its log and the next injection or patch site |
+| `GET /api/meds/doses?days=30` · `POST` · `DELETE /{id}` | `DoseLog` (marking a scheduled dose: send its `scheduledFor`) |
+| `GET /api/labs?days=3650` · `POST` · `DELETE /{id}` | `LabResult` |
+
 ## The AI connector (MCP)
 
 `POST /mcp/<token>` (or `POST /mcp` with `Authorization: Bearer <token>`) speaks the Model
 Context Protocol over Streamable HTTP, answering each JSON-RPC request with plain JSON. Tokens
 come from `POST /api/me/connectors`: `MCP` links read the account's data, `MCP_WRITE` links can
 also log entries, and an admin's `MCP_ALL` link reads every account and the server's log.
-`tools/list` describes each tool.
+`ConnectorRequest.modules` names the sensitive modules a link may read (and, for `MCP_WRITE`,
+log to); every-account links never see them. `tools/list` describes each tool.
 
 ## Admin
 
