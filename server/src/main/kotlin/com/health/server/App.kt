@@ -9,6 +9,7 @@ import com.health.server.health.deviceRoutes
 import com.health.server.health.healthRoutes
 import com.health.server.mcp.mcpRoutes
 import com.health.server.modules.moduleRoutes
+import com.health.server.platform.platformRoutes
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -89,6 +90,7 @@ fun Application.module(services: Services) {
         foodRoutes(services)
         mcpRoutes(services)
         moduleRoutes(services)
+        platformRoutes(services)
         route("/api/{...}") {
             handle { call.respond(HttpStatusCode.NotFound, ErrorBody("No such API")) }
         }

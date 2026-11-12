@@ -227,16 +227,30 @@ refused.
 | `GET /api/push/key` | `PushKey`: the server's VAPID public key |
 | `POST /api/push/subscriptions` · `GET` · `DELETE /{id}` | `PushSubscriptionInput` / `PushSubscriptionInfo` |
 | `POST /api/push/test` | Sends a test notification to this account's browsers |
-| `GET /api/reminders/upcoming?hours=24` | `[PushMessage]`: what's coming (the phone app plans its alarms from meds itself) |
-| `GET /api/digest/latest` · `GET /api/digest?week=YYYY-MM-DD` | `Digest` |
+| `GET /api/reminders/upcoming?hours=24` | `[PushMessage]` with `at`: what's coming, as a browser would show it (the phone app plans its alarms from meds itself) |
+| `GET /api/digest/latest` · `GET /api/digest?week=YYYY-MM-DD` | `Digest` (latest: the last one made, or last week's worked out now) |
+| `GET /api/digest/smtp` | `SmtpStatus`: whether the server can send email |
 | `POST /api/digest/email-test` | Sends the latest digest to `Profile.digest.email` |
 | `GET /api/webhooks` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Webhook` (the `secret` comes back once, on POST) |
-| `POST /api/webhooks/{id}/test` · `GET /api/webhooks/deliveries` | Sends a `test` event · the last deliveries |
-| `POST /api/integrations/keys` · `GET` · `DELETE /{id}` | `IntegrationKey` for Home Assistant |
+| `POST /api/webhooks/{id}/test` · `GET /api/webhooks/deliveries` | Sends a `test` event (answers the `WebhookDelivery`) · the last deliveries |
+| `POST /api/integrations/keys` · `GET` · `DELETE /{id}` | `IntegrationKey` for Home Assistant (the `token` only on POST) |
 | `GET /api/integrations/state` | With an integration key: today's numbers as flat JSON for REST sensors |
+| `GET /api/admin/smtp` · `PUT` · `POST /api/admin/smtp/test` | Admins: `{settings, passwordSet}` · `{settings, password?}` · `{to}` |
+
+Every minute the server sends what's due: doses (and again, every `remindAgainMinutes` while
+unmarked), refills, appointments, habits and the weekly digest, by browser push (names only if
+`ReminderPrefs.showNames`; nothing but doses in quiet hours) and to webhooks subscribed to the
+event. A push is a `PushMessage` (JSON, encrypted per RFC 8291); "taken" and "skip" actions carry
+`medicationId` and `scheduledFor` for `POST /api/meds/doses`.
 
 Webhook calls are `POST` with a `WebhookPayload` body and `X-SAMH-Signature: sha256=<hex>`, the
-HMAC-SHA256 of the body with the hook's secret. The admin sets up mail (SMTP) for digests.
+HMAC-SHA256 of the body with the hook's secret; three tries for server errors. Names are left out
+unless the hook's `includeDetails` is on. Private-network addresses are allowed unless the admin
+turns off `webhooksPrivateNetworks`. See [home-assistant.md](home-assistant.md).
+
+The admin sets up mail in `ServerSettings.smtp` (`enabled`, `host`, `port`, `security`
+`NONE`/`STARTTLS`/`TLS`, `username`, `from`); the password goes to `PUT /api/admin/smtp` and is
+kept sealed. Digest emails leave out sensitive features not in `DigestPrefs.emailModules`.
 
 ## Reports and export
 
@@ -250,7 +264,8 @@ HMAC-SHA256 of the body with the hook's secret. The admin sets up mail (SMTP) fo
 
 | | |
 |---|---|
-| `GET /pebble/config?return_to=` | The watch app's settings page: after signing in, makes a `WATCH` key and returns to the watch |
+| `GET /pebble/config?return_to=` | The watch app's settings page: `return_to` must start `pebblejs://close`; redirects to the web app's `/watch-setup?return_to=…` |
+| `POST /api/watch/keys` | Signed in: makes a `WATCH` key, as an `IntegrationKey` whose `url` is the server's address. `/watch-setup` then goes to `return_to + "#" + encodeURIComponent(JSON.stringify({server, token}))` |
 | `GET /api/watch/today` | `WatchToday` (with a `WATCH` key, or any app sign-in) |
 | `POST /api/watch/log` | `WatchLog`: one tap from the watch |
 | `POST /api/ingest` | A `WATCH` key may also send data in, like an upload key |

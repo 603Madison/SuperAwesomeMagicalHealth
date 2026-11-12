@@ -53,7 +53,8 @@ suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean =
     return found?.takeIf { it.session.kind.opensApi(allowUpload) }
 }
 
-private fun SessionKind.opensApi(allowUpload: Boolean) = this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && this == SessionKind.UPLOAD)
+private fun SessionKind.opensApi(allowUpload: Boolean) =
+    this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && (this == SessionKind.UPLOAD || this == SessionKind.WATCH))
 
 suspend fun ApplicationCall.requireUser(services: Services): User =
     principal(services)?.user ?: throw ApiError.unauthorized()

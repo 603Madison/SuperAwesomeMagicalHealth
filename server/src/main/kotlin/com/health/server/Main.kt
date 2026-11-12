@@ -31,8 +31,11 @@ private fun serve(config: ServerConfig) {
     runBlocking { services.bootstrap() }
     log.info("SuperAwesomeMagicalHealth server {} listening on {}:{}, data in {}", Services.version, config.host, config.port, config.dataDir)
     val server = embeddedServer(Netty, port = config.port, host = config.host) { module(services) }
+    // Reminders, webhooks and the weekly digest, each minute.
+    services.platform.scheduler.start()
     Runtime.getRuntime().addShutdownHook(
         Thread {
+            services.platform.scheduler.stop()
             server.stop(1_000, 5_000)
             services.close()
         },

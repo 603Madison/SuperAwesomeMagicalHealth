@@ -23,6 +23,8 @@ sqliteJdbc = "3.50.3.0"
 nimbusJoseJwt = "10.5"
 logback = "1.5.20"
 garminFit = "21.221.0"
+pdfbox = "3.0.5"
+angusMail = "2.0.4"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -68,6 +70,8 @@ sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteJdbc" }
 nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbusJoseJwt" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 garmin-fit = { module = "com.garmin:fit", version.ref = "garminFit" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angusMail" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
