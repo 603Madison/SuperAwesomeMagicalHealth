@@ -537,7 +537,7 @@ class ScreenshotTest {
     @Test
     @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     fun phq9Result() {
-        val result = ScreenerResult(Screener.PHQ9, now, List(9) { 1 }, score = 9, severity = "Mild", id = "r3")
+        val result = ScreenerResult(Screener.PHQ9, now, List(9) { if (it == 0) 2 else if (it == 8) 0 else 1 }, score = 9, severity = "Mild", id = "r3")
         render { Frame("health") { ScreenerScreen(phq9, mindState.results + result, result, crisis, zone, {}, {}, {}) } }
         save("phq9_result")
     }
