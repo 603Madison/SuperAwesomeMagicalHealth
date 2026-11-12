@@ -79,6 +79,8 @@ fun Route.adminRoutes(services: Services) {
                     val id = call.parameters["id"].orEmpty()
                     if (id == admin.id) throw ApiError.badRequest("You can't delete your own account")
                     services.users.delete(id)
+                    // The account's rows go with it; its photos' files are in the data folder.
+                    services.photos.deleteAll(id)
                     call.respond(mapOf("ok" to true))
                 }
                 post("/password") {

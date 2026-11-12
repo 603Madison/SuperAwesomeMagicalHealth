@@ -799,6 +799,93 @@ class McpServer(private val services: Services) {
             if (tick.count == 0) "Cleared ${habit.name} on ${tick.date}." else "Ticked ${habit.name} on ${tick.date}${if (habit.perDay > 1) " (${tick.count} of ${habit.perDay})" else ""}."
         },
         *careTools().toTypedArray(),
+        *neuroTransitionTools().toTypedArray(),
+    )
+
+    // ---- Autism & ADHD, and transition (neuro/, transition/). Photos are never offered. ----
+
+    private fun neuroTransitionTools(): List<Tool> = listOf(
+        Tool(
+            "neuro", "Autism & ADHD",
+            "The person's Autism & ADHD log, in their own words: about them (what helps, how they communicate, senses), times things got too much " +
+                "(overwhelm, meltdowns, shutdowns) with triggers and what helped, energy and social battery, masking, focus time, and patterns. " +
+                "Speak about it in neurodiversity-affirming terms.",
+            schema(daysProperty(30, 365)),
+            module = Module.NEURO,
+        ) { caller, args -> com.health.server.neuro.NeuroText.neuro(services, caller.user.id, args.int("days")?.coerceIn(7, 365) ?: 30) },
+        Tool(
+            "transition", "Transition",
+            "The person's transition, whatever it means to them: pronouns, how long since they began and on hormones, milestones (social, legal, " +
+                "medical, voice) with checklists, changes they've noticed, voice practice and pitch, hair removal, and moments of euphoria and dysphoria.",
+            schema(),
+            module = Module.TRANSITION,
+        ) { caller, _ -> com.health.server.neuro.NeuroText.transition(services, caller.user.id) },
+        Tool(
+            "log_overload", "Log a time things got too much",
+            "Logs overwhelm, sensory overload, a meltdown, a shutdown or panic: when, how intense (1–5), triggers and what helped.",
+            schema(
+                "kind" to enumProperty("What it was", com.health.api.OverloadKind.entries.map { it.name }),
+                "intensity" to intProperty("1 mild … 5 intense (default 3)"),
+                "triggers" to stringArray("What seemed to set it off"),
+                "helped" to stringArray("What helped"),
+                "at" to stringProperty("When it started: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "note" to stringProperty("A note"),
+                required = listOf("kind"),
+            ),
+            writes = true,
+            module = Module.NEURO,
+        ) { caller, args ->
+            val kind = args.string("kind")?.uppercase()?.let { runCatching { com.health.api.OverloadKind.valueOf(it) }.getOrNull() } ?: error("Which kind?")
+            val at = args.string("at")?.let { instantOf(caller.user, it) } ?: services.clock()
+            val saved = services.neuro.saveEvent(
+                caller.user.id,
+                com.health.api.OverloadEvent(at, kind = kind, intensity = args.int("intensity") ?: 3, triggers = args.strings("triggers"), whatHelped = args.strings("helped"), note = args.string("note")),
+            )
+            "Logged ${saved.kind.label.lowercase()} (${saved.intensity} of 5) at ${formatTime(services.profiles.days(caller.user.id), saved.start)}."
+        },
+        Tool(
+            "log_energy", "Log energy",
+            "Sets a day's energy budget (spoons or any unit) and adds what used or gave energy back, and the social battery (0–10).",
+            schema(
+                dateProperty,
+                "start_with" to intProperty("Energy to start the day with"),
+                "spend_what" to stringProperty("Something that used energy (or gave it back)"),
+                "spend_amount" to intProperty("How much it used (negative for gave back)"),
+                "social_battery" to intProperty("0 empty … 10 full"),
+            ),
+            writes = true,
+            module = Module.NEURO,
+        ) { caller, args ->
+            val userId = caller.user.id
+            val date = services.profiles.days(userId).parse(args.string("date") ?: "today", services.clock())
+            val day = services.neuro.energyOn(userId, date) ?: com.health.api.EnergyDay(date.toString())
+            val spend = args.string("spend_what")?.let { com.health.api.EnergySpend(it, args.int("spend_amount") ?: 1, services.clock()) }
+            val saved = services.neuro.saveEnergy(
+                userId, date.toString(),
+                day.copy(startWith = args.int("start_with") ?: day.startWith, spends = day.spends + listOfNotNull(spend), socialBattery = args.int("social_battery") ?: day.socialBattery),
+            )
+            "Energy for ${saved.date}: " + (saved.startWith?.let { "${it - saved.spends.sumOf { s -> s.amount }} of $it left" } ?: "${saved.spends.size} things logged") +
+                (saved.socialBattery?.let { ", social battery $it of 10" } ?: "") + "."
+        },
+        Tool(
+            "log_moment", "Log a moment of euphoria or dysphoria",
+            "Logs a moment of gender euphoria or dysphoria: how strong (1–5), what it was about, and a note.",
+            schema(
+                "kind" to enumProperty("Euphoria or dysphoria", com.health.api.MomentKind.entries.map { it.name }),
+                "intensity" to intProperty("1–5 (default 3)"),
+                "context" to stringArray("What it was about: mirror, voice, being gendered right, clothes…"),
+                "at" to stringProperty("When: YYYY-MM-DDTHH:MM or HH:MM today (default now)"),
+                "note" to stringProperty("A note"),
+                required = listOf("kind"),
+            ),
+            writes = true,
+            module = Module.TRANSITION,
+        ) { caller, args ->
+            val kind = args.string("kind")?.uppercase()?.let { runCatching { com.health.api.MomentKind.valueOf(it) }.getOrNull() } ?: error("Euphoria or dysphoria?")
+            val at = args.string("at")?.let { instantOf(caller.user, it) } ?: services.clock()
+            val saved = services.transition.saveMoment(caller.user.id, com.health.api.GenderMoment(at, kind, args.int("intensity") ?: 3, args.strings("context"), args.string("note")))
+            "Logged a moment of ${saved.kind.label.lowercase()} (${saved.intensity} of 5) at ${formatTime(services.profiles.days(caller.user.id), saved.at)}."
+        },
     )
 
     // ---- Hormone therapy, life stages and appointments (care/) ----

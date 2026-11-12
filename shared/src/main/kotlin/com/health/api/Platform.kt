@@ -215,6 +215,8 @@ enum class ReportSectionKey(val label: String, val module: Module?) {
     MEDICATIONS("Medications", Module.MEDICATIONS),
     HORMONES("Hormone therapy", Module.HORMONES),
     MIND("Mind", Module.MIND),
+    NEURO("Autism & ADHD", Module.NEURO),
+    TRANSITION("Transition", Module.TRANSITION),
     CYCLE("Cycle", Module.CYCLE),
     CONTINENCE("Bladder and bowel", Module.CONTINENCE),
     SYMPTOMS("Symptoms", Module.SYMPTOMS),

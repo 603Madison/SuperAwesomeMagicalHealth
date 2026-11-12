@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.garmin.fit)
     implementation(libs.pdfbox)
     implementation(libs.angus.mail)
+    implementation(libs.imageio.webp)
 
     testImplementation(libs.junit)
     testImplementation(libs.ktor.server.test.host)

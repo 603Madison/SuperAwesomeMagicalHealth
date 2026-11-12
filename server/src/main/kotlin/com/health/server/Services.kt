@@ -99,6 +99,15 @@ class Services(
         TrackingService(vitals, drinks, symptoms, habits, weather, days, clock).also { days.parts += it }
     }
 
+    // Autism & ADHD, transition and progress photos (neuro/, transition/, photos/).
+    val personal = com.health.server.neuro.PersonalStore(db, box, clock)
+    val neuro = com.health.server.neuro.NeuroService(entries, personal, profiles, days, modules.cycle, clock)
+    val transition = com.health.server.transition.TransitionService(entries, personal, profiles, hormones, records, clock)
+    val photos = com.health.server.photos.PhotoService(db, box, config.dataDir, profiles, records, clock).also { it.transition = transition }
+    init {
+        days.parts += com.health.server.neuro.NeuroTransitionDay(neuro, transition)
+    }
+
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(
@@ -108,6 +117,7 @@ class Services(
             *com.health.server.care.CoreQuestions.all(modules.mind, modules.cycle, modules.continence, modules.meds, days, clock).toTypedArray(),
             VitalsHooks(tracking.vitals, clock), DrinksHooks(tracking.drinks), SymptomsHooks(tracking.symptoms),
             HabitsHooks(tracking.habits), StressHooks(days),
+            neuro, transition, com.health.server.transition.MeasurementHooks(records),
         )
     }
 

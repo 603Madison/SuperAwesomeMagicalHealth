@@ -157,6 +157,11 @@ object SharedView {
         "/api/symptoms" to any(Module.SYMPTOMS),
         "/api/hormones" to any(Module.HORMONES),
         "/api/appointments" to any(Module.APPOINTMENTS),
+        // Energy days are also Mind's energy budget (Fields.MIND_ENERGY_BUDGET).
+        "/api/neuro/energy" to any(Module.NEURO, Module.MIND),
+        "/api/neuro" to any(Module.NEURO),
+        "/api/transition" to any(Module.TRANSITION),
+        "/api/photos" to any(Module.PHOTOS),
     )
 
     /** What viewing [path] needs; [metric] is the query's, for series and measurements. */
@@ -260,6 +265,8 @@ object SharedView {
                 hormones = m.hormones.takeIf { on(Module.HORMONES) },
                 lifeStage = m.lifeStage.takeIf { on(Module.CYCLE) },
                 appointments = m.appointments.takeIf { on(Module.APPOINTMENTS) },
+                neuro = m.neuro.takeIf { on(Module.NEURO) },
+                transition = m.transition.takeIf { on(Module.TRANSITION) },
             ),
         )
     }

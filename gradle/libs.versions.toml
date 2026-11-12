@@ -25,6 +25,7 @@ logback = "1.5.20"
 garminFit = "21.221.0"
 pdfbox = "3.0.5"
 angusMail = "2.0.4"
+twelvemonkeys = "3.12.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -72,6 +73,8 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 garmin-fit = { module = "com.garmin:fit", version.ref = "garminFit" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angusMail" }
+# Reads WebP progress photos (they're kept re-encoded as JPEG).
+imageio-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

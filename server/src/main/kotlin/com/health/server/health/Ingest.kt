@@ -158,6 +158,17 @@ class Ingest(
             Metric.BLOOD_PRESSURE_SYSTOLIC to (50.0 to 260.0),
             Metric.BLOOD_PRESSURE_DIASTOLIC to (30.0 to 180.0),
             Metric.BLOOD_GLUCOSE to (1.0 to 40.0),
+            // Body measurements, in cm.
+            Metric.WAIST to (30.0 to 250.0),
+            Metric.HIPS to (40.0 to 250.0),
+            Metric.CHEST to (40.0 to 250.0),
+            Metric.BUST to (40.0 to 250.0),
+            Metric.UNDERBUST to (40.0 to 200.0),
+            Metric.SHOULDERS to (20.0 to 200.0),
+            Metric.NECK to (15.0 to 80.0),
+            Metric.UPPER_ARM to (10.0 to 100.0),
+            Metric.THIGH to (20.0 to 150.0),
+            Metric.CALF to (15.0 to 100.0),
         )
     }
 }

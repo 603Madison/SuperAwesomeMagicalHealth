@@ -107,6 +107,23 @@ class SecretBox(private val key: ByteArray) {
         return String(cipher.doFinal(bytes, 12, bytes.size - 12))
     }
 
+    /** Seals bytes (a photo): the 12-byte IV, then the ciphertext with its tag, bound to [context]. */
+    fun sealBytes(plain: ByteArray, context: String): ByteArray {
+        val iv = Random.bytes(12)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
+        cipher.updateAAD(context.toByteArray())
+        return iv + cipher.doFinal(plain)
+    }
+
+    fun openBytes(sealed: ByteArray, context: String): ByteArray {
+        require(sealed.size > 12) { "Too short to be sealed" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, sealed, 0, 12))
+        cipher.updateAAD(context.toByteArray())
+        return cipher.doFinal(sealed, 12, sealed.size - 12)
+    }
+
     /** A separate key for signing, derived from the main one. */
     private val signingKey: ByteArray = hmac(key, "samh url signing".toByteArray())
 
