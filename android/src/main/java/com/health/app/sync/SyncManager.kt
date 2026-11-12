@@ -75,7 +75,8 @@ class SyncManager(
             for (batch in collected.batches.filterNot { it.isEmpty }.flatMap { it.chunked() }) {
                 try {
                     val result = upload(batch)
-                    samples += result.samples
+                    // Blood pressure and glucose readings count with the samples.
+                    samples += result.samples + result.readings
                     sleep += result.sleep
                     workouts += result.workouts
                 } catch (e: CancellationException) {

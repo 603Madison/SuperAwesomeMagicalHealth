@@ -57,6 +57,10 @@ import com.health.app.ui.modules.mind.MindRoute
 import com.health.app.ui.modules.mind.ScreenerRoute
 import com.health.app.ui.settings.SettingsRoute
 import com.health.app.ui.today.TodayRoute
+import com.health.app.ui.tracking.HabitsRoute
+import com.health.app.ui.tracking.MonitorPairRoute
+import com.health.app.ui.tracking.SymptomsRoute
+import com.health.app.ui.tracking.VitalsRoute
 import com.health.app.ui.trends.TrendsRoute
 import java.time.LocalDate
 import java.time.LocalTime
@@ -170,7 +174,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             AddFoodRoute(date, meal, onDone = { nav.popBackStack() })
         }
         composable("trends") { TrendsRoute() }
-        composable("devices") { DevicesRoute(onFindRing = { nav.navigate("devices/ring") }) }
+        composable("devices") { DevicesRoute(onFindRing = { nav.navigate("devices/ring") }, onFindMonitor = { nav.navigate("devices/monitor") }) }
         composable("devices/ring") { RingPairRoute(onDone = { nav.popBackStack() }) }
         composable("settings") { SettingsRoute() }
 
@@ -179,7 +183,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
                 onOpen = { route ->
                     if (route == "settings") {
                         nav.navigate("settings") { popUpTo("today") { saveState = true }; launchSingleTop = true; restoreState = true }
-                    } else {
+                    } else if (nav.graph.findNode(route) != null) {
                         open(route)
                     }
                 },
@@ -234,5 +238,11 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             "meds/edit?id={id}",
             arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { back -> MedEditorRoute(back.arguments?.getString("id"), onDone = { nav.popBackStack() }) }
+
+        // Blood pressure and glucose, symptoms, habits, and pairing monitors (ui/tracking).
+        composable("vitals") { VitalsRoute() }
+        composable("symptoms") { SymptomsRoute() }
+        composable("habits") { HabitsRoute() }
+        composable("devices/monitor") { MonitorPairRoute(onDone = { nav.popBackStack() }) }
     }
 }

@@ -6,6 +6,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
@@ -22,7 +23,9 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.health.api.BloodPressure
 import com.health.api.DeviceInfo
+import com.health.api.GlucoseReading
 import com.health.api.IngestBatch
 import com.health.api.Metric
 import com.health.api.Sample
@@ -34,6 +37,7 @@ import com.health.app.sync.Conduit
 import com.health.app.sync.SyncStore
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
+import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
 /**
@@ -141,9 +145,17 @@ class HealthConnectConduit(
             builder(r)?.samples?.add(Sample(Metric.BODY_FAT, r.time.toEpochMilli(), value = r.percentage.value))
         }
         each(BloodPressureRecord::class, "blood pressure") { r ->
-            val b = builder(r) ?: return@each
-            b.samples.add(Sample(Metric.BLOOD_PRESSURE_SYSTOLIC, r.time.toEpochMilli(), value = r.systolic.inMillimetersOfMercury))
-            b.samples.add(Sample(Metric.BLOOD_PRESSURE_DIASTOLIC, r.time.toEpochMilli(), value = r.diastolic.inMillimetersOfMercury))
+            builder(r)?.bloodPressure?.add(
+                BloodPressure(
+                    r.time.toEpochMilli(), r.systolic.inMillimetersOfMercury.roundToInt(), r.diastolic.inMillimetersOfMercury.roundToInt(),
+                    arm = HealthConnectMapping.arm(r.measurementLocation),
+                ),
+            )
+        }
+        each(BloodGlucoseRecord::class, "glucose") { r ->
+            builder(r)?.glucose?.add(
+                GlucoseReading(r.time.toEpochMilli(), Math.round(r.level.inMillimolesPerLiter * 10) / 10.0, HealthConnectMapping.glucoseContext(r.relationToMeal)),
+            )
         }
         each(SleepSessionRecord::class, "sleep") { r ->
             val b = builder(r) ?: return@each
@@ -174,6 +186,8 @@ class HealthConnectConduit(
         val samples = ArrayList<Sample>()
         val sleep = ArrayList<SleepSession>()
         val workouts = ArrayList<Workout>()
+        val bloodPressure = ArrayList<BloodPressure>()
+        val glucose = ArrayList<GlucoseReading>()
 
         fun build() = IngestBatch(
             device = DeviceInfo(
@@ -184,6 +198,8 @@ class HealthConnectConduit(
             samples = samples,
             sleep = sleep,
             workouts = workouts,
+            bloodPressure = bloodPressure,
+            glucose = glucose,
         )
     }
 
@@ -198,6 +214,7 @@ class HealthConnectConduit(
             HeartRateRecord::class, RestingHeartRateRecord::class, HeartRateVariabilityRmssdRecord::class,
             OxygenSaturationRecord::class, RespiratoryRateRecord::class, SleepSessionRecord::class,
             ExerciseSessionRecord::class, WeightRecord::class, BodyFatRecord::class, BloodPressureRecord::class,
+            BloodGlucoseRecord::class,
         )
     }
 }

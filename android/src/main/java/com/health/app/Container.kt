@@ -9,6 +9,8 @@ import com.health.app.data.Settings
 import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
+import com.health.app.devices.vitals.MonitorStore
+import com.health.app.devices.vitals.VitalsConduit
 import com.health.app.net.ServerApi
 import com.health.app.net.SignIn
 import com.health.app.reminders.DoseOutbox
@@ -64,8 +66,12 @@ class Container(val context: Context) {
     val healthConnect = HealthConnectConduit(context, syncStore)
     val gadgetbridge = GadgetbridgeConduit(context, syncStore)
 
+    /** Blood pressure monitors and glucose meters paired with this phone. */
+    val monitors = MonitorStore(context)
+    val vitalsMonitors = VitalsConduit(context, monitors, zone = ::zone)
+
     val sync = SyncManager(
-        conduits = listOf(colmi, healthConnect, gadgetbridge),
+        conduits = listOf(colmi, healthConnect, gadgetbridge, vitalsMonitors),
         store = syncStore,
         outbox = outbox,
         upload = { api.ingest(it) },
@@ -200,6 +206,7 @@ class Container(val context: Context) {
         doseOutbox.clear()
         medsCache.clear()
         reminders.cancelAll()
+        monitors.clear()
         _profile.value = null
     }
 

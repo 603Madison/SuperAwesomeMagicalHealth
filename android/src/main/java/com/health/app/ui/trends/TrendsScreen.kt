@@ -66,6 +66,8 @@ import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.modules.Moods
 import com.health.app.ui.log.WeightDialog
 import com.health.app.ui.theme.AppTheme
+import com.health.app.ui.tracking.TrackingTrends
+import com.health.api.VitalsTargets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -144,11 +146,15 @@ fun TrendsRoute() {
         state, settings.units, profile?.goals ?: Goals(), c.zone(),
         TrendsActions(vm::range, { vm.load() }, { vm.logWeight(it) }, { vm.deleteWeight(it) }),
         modules = profile?.modules ?: Module.DEFAULT,
+        vitalsTargets = profile?.vitalsTargets ?: VitalsTargets(),
     )
 }
 
 @Composable
-fun TrendsScreen(state: TrendsState, units: Units, goals: Goals, zone: ZoneId, actions: TrendsActions, modules: Set<Module> = Module.DEFAULT) {
+fun TrendsScreen(
+    state: TrendsState, units: Units, goals: Goals, zone: ZoneId, actions: TrendsActions, modules: Set<Module> = Module.DEFAULT,
+    vitalsTargets: VitalsTargets = VitalsTargets(),
+) {
     var weighing by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Trends", "How things are going over time")
@@ -224,6 +230,7 @@ fun TrendsScreen(state: TrendsState, units: Units, goals: Goals, zone: ZoneId, a
                         average(days.map { it.calories })?.let { "${Format.number(it)} kcal" }, "a day you logged", labels,
                         footer = average(days.map { it.protein })?.let { "${Format.number(it)} g protein a day" },
                     ) { BarChart(days.map { it.calories }, color = AppTheme.data.carbs, goal = goals.calories?.toDouble()) }
+                    TrackingTrends(days, labels, modules, vitalsTargets)
                     if (Module.BODY in modules) WeightCard(state.weights, units, goals, zone, onAdd = { weighing = true }, onDelete = actions.deleteWeight)
                     if (Module.ACTIVITY in modules) WorkoutsSummary(days)
                 }
@@ -243,7 +250,7 @@ private fun axis(days: List<TrendDay>): Triple<String, String?, String> {
 }
 
 @Composable
-private fun ChartCard(
+internal fun ChartCard(
     title: String,
     icon: ImageVector,
     tint: Color,

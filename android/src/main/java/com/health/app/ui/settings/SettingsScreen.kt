@@ -129,8 +129,9 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
                             subtitle = ModuleInfo.description(m),
                         )
                     }
+                    val sensitive = Module.entries.filter { it.sensitive }.map { it.label }
                     Hint(
-                        "Mind, Cycle, Bladder & bowel and Medications are encrypted on your server, and an AI connector " +
+                        sensitive.dropLast(1).joinToString(", ") + " and ${sensitive.last()} are encrypted on your server, and an AI connector " +
                             "link only sees them if you allow it when making the link.",
                     )
                 }

@@ -19,10 +19,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Healing
 import androidx.compose.material.icons.rounded.Medication
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.MonitorWeight
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Restaurant
@@ -68,7 +73,11 @@ object ModuleInfo {
         Module.CYCLE -> Icons.Rounded.CalendarMonth
         Module.CONTINENCE -> Icons.Rounded.Wc
         Module.MEDICATIONS -> Icons.Rounded.Medication
-        Module.VITALS, Module.HABITS, Module.SYMPTOMS, Module.HORMONES, Module.APPOINTMENTS -> Icons.Rounded.Medication
+        Module.VITALS -> Icons.Rounded.MonitorHeart
+        Module.HABITS -> Icons.Rounded.Checklist
+        Module.SYMPTOMS -> Icons.Rounded.Healing
+        Module.HORMONES -> Icons.Rounded.Science
+        Module.APPOINTMENTS -> Icons.AutoMirrored.Rounded.EventNote
     }
 
     fun description(module: Module): String = when (module) {
@@ -93,11 +102,19 @@ object ModuleInfo {
         Module.CYCLE -> "cycle"
         Module.CONTINENCE -> "continence"
         Module.MEDICATIONS -> "meds"
+        Module.VITALS -> "vitals"
+        Module.HABITS -> "habits"
+        Module.SYMPTOMS -> "symptoms"
+        Module.HORMONES -> "hormones"
+        Module.APPOINTMENTS -> "appointments"
         else -> null
     }
 
     /** The opt-in modules, in the order they're shown. */
-    val OPT_IN = listOf(Module.MIND, Module.CYCLE, Module.CONTINENCE, Module.MEDICATIONS)
+    val OPT_IN = listOf(
+        Module.MIND, Module.CYCLE, Module.CONTINENCE, Module.MEDICATIONS,
+        Module.VITALS, Module.HABITS, Module.SYMPTOMS, Module.HORMONES, Module.APPOINTMENTS,
+    )
 }
 
 /** Mood 1–5 as faces, from very low to great. */

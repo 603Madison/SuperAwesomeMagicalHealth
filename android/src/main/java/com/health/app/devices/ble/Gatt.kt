@@ -100,17 +100,18 @@ class GattConnection private constructor() {
     private fun characteristic(service: UUID, characteristic: UUID): BluetoothGattCharacteristic =
         gatt.getService(service)?.getCharacteristic(characteristic) ?: throw BleException("The ring doesn't offer $characteristic")
 
-    /** Turns notifications from [characteristic] on. */
-    suspend fun enableNotifications(service: UUID, characteristic: UUID) {
+    /** Turns notifications (or, with [indicate], indications) from [characteristic] on; both arrive on [notifications]. */
+    suspend fun enableNotifications(service: UUID, characteristic: UUID, indicate: Boolean = false) {
         val char = characteristic(service, characteristic)
         if (!gatt.setCharacteristicNotification(char, true)) throw BleException("Couldn't listen to the ring")
         val descriptor = char.getDescriptor(CCCD) ?: return
+        val enable = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         operation("listen") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
+                gatt.writeDescriptor(descriptor, enable) == BluetoothStatusCodes.SUCCESS
             } else {
                 @Suppress("DEPRECATION")
-                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                descriptor.value = enable
                 @Suppress("DEPRECATION")
                 gatt.writeDescriptor(descriptor)
             }

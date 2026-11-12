@@ -49,7 +49,7 @@ fun PrivacyScreen(onClose: () -> Unit) {
                     Text("Where it goes", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "SuperAwesomeMagicalHealth reads what you allow from Health Connect (steps, heart rate, sleep, workouts, " +
-                            "weight and the like) and sends it to your own SuperAwesomeMagicalHealth server, the one you signed in to. " +
+                            "weight, blood pressure, glucose and the like) and sends it to your own SuperAwesomeMagicalHealth server, the one you signed in to. " +
                             "Nothing goes anywhere else: no ads, no analytics, no third parties.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 6.dp),

@@ -61,6 +61,9 @@ import com.health.api.Device
 import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
+import com.health.app.devices.vitals.VitalsConduit
+import com.health.app.ui.tracking.MonitorsCard
+import com.health.app.ui.tracking.MonitorsUi
 import com.health.app.sync.ConduitStatus
 import com.health.app.ui.Format
 import com.health.app.ui.components.CardItem
@@ -89,11 +92,15 @@ class DevicesActions(
 )
 
 @Composable
-fun DevicesRoute(onFindRing: () -> Unit) {
+fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}) {
     val c = appContainer()
     val context = LocalContext.current
     val vm = viewModel { DevicesViewModel(c) }
     val state by vm.state.collectAsState()
+    val pairedMonitors by c.monitors.monitors.collectAsState()
+    val monitorBluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.all { it }) onFindMonitor() else c.tell("The app needs Bluetooth permission to find your monitor")
+    }
     val healthConnect = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { granted ->
         vm.healthConnectGranted(granted)
     }
@@ -132,11 +139,16 @@ fun DevicesRoute(onFindRing: () -> Unit) {
             forget = vm::forget,
             retry = vm::loadServer,
         ),
+        monitors = MonitorsUi(
+            pairedMonitors,
+            find = { if (ColmiConduit.hasPermission(context)) onFindMonitor() else monitorBluetooth.launch(ColmiConduit.permissions()) },
+            forget = { kind -> c.monitors.forget(kind) },
+        ),
     )
 }
 
 @Composable
-fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = System.currentTimeMillis()) {
+fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = System.currentTimeMillis(), monitors: MonitorsUi = MonitorsUi()) {
     var renaming by remember { mutableStateOf<Device?>(null) }
     var forgetting by remember { mutableStateOf<Device?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -155,6 +167,11 @@ fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = Syst
             RingCard(state, actions, now)
             HealthConnectCard(state, actions, now)
             GadgetbridgeCard(state, actions, now)
+            // Blood pressure monitors and glucose meters (ui/tracking).
+            MonitorsCard(
+                MonitorsUi(monitors.monitors, state.statuses[VitalsConduit.ID], state.running == VitalsConduit.ID, monitors.find, { actions.sync(VitalsConduit.ID) }, monitors.forget),
+                now,
+            )
         }
         SectionTitle("Pebble and Garmin")
         Column(Modifier.padding(horizontal = 16.dp)) { OtherDevicesCard() }
@@ -317,7 +334,7 @@ private fun GadgetbridgeCard(state: DevicesState, actions: DevicesActions, now: 
 private fun OtherDevicesCard() {
     InfoCard(null, icon = Icons.Rounded.Watch) {
         Text("Pebble Time 2", style = MaterialTheme.typography.titleSmall)
-        Hint("Pair it with Gadgetbridge, then bring its steps, heart rate and sleep in through Gadgetbridge's export or Health Connect (above). A watch app that uploads straight to your server is on the way.")
+        Hint("Pair it with Gadgetbridge, then bring its steps, heart rate and sleep in through Gadgetbridge's export or Health Connect (above). The SuperAwesomeMagicalHealth watch app (with each release) shows today's scores and logs mood, water, doses and more in one tap.")
         HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
         Text("Garmin", style = MaterialTheme.typography.titleSmall)
         Hint("Turn on Health Connect in the Garmin Connect app and connect Health Connect above; or use Gadgetbridge; or upload .FIT files from your watch on your server's web page (Devices › Import).")
