@@ -321,6 +321,15 @@ class AiService(private val services: Services) {
                 if (module !in modules) throw IllegalArgumentException("${metric.label} is part of ${module.label}, which the person hasn't let you see")
                 mcp.runAssistantTool(caller, name, own)
             }
+            AiTools.CONDITIONS -> {
+                // Stricter than the connector's: every feature a condition turns on must be allowed, not just its private ones.
+                val visible = services.conditions.get(user.id).conditions.filter { c ->
+                    com.health.server.conditions.ConditionsService.modulesOf(c).let { m -> m.isNotEmpty() && m.all { it in modules } }
+                }
+                if (visible.isEmpty()) "None that the person has let you see." else visible.joinToString("\n") { c ->
+                    "${c.name}${c.status?.let { " (${it.label.lowercase()})" } ?: ""}${c.since?.let { ", since $it" } ?: ""}${c.notes?.let { ": $it" } ?: ""}"
+                }
+            }
             else -> mcp.runAssistantTool(caller, name, own)
         } to false
     } catch (e: CancellationException) {

@@ -29,7 +29,7 @@ import com.health.server.health.ProfileStore
 import com.health.server.health.Records
 import com.health.server.modules.EntryKind
 import com.health.server.modules.EntryStore
-import com.health.server.neuro.PersonalStore
+import com.health.server.modules.UserSettingsStore
 import com.health.server.neuro.clean
 import com.health.server.neuro.plural
 import com.health.server.neuro.text
@@ -52,7 +52,7 @@ import java.util.Locale
  */
 class TransitionService(
     private val entries: EntryStore,
-    private val personal: PersonalStore,
+    private val personal: UserSettingsStore,
     private val profiles: ProfileStore,
     private val hormones: HormonesService,
     private val records: Records,

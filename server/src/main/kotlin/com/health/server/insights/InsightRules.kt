@@ -71,7 +71,7 @@ object InsightRules {
         // Temperature.
         Scoring.temperatureDeviation(today, c.history.takeLast(30))?.let { dev ->
             if (c.cyclePhase == com.health.api.CyclePhase.LUTEAL && dev in 0.2..0.8) {
-                out += Ranked(38, Insight("info", "Temperature ${Scoring.signed(dev)} °C from your usual", "As expected after ovulation: it usually falls again around your period.", "thermometer", com.health.api.Module.CYCLE))
+                out += Ranked(38, Insight("info", "Temperature ${Scoring.signed(dev)} °C from your usual", "As expected in the second half of a cycle: it usually falls again around your period.", "thermometer", com.health.api.Module.CYCLE))
             } else if (abs(dev) >= 0.6) {
                 add(88, "warn", "thermometer", "Temperature ${Scoring.signed(dev)} °C from your usual", if (dev > 0) "A raised temperature can mean you're coming down with something, or your cycle, alcohol or a warm room. Worth keeping an eye on." else "A lower temperature than usual; often just a cool room.")
             }

@@ -25,6 +25,7 @@ import com.health.api.Wording
 import com.health.server.ApiError
 import com.health.server.health.ProfileStore
 import com.health.server.insights.DayService
+import com.health.server.modules.UserSettingsStore
 import com.health.server.modules.CycleService
 import com.health.server.modules.EntryKind
 import com.health.server.modules.EntryStore
@@ -48,7 +49,7 @@ import kotlin.math.roundToInt
  */
 class NeuroService(
     private val entries: EntryStore,
-    private val personal: PersonalStore,
+    private val personal: UserSettingsStore,
     private val profiles: ProfileStore,
     private val days: DayService,
     private val cycle: CycleService,

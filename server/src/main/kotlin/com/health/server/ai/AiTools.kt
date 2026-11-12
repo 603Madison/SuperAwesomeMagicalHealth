@@ -64,6 +64,8 @@ object AiTools {
         "log_overload" to Module.NEURO,
         "log_energy" to Module.NEURO,
         "log_moment" to Module.TRANSITION,
+        "supplies" to Module.CONTINENCE,
+        "continence_progress" to Module.CONTINENCE,
     )
 
     /** Run the assistant's own way: a day and trends limited to the features allowed, readings by their metric's feature. */
@@ -71,13 +73,16 @@ object AiTools {
     const val TRENDS = "trends"
     const val READINGS = "readings"
 
+    /** Conditions and goals: only those whose features the person has all allowed (see AiService). */
+    const val CONDITIONS = "conditions"
+
     /** Never, whatever the person allows. */
     val NEVER: Set<Module> = setOf(Module.PHOTOS)
 
     /** The tools for a person who allowed [modules], in a fixed order (so the request's prefix caches). */
     fun allowed(tools: List<McpServer.AssistantTool>, modules: Set<Module>): List<McpServer.AssistantTool> = tools.filter { t ->
         when (t.name) {
-            DAY, TRENDS -> true
+            DAY, TRENDS, CONDITIONS -> true
             READINGS -> modules.any { !it.sensitive }
             else -> MODULES.containsKey(t.name) && MODULES[t.name].let { it == null || (it in modules && it !in NEVER) }
         }

@@ -188,6 +188,28 @@ class AiTest {
     }
 
     @Test
+    fun `it sees a condition only when every feature it turns on was allowed`() = serverTest { s ->
+        s.useFakeAnthropic()
+        val admin = adminBrowser()
+        admin.turnOn()
+        val saved = admin.putJson(
+            "/api/conditions",
+            """{"conditions":[{"id":"sleep-better","name":"Sleep better","kind":"GOAL"},{"id":"hypertension","name":"High blood pressure"}]}""",
+        )
+        assertEquals(HttpStatusCode.OK, saved.status)
+        admin.consent("\"SLEEP\",\"HABITS\",\"VITALS\"")
+        replies += message("tool_use", toolUse("toolu_1", "conditions", "{}"))
+        replies += message("end_turn", text("You're working on sleeping better."))
+        assertEquals(HttpStatusCode.OK, admin.ask("What am I working on?").status)
+
+        assertTrue("conditions" in toolNames(requests.first().second))
+        val result = requests.toList()[1].second["messages"]!!.jsonArray.last().jsonObject["content"]!!.jsonArray.single().jsonObject.toString()
+        assertTrue(result.contains("Sleep better"))
+        // High blood pressure also turns on medications, which the person didn't allow.
+        assertFalse(result.contains("blood pressure"))
+    }
+
+    @Test
     fun `it may log entries only when both the admin and the person allow it`() = serverTest { s ->
         s.useFakeAnthropic()
         val admin = adminBrowser()

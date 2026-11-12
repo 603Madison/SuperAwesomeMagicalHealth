@@ -162,6 +162,9 @@ object SharedView {
         "/api/neuro" to any(Module.NEURO),
         "/api/transition" to any(Module.TRANSITION),
         "/api/photos" to any(Module.PHOTOS),
+        // Supplies (bladder and bowel, periods); /api/fields is filtered to what's shared; conditions never are.
+        "/api/supplies" to any(Module.CONTINENCE, Module.CYCLE),
+        "/api/fields" to Need.Always,
     )
 
     /** What viewing [path] needs; [metric] is the query's, for series and measurements. */
@@ -267,6 +270,9 @@ object SharedView {
                 appointments = m.appointments.takeIf { on(Module.APPOINTMENTS) },
                 neuro = m.neuro.takeIf { on(Module.NEURO) },
                 transition = m.transition.takeIf { on(Module.TRANSITION) },
+                lowSupplies = m.lowSupplies?.filter { s ->
+                    if (s.supply.kind.category == com.health.api.SupplyCategory.PERIOD) on(Module.CYCLE) else on(Module.CONTINENCE)
+                }?.takeIf { it.isNotEmpty() },
             ),
         )
     }

@@ -99,13 +99,32 @@ class Services(
         TrackingService(vitals, drinks, symptoms, habits, weather, days, clock).also { days.parts += it }
     }
 
+    /** Each person's own settings, sealed one row per key (conditions, a feature's diary settings, Autism & ADHD, transition). */
+    val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
+
     // Autism & ADHD, transition and progress photos (neuro/, transition/, photos/).
-    val personal = com.health.server.neuro.PersonalStore(db, box, clock)
-    val neuro = com.health.server.neuro.NeuroService(entries, personal, profiles, days, modules.cycle, clock)
-    val transition = com.health.server.transition.TransitionService(entries, personal, profiles, hormones, records, clock)
+    val neuro = com.health.server.neuro.NeuroService(entries, userSettings, profiles, days, modules.cycle, clock)
+    val transition = com.health.server.transition.TransitionService(entries, userSettings, profiles, hormones, records, clock)
     val photos = com.health.server.photos.PhotoService(db, box, config.dataDir, profiles, records, clock).also { it.transition = transition }
     init {
         days.parts += com.health.server.neuro.NeuroTransitionDay(neuro, transition)
+    }
+
+    // Conditions and goals, supplies (bladder and bowel, periods).
+    val conditions = com.health.server.conditions.ConditionsService(userSettings, profiles)
+    val supplies = com.health.server.modules.SuppliesService(db, box, entries, profiles, clock)
+    init {
+        modules.continence.supplies = supplies
+        modules.continence.settings = userSettings
+        modules.continence.caffeine = { userId, from, to ->
+            tracking.drinks.list(userId, from, to).groupBy { profiles.days(userId).dateOf(it.at) }.mapValues { (_, l) -> l.sumOf { it.caffeineMg } }
+        }
+        modules.cycle.supplies = supplies
+        modules.cycle.settings = userSettings
+        modules.supplies = supplies
+        modules.plainCycle = { userId ->
+            modules.cycle.settings(userId).neutralWording || !conditions.shows(userId, com.health.api.Fields.CYCLE_FERTILITY)
+        }
     }
 
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
@@ -118,6 +137,9 @@ class Services(
             VitalsHooks(tracking.vitals, clock), DrinksHooks(tracking.drinks), SymptomsHooks(tracking.symptoms),
             HabitsHooks(tracking.habits), StressHooks(days),
             neuro, transition, com.health.server.transition.MeasurementHooks(records),
+            com.health.server.modules.ContinenceHooks(modules.continence, clock, supplies),
+            com.health.server.modules.SuppliesHooks(supplies, profiles, clock),
+            com.health.server.modules.CycleHooks(modules.cycle, clock),
         )
     }
 
