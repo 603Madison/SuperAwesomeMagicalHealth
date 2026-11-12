@@ -6,7 +6,7 @@ import type {
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
   LifeStageOverview, Migraine, Place, PushKey, PushMessage, PushSubscriptionInfo, ReportSectionKey, Shares, Share,
-  SuggestedQuestion, SymptomEntry, SymptomsSummary, VitalsSummary, Webhook, WebhookDelivery,
+  SmtpSettings, SuggestedQuestion, SymptomEntry, SymptomsSummary, VitalsSummary, Webhook, WebhookDelivery,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -263,6 +263,10 @@ export const api = {
   latestDigest: () => get<Digest>("/api/digest/latest"),
   digest: (week: string) => get<Digest>(`/api/digest?week=${q(week)}`),
   emailDigest: () => post<unknown>("/api/digest/email-test"),
+  smtpStatus: () => get<{ configured: boolean }>("/api/digest/smtp"),
+  adminSmtp: () => get<{ settings: SmtpSettings; passwordSet: boolean }>("/api/admin/smtp"),
+  saveAdminSmtp: (settings: SmtpSettings, password?: string) => put<{ settings: SmtpSettings; passwordSet: boolean }>("/api/admin/smtp", { settings, password }),
+  testAdminSmtp: (to: string) => post<unknown>("/api/admin/smtp/test", { to }),
   webhooks: () => get<Webhook[]>("/api/webhooks"),
   saveWebhook: (w: Webhook) => (w.id ? put<Webhook>(`/api/webhooks/${q(w.id)}`, w) : post<Webhook>("/api/webhooks", w)),
   deleteWebhook: (id: string) => del<unknown>(`/api/webhooks/${q(id)}`),

@@ -362,6 +362,21 @@ export interface ServerSettings {
   foodDatabase: boolean;
   crisisResources: CrisisResource[];
   oidc: OidcSettings;
+  /** Air pressure for symptom patterns, and place search (a rough place goes to open-meteo.com). */
+  weather?: boolean;
+  smtp?: SmtpSettings;
+  /** Let webhooks call addresses on private networks. */
+  webhooksPrivateNetworks?: boolean;
+}
+
+/** Mail for weekly digests; the password is set apart, at /api/admin/smtp. */
+export interface SmtpSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  security: "NONE" | "STARTTLS" | "TLS";
+  username: string;
+  from: string;
 }
 
 export interface AdminSettings {

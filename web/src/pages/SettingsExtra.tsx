@@ -148,6 +148,7 @@ export function DigestSettings() {
   const [busy, setBusy] = useState(false);
   const on = useModules();
   const navigate = useNavigate();
+  const mail = useLoad(() => api.smtpStatus().catch(() => ({ configured: true })), []);
   useEffect(() => { if (profile?.digest) setD(profile.digest); }, [profile?.digest]);
   const sensitive = FEATURES.filter((f) => SENSITIVE.includes(f.id) && on.includes(f.id));
   const save = async () => {
@@ -173,6 +174,7 @@ export function DigestSettings() {
           <Toggle label="Email it to me too" help="If your server's admin has set up mail. The app and notifications always show it." checked={d.emailEnabled} onChange={(emailEnabled) => setD({ ...d, emailEnabled })} />
           {d.emailEnabled && (
             <>
+              {mail.data && !mail.data.configured && <p className="notice small">Your server can't send email yet: its admin sets that up. Until then the digest shows here and as a notification.</p>}
               <Field label="Email address"><input type="email" autoComplete="email" value={d.email ?? ""} onChange={(e) => setD({ ...d, email: e.target.value })} placeholder="you@example.com" /></Field>
               {sensitive.length > 0 && (
                 <Field label="Private features in the email" help="Email is less private than the app: these stay out of it unless you choose.">
