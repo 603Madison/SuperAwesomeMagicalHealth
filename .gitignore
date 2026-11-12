@@ -1,0 +1,23 @@
+*.iml
+.gradle/
+.kotlin/
+/local.properties
+/.idea/
+.DS_Store
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.keystore
+*.jks
+*.apk
+
+# Release signing key: never commit it (see CLAUDE.md).
+/keystore/
+
+# The web app's dependencies and build output.
+web/node_modules/
+web/dist/
+
+# A server's data folder, when run from a checkout.
+/data/
