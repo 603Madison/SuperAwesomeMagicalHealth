@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Activity, BatteryLow, CalendarHeart, Droplet, Dumbbell, Egg, Flame, Footprints, Heart, Moon, Pill, Scale, Sparkles, Thermometer, Zap, type LucideIcon } from "lucide-react";
+import {
+  Activity, Baby, BatteryLow, Brain, CalendarClock, CalendarHeart, CloudSun, Coffee, Droplet, Droplets, Dumbbell, Egg, Flame, FlaskConical, Footprints,
+  Gauge, Heart, HeartPulse, ListChecks, Moon, Pill, Scale, Sparkles, Stethoscope, Syringe, Thermometer, ThermometerSun, Wine, Zap, type LucideIcon,
+} from "lucide-react";
 import { api } from "../lib/api";
 import { localInput, toKg, useUnits, weightValue, WORKOUT_TYPES } from "../lib/format";
 import type { CheckIn, Workout, WorkoutType } from "../lib/types";
@@ -10,6 +13,9 @@ export const INSIGHT_ICONS: Record<string, LucideIcon> = {
   zap: Zap, "battery-low": BatteryLow, heart: Heart, activity: Activity, thermometer: Thermometer, moon: Moon,
   footprints: Footprints, dumbbell: Dumbbell, egg: Egg, flame: Flame, droplet: Droplet, scale: Scale, sparkles: Sparkles,
   pill: Pill, calendar: CalendarHeart,
+  gauge: Gauge, "heart-pulse": HeartPulse, coffee: Coffee, wine: Wine, stethoscope: Stethoscope, "list-checks": ListChecks, syringe: Syringe,
+  baby: Baby, "thermometer-sun": ThermometerSun, "calendar-clock": CalendarClock, flask: FlaskConical, "flask-conical": FlaskConical,
+  brain: Brain, cloud: CloudSun, "cloud-sun": CloudSun, droplets: Droplets,
 };
 
 export function WeightDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { CalendarHeart, ChevronLeft, ChevronRight, Droplets, Thermometer } from "lucide-react";
+import { CalendarHeart, ChevronLeft, ChevronRight, Droplets, Sprout, Thermometer } from "lucide-react";
 import { api } from "../lib/api";
 import { isoDate, num, shortDate, today } from "../lib/format";
-import type { CycleDay, CycleOverview, CyclePhase, Flow, Mucus, OvulationTest } from "../lib/types";
+import { useReadOnly } from "../lib/viewing";
+import type { CycleDay, CycleOverview, CyclePhase, Flow, LifeStage, LifeStageInfo, Mucus, OvulationTest } from "../lib/types";
+import { StageDialog, StagePanels, predicts, stageSubtitle } from "./LifeStage";
 import { LineChart } from "../components/charts";
 import { Button, Card, ErrorNotice, Field, IconButton, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
 
@@ -16,39 +18,53 @@ const PHASE_TEXT: Record<CyclePhase, string> = {
 };
 
 export function Cycle() {
-  const { data, error, loading, reload } = useLoad(() => api.cycle(24), []);
+  const { data: raw, error, loading, reload } = useLoad(() => api.cycle(24), []);
+  const readOnly = useReadOnly();
+  const stageInfo = useLoad<LifeStageInfo>(() => api.lifeStage().catch(() => ({ stage: "CYCLING" as LifeStage })), []);
+  const overview = useLoad(() => api.lifeStageOverview(30).catch(() => undefined), []);
   const [editing, setEditing] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const stage = stageInfo.data?.stage ?? "CYCLING";
+  const predict = predicts(stage);
+  // No period predictions while pregnant, after a birth or after menopause: the calendar still logs bleeding.
+  const data = raw && !predict ? { ...raw, prediction: undefined, daysUntilPeriod: undefined } : raw;
+  const reloadAll = () => { reload(); stageInfo.reload(); overview.reload(); };
   return (
     <div className="page">
-      <PageHeader title="Cycle" subtitle="Your periods, symptoms and what comes next" actions={<Button variant="primary" onClick={() => setEditing(today())}><Droplets size={18} /> Log today</Button>} />
+      <PageHeader title="Cycle" subtitle={stageInfo.data ? stageSubtitle(stageInfo.data) : "Your periods, symptoms and what comes next"} actions={!readOnly && <>
+        <Button onClick={() => setChoosing(true)}><Sprout size={18} /> {stage === "CYCLING" ? "Life stage" : "Change stage"}</Button>
+        <Button variant="primary" onClick={() => setEditing(today())}><Droplets size={18} /> Log today</Button>
+      </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <Spinner />}
       {data && (
         <div className="grid grid-2">
-          <Card title="Now" icon={<CalendarHeart size={18} />}>
+          {overview.data && <StagePanels overview={overview.data} readOnly={readOnly} onChanged={overview.reload} />}
+          {predict && <Card title="Now" icon={<CalendarHeart size={18} />}>
             <div className="stats">
               <Stat label="Cycle day" value={data.cycleDay ?? "–"} sub={PHASE_TEXT[data.phase]} />
               <Stat label="Next period" value={untilText(data.daysUntilPeriod)} sub={data.prediction ? `${shortDate(data.prediction.earliest)} – ${shortDate(data.prediction.latest)}` : "Log a period to start"} />
             </div>
             {data.prediction && <p className="muted small">{data.prediction.confidence === "low" ? "Low confidence: predictions get better after three cycles." : `${data.prediction.confidence[0].toUpperCase()}${data.prediction.confidence.slice(1)} confidence.`} {data.caveat}</p>}
-          </Card>
-          <Card title="Averages">
+            {stage === "PERIMENOPAUSE" && <p className="muted small">Cycles often vary a lot in perimenopause, so the range is wider and worth taking loosely.</p>}
+          </Card>}
+          {predict && <Card title="Averages">
             <div className="stats">
               <Stat label="Cycle" value={data.averageCycle != null ? num(data.averageCycle, 0) : "–"} unit="days" sub={data.variation != null ? `± ${num(data.variation, 1)} days` : undefined} />
               <Stat label="Period" value={data.averagePeriod != null ? num(data.averagePeriod, 0) : "–"} unit="days" />
               <Stat label="Cycles logged" value={data.cycles.length} />
             </div>
-          </Card>
+          </Card>}
           <Card className="span-2" title={month.toLocaleDateString(undefined, { month: "long", year: "numeric" })} action={<>
             <IconButton label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={20} /></IconButton>
             <IconButton label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={20} /></IconButton>
           </>}>
             <Calendar month={month} data={data} onPick={setEditing} />
             <ul className="legend">
-              <li><span className="legend-key flow-key" />Period</li>
-              <li><span className="legend-key predicted-key" />Predicted period</li>
-              <li><span className="legend-key fertile-key" />Fertile window (estimate)</li>
+              <li><span className="legend-key flow-key" />{predict ? "Period" : "Bleeding"}</li>
+              {predict && <li><span className="legend-key predicted-key" />Predicted period</li>}
+              {predict && <li><span className="legend-key fertile-key" />Fertile window (estimate)</li>}
               <li><span className="legend-key symptom-key" />Symptoms logged</li>
             </ul>
           </Card>
@@ -71,7 +87,7 @@ export function Cycle() {
                       <div className="row-title">{new Date(`${c.start}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</div>
                       <div className="row-sub">Period {c.periodLength} days{c.ovulation ? ` · temperature rise around ${shortDate(c.ovulation)}` : ""}</div>
                     </div>
-                    <div className="row-end">{c.length ? `${c.length} days` : "Now"}</div>
+                    <div className="row-end">{c.length ? `${c.length} days` : predict ? "Now" : ""}</div>
                   </li>
                 ))}
               </ul>
@@ -79,7 +95,8 @@ export function Cycle() {
           )}
         </div>
       )}
-      {editing && <DayDialog date={editing} day={data?.days.find((d) => d.date === editing)} onClose={() => setEditing(null)} onSaved={reload} />}
+      {editing && !readOnly && <DayDialog date={editing} day={data?.days.find((d) => d.date === editing)} onClose={() => setEditing(null)} onSaved={reload} />}
+      {choosing && stageInfo.data && <StageDialog info={stageInfo.data} onClose={() => setChoosing(false)} onSaved={reloadAll} />}
     </div>
   );
 }

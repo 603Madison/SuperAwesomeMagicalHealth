@@ -3,7 +3,7 @@ import { Copy, KeyRound, LogOut, MoreHorizontal, Plus, Shield, ShieldOff, Trash2
 import { api } from "../lib/api";
 import { when } from "../lib/format";
 import { useSession } from "../lib/session";
-import type { AdminSettings, ServerSettings, User } from "../lib/types";
+import type { AdminSettings, ServerSettings, SmtpSettings, User } from "../lib/types";
 import { Button, errorToast, Field, Menu, Modal, PageHeader, Spinner, toast, Toggle, useLoad } from "../components/ui";
 
 export function Admin() {
@@ -154,7 +154,9 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
   const save = async () => {
     setBusy(true);
     try {
-      onSaved(await api.saveSettings(settings, secret ? secret : undefined));
+      // Mail is saved on its own (below): keep whatever it is now, not what this page loaded with.
+      const smtp = settings.smtp !== undefined ? (await api.adminSmtp().catch(() => null))?.settings ?? settings.smtp : undefined;
+      onSaved(await api.saveSettings(smtp ? { ...settings, smtp } : settings, secret ? secret : undefined));
       setSecret("");
       toast("Saved");
     } catch (e) { errorToast(e); }
@@ -172,7 +174,14 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
           </Field>
           <Toggle label="People can sign in with a password" help="Off: everyone but the break-glass admin signs in through single sign-on." checked={settings.localLogin} onChange={(localLogin) => setSettings({ ...settings, localLogin })} />
           <Toggle label="Look foods up in Open Food Facts" help={`Food searches and scanned barcodes are sent to openfoodfacts.org (nothing about who asked). Off: people use their own foods only.${lockedNote("SAMH_FOOD_DATABASE")}`} checked={settings.foodDatabase} onChange={(foodDatabase) => setSettings({ ...settings, foodDatabase })} />
+          {settings.weather !== undefined && <Toggle label="Weather for symptom patterns" help="Air pressure from open-meteo.com for the town people choose, and the place search. Only a rough place is sent, nothing about who asked." checked={settings.weather} onChange={(weather) => setSettings({ ...settings, weather })} />}
+          {settings.webhooksPrivateNetworks !== undefined && <Toggle label="Webhooks may call home networks" help="Lets people's webhooks reach addresses on private networks, where Home Assistant usually lives. Off: public addresses only." checked={settings.webhooksPrivateNetworks} onChange={(webhooksPrivateNetworks) => setSettings({ ...settings, webhooksPrivateNetworks })} />}
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>Mail</h2>
+        <MailSettings />
       </section>
 
       <section className="panel">
@@ -240,5 +249,68 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
         <Button variant="primary" busy={busy} onClick={save}>Save server settings</Button>
       </div>
     </>
+  );
+}
+
+/** Mail for the weekly digest: the server's SMTP account. The password is kept sealed on the server. */
+function MailSettings() {
+  const { data, error, loading, setData } = useLoad(() => api.adminSmtp(), []);
+  const [smtp, setSmtp] = useState<SmtpSettings | null>(null);
+  const [password, setPassword] = useState("");
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (data) setSmtp(data.settings); }, [data]);
+  if (loading && !data) return <Spinner />;
+  if (error) return <div className="notice notice-error">{error}</div>;
+  if (!smtp) return null;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const saved = await api.saveAdminSmtp(smtp, password || undefined);
+      setData(saved);
+      setPassword("");
+      toast("Mail settings saved");
+    } catch (e) { errorToast(e); }
+    setBusy(false);
+  };
+  return (
+    <div className="form-stack">
+      <p className="muted">So people can have their weekly digest emailed. Any SMTP account works: your email provider's, or a service like Mailgun or Postmark.</p>
+      <Toggle label="Send email" checked={smtp.enabled} onChange={(enabled) => setSmtp({ ...smtp, enabled })} />
+      {smtp.enabled && (
+        <>
+          <div className="two-col">
+            <Field label="Server"><input value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value.trim() })} placeholder="smtp.example.com" autoCapitalize="none" /></Field>
+            <div className="pair">
+              <Field label="Port"><input inputMode="numeric" value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) || 587 })} /></Field>
+              <Field label="Security">
+                <select value={smtp.security} onChange={(e) => setSmtp({ ...smtp, security: e.target.value as SmtpSettings["security"], port: e.target.value === "TLS" ? 465 : e.target.value === "STARTTLS" ? 587 : smtp.port })}>
+                  <option value="STARTTLS">STARTTLS</option><option value="TLS">TLS</option><option value="NONE">None</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+          <div className="two-col">
+            <Field label="Username"><input value={smtp.username} onChange={(e) => setSmtp({ ...smtp, username: e.target.value })} autoComplete="off" autoCapitalize="none" /></Field>
+            <Field label="Password" help={data?.passwordSet ? "Set. Leave empty to keep it." : "Kept encrypted on the server."}>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" placeholder={data?.passwordSet ? "••••••••" : ""} />
+            </Field>
+          </div>
+          <Field label="From" help="The sender people see, e.g. SuperAwesomeMagicalHealth <health@example.com>"><input value={smtp.from} onChange={(e) => setSmtp({ ...smtp, from: e.target.value })} /></Field>
+        </>
+      )}
+      <div className="button-row">
+        <Button variant="primary" busy={busy} onClick={save}>Save mail settings</Button>
+      </div>
+      {smtp.enabled && data?.settings.enabled && (
+        <form className="inline-form" onSubmit={async (e) => {
+          e.preventDefault();
+          try { await api.testAdminSmtp(to.trim()); toast(`Test email sent to ${to.trim()}`); } catch (err) { errorToast(err); }
+        }}>
+          <Field label="Send a test to"><input type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="you@example.com" /></Field>
+          <Button type="submit" disabled={!to.trim()}>Send a test</Button>
+        </form>
+      )}
+    </div>
   );
 }

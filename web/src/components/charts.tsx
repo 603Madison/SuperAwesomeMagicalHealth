@@ -95,7 +95,7 @@ export interface LinePoint {
  * nearest point and the tooltip reads it out.
  */
 export function LineChart({
-  points, height = 180, color = "var(--c1)", formatX, formatY, yMin, yMax, area = true, band, label, dots = false,
+  points, height = 180, color = "var(--c1)", formatX, formatY, yMin, yMax, area = true, band, label, dots = false, extra = [], name,
 }: {
   points: LinePoint[];
   height?: number;
@@ -109,10 +109,14 @@ export function LineChart({
   band?: [number, number];
   label: string;
   dots?: boolean;
+  /** More lines, point for point with [points] (blood pressure's two numbers), named in the tooltip. */
+  extra?: { points: LinePoint[]; color: string; name: string }[];
+  /** The main line's name, when there are [extra] ones. */
+  name?: string;
 }) {
   const [ref, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
-  const values = points.map((p) => p.y).filter((v): v is number => v != null);
+  const values = [...points, ...extra.flatMap((e) => e.points)].map((p) => p.y).filter((v): v is number => v != null);
   const pad = { top: 12, right: 12, bottom: 24, left: 40 };
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
@@ -188,17 +192,34 @@ export function LineChart({
             ? <path key={i} d={path(run)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             : run.length === 1 ? <circle key={i} cx={sx(run[0].x)} cy={sy(run[0].y!)} r={3} fill={color} /> : null)}
           {dots && points.filter((p) => p.y != null).map((p, i) => <circle key={`d${i}`} cx={sx(p.x)} cy={sy(p.y!)} r={4} fill={color} stroke="var(--chart-surface)" strokeWidth={2} />)}
+          {extra.map((e, k) => {
+            const known = e.points.filter((p) => p.y != null);
+            return (
+              <g key={`e${k}`}>
+                {known.length > 1 && <path d={path(known)} fill="none" stroke={e.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+                {(dots || known.length === 1) && known.map((p, i) => <circle key={i} cx={sx(p.x)} cy={sy(p.y!)} r={4} fill={e.color} stroke="var(--chart-surface)" strokeWidth={2} />)}
+              </g>
+            );
+          })}
           {hovered && hovered.y != null && (
             <g pointerEvents="none">
               <line x1={sx(hovered.x)} x2={sx(hovered.x)} y1={pad.top} y2={pad.top + h} className="crosshair" />
               <circle cx={sx(hovered.x)} cy={sy(hovered.y)} r={5} fill={color} stroke="var(--chart-surface)" strokeWidth={2} />
+              {extra.map((e, k) => {
+                const p = hover != null ? e.points[hover] : undefined;
+                return p?.y != null ? <circle key={k} cx={sx(p.x)} cy={sy(p.y)} r={5} fill={e.color} stroke="var(--chart-surface)" strokeWidth={2} /> : null;
+              })}
             </g>
           )}
         </svg>
       )}
       {hovered && hovered.y != null && (
         <Tooltip x={sx(hovered.x)} y={Math.max(0, sy(hovered.y) - 54)} width={width}>
-          <strong>{formatY(hovered.y)}</strong>
+          <strong>{name ? `${name} ` : ""}{formatY(hovered.y)}</strong>
+          {extra.map((e, k) => {
+            const p = hover != null ? e.points[hover] : undefined;
+            return p?.y != null ? <strong key={k}>{e.name} {formatY(p.y)}</strong> : null;
+          })}
           <span>{formatX(hovered.x)}</span>
         </Tooltip>
       )}

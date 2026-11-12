@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# Screenshots taken while checking the pages.
+shots/

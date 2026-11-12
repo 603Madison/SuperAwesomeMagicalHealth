@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Bot, CalendarHeart, Copy, Droplet, KeyRound, Lock, LogOut, Monitor, Moon, Pill, Shield, Smartphone, Watch, Weight } from "lucide-react";
+import { Bot, Copy, FileText, Home, Inbox, KeyRound, Lock, LogOut, Monitor, Shield, Smartphone, Watch } from "lucide-react";
 import { useModules } from "../App";
 import type { Module } from "../lib/types";
 import { NavLink } from "react-router-dom";
@@ -9,6 +9,12 @@ import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
 import { SENSITIVE, type Goals, type Profile as ProfileModel } from "../lib/types";
 import { Button, Field, IconButton, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { FEATURES } from "../components/features";
+import { PlacePicker } from "../components/PlacePicker";
+import { DigestSettings, IntegrationSettings, NotificationSettings, SharingSettings } from "./SettingsExtra";
+
+/** The features phones show as tabs; the rest are links at the top of Settings. */
+const TABS: Module[] = ["NUTRITION", "MIND"];
 
 export function Settings() {
   const user = useSession((s) => s.user)!;
@@ -16,31 +22,56 @@ export function Settings() {
   const on = useModules();
   // A new connector link or upload key shows in the list of sign-ins at once.
   const [signIns, setSignIns] = useState(0);
+  useEffect(() => {
+    // Links like /settings#digest land on their section.
+    const id = window.location.hash.slice(1);
+    if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 50);
+  }, []);
   return (
     <div className="page settings">
       <PageHeader title="Settings" />
       {/* Phones show five tabs; the rest of the app is a tap away here. */}
       <nav className="phone-only more-links" aria-label="More">
-        {on.includes("SLEEP") && <NavLink to="/sleep" className="chip"><Moon size={18} /> Sleep</NavLink>}
-        {on.includes("ACTIVITY") && <NavLink to="/activity" className="chip"><Activity size={18} /> Activity</NavLink>}
-        {on.includes("BODY") && <NavLink to="/body" className="chip"><Weight size={18} /> Body</NavLink>}
-        {on.includes("CYCLE") && <NavLink to="/cycle" className="chip"><CalendarHeart size={18} /> Cycle</NavLink>}
-        {on.includes("CONTINENCE") && <NavLink to="/bladder" className="chip"><Droplet size={18} /> Bladder &amp; bowel</NavLink>}
-        {on.includes("MEDICATIONS") && <NavLink to="/meds" className="chip"><Pill size={18} /> Medications</NavLink>}
+        {FEATURES.filter((f) => on.includes(f.id) && f.route && !TABS.includes(f.id)).map((f) => (
+          <NavLink key={f.id} to={f.route!} className="chip"><f.icon size={18} /> {f.name}</NavLink>
+        ))}
+        <NavLink to="/reports" className="chip"><FileText size={18} /> Reports</NavLink>
+        <NavLink to="/digest" className="chip"><Inbox size={18} /> Your week</NavLink>
         <NavLink to="/devices" className="chip"><Watch size={18} /> Devices</NavLink>
         {user.role === "ADMIN" && <NavLink to="/admin" className="chip"><Shield size={18} /> Admin</NavLink>}
       </nav>
 
-      <section className="panel">
+      <section className="panel" id="features">
         <h2>Features</h2>
         <p className="muted">Turn on the parts you want. The rest stay out of your way.</p>
         {profile ? <Features profile={profile} /> : <Spinner />}
       </section>
 
-      <section className="panel">
+      <section className="panel" id="profile">
         <h2>You and your goals</h2>
         <p className="muted">Your profile works out resting energy and calorie targets; goals shape your scores.</p>
         {profile ? <ProfileForm initial={profile} /> : <Spinner />}
+        {profile && (on.includes("SYMPTOMS") || profile.place) && (
+          <>
+            <h3>Weather</h3>
+            <PlacePicker />
+          </>
+        )}
+      </section>
+
+      <section className="panel" id="reminders">
+        <h2>Reminders and notifications</h2>
+        <NotificationSettings />
+      </section>
+
+      <section className="panel" id="digest">
+        <h2>Weekly digest</h2>
+        <DigestSettings />
+      </section>
+
+      <section className="panel" id="sharing">
+        <h2>Sharing</h2>
+        <SharingSettings />
       </section>
 
       <section className="panel">
@@ -48,9 +79,19 @@ export function Settings() {
         <AppearanceSettings />
       </section>
 
-      <section className="panel">
+      <section className="panel" id="connector">
         <h2>AI connector (MCP)</h2>
         <Connector onMade={() => setSignIns((n) => n + 1)} />
+      </section>
+
+      <section className="panel" id="integrations">
+        <h2>Webhooks and Home Assistant</h2>
+        <IntegrationSettings />
+      </section>
+
+      <section className="panel" id="watch">
+        <h2>Pebble watch</h2>
+        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs a mood, water, coffee or a toilet trip with a tap. Connected watches are listed under "Signed in on".</p>
       </section>
 
       <section className="panel">
@@ -67,17 +108,6 @@ export function Settings() {
     </div>
   );
 }
-
-const FEATURES: { id: Module; name: string; about: string }[] = [
-  { id: "ACTIVITY", name: "Activity", about: "Steps, calories, workouts and the activity score." },
-  { id: "SLEEP", name: "Sleep", about: "Nights, sleep stages and the sleep score." },
-  { id: "NUTRITION", name: "Food", about: "A food diary with calories, protein, carbs, fat and water." },
-  { id: "BODY", name: "Body", about: "Weight and body fat." },
-  { id: "MIND", name: "Mind", about: "Mood, a private journal, anxiety and depression check-ins, calming tools, and support when you need it." },
-  { id: "CYCLE", name: "Cycle", about: "Periods, symptoms and predictions, with your ring's temperature where it has one." },
-  { id: "CONTINENCE", name: "Bladder & bowel", about: "A diary of toilet trips, leaks and bowel movements, and pelvic floor exercises." },
-  { id: "MEDICATIONS", name: "Medications", about: "Medications and supplements, reminders, injection-site rotation and lab results." },
-];
 
 function Features({ profile }: { profile: ProfileModel }) {
   const [busy, setBusy] = useState(false);
@@ -271,6 +301,7 @@ function PasswordChange() {
 
 const KIND_TEXT: Record<string, string> = {
   WEB: "Signed in", APP: "Signed in", UPLOAD: "Key made", MCP: "Link made", MCP_WRITE: "Link made", MCP_ALL: "Link made",
+  INTEGRATION: "Key made", WATCH: "Connected",
 };
 
 export function SignIns({ only }: { only?: string[] }) {
@@ -284,7 +315,8 @@ export function SignIns({ only }: { only?: string[] }) {
       <ul className="device-list">
         {list.map((s) => (
           <li key={s.id} className="device-row">
-            {s.kind === "APP" ? <Smartphone size={20} /> : s.kind.startsWith("MCP") ? <Bot size={20} /> : s.kind === "UPLOAD" ? <KeyRound size={20} /> : <Monitor size={20} />}
+            {s.kind === "APP" ? <Smartphone size={20} /> : s.kind.startsWith("MCP") ? <Bot size={20} /> : s.kind === "UPLOAD" ? <KeyRound size={20} />
+              : s.kind === "WATCH" ? <Watch size={20} /> : s.kind === "INTEGRATION" ? <Home size={20} /> : <Monitor size={20} />}
             <div className="source-text">
               <div className="source-name">{s.name}{s.current && <span className="badge">This browser</span>}</div>
               <div className="source-sub">{KIND_TEXT[s.kind]} {when(s.createdAt)} · last used {when(s.lastSeenAt)}{s.scope?.length ? ` · can see ${s.scope.map((m) => FEATURES.find((f) => f.id === m)?.name).join(", ")}` : ""}</div>

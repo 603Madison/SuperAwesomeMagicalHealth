@@ -5,6 +5,8 @@ import { clock, dayLabel, isoDate, num, shortDate, today } from "../lib/format";
 import type { DueDose, LabResult, MedForm, Medication, ScheduleKind } from "../lib/types";
 import { LineChart } from "../components/charts";
 import { Button, Card, DateNav, Empty, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { useModules } from "../App";
+import { useReadOnly } from "../lib/viewing";
 
 const FORMS: { id: MedForm; label: string }[] = [
   { id: "PILL", label: "Pill" }, { id: "CAPSULE", label: "Capsule" }, { id: "LIQUID", label: "Liquid" }, { id: "INJECTION", label: "Injection" },
@@ -26,6 +28,7 @@ export function Meds() {
   const labs = useLoad(() => api.labs(), []);
   const [editing, setEditing] = useState<Medication | "new" | null>(null);
   const [addingLab, setAddingLab] = useState(false);
+  const readOnly = useReadOnly();
   const reload = () => { day.reload(); meds.reload(); };
   const d = day.data;
 
@@ -33,7 +36,7 @@ export function Meds() {
     <div className="page">
       <PageHeader title="Medications" subtitle="What you take, when, and how it's going" actions={<>
         <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
-        <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> Add</Button>
+        {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> Add</Button>}
       </>} />
       {day.error && <ErrorNotice message={day.error} onRetry={day.reload} />}
       {!d && day.loading && <Spinner />}
@@ -47,7 +50,7 @@ export function Meds() {
                 <li key={m.id} className="row">
                   <div className="row-icon"><Pill size={18} /></div>
                   <div className="row-main"><div className="row-title">{m.name}{m.dose ? ` · ${m.dose}` : ""}</div><div className="row-sub">As needed{d.extra.filter((e) => e.medicationId === m.id).map((e) => ` · took one at ${clock(e.at)}`).join("")}</div></div>
-                  <Button onClick={async () => { try { await api.logDose({ medicationId: m.id!, at: Date.now(), status: "TAKEN" }); toast(`${m.name} logged`); reload(); } catch (e) { errorToast(e); } }}>Took one</Button>
+                  <Button className="write-only" onClick={async () => { try { await api.logDose({ medicationId: m.id!, at: Date.now(), status: "TAKEN" }); toast(`${m.name} logged`); reload(); } catch (e) { errorToast(e); } }}>Took one</Button>
                 </li>
               ))}
             </ul>
@@ -82,7 +85,7 @@ export function Meds() {
 
       <div className="section-head">
         <h2 className="section-title">Lab results</h2>
-        <Button onClick={() => setAddingLab(true)}><Plus size={18} /> Add a result</Button>
+        {!readOnly && <Button onClick={() => setAddingLab(true)}><Plus size={18} /> Add a result</Button>}
       </div>
       {labs.data && labs.data.length === 0 && <Card><Empty icon={<FlaskConical size={36} />} title="No results yet">Keep blood test results here (hormone levels, iron, thyroid, cholesterol…) to see how they change over time.</Empty></Card>}
       {labs.data && labs.data.length > 0 && (
@@ -152,9 +155,10 @@ function DoseRow({ dose, onChanged }: { dose: DueDose; onChanged: () => void }) 
   );
 }
 
-function MedDialog({ med, onClose, onSaved }: { med?: Medication; onClose: () => void; onSaved: () => void }) {
-  const [m, setM] = useState<Medication>(med ?? { name: "", form: "PILL", schedule: { kind: "DAILY", times: ["09:00"], everyDays: 1, weekdays: [] }, sites: [], reminders: true, active: true });
+export function MedDialog({ med, onClose, onSaved, hormone }: { med?: Medication; onClose: () => void; onSaved: () => void; hormone?: boolean }) {
+  const [m, setM] = useState<Medication>(med ?? { name: "", form: "PILL", schedule: { kind: "DAILY", times: ["09:00"], everyDays: 1, weekdays: [] }, sites: [], reminders: true, active: true, hormone });
   const [busy, setBusy] = useState(false);
+  const hormonesOn = useModules().includes("HORMONES");
   const s = m.schedule;
   const setS = (change: Partial<typeof s>) => setM({ ...m, schedule: { ...s, ...change } });
   const suggested = SITE_SETS[m.form] ?? [];
@@ -208,8 +212,14 @@ function MedDialog({ med, onClose, onSaved }: { med?: Medication; onClose: () =>
       )}
       <div className="two-col">
         <Field label="Doses left" help="Optional: counts down as you take them"><input inputMode="numeric" value={m.stock ?? ""} onChange={(e) => setM({ ...m, stock: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
-        <Toggle label="Remind me" help="On your phone, at each time" checked={m.reminders} onChange={(reminders) => setM({ ...m, reminders })} />
+        <Toggle label="Remind me" help="On your phone, in your browser and on your watch, at each time" checked={m.reminders} onChange={(reminders) => setM({ ...m, reminders })} />
       </div>
+      {hormonesOn && (
+        <div className="two-col">
+          <Toggle label="Part of hormone therapy" help="Shown in Hormone therapy, with its dose history." checked={!!m.hormone} onChange={(hormone) => setM({ ...m, hormone })} />
+          <Field label="Started on" help="Optional"><input type="date" value={m.startedOn ?? ""} max={today()} onChange={(e) => setM({ ...m, startedOn: e.target.value || undefined })} /></Field>
+        </div>
+      )}
       <Field label="Notes"><textarea rows={2} value={m.notes ?? ""} onChange={(e) => setM({ ...m, notes: e.target.value || undefined })} /></Field>
     </Modal>
   );
@@ -240,8 +250,8 @@ function LabCard({ name, results, onChanged }: { name: string; results: LabResul
   );
 }
 
-function LabDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [lab, setLab] = useState({ name: "", value: "", unit: "", date: today(), low: "", high: "", note: "" });
+export function LabDialog({ onClose, onSaved, name = "", unit = "" }: { onClose: () => void; onSaved: () => void; name?: string; unit?: string }) {
+  const [lab, setLab] = useState({ name, value: "", unit, date: today(), low: "", high: "", note: "" });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof lab) => (e: React.ChangeEvent<HTMLInputElement>) => setLab({ ...lab, [k]: e.target.value });
   const n = (v: string) => (v.trim() === "" ? undefined : Number(v.replace(",", ".")));

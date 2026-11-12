@@ -7,6 +7,8 @@ import type { Food as FoodItem, FoodDay, FoodEntry, Meal, Nutrients } from "../l
 import { Meter } from "../components/charts";
 import { Button, Card, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { Macros } from "./Today";
+import { DrinksCard } from "./Drinks";
+import { useReadOnly } from "../lib/viewing";
 
 const MEALS: { id: Meal; label: string }[] = [
   { id: "BREAKFAST", label: "Breakfast" },
@@ -20,6 +22,8 @@ export function Food() {
   const date = params.get("date") ?? today();
   const setDate = (d: string) => setParams(d === today() ? {} : { date: d }, { replace: true });
   const { data, error, loading, reload, setData } = useLoad(() => api.foodDay(date), [date]);
+  const drinks = useLoad(() => api.drinksDay(date).catch(() => undefined), [date]);
+  const readOnly = useReadOnly();
   const [adding, setAdding] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<FoodEntry | null>(null);
 
@@ -37,6 +41,7 @@ export function Food() {
       {data && (
         <div className="grid grid-2" style={{ opacity: loading ? 0.6 : 1 }}>
           <Summary day={data} onChanged={reload} />
+          <DrinksCard className="span-2" day={drinks.data} date={date} readOnly={readOnly} onChanged={() => { drinks.reload(); reload(); }} />
           {MEALS.map((m) => (
             <MealCard
               key={m.id} meal={m} day={data}
