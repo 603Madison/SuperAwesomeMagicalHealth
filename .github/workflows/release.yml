@@ -1,6 +1,6 @@
 name: Release
 
-# Builds the signed APK and publishes it as a GitHub release, with notes from
+# Builds the signed APK and the Pebble watch app and publishes them as a GitHub release, with notes from
 # release-notes/<version>.md, and publishes the server's container image to
 # ghcr.io/<owner>/<repository>. Start it from the Actions tab ("Run workflow") with the version,
 # or push a v* tag. The release's tag is created on the built commit if it doesn't exist yet.
@@ -68,6 +68,7 @@ jobs:
       - name: Tests
         run: |
           (cd web && npm ci --no-audit --no-fund && npm run build)
+          node --test pebble/test/*.test.js
           ./gradlew --no-daemon :android:testDebugUnitTest :server:test
 
       - name: Build the signed APK
@@ -78,6 +79,17 @@ jobs:
           cp android/build/outputs/apk/release/android-release.apk "SuperAwesomeMagicalHealth-$TAG.apk"
           sha256sum SuperAwesomeMagicalHealth-*.apk
 
+      - uses: astral-sh/setup-uv@v6
+      # The watch app carries the same version as everything else (major.minor on the watch).
+      - name: Build the watch app
+        run: |
+          uv tool install pebble-tool==5.2.0 --python 3.13
+          PEBBLE="$(uv tool dir --bin)/pebble"
+          "$PEBBLE" sdk install 4.44
+          (cd pebble && npm pkg set version="${TAG#v}" && "$PEBBLE" build)
+          cp pebble/build/pebble.pbw "SuperAwesomeMagicalHealth-watch-$TAG.pbw"
+          sha256sum SuperAwesomeMagicalHealth-watch-*.pbw
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -85,9 +97,9 @@ jobs:
           git fetch --depth=1 origin "${{ github.sha }}"
           git show "${{ github.sha }}:release-notes/$TAG.md" > notes.md 2>/dev/null || echo "SuperAwesomeMagicalHealth $TAG" > notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" --clobber
+            gh release upload "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" "SuperAwesomeMagicalHealth-watch-$TAG.pbw" --clobber
           else
-            gh release create "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" --target "$COMMIT" --title "SuperAwesomeMagicalHealth $TAG" --notes-file notes.md
+            gh release create "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" "SuperAwesomeMagicalHealth-watch-$TAG.pbw" --target "$COMMIT" --title "SuperAwesomeMagicalHealth $TAG" --notes-file notes.md
           fi
 
   # The server and web app, for amd64 and arm64 (a Raspberry Pi), at

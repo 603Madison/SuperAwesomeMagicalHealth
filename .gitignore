@@ -15,6 +15,10 @@
 # Release signing key: never commit it (see CLAUDE.md).
 /keystore/
 
+# The watch app's build output (pebble build).
+/pebble/build/
+/pebble/.lock-waf*
+
 # The web app's dependencies and build output.
 web/node_modules/
 web/dist/
