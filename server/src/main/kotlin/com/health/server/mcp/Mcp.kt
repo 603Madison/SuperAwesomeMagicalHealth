@@ -614,6 +614,50 @@ class McpServer(private val services: Services) {
             )
             "Checked in for ${saved.date}: ${checkInText(saved)}."
         },
+        *careTools().toTypedArray(),
+    )
+
+    // ---- Hormone therapy, life stages and appointments (care/) ----
+
+    private fun careTools(): List<Tool> = listOf(
+        Tool(
+            "hormones", "Hormone therapy",
+            "Hormone therapy of any kind: the medications marked as hormones, every change to their dose or schedule, " +
+                "lab results against the person's own target ranges (from their clinician), and when labs are next due.",
+            schema(),
+            module = Module.HORMONES,
+        ) { caller, _ -> com.health.server.care.CareText.hormones(services, caller.user) },
+        Tool(
+            "life_stage", "Life stage",
+            "The person's life stage with their cycle (tracking a cycle, trying to conceive, pregnant, after a birth, perimenopause, " +
+                "after menopause), with pregnancy week and due date, movement counts, contractions, feeds, months since the last period, and hot flashes.",
+            schema(daysProperty(30, 365)),
+            module = Module.CYCLE,
+        ) { caller, args -> com.health.server.care.CareText.lifeStage(services, caller.user, args.int("days")?.coerceIn(1, 365) ?: 30) },
+        Tool(
+            "appointments", "Appointments",
+            "Appointments coming up and before: when, with whom, where, the questions the person wants to ask (ticked when asked) and notes afterwards.",
+            schema(daysProperty(90, 730)),
+            module = Module.APPOINTMENTS,
+        ) { caller, args -> com.health.server.care.CareText.appointments(services, caller.user, args.int("days")?.coerceIn(1, 730) ?: 90) },
+        Tool(
+            "log_hot_flash", "Log a hot flash",
+            "Logs a hot flash: when (default now), how strong (1 mild, 2 moderate, 3 strong) and whether it was at night (a night sweat).",
+            schema(
+                "at" to stringProperty("When: an ISO time like 2026-03-20T14:30, or leave out for now (the person's time zone)"),
+                "intensity" to intProperty("1 mild, 2 moderate, 3 strong (default 2)"),
+                "night" to boolProperty("At night (a night sweat)"),
+            ),
+            writes = true,
+            module = Module.CYCLE,
+        ) { caller, args ->
+            val days = services.profiles.days(caller.user.id)
+            val at = args.string("at")?.let { text ->
+                runCatching { java.time.LocalDateTime.parse(text).atZone(days.zone).toInstant().toEpochMilli() }.getOrElse { error("Times look like 2026-03-20T14:30") }
+            } ?: services.clock()
+            val saved = services.lifeStages.saveHotFlash(caller.user.id, com.health.api.HotFlash(at, args.int("intensity") ?: 2, args.bool("night") ?: (days.hourOf(at) !in 7..21)))
+            "Logged a ${listOf("mild", "moderate", "strong")[saved.intensity - 1]} hot flash at ${formatTime(days, saved.at)}${if (saved.night) " (at night)" else ""}."
+        },
     )
 
     // ---- Tools ----
@@ -956,7 +1000,7 @@ class McpServer(private val services: Services) {
         val results = m.screenerResults(user.id, 365)
         if (results.isNotEmpty()) {
             appendLine("Check-ins:")
-            results.take(10).forEach { appendLine("  ${it.date}: ${if (it.screener == Screener.PHQ9) "PHQ-9" else "GAD-7"} ${it.score} (${it.severity})${if (it.flagged) "; answered the self-harm question above \"not at all\"" else ""}") }
+            results.take(10).forEach { appendLine("  ${it.date}: ${when (it.screener) { Screener.PHQ9 -> "PHQ-9"; Screener.GAD7 -> "GAD-7"; Screener.EPDS -> "EPDS (Edinburgh)" }} ${it.score} (${it.severity})${if (it.flagged) "; answered the self-harm question above its lowest answer" else ""}") }
         }
         val sessions = m.sessions(user.id, count)
         if (sessions.isNotEmpty()) appendLine("Calm practice: ${sessions.groupBy { it.kind }.entries.joinToString { (k, v) -> "$k ×${v.size}" }}")

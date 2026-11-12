@@ -178,6 +178,7 @@ class MindService(
             options = FREQUENCY,
             bands = listOf(ScoreBand(0, "Minimal"), ScoreBand(5, "Mild"), ScoreBand(10, "Moderate"), ScoreBand(15, "Moderately severe"), ScoreBand(20, "Severe")),
             source = "Patient Health Questionnaire (PHQ-9), Kroenke, Spitzer & Williams, 2001. Free to use.",
+            flagItem = 8,
         )
 
         val GAD7 = ScreenerDefinition(
@@ -199,19 +200,67 @@ class MindService(
             source = "Generalized Anxiety Disorder 7 (GAD-7), Spitzer, Kroenke, Williams & Löwe, 2006. Free to use.",
         )
 
-        val SCREENERS = listOf(PHQ9, GAD7)
+        /**
+         * The Edinburgh Postnatal Depression Scale, for pregnancy and the year after a birth. Each
+         * question has its own answers; some count in reverse. The last asks about self-harm.
+         */
+        val EPDS = ScreenerDefinition(
+            id = Screener.EPDS,
+            title = "Edinburgh check-in (EPDS)",
+            about = "Ten questions made for pregnancy and the year after a birth. It's not a diagnosis; it's a way to notice how you're doing and talk about it.",
+            question = "In the past 7 days: choose the answer that comes closest to how you have felt, not just how you feel today.",
+            items = listOf(
+                "I have been able to laugh and see the funny side of things",
+                "I have looked forward with enjoyment to things",
+                "I have blamed myself unnecessarily when things went wrong",
+                "I have been anxious or worried for no good reason",
+                "I have felt scared or panicky for no very good reason",
+                "Things have been getting on top of me",
+                "I have been so unhappy that I have had difficulty sleeping",
+                "I have felt sad or miserable",
+                "I have been so unhappy that I have been crying",
+                "The thought of harming myself has occurred to me",
+            ),
+            // Each question's answers are in itemOptions; apps that don't know them can't ask it.
+            options = emptyList(),
+            itemOptions = listOf(
+                listOf("As much as I always could", "Not quite so much now", "Definitely not so much now", "Not at all"),
+                listOf("As much as I ever did", "Rather less than I used to", "Definitely less than I used to", "Hardly at all"),
+                listOf("Yes, most of the time", "Yes, some of the time", "Not very often", "No, never"),
+                listOf("No, not at all", "Hardly ever", "Yes, sometimes", "Yes, very often"),
+                listOf("Yes, quite a lot", "Yes, sometimes", "No, not much", "No, not at all"),
+                listOf("Yes, most of the time I haven't been able to cope at all", "Yes, sometimes I haven't been coping as well as usual", "No, most of the time I have coped quite well", "No, I have been coping as well as ever"),
+                listOf("Yes, most of the time", "Yes, sometimes", "Not very often", "No, not at all"),
+                listOf("Yes, most of the time", "Yes, quite often", "Not very often", "No, not at all"),
+                listOf("Yes, most of the time", "Yes, quite often", "Only occasionally", "No, never"),
+                listOf("Yes, quite often", "Sometimes", "Hardly ever", "Never"),
+            ),
+            itemScores = listOf(UP, UP, DOWN, UP, DOWN, DOWN, DOWN, DOWN, DOWN, DOWN),
+            bands = listOf(ScoreBand(0, "Low"), ScoreBand(10, "Raised"), ScoreBand(13, "High")),
+            source = "Edinburgh Postnatal Depression Scale (EPDS), Cox, Holden & Sagovsky, 1987, British Journal of Psychiatry.",
+            flagItem = 9,
+        )
+
+        val SCREENERS = listOf(PHQ9, GAD7, EPDS)
 
         private val FREQUENCY get() = listOf("Not at all", "Several days", "More than half the days", "Nearly every day")
+        private val UP get() = listOf(0, 1, 2, 3)
+        private val DOWN get() = listOf(3, 2, 1, 0)
 
-        /** Scores a screener's answers: the sum, its band, and (PHQ-9) whether the last question needs support shown. */
+        /**
+         * Scores a screener's answers (each the chosen option, 0–3): the points (from the
+         * definition's itemScores where each question counts its own way), the band, and whether
+         * the self-harm question ([ScreenerDefinition.flagItem]) needs support shown straight away.
+         */
         fun score(result: ScreenerResult): ScreenerResult {
             val definition = SCREENERS.first { it.id == result.screener }
             if (result.answers.size != definition.items.size || result.answers.any { it !in 0..3 }) {
                 throw ApiError.badRequest("Answer each of the ${definition.items.size} questions with 0 to 3")
             }
-            val score = result.answers.sum()
+            val points = result.answers.mapIndexed { i, a -> definition.itemScores?.getOrNull(i)?.getOrNull(a) ?: a }
+            val score = points.sum()
             val band = definition.bands.last { score >= it.from }.label
-            val flagged = result.screener == Screener.PHQ9 && result.answers.last() > 0
+            val flagged = definition.flagItem?.let { points.getOrNull(it)?.let { p -> p > 0 } } ?: false
             return result.copy(score = score, severity = band, flagged = flagged, id = null, date = null)
         }
 

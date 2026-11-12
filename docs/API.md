@@ -100,7 +100,7 @@ from `at`, in the person's time zone.
 |---|---|
 | `GET /api/mind/moods?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `MoodEntry` |
 | `GET /api/mind/journal?days=90` · `POST` · `PUT /{id}` · `DELETE /{id}` | `JournalEntry` |
-| `GET /api/mind/screeners` | `[ScreenerDefinition]`: PHQ-9 and GAD-7, their questions and bands |
+| `GET /api/mind/screeners` | `[ScreenerDefinition]`: PHQ-9, GAD-7 and the EPDS, their questions and bands |
 | `GET /api/mind/screeners/results?days=365` · `POST` · `DELETE /{id}` | `ScreenerResult` (post `screener`, `at`, `answers`; the server scores it) |
 | `GET /api/mind/sessions?days=30` · `POST` · `DELETE /{id}` | `MindfulnessSession` |
 | `GET /api/mind/summary?days=30` | `MindSummary`: daily averages, feelings, patterns, latest screeners |
@@ -195,19 +195,24 @@ Medications are marked with `Medication.hormone`.
 |---|---|
 | `GET /api/cycle/stage` · `PUT` | `LifeStageInfo` |
 | `GET /api/cycle/stage/overview?days=30` | `LifeStageOverview` |
-| `POST /api/cycle/kicks` · `PUT /{id}` · `DELETE /{id}` | `KickSession` |
-| `POST /api/cycle/contractions` · `PUT /{id}` · `DELETE /{id}` | `Contraction` |
-| `POST /api/cycle/feeds` · `PUT /{id}` · `DELETE /{id}` | `Feed` |
-| `POST /api/cycle/hot-flashes` · `DELETE /{id}` | `HotFlash` |
+| `GET /api/cycle/kicks?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `KickSession` |
+| `GET /api/cycle/contractions?days=2` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Contraction` |
+| `GET /api/cycle/feeds?days=7` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Feed` |
+| `GET /api/cycle/hot-flashes?days=30` · `POST` · `DELETE /{id}` | `HotFlash` |
 
-While pregnant or after a birth, Mind offers the EPDS check-in.
+A pregnancy needs `dueDate` or `lastPeriod` (the due date is then 280 days on). While pregnant,
+after a birth or after menopause, `GET /api/cycle` has no prediction (its `caveat` says why); in
+perimenopause the range is wider. While pregnant or after a birth, Mind offers the EPDS check-in:
+its questions each have their own answers (`ScreenerDefinition.itemOptions`), the answers sent are
+the chosen option's index (0–3), and `itemScores` turns them into points (some count in reverse).
+`flagItem` is the self-harm question for PHQ-9 and EPDS.
 
 ### Appointments
 
 | | |
 |---|---|
-| `GET /api/appointments?days=365&upcoming=true` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Appointment` |
-| `GET /api/appointments/{id}/suggestions` | `[SuggestedQuestion]` from what was logged since the last appointment |
+| `GET /api/appointments?days=365&upcoming=true` · `POST` · `GET /{id}` · `PUT /{id}` · `DELETE /{id}` | `Appointment` (without `upcoming`: the last `days` and everything ahead) |
+| `GET /api/appointments/{id}/suggestions` | `[SuggestedQuestion]` from what was logged since the last appointment (or 30 days), by every feature that's on; ones already on the list are left out |
 
 ## Sharing
 
@@ -217,8 +222,11 @@ While pregnant or after a birth, Mind offers the EPDS check-in.
 | `POST /api/shares` · `PUT /{id}` · `DELETE /{id}` | `ShareRequest` / `ShareChange` (the owner, or the viewer leaving) |
 
 A viewer sends `X-SAMH-View: <ownerId>` with GET requests to see the owner's data, limited to the
-shared features (`/api/day` and `/api/trends` leave the rest out). Anything else with the header is
-refused.
+shared features (and to those the owner has on): `/api/day` and `/api/trends` leave the rest out,
+`/api/profile` gives only units, time zone, goals and the features shared, and each feature's own
+endpoints need it shared (`/api/series` and `/api/measurements` by their `metric`). Anything else
+with the header (a change, or `/api/me`, devices, settings, admin, reports, exports) is refused with
+403. Shares go to existing accounts by username, and only for the features picked.
 
 ## Reminders, digest, webhooks and Home Assistant
 

@@ -21,6 +21,9 @@ class ModuleService(
     val meds: MedsService,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : DayExtras {
+    /** Hormone therapy, life stages and appointments, once they exist (care/CareDay). */
+    var care: com.health.server.care.CareDay? = null
+
     override suspend fun today(userId: String, profile: Profile, date: LocalDate): DayExtrasResult {
         val on = profile.modules
         val days = Days(Days.zoneOf(profile.timezone))
@@ -86,7 +89,10 @@ class ModuleService(
             }
         } else null
 
-        return DayExtrasResult(ModulesToday(mindDay, cycleToday, continenceDay, medsDay), insights, phase)
+        var modulesToday = ModulesToday(mindDay, cycleToday, continenceDay, medsDay)
+        // Hormone therapy, life stages and appointments (care/), after the others, since life stages read them.
+        care?.let { modulesToday = it.today(userId, profile, date, modulesToday, insights) }
+        return DayExtrasResult(modulesToday, insights, phase)
     }
 
     override suspend fun trends(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, ModuleTrend> {
@@ -123,6 +129,7 @@ class ModuleService(
                 }
             }
         }
+        care?.hotFlashes(userId, profile, from, to)?.forEach { (date, count) -> out[date] = at(LocalDate.parse(date)).copy(hotFlashes = count) }
         return out
     }
 }

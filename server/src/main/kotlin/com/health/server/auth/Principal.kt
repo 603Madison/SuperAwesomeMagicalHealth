@@ -36,6 +36,8 @@ const val CSRF_HEADER = "X-SAMH"
  * count where [allowUpload] says so (sending data in).
  */
 suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean = false): Principal? {
+    // Someone viewing another account's shared data may only read, and only what can be shared.
+    if (request.header(com.health.server.care.SharedView.HEADER) != null) com.health.server.care.SharedView.check(this)
     attributes.getOrNull(PrincipalKey)?.let { resolved ->
         return resolved.principal?.takeIf { it.session.kind.opensApi(allowUpload) }
     }
@@ -55,8 +57,15 @@ suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean =
 
 private fun SessionKind.opensApi(allowUpload: Boolean) = this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && this == SessionKind.UPLOAD)
 
-suspend fun ApplicationCall.requireUser(services: Services): User =
-    principal(services)?.user ?: throw ApiError.unauthorized()
+/**
+ * The account a request is about: the signed-in person's own, or, with `X-SAMH-View: <ownerId>`,
+ * the owner's, when they share what's asked for with this person (care/Sharing.kt).
+ */
+suspend fun ApplicationCall.requireUser(services: Services): User {
+    val principal = principal(services) ?: throw ApiError.unauthorized()
+    request.header(com.health.server.care.SharedView.HEADER)?.let { owner -> return services.sharing.view(this, principal, owner) }
+    return principal.user
+}
 
 suspend fun ApplicationCall.requireAdmin(services: Services): User =
     requireUser(services).also { if (!it.isAdmin) throw ApiError.forbidden() }

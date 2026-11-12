@@ -82,6 +82,7 @@ data class ModuleTrend(
     val leaks: Int? = null,
     val dosesTaken: Int? = null,
     val dosesDue: Int? = null,
+    val hotFlashes: Int? = null,
 )
 
 /** Days: their numbers, scores and insights, and trends over weeks. */
@@ -360,6 +361,7 @@ class DayService(
                     row.copy(
                         mood = m.mood, anxiety = m.anxiety, mindfulMinutes = m.mindfulMinutes, flow = m.flow, voids = m.voids,
                         nightVoids = m.nightVoids, leaks = m.leaks, dosesTaken = m.dosesTaken, dosesDue = m.dosesDue,
+                        hotFlashes = m.hotFlashes,
                     )
                 } ?: row
             }
