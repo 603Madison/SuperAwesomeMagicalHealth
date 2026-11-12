@@ -172,7 +172,8 @@ object SharedView {
     fun moduleOf(metric: Metric): Module = when (metric) {
         Metric.STEPS, Metric.DISTANCE, Metric.ACTIVE_CALORIES, Metric.FLOORS, Metric.HEART_RATE, Metric.STRESS -> Module.ACTIVITY
         Metric.RESTING_HEART_RATE, Metric.HRV, Metric.SPO2, Metric.RESPIRATORY_RATE, Metric.SKIN_TEMPERATURE, Metric.TEMPERATURE_DEVIATION -> Module.SLEEP
-        Metric.WEIGHT, Metric.BODY_FAT -> Module.BODY
+        Metric.WEIGHT, Metric.BODY_FAT, Metric.WAIST, Metric.HIPS, Metric.CHEST, Metric.BUST, Metric.UNDERBUST, Metric.SHOULDERS,
+        Metric.NECK, Metric.UPPER_ARM, Metric.THIGH, Metric.CALF -> Module.BODY
         Metric.BLOOD_PRESSURE_SYSTOLIC, Metric.BLOOD_PRESSURE_DIASTOLIC, Metric.BLOOD_GLUCOSE -> Module.VITALS
     }
 

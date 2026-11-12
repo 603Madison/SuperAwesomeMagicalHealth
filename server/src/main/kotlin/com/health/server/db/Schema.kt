@@ -295,6 +295,45 @@ object Schema {
             PRIMARY KEY (user_id, week)
         );
         """,
+        // 4: per-person settings (conditions, feature settings, AI consent: sealed), supplies (sealed),
+        // progress photos (files sealed in the data folder), the AI assistant's audit log.
+        """
+        CREATE TABLE user_settings (
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            data TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (user_id, key)
+        );
+        CREATE TABLE supplies (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            data TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX supplies_user ON supplies(user_id);
+        CREATE TABLE photos (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            date TEXT NOT NULL,
+            at INTEGER NOT NULL,
+            file TEXT NOT NULL,
+            thumb TEXT NOT NULL,
+            bytes INTEGER NOT NULL,
+            data TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX photos_user ON photos(user_id, at);
+        CREATE TABLE ai_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            at INTEGER NOT NULL,
+            data TEXT NOT NULL
+        );
+        CREATE INDEX ai_audit_user ON ai_audit(user_id, at);
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

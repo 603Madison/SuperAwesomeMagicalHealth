@@ -37,6 +37,17 @@ enum class Metric(val unit: String, val aggregation: Aggregation, val label: Str
     BLOOD_PRESSURE_SYSTOLIC("mmHg", Aggregation.LATEST, "Systolic blood pressure"),
     BLOOD_PRESSURE_DIASTOLIC("mmHg", Aggregation.LATEST, "Diastolic blood pressure"),
     BLOOD_GLUCOSE("mmol/L", Aggregation.LATEST, "Blood glucose"),
+    // Body measurements, in cm (for transition, and for weight and fitness goals).
+    WAIST("cm", Aggregation.LATEST, "Waist"),
+    HIPS("cm", Aggregation.LATEST, "Hips"),
+    CHEST("cm", Aggregation.LATEST, "Chest"),
+    BUST("cm", Aggregation.LATEST, "Bust"),
+    UNDERBUST("cm", Aggregation.LATEST, "Underbust"),
+    SHOULDERS("cm", Aggregation.LATEST, "Shoulders"),
+    NECK("cm", Aggregation.LATEST, "Neck"),
+    UPPER_ARM("cm", Aggregation.LATEST, "Upper arm"),
+    THIGH("cm", Aggregation.LATEST, "Thigh"),
+    CALF("cm", Aggregation.LATEST, "Calf"),
 }
 
 /** One reading: at [start], or (for sums like steps) over [start]..[end]. */

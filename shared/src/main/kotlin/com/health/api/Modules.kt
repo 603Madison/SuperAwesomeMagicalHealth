@@ -32,6 +32,12 @@ enum class Module(val label: String, val sensitive: Boolean) {
     HORMONES("Hormone therapy", true),
     /** Appointments, with questions to ask and notes afterwards. */
     APPOINTMENTS("Appointments", true),
+    /** Autism and ADHD (shown in Mind): sensory life, overload and burnout, masking, focus, routines, communication cards. */
+    NEURO("Autism & ADHD", true),
+    /** Transition: milestones, changes, voice, hair removal, euphoria and dysphoria (with hormone therapy). */
+    TRANSITION("Transition", true),
+    /** Progress photos: encrypted, never shown to AI, shared only when chosen. */
+    PHOTOS("Progress photos", true),
     ;
 
     companion object {
@@ -210,6 +216,67 @@ data class CycleDay(
     /** Basal body temperature taken on waking, °C. */
     val temperature: Double? = null,
     val note: String? = null,
+    // ---- In as much detail as the person wants (each shows when its field is on: see Fields).
+    /** Products used: each comes off the supply's count when it has one. */
+    val products: List<ProductUse> = emptyList(),
+    val clots: Clots? = null,
+    /** "bright red", "dark red", "brown", "pink"… */
+    val color: String? = null,
+    /** "lower belly", "lower back", "thighs", "pelvis", "rectum", "chest"… */
+    val painAreas: List<String> = emptyList(),
+    /** Symptom to how bad, 1 mild … 3 severe. */
+    val symptomSeverity: Map<String, Int> = emptyMap(),
+    val mood: List<String> = emptyList(),
+    /** 1–5. */
+    val energy: Int? = null,
+    val libido: Int? = null,
+    val sex: SexEntry? = null,
+    val cervix: Cervix? = null,
+    /** An LH test's number, where the reader gives one. */
+    val lh: Double? = null,
+    val pregnancyTest: PregnancyTest? = null,
+    /** "none", "creamy", "watery", "unusual colour", "unusual smell"… */
+    val discharge: String? = null,
+    val tags: List<String> = emptyList(),
+    val details: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class ProductUse(val kind: SupplyKind, val count: Int = 1, val fullness: Fullness? = null, val supplyId: String? = null)
+
+@Serializable
+enum class Clots(val label: String) { NONE("None"), SMALL("Small"), LARGE("Larger than a coin") }
+
+@Serializable
+data class SexEntry(val had: Boolean = true, val protected: Boolean? = null, val note: String? = null)
+
+@Serializable
+data class Cervix(val position: String? = null, val firmness: String? = null, val opening: String? = null)
+
+@Serializable
+enum class PregnancyTest(val label: String) { NEGATIVE("Negative"), FAINT("Faint line"), POSITIVE("Positive") }
+
+/** How cycle tracking works for this person (GET/PUT /api/cycle/settings). */
+@Serializable
+data class CycleSettings(
+    /** The person's own symptoms, offered first. */
+    val symptoms: List<String> = emptyList(),
+    /** Symptoms to leave out of the picker. */
+    val hiddenSymptoms: List<String> = emptyList(),
+    val moods: List<String> = emptyList(),
+    val painAreas: List<String> = emptyList(),
+    val customFields: List<CustomField> = emptyList(),
+    /** Use these instead of the averages. */
+    val cycleLength: Int? = null,
+    val periodLength: Int? = null,
+    /** Days from ovulation to the next period (14 to start). */
+    val lutealLength: Int? = null,
+    /** Reminders: before a period (days), when late (days), and a daily log nudge ("HH:mm"). */
+    val remindBeforePeriod: Int? = 2,
+    val remindLateAfter: Int? = 3,
+    val dailyReminder: String? = null,
+    /** Plain wording without "fertile" or "ovulation", for people not trying to conceive (see Fields.CYCLE_FERTILITY too). */
+    val neutralWording: Boolean = false,
 )
 
 @Serializable
@@ -267,10 +334,36 @@ data class DatedValue(val date: String, val value: Double)
 @Serializable
 enum class ContinenceKind(val label: String) {
     URINATION("Toilet trip"), LEAK("Leak"), BOWEL("Bowel movement"), PAD_CHANGE("Pad change"), PELVIC_FLOOR("Pelvic floor exercise"),
+    /** A bowel accident (leak of stool or wind). */
+    BOWEL_LEAK("Bowel accident"),
+    /** Emptying with a catheter. */
+    CATHETER("Catheter"),
+    /** A night the bed got wet. */
+    BEDWETTING("Wet night"),
 }
 
 @Serializable
-enum class LeakSize(val label: String) { DROPS("A few drops"), SMALL("Small"), MEDIUM("Medium"), LARGE("Large") }
+enum class LeakSize(val label: String) {
+    DROPS("A few drops"), SMALL("Small"), MEDIUM("Medium"), LARGE("Large"),
+    /** The whole bladder or bowel. */
+    FULL("All of it"),
+}
+
+/** How full a pad, brief or other product was. */
+@Serializable
+enum class Fullness(val label: String, val level: Int) {
+    DRY("Dry", 0), DAMP("Damp", 1), WET("Wet", 2), FULL("Full", 3), SOAKED("Soaked", 4), LEAKED("Leaked through", 5),
+}
+
+@Serializable
+enum class Awareness(val label: String) { FELT_IT("Felt it coming"), FELT_DURING("Felt it happening"), NOTICED_AFTER("Noticed afterwards"), DIDNT_NOTICE("Didn't notice") }
+
+@Serializable
+enum class ReachedToilet(val label: String) { YES("Made it"), PARTLY("Partly"), NO("Didn't make it"), NOT_TRYING("Wasn't trying") }
+
+/** What leaked, for accidents. */
+@Serializable
+enum class LeakContents(val label: String) { URINE("Urine"), STOOL("Stool"), WIND("Wind"), BOTH("Urine and stool") }
 
 /** One entry in the bladder and bowel diary. */
 @Serializable
@@ -296,6 +389,181 @@ data class ContinenceEntry(
     val date: String? = null,
     /** Set by the server: whether it was during the night's sleep. */
     val night: Boolean = false,
+    // ---- In as much detail as the person wants (each shows when its field is on: see Fields).
+    val contents: LeakContents? = null,
+    /** "standing up", "walking", "coughing", "asleep", "on the way to the toilet"… */
+    val activity: List<String> = emptyList(),
+    val awareness: Awareness? = null,
+    val reachedToilet: ReachedToilet? = null,
+    /** Seconds between feeling the urge and the leak. */
+    val warningSeconds: Int? = null,
+    /** "home", "work", "out", "in bed", "travelling"… */
+    val location: String? = null,
+    /** The product being worn (a Supply id), and how full it was. */
+    val supplyId: String? = null,
+    val fullness: Fullness? = null,
+    /** Weighed wet, in grams: with the product's dry weight, the amount lost. */
+    val padWeightG: Double? = null,
+    /** Set by the server from the product's dry weight. */
+    val lossG: Double? = null,
+    val changedClothes: Boolean = false,
+    val changedBedding: Boolean = false,
+    val leakedThrough: Boolean = false,
+    /** Skin comfort 0 fine … 3 sore. */
+    val skin: Int? = null,
+    /** "burning", "cloudy", "strong smell", "fever", "more often"… */
+    val utiSigns: List<String> = emptyList(),
+    /** For PAD_CHANGE: how many products (default 1); each comes off the supply's count. */
+    val count: Int? = null,
+    /** The person's own tags and fields (ContinenceSettings.customFields), key to value. */
+    val tags: List<String> = emptyList(),
+    val details: Map<String, String> = emptyMap(),
+)
+
+/** How the bladder and bowel diary works for this person (GET/PUT /api/continence/settings). */
+@Serializable
+data class ContinenceSettings(
+    /** The buttons on the quick-log row, in order. */
+    val quickButtons: List<ContinenceKind> = listOf(ContinenceKind.URINATION, ContinenceKind.LEAK, ContinenceKind.BOWEL, ContinenceKind.PAD_CHANGE),
+    /** The person's own words offered in pickers. */
+    val triggers: List<String> = emptyList(),
+    val activities: List<String> = emptyList(),
+    val locations: List<String> = emptyList(),
+    val customFields: List<CustomField> = emptyList(),
+    /** The product usually worn, preselected when logging. */
+    val defaultSupplyId: String? = null,
+    /** When night begins and ends, if not from recorded sleep. */
+    val nightFrom: String? = null,
+    val nightTo: String? = null,
+    val bladderTraining: BladderTraining = BladderTraining(),
+)
+
+/** Timed trips to the toilet, stretched a little at a time: reminders every [intervalMinutes] while awake. */
+@Serializable
+data class BladderTraining(
+    val enabled: Boolean = false,
+    val intervalMinutes: Int = 60,
+    val from: String = "08:00",
+    val to: String = "21:00",
+    /** Add [stepMinutes] every [stepEveryDays] days, up to [goalMinutes]. */
+    val stepMinutes: Int = 15,
+    val stepEveryDays: Int = 7,
+    val goalMinutes: Int = 180,
+    val startedOn: String? = null,
+)
+
+/** A weekly "how much does it bother you", 0 not at all … 10 a great deal, and how things compare. */
+@Serializable
+data class ContinenceCheckIn(
+    val date: String,
+    val bother: Int,
+    /** "much better" … "much worse", against a month ago. */
+    val compared: Int? = null,
+    /** Things it got in the way of: "sleep", "work", "going out", "exercise", "sex", "travel"… */
+    val impact: List<String> = emptyList(),
+    val note: String? = null,
+    val id: String? = null,
+)
+
+@Serializable
+enum class Verdict(val label: String) {
+    IMPROVING("Getting better"), STEADY("About the same"), WORSENING("Getting worse"), NOT_ENOUGH("Not enough to tell yet"),
+}
+
+/** One number, the earlier stretch against the latest, and whether lower is better. */
+@Serializable
+data class ProgressMetric(val key: String, val label: String, val before: Double?, val after: Double?, val unit: String = "", val lowerIsBetter: Boolean = true, val verdict: Verdict)
+
+@Serializable
+data class ProgressWeek(
+    val weekStart: String,
+    val days: Int,
+    val voidsPerDay: Double? = null,
+    val nightVoidsPerDay: Double? = null,
+    val leaksPerDay: Double? = null,
+    val bowelLeaksPerDay: Double? = null,
+    val urgency: Double? = null,
+    val productsPerDay: Double? = null,
+    val fullness: Double? = null,
+    val lossGPerDay: Double? = null,
+    val bother: Double? = null,
+    val pelvicFloorSets: Int = 0,
+)
+
+/** Whether things are getting better (GET /api/continence/progress?weeks=12): the last weeks against the ones before. */
+@Serializable
+data class ContinenceProgress(
+    val verdict: Verdict,
+    val headline: String,
+    val recentWeeks: Int,
+    val metrics: List<ProgressMetric>,
+    val weeks: List<ProgressWeek>,
+    /** What may have helped or got in the way, in plain words (pelvic floor practice, caffeine, a new medication…). */
+    val notes: List<String> = emptyList(),
+)
+
+// ---------------------------------------------------------------- Supplies (bladder and bowel, periods)
+
+@Serializable
+enum class SupplyCategory(val label: String) { CONTINENCE("Bladder and bowel"), PERIOD("Periods"), OTHER("Other") }
+
+@Serializable
+enum class SupplyKind(val label: String, val category: SupplyCategory) {
+    LINER("Liner", SupplyCategory.CONTINENCE),
+    PAD("Pad", SupplyCategory.CONTINENCE),
+    BOOSTER("Booster pad", SupplyCategory.CONTINENCE),
+    PULL_UP("Pull-up / protective underwear", SupplyCategory.CONTINENCE),
+    BRIEF("Brief / diaper (with tabs)", SupplyCategory.CONTINENCE),
+    BED_PAD("Bed pad", SupplyCategory.CONTINENCE),
+    REUSABLE_UNDERWEAR("Reusable underwear", SupplyCategory.CONTINENCE),
+    CATHETER("Catheter", SupplyCategory.CONTINENCE),
+    WIPES("Wipes", SupplyCategory.OTHER),
+    BARRIER_CREAM("Barrier cream", SupplyCategory.OTHER),
+    PERIOD_PAD("Period pad", SupplyCategory.PERIOD),
+    TAMPON("Tampon", SupplyCategory.PERIOD),
+    CUP("Cup", SupplyCategory.PERIOD),
+    DISC("Disc", SupplyCategory.PERIOD),
+    PERIOD_UNDERWEAR("Period underwear", SupplyCategory.PERIOD),
+    OTHER("Other", SupplyCategory.OTHER),
+}
+
+/** Something kept on hand. Encrypted on the server, like the diary. */
+@Serializable
+data class Supply(
+    val name: String,
+    val kind: SupplyKind,
+    val brand: String? = null,
+    val size: String? = null,
+    /** As the pack says: "Maxi", "Super", "6 drops", "overnight". */
+    val absorbency: String? = null,
+    /** Dry weight in grams, for weighing used ones. */
+    val dryWeightG: Double? = null,
+    val onHand: Int = 0,
+    val perPack: Int? = null,
+    /** Warn when this few are left (default: about a week's use). */
+    val lowAt: Int? = null,
+    /** Reusable things (a cup, reusable underwear) aren't counted down. */
+    val reusable: Boolean = false,
+    val notes: String? = null,
+    val active: Boolean = true,
+    val id: String? = null,
+)
+
+@Serializable
+enum class SupplyReason { USED, RESTOCKED, COUNTED, GAVE_AWAY }
+
+/** A change to what's on hand: used ones come from the diary; restocks and counts by hand. */
+@Serializable
+data class SupplyAdjustment(val at: Long, val delta: Int, val reason: SupplyReason, val note: String? = null, val id: String? = null, val supplyId: String? = null)
+
+@Serializable
+data class SupplyStatus(
+    val supply: Supply,
+    /** Used a day, over the last two weeks. */
+    val perDay: Double? = null,
+    val daysLeft: Int? = null,
+    val low: Boolean = false,
+    val lastRestocked: String? = null,
 )
 
 @Serializable
@@ -444,6 +712,10 @@ data class ModulesToday(
     val lifeStage: LifeStageToday? = null,
     /** In the next seven days. */
     val appointments: List<Appointment>? = null,
+    /** Supplies running low (bladder and bowel, periods). */
+    val lowSupplies: List<SupplyStatus>? = null,
+    val neuro: NeuroToday? = null,
+    val transition: TransitionToday? = null,
 )
 
 @Serializable
