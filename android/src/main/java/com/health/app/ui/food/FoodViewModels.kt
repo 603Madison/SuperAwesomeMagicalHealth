@@ -2,6 +2,9 @@ package com.health.app.ui.food
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.health.api.Drink
+import com.health.api.DrinkKind
+import com.health.api.DrinksDay
 import com.health.api.Food
 import com.health.api.FoodDay
 import com.health.api.FoodEntryChange
@@ -11,6 +14,11 @@ import com.health.api.Meal
 import com.health.api.Nutrients
 import com.health.api.WaterEntry
 import com.health.app.Container
+import com.health.app.net.addDrink
+import com.health.app.net.deleteDrink
+import com.health.app.net.drinksDay
+import com.health.app.net.updateDrink
+import com.health.app.ui.tracking.quickDrink
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +35,8 @@ data class FoodState(
     val day: FoodDay? = null,
     val loading: Boolean = true,
     val error: String? = null,
+    /** The day's coffee, tea, alcohol and the rest (ui/tracking). */
+    val drinks: DrinksDay? = null,
 )
 
 class FoodViewModel(private val c: Container) : ViewModel() {
@@ -47,7 +57,8 @@ class FoodViewModel(private val c: Container) : ViewModel() {
         job = viewModelScope.launch {
             try {
                 val day = c.api.foodDay(date.toString())
-                _state.update { if (it.date == date) it.copy(day = day, loading = false) else it }
+                val drinks = runCatching { c.api.drinksDay(date.toString()) }.getOrNull()
+                _state.update { if (it.date == date) it.copy(day = day, drinks = drinks, loading = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load the day") }
             }
@@ -78,6 +89,17 @@ class FoodViewModel(private val c: Container) : ViewModel() {
     fun addWater(ml: Int) = act("Added $ml ml of water") { c.api.addWater(WaterEntry(_state.value.date.toString(), ml)) }
 
     fun deleteWater(id: String) = act(null) { c.api.deleteWater(id) }
+
+    /** A drink: a quick one now on today, else at noon on the day shown. */
+    private fun drinkTime(): Long = _state.value.let { s ->
+        if (s.date == s.today) System.currentTimeMillis() else s.date.atTime(12, 0).atZone(c.zone()).toInstant().toEpochMilli()
+    }
+
+    fun quickDrink(kind: DrinkKind) = act("${kind.label} logged") { c.api.addDrink(quickDrink(kind, drinkTime())) }
+
+    fun saveDrink(drink: Drink) = act("Saved") { if (drink.id == null) c.api.addDrink(drink) else c.api.updateDrink(drink) }
+
+    fun deleteDrink(id: String) = act(null) { c.api.deleteDrink(id) }
 
     /** Copies yesterday's [meal] (or the whole day) to the day shown. */
     fun copyYesterday(meal: Meal?) = act("Copied from the day before") {

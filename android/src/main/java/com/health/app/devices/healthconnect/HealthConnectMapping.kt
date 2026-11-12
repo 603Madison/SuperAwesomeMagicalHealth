@@ -1,8 +1,11 @@
 package com.health.app.devices.healthconnect
 
+import androidx.health.connect.client.records.BloodGlucoseRecord
+import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import com.health.api.DeviceKind
+import com.health.api.GlucoseContext
 import com.health.api.SleepStage
 import com.health.api.WorkoutType
 
@@ -72,6 +75,21 @@ object HealthConnectMapping {
         ExerciseSessionRecord.EXERCISE_TYPE_CRICKET, ExerciseSessionRecord.EXERCISE_TYPE_HANDBALL,
         ExerciseSessionRecord.EXERCISE_TYPE_FRISBEE_DISC, ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS -> WorkoutType.SPORT
         else -> WorkoutType.OTHER
+    }
+
+    /** Which arm a blood pressure was taken on, where Health Connect says (wrists count as their arm). */
+    fun arm(location: Int): String? = when (location) {
+        BloodPressureRecord.MEASUREMENT_LOCATION_LEFT_UPPER_ARM, BloodPressureRecord.MEASUREMENT_LOCATION_LEFT_WRIST -> "left"
+        BloodPressureRecord.MEASUREMENT_LOCATION_RIGHT_UPPER_ARM, BloodPressureRecord.MEASUREMENT_LOCATION_RIGHT_WRIST -> "right"
+        else -> null
+    }
+
+    /** When a glucose reading was taken, against meals. */
+    fun glucoseContext(relationToMeal: Int): GlucoseContext = when (relationToMeal) {
+        BloodGlucoseRecord.RELATION_TO_MEAL_FASTING -> GlucoseContext.FASTING
+        BloodGlucoseRecord.RELATION_TO_MEAL_BEFORE_MEAL -> GlucoseContext.BEFORE_MEAL
+        BloodGlucoseRecord.RELATION_TO_MEAL_AFTER_MEAL -> GlucoseContext.AFTER_MEAL
+        else -> GlucoseContext.OTHER
     }
 
     /** A Health Connect sleep stage; null for "out of bed" (not part of the night's stages). */

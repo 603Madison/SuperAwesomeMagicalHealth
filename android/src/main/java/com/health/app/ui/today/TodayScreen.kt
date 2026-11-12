@@ -101,6 +101,9 @@ import com.health.app.ui.log.SleepDialog
 import com.health.app.ui.log.WeightDialog
 import com.health.app.ui.log.WorkoutDialog
 import com.health.app.ui.theme.AppTheme
+import com.health.app.ui.tracking.TrackingTodayActions
+import com.health.app.ui.tracking.TrackingTodayCards
+import com.health.api.GlucoseUnit
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -122,6 +125,8 @@ class TodayActions(
     val quickMood: (Int) -> Unit = {},
     val logContinence: (ContinenceKind) -> Unit = {},
     val takeDose: (DueDose, String?) -> Unit = { _, _ -> },
+    /** Blood pressure and glucose, habits, symptoms, drinks (ui/tracking). */
+    val tracking: TrackingTodayActions = TrackingTodayActions(),
 )
 
 @Composable
@@ -151,6 +156,7 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
             quickMood = vm::quickMood,
             logContinence = vm::logContinence,
             takeDose = vm::takeDose,
+            tracking = remember(profile?.vitalsTargets?.glucoseUnit) { TrackingTodayActions.of(c, profile?.vitalsTargets?.glucoseUnit ?: GlucoseUnit.MMOL_L) },
         ),
     )
 }
@@ -202,6 +208,7 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                         if (Module.CONTINENCE in modules) {
                             ContinenceTodayCard(summary.modules.continence, actions.logContinence) { actions.open("continence") }
                         }
+                        TrackingTodayCards(summary, modules, units, zone, actions.tracking, actions.open)
                         if (Module.ACTIVITY in modules) ActivityCard(summary, units)
                         if (Module.SLEEP in modules) SleepCard(summary.sleepSummary, zone) { dialog = Dialog.SLEEP }
                         if (tracking) HeartCard(summary, units, zone)

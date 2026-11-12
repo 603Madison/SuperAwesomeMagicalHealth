@@ -66,7 +66,11 @@ import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.theme.AppTheme
+import com.health.app.ui.tracking.DrinksCard
+import com.health.api.Drink
+import com.health.api.DrinkKind
 import java.time.LocalDate
+import java.time.ZoneId
 
 class FoodActions(
     val go: (LocalDate) -> Unit = {},
@@ -77,6 +81,9 @@ class FoodActions(
     val addWater: (Int) -> Unit = {},
     val deleteWater: (String) -> Unit = {},
     val copyYesterday: (Meal?) -> Unit = {},
+    val quickDrink: (DrinkKind) -> Unit = {},
+    val saveDrink: (Drink) -> Unit = {},
+    val deleteDrink: (String) -> Unit = {},
 )
 
 @Composable
@@ -90,12 +97,14 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
         FoodActions(
             go = vm::go, retry = { vm.load() }, add = onAdd, delete = vm::delete, change = vm::change,
             addWater = vm::addWater, deleteWater = vm::deleteWater, copyYesterday = vm::copyYesterday,
+            quickDrink = { vm.quickDrink(it) }, saveDrink = { vm.saveDrink(it) }, deleteDrink = { vm.deleteDrink(it) },
         ),
+        zone = c.zone(),
     )
 }
 
 @Composable
-fun FoodScreen(state: FoodState, units: Units, actions: FoodActions) {
+fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault()) {
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     val day = state.day
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -115,6 +124,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions) {
                         MealCard(meal, day.entries.filter { it.meal == meal }, onAdd = { actions.add(state.date, meal) }, onEdit = { editing = it }, onCopy = { actions.copyYesterday(meal) })
                     }
                     WaterCard(day, units, actions)
+                    DrinksCard(state.drinks, units, zone, actions.quickDrink, actions.saveDrink, actions.deleteDrink)
                 }
             }
         }

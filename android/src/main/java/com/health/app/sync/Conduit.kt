@@ -35,4 +35,4 @@ fun IngestBatch.chunked(max: Int = MAX_SAMPLES_PER_BATCH): List<IngestBatch> {
     }
 }
 
-val IngestBatch.isEmpty: Boolean get() = samples.isEmpty() && sleep.isEmpty() && workouts.isEmpty()
+val IngestBatch.isEmpty: Boolean get() = samples.isEmpty() && sleep.isEmpty() && workouts.isEmpty() && bloodPressure.isEmpty() && glucose.isEmpty()
