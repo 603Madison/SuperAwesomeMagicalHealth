@@ -31,9 +31,28 @@ data class User(
     val isAdmin: Boolean get() = role == Role.ADMIN
 }
 
-/** A browser, the app, or an upload key (which can only send data in). */
+/**
+ * A browser, the app, an upload key (which can only send data in), or an AI connector link (MCP):
+ * read-only, able to log entries too, or (an admin's) seeing every account.
+ */
 @Serializable
-enum class SessionKind { WEB, APP, UPLOAD }
+enum class SessionKind {
+    WEB, APP, UPLOAD, MCP, MCP_WRITE, MCP_ALL;
+
+    val isConnector: Boolean get() = this == MCP || this == MCP_WRITE || this == MCP_ALL
+}
+
+@Serializable
+data class ConnectorRequest(
+    /** Let the AI log food, water, weight, workouts and check-ins (not only read). */
+    val allowLogging: Boolean = false,
+    /** An admin's link that sees every account (read-only). */
+    val allAccounts: Boolean = false,
+    val name: String = "",
+)
+
+@Serializable
+data class ConnectorLink(val url: String, val token: String)
 
 /** A signed-in browser or app, as shown in the account's list of devices. */
 @Serializable
