@@ -95,13 +95,13 @@ class TrackingTodayActions(
             }
             return TrackingTodayActions(
                 glucoseUnit = glucoseUnit,
-                logBloodPressure ={ bp -> act("Blood pressure saved") { c.api.addBloodPressure(bp) } },
-                logGlucose = { g -> act("Glucose saved") { c.api.addGlucose(g) } },
-                tickHabit = { s, n -> act(if (n >= s.habit.perDay && !s.done) "Nice: ${s.habit.name} done" else null) { c.api.tickHabit(s.habit.id!!, HabitTick(s.date, n.coerceAtLeast(0))) } },
-                logSymptom = { e -> act("${e.symptom.replaceFirstChar { it.uppercase() }} logged") { c.api.addSymptom(e) } },
-                quickDrink = { kind -> act("${kind.label} logged") { c.api.addDrink(quickDrink(kind)) } },
-                saveDrink = { d -> act("Saved") { if (d.id == null) c.api.addDrink(d) else c.api.updateDrink(d) } },
-                deleteDrink = { id -> act(null) { c.api.deleteDrink(id) } },
+                logBloodPressure ={ bp -> act("Blood pressure saved") { c.ui.addBloodPressure(bp) } },
+                logGlucose = { g -> act("Glucose saved") { c.ui.addGlucose(g) } },
+                tickHabit = { s, n -> act(if (n >= s.habit.perDay && !s.done) "Nice: ${s.habit.name} done" else null) { c.ui.tickHabit(s.habit.id!!, HabitTick(s.date, n.coerceAtLeast(0))) } },
+                logSymptom = { e -> act("${e.symptom.replaceFirstChar { it.uppercase() }} logged") { c.ui.addSymptom(e) } },
+                quickDrink = { kind -> act("${kind.label} logged") { c.ui.addDrink(quickDrink(kind)) } },
+                saveDrink = { d -> act("Saved") { if (d.id == null) c.ui.addDrink(d) else c.ui.updateDrink(d) } },
+                deleteDrink = { id -> act(null) { c.ui.deleteDrink(id) } },
             )
         }
     }

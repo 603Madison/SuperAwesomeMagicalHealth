@@ -37,8 +37,23 @@ import com.health.api.JournalKind
 import com.health.api.Meal
 import com.health.api.Module
 import com.health.api.Screener
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
+import com.health.app.ui.care.AppointmentEditorRoute
+import com.health.app.ui.care.AppointmentsRoute
+import com.health.app.ui.care.DigestRoute
+import com.health.app.ui.care.HormonesRoute
+import com.health.app.ui.care.IntegrationsRoute
+import com.health.app.ui.care.LocalReadOnly
+import com.health.app.ui.care.RemindersRoute
+import com.health.app.ui.care.ReportsRoute
+import com.health.app.ui.care.SharingRoute
+import com.health.app.ui.care.ViewingBanner
+import com.health.app.ui.care.WatchRoute
 import com.health.app.ui.components.Backdrop
 import com.health.app.ui.components.appContainer
+import kotlinx.coroutines.launch
 import com.health.app.ui.devices.DevicesRoute
 import com.health.app.ui.devices.RingPairRoute
 import com.health.app.ui.food.AddFoodRoute
@@ -99,26 +114,50 @@ fun mealNow(time: LocalTime = LocalTime.now()): Meal = when (time.hour) {
 }
 
 @Composable
-fun MainScaffold() {
+fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
     val c = appContainer()
     val nav = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { c.messages.collect { snackbar.showSnackbar(it) } }
     val profile by c.profile.collectAsState()
-    val tabs = tabsFor(profile?.modules ?: Module.DEFAULT)
+    // Viewing someone's share: their shared features, read-only, with a way back.
+    val viewing by c.viewing.collectAsState()
+    val viewProfile by c.viewProfile.collectAsState()
+    val modules = if (viewing != null) viewProfile?.modules ?: viewing?.modules.orEmpty() else profile?.modules ?: Module.DEFAULT
+    val tabs = tabsFor(modules)
     val entry by nav.currentBackStackEntryAsState()
-    AppFrame(
-        selected = tabOf(entry?.destination?.route, tabs),
-        snackbar = snackbar,
-        tabs = tabs,
-        onTab = { tab ->
-            nav.navigate(tab) {
-                popUpTo("today") { saveState = true }
-                launchSingleTop = true
-                restoreState = true
+    val scope = rememberCoroutineScope()
+    // A notification asked for a page.
+    LaunchedEffect(open) {
+        if (open != null) {
+            runCatching { nav.navigate(open) { launchSingleTop = true } }
+            onOpened()
+        }
+    }
+    CompositionLocalProvider(LocalReadOnly provides (viewing != null)) {
+        AppFrame(
+            selected = tabOf(entry?.destination?.route, tabs),
+            snackbar = snackbar,
+            tabs = tabs,
+            onTab = { tab ->
+                nav.navigate(tab) {
+                    popUpTo("today") { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                viewing?.let { share ->
+                    ViewingBanner(share.ownerName, onBack = {
+                        scope.launch { c.view(null) }
+                        nav.navigate("today") { popUpTo("today") { inclusive = true } }
+                    })
+                }
+                Box(Modifier.weight(1f)) { Routes(nav, showDevicesInHub = tabs.none { it.route == "devices" }) }
             }
-        },
-    ) { Routes(nav, showDevicesInHub = tabs.none { it.route == "devices" }) }
+        }
+    }
 }
 
 /** The app around its pages: the aurora backdrop, the tabs along the bottom, and the snackbar. */
@@ -176,7 +215,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         composable("trends") { TrendsRoute() }
         composable("devices") { DevicesRoute(onFindRing = { nav.navigate("devices/ring") }, onFindMonitor = { nav.navigate("devices/monitor") }) }
         composable("devices/ring") { RingPairRoute(onDone = { nav.popBackStack() }) }
-        composable("settings") { SettingsRoute() }
+        composable("settings") { SettingsRoute(onOpen = ::open) }
 
         composable("health") {
             HubRoute(
@@ -244,5 +283,21 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         composable("symptoms") { SymptomsRoute() }
         composable("habits") { HabitsRoute() }
         composable("devices/monitor") { MonitorPairRoute(onDone = { nav.popBackStack() }) }
+        // Hormone therapy, appointments, and Settings' pages for reminders, the digest, sharing,
+        // reports, the watch and integrations.
+        composable("hormones") { HormonesRoute(onEditMedication = { id -> nav.navigate("meds/edit" + (id?.let { "?id=$it" } ?: "")) }) }
+        composable("appointments") { AppointmentsRoute(onOpen = { id -> nav.navigate("appointments/edit" + (id?.let { "?id=$it" } ?: "")) }) }
+        composable(
+            "appointments/edit?id={id}",
+            arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { back -> AppointmentEditorRoute(back.arguments?.getString("id"), onDone = { nav.popBackStack() }) }
+        composable("settings/reminders") { RemindersRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/sharing") {
+            SharingRoute(onBack = { nav.popBackStack() }, onViewing = { nav.navigate("today") { popUpTo("today") { inclusive = true } } })
+        }
+        composable("settings/watch") { WatchRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/integrations") { IntegrationsRoute(onBack = { nav.popBackStack() }) }
+        composable("digest") { DigestRoute(onBack = { nav.popBackStack() }) }
+        composable("reports") { ReportsRoute(onBack = { nav.popBackStack() }) }
     }
 }

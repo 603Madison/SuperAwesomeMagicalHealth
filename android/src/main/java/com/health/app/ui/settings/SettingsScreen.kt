@@ -73,7 +73,7 @@ class SettingsActions(
 )
 
 @Composable
-fun SettingsRoute() {
+fun SettingsRoute(onOpen: (String) -> Unit = {}) {
     val c = appContainer()
     val scope = rememberCoroutineScope()
     val settings by c.settings.collectAsState()
@@ -85,6 +85,7 @@ fun SettingsRoute() {
             updateSettings = { t -> scope.launch { c.prefs.update(t) } },
             signOut = { scope.launch { c.signOut() } },
         ),
+        onOpen = onOpen,
     )
 }
 
@@ -92,7 +93,7 @@ fun SettingsRoute() {
 private enum class Edit { BIRTH_YEAR, HEIGHT, ENERGY, STEPS, ACTIVE, SLEEP, CALORIES, PROTEIN, WATER, WORKOUTS, TARGET_WEIGHT, WEEKLY }
 
 @Composable
-fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActions) {
+fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActions, onOpen: (String) -> Unit = {}) {
     var editing by remember { mutableStateOf<Edit?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
     val units = profile?.units ?: settings.units
@@ -147,6 +148,8 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
                     ValueRow("Weight change", weeklyLabel(g.weeklyChangeKg, units), onClick = { editing = Edit.WEEKLY })
                 }
             }
+            // Reminders, the digest, sharing, reports, the watch and integrations.
+            com.health.app.ui.care.MoreSettings(onOpen)
             SectionCard("Appearance") {
                 Text("Theme", style = MaterialTheme.typography.bodyLarge)
                 val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

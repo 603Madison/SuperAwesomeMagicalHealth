@@ -153,7 +153,7 @@ fun MedsRoute(onEdit: (String?) -> Unit) {
 fun MedsScreen(state: MedsState, zone: ZoneId, actions: MedsActions, canNotify: Boolean = true, canBeExact: Boolean = true) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Medications", "Doses, reminders and results") {
-            TextButton(onClick = { actions.edit(null) }) {
+            if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = { actions.edit(null) }) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Add")
@@ -263,7 +263,7 @@ fun DoseList(day: MedsDay, zone: ZoneId, actions: MedsActions, compact: Boolean 
                     )
                     if (log == null && due.nextSite != null) Hint("Next site: ${due.nextSite}")
                 }
-                if (due.log == null) {
+                if (due.log == null && !com.health.app.ui.care.LocalReadOnly.current) {
                     if (!compact) TextButton(onClick = { actions.skip(due) }) { Text("Skip") }
                     FilledTonalButton(onClick = { if (needsSite(due)) picking = due else actions.take(due, null) }) { Text("Take") }
                 }

@@ -106,8 +106,8 @@ class TrendsViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.trends == null, error = null) }
         viewModelScope.launch {
             try {
-                val trends = c.api.trends(days)
-                val weights = runCatching { c.api.measurements(Metric.WEIGHT, maxOf(days, 90)) }.getOrDefault(emptyList())
+                val trends = c.ui.trends(days)
+                val weights = runCatching { c.ui.measurements(Metric.WEIGHT, maxOf(days, 90)) }.getOrDefault(emptyList())
                 _state.update { if (it.days == days) it.copy(trends = trends, weights = weights, loading = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your trends") }
@@ -116,13 +116,13 @@ class TrendsViewModel(private val c: Container) : ViewModel() {
     }
 
     fun logWeight(kg: Double) = viewModelScope.launch {
-        runCatching { c.api.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, System.currentTimeMillis())) }
+        runCatching { c.ui.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, System.currentTimeMillis())) }
             .onSuccess { c.tell("Weight saved"); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun deleteWeight(id: Long) = viewModelScope.launch {
-        runCatching { c.api.deleteMeasurement(id) }
+        runCatching { c.ui.deleteMeasurement(id) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't delete that") }
     }
@@ -145,7 +145,7 @@ fun TrendsRoute() {
     TrendsScreen(
         state, settings.units, profile?.goals ?: Goals(), c.zone(),
         TrendsActions(vm::range, { vm.load() }, { vm.logWeight(it) }, { vm.deleteWeight(it) }),
-        modules = profile?.modules ?: Module.DEFAULT,
+        modules = com.health.app.ui.care.shownModules(),
         vitalsTargets = profile?.vitalsTargets ?: VitalsTargets(),
     )
 }

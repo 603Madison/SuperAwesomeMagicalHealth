@@ -116,12 +116,23 @@ fun MedEditorRoute(id: String?, onDone: () -> Unit) {
             onDone()
         },
         onDelete = { vm.delete(it); onDone() },
+        hormones = com.health.api.Module.HORMONES in c.modules(),
     )
 }
 
 @Composable
-fun MedEditorScreen(existing: Medication?, onBack: () -> Unit, onSave: (Medication) -> Unit, onDelete: (String) -> Unit) {
+fun MedEditorScreen(
+    existing: Medication?,
+    onBack: () -> Unit,
+    onSave: (Medication) -> Unit,
+    onDelete: (String) -> Unit,
+    hormones: Boolean = false,
+) {
     val start = existing ?: Medication("")
+    // Hormone therapy: whether it's part of it, and since when.
+    var hormone by remember { mutableStateOf(start.hormone) }
+    var startedOn by remember { mutableStateOf(start.startedOn) }
+    var pickingStarted by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(start.name) }
     var dose by remember { mutableStateOf(start.dose.orEmpty()) }
     var form by remember { mutableStateOf(start.form) }
@@ -152,6 +163,7 @@ fun MedEditorScreen(existing: Medication?, onBack: () -> Unit, onSave: (Medicati
         purpose = purpose.trim().ifBlank { null }, notes = notes.trim().ifBlank { null },
         sites = sites.toList(), reminders = reminders && kind != ScheduleKind.AS_NEEDED, active = active,
         stock = stock.trim().toIntOrNull()?.coerceAtLeast(0),
+        hormone = hormone, startedOn = startedOn,
     )
     val valid = name.isNotBlank() && (kind != ScheduleKind.WEEKLY || weekdays.isNotEmpty()) &&
         (kind != ScheduleKind.EVERY_N_DAYS || every.toIntOrNull() != null)
@@ -235,6 +247,21 @@ fun MedEditorScreen(existing: Medication?, onBack: () -> Unit, onSave: (Medicati
                 }
             }
 
+            if (hormones || hormone) {
+                InfoCard("Hormone therapy") {
+                    LabeledSwitch(
+                        "Part of hormone therapy", hormone, { hormone = it },
+                        subtitle = "Shown there, with every change to its dose noted",
+                    )
+                    Row(Modifier.padding(top = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        OutlinedButton(onClick = { pickingStarted = true }) {
+                            Text(startedOn?.let { "Started ${com.health.app.ui.care.CareFormat.date(it) ?: it}" } ?: "When did you start it?")
+                        }
+                        if (startedOn != null) TextButton(onClick = { startedOn = null }) { Text("Clear") }
+                    }
+                }
+            }
+
             InfoCard("Reminders and stock") {
                 if (kind != ScheduleKind.AS_NEEDED) {
                     LabeledSwitch("Remind me", reminders, { reminders = it }, subtitle = "A notification at each time, with Taken and Snooze")
@@ -297,6 +324,11 @@ fun MedEditorScreen(existing: Medication?, onBack: () -> Unit, onSave: (Medicati
             },
             dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("Cancel") } },
         ) { DatePicker(picker) }
+    }
+
+    if (pickingStarted) {
+        val initial = startedOn?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+        com.health.app.ui.care.DatePickDialog(initial, { pickingStarted = false }) { startedOn = it.toString(); pickingStarted = false }
     }
 
     if (confirmDelete && existing?.id != null) {

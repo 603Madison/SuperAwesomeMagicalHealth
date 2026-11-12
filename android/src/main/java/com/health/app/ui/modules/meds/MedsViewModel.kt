@@ -46,9 +46,9 @@ class MedsViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.day == null, error = null, date = date) }
         viewModelScope.launch {
             try {
-                val day = async { c.api.medsDay(date.toString()) }
-                val meds = async { c.api.medications(all = true) }
-                val labs = async { c.api.labs() }
+                val day = async { c.ui.medsDay(date.toString()) }
+                val meds = async { c.ui.medications(all = true) }
+                val labs = async { c.ui.labs() }
                 val loaded = day.await()
                 c.medsCache.saveSites(loaded)
                 _state.update { it.copy(day = loaded, meds = meds.await(), labs = labs.await().sortedByDescending { l -> l.at }, loading = false) }
@@ -72,24 +72,24 @@ class MedsViewModel(private val c: Container) : ViewModel() {
     }
 
     fun take(due: DueDose, site: String?) = act("${due.name} taken") {
-        c.api.logDose(DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site))
+        c.ui.logDose(DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site))
     }
 
     fun skip(due: DueDose) = act("Skipped") {
-        c.api.logDose(DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.SKIPPED, scheduledFor = due.scheduledFor))
+        c.ui.logDose(DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.SKIPPED, scheduledFor = due.scheduledFor))
     }
 
-    fun tookOne(med: Medication) = act("${med.name} noted") { c.api.logDose(DoseLog(med.id!!, System.currentTimeMillis())) }
+    fun tookOne(med: Medication) = act("${med.name} noted") { c.ui.logDose(DoseLog(med.id!!, System.currentTimeMillis())) }
 
-    fun undo(log: DoseLog) = act(null) { log.id?.let { c.api.deleteDose(it) } }
+    fun undo(log: DoseLog) = act(null) { log.id?.let { c.ui.deleteDose(it) } }
 
     fun save(med: Medication) = act("Saved", after = { c.refreshReminders() }) {
-        if (med.id == null) c.api.addMedication(med) else c.api.updateMedication(med)
+        if (med.id == null) c.ui.addMedication(med) else c.ui.updateMedication(med)
     }
 
-    fun delete(id: String) = act("Medication removed", after = { c.refreshReminders() }) { c.api.deleteMedication(id) }
+    fun delete(id: String) = act("Medication removed", after = { c.refreshReminders() }) { c.ui.deleteMedication(id) }
 
-    fun addLab(lab: LabResult) = act("Result saved") { c.api.addLab(lab) }
+    fun addLab(lab: LabResult) = act("Result saved") { c.ui.addLab(lab) }
 
-    fun deleteLab(id: String) = act(null) { c.api.deleteLab(id) }
+    fun deleteLab(id: String) = act(null) { c.ui.deleteLab(id) }
 }

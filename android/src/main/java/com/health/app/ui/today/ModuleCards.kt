@@ -74,11 +74,13 @@ fun MindTodayCard(mind: MindDay?, onMood: (Int) -> Unit, onOpen: () -> Unit) {
                     Modifier.padding(top = 4.dp),
                 )
             }
+            if (com.health.app.ui.care.LocalReadOnly.current) return@InfoCard
             Spacer(Modifier.height(10.dp))
             Hint("How about now?")
         } else {
-            Hint("How are you feeling?")
+            Hint(if (com.health.app.ui.care.LocalReadOnly.current) "No mood logged yet today." else "How are you feeling?")
         }
+        if (com.health.app.ui.care.LocalReadOnly.current) return@InfoCard
         Spacer(Modifier.height(8.dp))
         FaceScale(null, { it?.let(onMood) }, size = 48.dp, labels = false)
     }
@@ -98,7 +100,7 @@ fun CycleTodayCard(cycle: CycleToday?, onLog: () -> Unit, onOpen: () -> Unit) {
                     if (parts.isNotEmpty()) Hint("Today: ${parts.joinToString(" · ")}", Modifier.padding(top = 4.dp))
                 }
             }
-            FilledTonalButton(onClick = onLog) { Text(if (cycle?.logged != null) "Edit today" else "Log today") }
+            if (!com.health.app.ui.care.LocalReadOnly.current) FilledTonalButton(onClick = onLog) { Text(if (cycle?.logged != null) "Edit today" else "Log today") }
         }
     }
 }
@@ -113,8 +115,10 @@ fun ContinenceTodayCard(day: ContinenceDay?, onLog: (ContinenceKind) -> Unit, on
             Stat("$leaks", if (leaks == 1) "leak" else "leaks", Modifier.weight(1f), color = if (leaks > 0) AppTheme.status.warn else MaterialTheme.colorScheme.onSurface)
             Stat("${day?.nightVoids ?: 0}", "at night", Modifier.weight(1f))
         }
-        Spacer(Modifier.height(12.dp))
-        QuickButtons(onLog)
+        if (!com.health.app.ui.care.LocalReadOnly.current) {
+            Spacer(Modifier.height(12.dp))
+            QuickButtons(onLog)
+        }
     }
 }
 
@@ -133,6 +137,16 @@ fun MedsTodayCard(meds: MedsDay?, zone: ZoneId, onTake: (DueDose, String?) -> Un
     ) {
         if (meds == null || due.isEmpty()) {
             Hint(if (meds?.asNeeded?.isNotEmpty() == true) "Nothing scheduled today." else "Add your medications for reminders and a one-tap checklist.")
+        } else if (com.health.app.ui.care.LocalReadOnly.current) {
+            // Someone viewing a share sees what's taken, without the buttons.
+            due.forEach { d ->
+                Text(
+                    "${d.name} · ${com.health.app.ui.Format.timeOfDay(d.scheduledFor, zone)} · " +
+                        when (d.log?.status) { com.health.api.DoseStatus.TAKEN -> "taken"; com.health.api.DoseStatus.SKIPPED -> "skipped"; null -> "not yet" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
         } else {
             DoseList(meds, zone, MedsActions(take = onTake), compact = true)
         }

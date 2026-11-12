@@ -119,9 +119,9 @@ class SymptomsViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.summary == null, error = null) }
         viewModelScope.launch {
             try {
-                val entries = async { c.api.symptoms(30) }
-                val migraines = async { c.api.migraines(90) }
-                val summary = async { c.api.symptomsSummary(90) }
+                val entries = async { c.ui.symptoms(30) }
+                val migraines = async { c.ui.migraines(90) }
+                val summary = async { c.ui.symptomsSummary(90) }
                 _state.update { it.copy(entries = entries.await(), migraines = migraines.await(), summary = summary.await(), loading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your symptoms") }
@@ -136,22 +136,22 @@ class SymptomsViewModel(private val c: Container) : ViewModel() {
     }
 
     fun save(entry: SymptomEntry) = act("${entry.symptom.replaceFirstChar { it.uppercase() }} logged") {
-        if (entry.id == null) c.api.addSymptom(entry) else c.api.updateSymptom(entry)
+        if (entry.id == null) c.ui.addSymptom(entry) else c.ui.updateSymptom(entry)
     }
 
-    fun delete(id: String) = act(null) { c.api.deleteSymptom(id) }
+    fun delete(id: String) = act(null) { c.ui.deleteSymptom(id) }
 
     fun saveMigraine(m: Migraine) = act(if (m.id == null) "Migraine noted; take care" else if (m.end != null) "Glad it's over" else null) {
-        if (m.id == null) c.api.addMigraine(m) else c.api.updateMigraine(m)
+        if (m.id == null) c.ui.addMigraine(m) else c.ui.updateMigraine(m)
     }
 
-    fun deleteMigraine(id: String) = act(null) { c.api.deleteMigraine(id) }
+    fun deleteMigraine(id: String) = act(null) { c.ui.deleteMigraine(id) }
 
     fun search(query: String) {
         if (query.isBlank()) return
         _state.update { it.copy(searching = true) }
         viewModelScope.launch {
-            val found = runCatching { c.api.places(query) }.getOrElse { c.tell(it.message ?: "Couldn't look that up"); emptyList() }
+            val found = runCatching { c.ui.places(query) }.getOrElse { c.tell(it.message ?: "Couldn't look that up"); emptyList() }
             _state.update { it.copy(places = found, searching = false) }
         }
     }

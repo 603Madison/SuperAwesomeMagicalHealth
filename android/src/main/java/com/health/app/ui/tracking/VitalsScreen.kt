@@ -110,7 +110,7 @@ class VitalsViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.summary == null, error = null) }
         viewModelScope.launch {
             try {
-                val summary = c.api.vitalsSummary(days)
+                val summary = c.ui.vitalsSummary(days)
                 _state.update { if (it.days == days) it.copy(summary = summary, loading = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your readings") }
@@ -124,13 +124,13 @@ class VitalsViewModel(private val c: Container) : ViewModel() {
             .onFailure { c.tell(it.message ?: "That didn't work") }
     }
 
-    fun addBloodPressure(bp: BloodPressure) = act("Blood pressure saved") { c.api.addBloodPressure(bp) }
+    fun addBloodPressure(bp: BloodPressure) = act("Blood pressure saved") { c.ui.addBloodPressure(bp) }
 
-    fun addGlucose(g: GlucoseReading) = act("Glucose saved") { c.api.addGlucose(g) }
+    fun addGlucose(g: GlucoseReading) = act("Glucose saved") { c.ui.addGlucose(g) }
 
-    fun deleteBloodPressure(id: String) = act(null) { c.api.deleteBloodPressure(id) }
+    fun deleteBloodPressure(id: String) = act(null) { c.ui.deleteBloodPressure(id) }
 
-    fun deleteGlucose(id: String) = act(null) { c.api.deleteGlucose(id) }
+    fun deleteGlucose(id: String) = act(null) { c.ui.deleteGlucose(id) }
 
     fun saveTargets(targets: VitalsTargets) = act("Targets saved") {
         val profile = c.profile.value ?: c.loadProfile() ?: return@act

@@ -100,7 +100,7 @@ class HabitsViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.statuses.isEmpty(), error = null) }
         viewModelScope.launch {
             try {
-                val statuses = c.api.habitsToday()
+                val statuses = c.ui.habitsToday()
                 _state.update { it.copy(statuses = statuses, loading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your habits") }
@@ -115,14 +115,14 @@ class HabitsViewModel(private val c: Container) : ViewModel() {
     }
 
     fun tick(status: HabitStatus, count: Int) = act(if (count >= status.habit.perDay && !status.done) "Nice: ${status.habit.name} done" else null) {
-        c.api.tickHabit(status.habit.id!!, HabitTick(status.date, count.coerceAtLeast(0)))
+        c.ui.tickHabit(status.habit.id!!, HabitTick(status.date, count.coerceAtLeast(0)))
     }
 
     fun save(habit: Habit) = act(if (habit.id == null) "Habit added" else "Saved") {
-        if (habit.id == null) c.api.addHabit(habit) else c.api.updateHabit(habit)
+        if (habit.id == null) c.ui.addHabit(habit) else c.ui.updateHabit(habit)
     }
 
-    fun delete(id: String) = act("Habit removed") { c.api.deleteHabit(id) }
+    fun delete(id: String) = act("Habit removed") { c.ui.deleteHabit(id) }
 }
 
 class HabitsActions(

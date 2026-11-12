@@ -124,7 +124,7 @@ class CycleViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.overview == null, error = null, today = LocalDate.now(c.zone())) }
         viewModelScope.launch {
             try {
-                val overview = c.api.cycle(12)
+                val overview = c.ui.cycle(12)
                 _state.update { it.copy(overview = overview, loading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your cycle") }
@@ -135,13 +135,13 @@ class CycleViewModel(private val c: Container) : ViewModel() {
     fun month(month: YearMonth) = _state.update { it.copy(month = month) }
 
     fun save(day: CycleDay) = viewModelScope.launch {
-        runCatching { c.api.saveCycleDay(day) }
+        runCatching { c.ui.saveCycleDay(day) }
             .onSuccess { c.tell("Saved"); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun clear(date: LocalDate) = viewModelScope.launch {
-        runCatching { c.api.deleteCycleDay(date.toString()) }
+        runCatching { c.ui.deleteCycleDay(date.toString()) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't clear that day") }
     }
@@ -160,11 +160,32 @@ fun CycleRoute(logDate: LocalDate? = null) {
     val vm = viewModel { CycleViewModel(c) }
     val state by vm.state.collectAsState()
     val settings by c.settings.collectAsState()
-    CycleScreen(state, settings.units, CycleActions(vm::month, { vm.save(it) }, { vm.clear(it) }, { vm.load() }), openDay = logDate)
+    // Life stages (pregnancy, after a birth, perimenopause and after) live alongside the cycle.
+    val stages = viewModel { com.health.app.ui.care.LifeStageViewModel(c) }
+    val stage by stages.state.collectAsState()
+    CycleScreen(
+        state, settings.units, CycleActions(vm::month, { vm.save(it) }, { vm.clear(it) }, { vm.load() }), openDay = logDate,
+        lifeStage = {
+            com.health.app.ui.care.LifeStageSection(
+                stage, c.zone(),
+                com.health.app.ui.care.LifeStageActions(
+                    saveInfo = { stages.saveInfo(it) }, startKicks = stages::startKicks, kick = stages::kick, finishKicks = stages::finishKicks,
+                    cancelKicks = stages::cancelKicks, toggleContraction = stages::toggleContraction, startFeed = { stages.startFeed(it) },
+                    stopFeed = stages::stopFeed, hotFlash = { stages.hotFlash(it) },
+                ),
+            )
+        },
+    )
 }
 
 @Composable
-fun CycleScreen(state: CycleState, units: Units, actions: CycleActions, openDay: LocalDate? = null) {
+fun CycleScreen(
+    state: CycleState,
+    units: Units,
+    actions: CycleActions,
+    openDay: LocalDate? = null,
+    lifeStage: @Composable () -> Unit = {},
+) {
     var editing by remember { mutableStateOf<LocalDate?>(null) }
     LaunchedEffect(openDay, state.overview != null) { if (openDay != null && state.overview != null) editing = openDay }
     val overview = state.overview
@@ -175,8 +196,11 @@ fun CycleScreen(state: CycleState, units: Units, actions: CycleActions, openDay:
                 state.loading && overview == null -> Loading()
                 state.error != null && overview == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
                 overview != null -> {
-                    TodayCard(overview, onLog = { editing = state.today })
-                    CalendarCard(state, overview, actions.month) { editing = it }
+                    // Someone viewing a share looks at the calendar but doesn't open days to change them.
+                    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+                    TodayCard(overview, onLog = { if (!readOnly) editing = state.today })
+                    lifeStage()
+                    CalendarCard(state, overview, actions.month) { if (!readOnly) editing = it }
                     AveragesCard(overview)
                     if (overview.temperatures.size >= 3) TemperatureCard(overview, units)
                     if (overview.cycles.isNotEmpty()) CyclesCard(overview)
@@ -222,7 +246,7 @@ private fun TodayCard(overview: CycleOverview, onLog: () -> Unit) {
                 }
                 if (overview.cycleDay == null) Hint("Log your next period and the calendar fills in from there.")
             }
-            FilledTonalButton(onClick = onLog) { Text("Log today") }
+            if (!com.health.app.ui.care.LocalReadOnly.current) FilledTonalButton(onClick = onLog) { Text("Log today") }
         }
     }
 }

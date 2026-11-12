@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.health.api.MedForm
+import com.health.api.Module
 import com.health.app.MainActivity
 import com.health.app.R
 import java.time.Instant
@@ -20,11 +21,18 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Medication reminders: one alarm for the next moment a dose is due (exact where Android allows
- * it, else within ten minutes), a notification for each dose due then with Taken and Snooze, and
- * the next alarm set when one goes off. Works from [MedsCache], so it needs no network.
+ * Reminders: one alarm for the next moment anything is due (exact where Android allows it, else
+ * within ten minutes), a notification for each reminder due then, and the next alarm set when one
+ * goes off. Doses come with Taken and Snooze, and again while they aren't marked; refills, habits
+ * and appointments have their own channels. On a locked screen, names only show when the person
+ * says so. Works from [MedsCache] and [ReminderCache], so it needs no network.
  */
-class Reminders(private val context: Context, private val cache: MedsCache, private val zone: () -> ZoneId) {
+class Reminders(
+    private val context: Context,
+    private val cache: MedsCache,
+    private val zone: () -> ZoneId,
+    private val extra: ReminderCache? = null,
+) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
     /** Whether reminders can go off at the minute (Android 12 and later ask the person first). */
@@ -34,11 +42,24 @@ class Reminders(private val context: Context, private val cache: MedsCache, priv
     fun canNotify(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    /** Sets the alarm for the next dose due, replacing any set before. */
+    /** What reminders are planned from, as kept on the phone. */
+    fun inputs(): ReminderInputs {
+        val meds = cache.medications()
+        return ReminderInputs(
+            meds = meds,
+            marked = extra?.marked().orEmpty(),
+            prefs = extra?.prefs() ?: com.health.api.ReminderPrefs(),
+            // Before the features are known, medications kept here still remind.
+            modules = extra?.modules()?.takeIf { it.isNotEmpty() } ?: if (meds.isNotEmpty()) setOf(Module.MEDICATIONS) else emptySet(),
+            habits = extra?.habits().orEmpty(),
+            appointments = extra?.appointments().orEmpty(),
+        )
+    }
+
+    /** Sets the alarm for the next reminder due, replacing any set before. */
     fun reschedule(now: Long = System.currentTimeMillis()) {
-        val intent = fireIntent(0)
-        alarms.cancel(intent)
-        val (at, _) = ReminderPlanner.next(cache.medications(), now, zone()) ?: return
+        alarms.cancel(fireIntent(0))
+        val (at, _) = CarePlanner.next(inputs(), now, zone()) ?: return
         set(at, fireIntent(at))
     }
 
@@ -47,32 +68,60 @@ class Reminders(private val context: Context, private val cache: MedsCache, priv
         NotificationManagerCompat.from(context).cancelAll()
     }
 
-    /** Shows a notification for each of [doses]. */
-    fun notify(doses: List<PlannedDose>) {
-        if (doses.isEmpty() || !canNotify()) return
-        ensureChannel()
-        val manager = NotificationManagerCompat.from(context)
-        doses.forEach { dose ->
-            val time = DateTimeFormatter.ofPattern("H:mm").format(Instant.ofEpochMilli(dose.at).atZone(zone()))
-            val site = cache.nextSite(dose.medicationId)?.takeIf { dose.form == MedForm.INJECTION || dose.form == MedForm.PATCH }
-            val text = listOfNotNull(dose.dose, "due at $time", site?.let { "next site: $it" }).joinToString(" · ")
-            val open = PendingIntent.getActivity(
-                context, 1, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    /** Shows the reminders due when an alarm goes off at [at]. */
+    fun fire(at: Long) = show(CarePlanner.dueAt(inputs(), at, zone()))
+
+    /** Shows a notification for each of [doses] (a snoozed one coming back). */
+    fun notify(doses: List<PlannedDose>) = show(
+        doses.map { d ->
+            val time = DateTimeFormatter.ofPattern("H:mm").format(Instant.ofEpochMilli(d.at).atZone(zone()))
+            PlannedAlarm(
+                at = d.at, kind = AlarmKind.DOSE, key = "dose:" + CarePlanner.doseKey(d.medicationId, d.at),
+                title = "Time for ${d.name}", body = listOfNotNull(d.dose, "due at $time").joinToString(" · "),
+                privateTitle = "Time for your $time medications", privateBody = "Open the app to see what's due.", dose = d,
             )
-            val notification = NotificationCompat.Builder(context, CHANNEL)
+        },
+    )
+
+    /** Shows each of [alarms] in its own notification. */
+    fun show(alarms: List<PlannedAlarm>) {
+        if (alarms.isEmpty() || !canNotify()) return
+        ensureChannels()
+        val showNames = extra?.prefs()?.showNames ?: false
+        val manager = NotificationManagerCompat.from(context)
+        alarms.forEach { alarm ->
+            val dose = alarm.dose
+            val site = dose?.let { d -> cache.nextSite(d.medicationId)?.takeIf { d.form == MedForm.INJECTION || d.form == MedForm.PATCH } }
+            val body = listOfNotNull(alarm.body, site?.let { "next site: $it" }).joinToString(" · ")
+            val channel = channelOf(alarm.kind)
+            val builder = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Time for ${dose.name}")
-                .setContentText(text)
-                .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(open)
+                .setContentTitle(alarm.title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setCategory(if (alarm.kind == AlarmKind.APPOINTMENT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
+                .setPriority(if (alarm.kind == AlarmKind.DOSE || alarm.kind == AlarmKind.DOSE_AGAIN || alarm.kind == AlarmKind.APPOINTMENT) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(openIntent(alarm))
                 .setAutoCancel(true)
-                .addAction(0, "Taken", actionIntent(ReminderReceiver.ACTION_TAKEN, dose))
-                .addAction(0, "Snooze 10 min", actionIntent(ReminderReceiver.ACTION_SNOOZE, dose))
-                .build()
+                .setSilent(alarm.silent)
+            if (showNames) {
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            } else {
+                // A locked screen shows only the version without names.
+                builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
+                    NotificationCompat.Builder(context, channel)
+                        .setSmallIcon(R.drawable.ic_notification)
+                        .setContentTitle(alarm.privateTitle)
+                        .setContentText(alarm.privateBody)
+                        .build(),
+                )
+            }
+            if (dose != null) {
+                builder.addAction(0, "Taken", doseIntent(ReminderReceiver.ACTION_TAKEN, dose))
+                    .addAction(0, "Snooze 10 min", doseIntent(ReminderReceiver.ACTION_SNOOZE, dose))
+            }
             @Suppress("MissingPermission") // checked in canNotify()
-            manager.notify(notificationId(dose), notification)
+            manager.notify(notificationId(alarm), builder.build())
         }
     }
 
@@ -84,6 +133,13 @@ class Reminders(private val context: Context, private val cache: MedsCache, priv
 
     fun dismiss(dose: PlannedDose) = NotificationManagerCompat.from(context).cancel(notificationId(dose))
 
+    /** A dose marked (from a notification): no more reminders for it. */
+    fun marked(dose: PlannedDose) {
+        extra?.mark(CarePlanner.doseKey(dose.medicationId, dose.at))
+        dismiss(dose)
+        reschedule()
+    }
+
     private fun set(at: Long, intent: PendingIntent) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
@@ -92,13 +148,19 @@ class Reminders(private val context: Context, private val cache: MedsCache, priv
         }
     }
 
+    private fun openIntent(alarm: PlannedAlarm): PendingIntent = PendingIntent.getActivity(
+        context, alarm.kind.ordinal + 1,
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(MainActivity.EXTRA_OPEN, routeOf(alarm.kind)),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     private fun fireIntent(at: Long): PendingIntent = PendingIntent.getBroadcast(
         context, REQUEST_FIRE,
         Intent(context, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_FIRE).putExtra(ReminderReceiver.EXTRA_AT, at),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
-
-    private fun actionIntent(action: String, dose: PlannedDose): PendingIntent = doseIntent(action, dose)
 
     private fun doseIntent(action: String, dose: PlannedDose): PendingIntent = PendingIntent.getBroadcast(
         context, (action + notificationId(dose)).hashCode(),
@@ -106,20 +168,48 @@ class Reminders(private val context: Context, private val cache: MedsCache, priv
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun ensureChannel() {
+    private fun ensureChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Medication reminders", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "When a dose is due, with Taken and Snooze."
-            },
-        )
+        CHANNELS.forEach { (id, name, importance, about) ->
+            if (manager.getNotificationChannel(id) == null) {
+                manager.createNotificationChannel(NotificationChannel(id, name, importance).apply { description = about })
+            }
+        }
     }
+
+    private data class Channel(val id: String, val name: String, val importance: Int, val about: String)
 
     companion object {
         const val CHANNEL = "medication-reminders"
+        const val CHANNEL_REFILLS = "medication-refills"
+        const val CHANNEL_HABITS = "habit-reminders"
+        const val CHANNEL_APPOINTMENTS = "appointment-reminders"
         private const val REQUEST_FIRE = 4100
 
+        private val CHANNELS = listOf(
+            Channel(CHANNEL, "Medication reminders", NotificationManager.IMPORTANCE_HIGH, "When a dose is due, with Taken and Snooze, and again if it isn't marked."),
+            Channel(CHANNEL_REFILLS, "Refills", NotificationManager.IMPORTANCE_DEFAULT, "When a medication is running low."),
+            Channel(CHANNEL_HABITS, "Habits", NotificationManager.IMPORTANCE_DEFAULT, "A nudge when a habit isn't ticked by its time."),
+            Channel(CHANNEL_APPOINTMENTS, "Appointments", NotificationManager.IMPORTANCE_HIGH, "Before each appointment."),
+        )
+
+        fun channelOf(kind: AlarmKind): String = when (kind) {
+            AlarmKind.DOSE, AlarmKind.DOSE_AGAIN -> CHANNEL
+            AlarmKind.REFILL -> CHANNEL_REFILLS
+            AlarmKind.HABIT -> CHANNEL_HABITS
+            AlarmKind.APPOINTMENT -> CHANNEL_APPOINTMENTS
+        }
+
+        /** Where tapping a reminder goes in the app. */
+        fun routeOf(kind: AlarmKind): String = when (kind) {
+            AlarmKind.DOSE, AlarmKind.DOSE_AGAIN, AlarmKind.REFILL -> "meds"
+            AlarmKind.HABIT -> "today"
+            AlarmKind.APPOINTMENT -> "appointments"
+        }
+
         fun notificationId(dose: PlannedDose): Int = (dose.medicationId + dose.at).hashCode()
+
+        /** A dose and its reminders again share one notification, so each replaces the last. */
+        fun notificationId(alarm: PlannedAlarm): Int = alarm.dose?.let(::notificationId) ?: alarm.key.hashCode()
     }
 }

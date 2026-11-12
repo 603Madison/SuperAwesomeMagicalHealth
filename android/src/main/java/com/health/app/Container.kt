@@ -11,11 +11,20 @@ import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
 import com.health.app.devices.vitals.MonitorStore
 import com.health.app.devices.vitals.VitalsConduit
+import com.health.api.Share
 import com.health.app.net.ServerApi
 import com.health.app.net.SignIn
+import com.health.app.net.appointments
+import com.health.app.net.habitsForReminders
+import com.health.app.reminders.DigestWorker
 import com.health.app.reminders.DoseOutbox
+import com.health.app.reminders.HabitReminder
 import com.health.app.reminders.MedsCache
+import com.health.app.reminders.ReminderCache
 import com.health.app.reminders.Reminders
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import com.health.app.sync.Outbox
 import com.health.app.sync.SyncManager
 import com.health.app.sync.SyncStore
@@ -81,8 +90,38 @@ class Container(val context: Context) {
 
     /** Medications kept on the phone for reminders, the reminders themselves, and doses waiting to be sent. */
     val medsCache = MedsCache(context)
-    val reminders = Reminders(context, medsCache, ::zone)
+    val reminderCache = ReminderCache(context)
+    val reminders = Reminders(context, medsCache, ::zone, reminderCache)
     val doseOutbox = DoseOutbox(File(context.filesDir, "dose-outbox"))
+
+    // ---- Viewing someone else's data, from a share (read-only) ----
+
+    private val _viewing = MutableStateFlow<Share?>(null)
+
+    /** The share being viewed, or null for the person's own data. */
+    val viewing: StateFlow<Share?> = _viewing.asStateFlow()
+
+    private val _viewProfile = MutableStateFlow<Profile?>(null)
+
+    /** The viewed person's profile, limited by the server to what's shared. */
+    val viewProfile: StateFlow<Profile?> = _viewProfile.asStateFlow()
+
+    /** Reads the viewed person's data; refuses any change before it leaves the phone. */
+    val viewApi = ServerApi(http, { settings.value.server }, { settings.value.token }, viewAs = { _viewing.value?.ownerId })
+
+    /** What screens read from: the person's own data, or the shared data being viewed. Background work always uses [api]. */
+    val ui: ServerApi get() = if (_viewing.value != null) viewApi else api
+
+    /** Starts (or, with null, stops) viewing a share. */
+    suspend fun view(share: Share?) {
+        _viewing.value = share
+        _viewProfile.value = null
+        if (share != null) _viewProfile.value = runCatching { viewApi.profile() }.getOrNull()
+        dataChanged()
+    }
+
+    /** The features to show: the viewed person's shared ones while viewing, else the person's own. */
+    fun shownModules(): Set<Module> = if (_viewing.value != null) _viewProfile.value?.modules ?: _viewing.value?.modules.orEmpty() else modules()
 
     private val _profile = MutableStateFlow<Profile?>(null)
 
@@ -115,16 +154,44 @@ class Container(val context: Context) {
      * Medications off, forgets them and takes any reminders away.
      */
     suspend fun refreshReminders() {
-        if (Module.MEDICATIONS !in modules()) {
+        val modules = modules()
+        val today = java.time.LocalDate.now(zone())
+        profile.value?.let { reminderCache.savePrefs(it.reminders, modules) }
+        val any = Module.MEDICATIONS in modules || Module.HABITS in modules || Module.APPOINTMENTS in modules
+        if (!any) {
             medsCache.clear()
+            reminderCache.clear()
             reminders.cancelAll()
             return
         }
-        try {
-            medsCache.save(api.medications())
-            runCatching { api.medsDay(java.time.LocalDate.now(zone()).toString()) }.getOrNull()?.let(medsCache::saveSites)
-        } catch (e: Exception) {
-            Log.w(TAG, "Couldn't load the medications; reminders use the ones kept", e)
+        if (Module.MEDICATIONS in modules) {
+            try {
+                medsCache.save(api.medications())
+                runCatching { api.medsDay(today.toString()) }.getOrNull()?.let {
+                    medsCache.saveSites(it)
+                    reminderCache.saveMarked(it)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Couldn't load the medications; reminders use the ones kept", e)
+            }
+        } else {
+            medsCache.clear()
+        }
+        // Habits with a reminder time, and whether each is done today.
+        if (Module.HABITS in modules) {
+            runCatching { api.habitsForReminders(today) }.getOrNull()?.let { list ->
+                reminderCache.saveHabits(
+                    list.filter { it.habit.active && it.habit.reminderTime != null && it.habit.id != null }
+                        .map { HabitReminder(it.habit.id!!, it.habit.name, it.habit.reminderTime!!, it.date, it.done) },
+                )
+            }
+        } else {
+            reminderCache.saveHabits(emptyList())
+        }
+        if (Module.APPOINTMENTS in modules) {
+            runCatching { api.appointments(days = 60, upcoming = true) }.getOrNull()?.let(reminderCache::saveAppointments)
+        } else {
+            reminderCache.saveAppointments(emptyList())
         }
         reminders.reschedule()
     }
@@ -153,6 +220,25 @@ class Container(val context: Context) {
                 }
             }
         }
+        startCare()
+    }
+
+    /**
+     * Reminders follow what changes (a dose marked here or elsewhere, a sync): they're planned
+     * again a few seconds after. The weekly digest's check follows the person's chosen time.
+     */
+    @OptIn(FlowPreview::class)
+    private fun startCare() {
+        scope.launch {
+            revision.drop(1).debounce(3_000).collect {
+                if (settings.value.signedIn) runCatching { refreshReminders() }
+            }
+        }
+        scope.launch {
+            profile.map { it?.digest to it?.timezone }.distinctUntilChanged().collect { (digest, _) ->
+                if (digest != null) runCatching { DigestWorker.schedule(context, digest, zone()) }
+            }
+        }
     }
 
     /** Loads the profile; the first time, gives it this phone's time zone if it has none. */
@@ -173,7 +259,7 @@ class Container(val context: Context) {
         _profile.value = saved
         prefs.update { it.copy(units = saved.units) }
         dataChanged()
-        if (before != saved.modules) runCatching { refreshReminders() }
+        if (before != saved.modules || saved.reminders != reminderCache.prefs()) runCatching { refreshReminders() }
         return saved
     }
 
@@ -205,8 +291,12 @@ class Container(val context: Context) {
         outbox.clear()
         doseOutbox.clear()
         medsCache.clear()
+        reminderCache.clear()
         reminders.cancelAll()
         monitors.clear()
+        runCatching { DigestWorker.schedule(context, null, zone()) }
+        _viewing.value = null
+        _viewProfile.value = null
         _profile.value = null
     }
 

@@ -53,7 +53,7 @@ class TodayViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(today = today, date = date, loading = !quiet || it.summary == null, error = null) }
         job = viewModelScope.launch {
             try {
-                val summary = c.api.day(date.toString())
+                val summary = c.ui.day(date.toString())
                 _state.update { if (it.date == date) it.copy(summary = summary, loading = false, refreshing = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, refreshing = false, error = e.message ?: "Couldn't load the day") }
@@ -87,32 +87,32 @@ class TodayViewModel(private val c: Container) : ViewModel() {
         }
     }
 
-    fun addWater(ml: Int) = act("Added ${ml} ml of water") { c.api.addWater(WaterEntry(_state.value.date.toString(), ml)) }
+    fun addWater(ml: Int) = act("Added ${ml} ml of water") { c.ui.addWater(WaterEntry(_state.value.date.toString(), ml)) }
 
     fun logWeight(kg: Double) = act("Weight saved") {
         val now = System.currentTimeMillis()
         val date = _state.value.date
         val at = if (date == _state.value.today) now else date.atTime(8, 0).atZone(c.zone()).toInstant().toEpochMilli()
-        c.api.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, at))
+        c.ui.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, at))
     }
 
-    fun logWorkout(workout: Workout) = act("Workout saved") { c.api.addWorkout(workout) }
+    fun logWorkout(workout: Workout) = act("Workout saved") { c.ui.addWorkout(workout) }
 
-    fun logSleep(session: SleepSession) = act("Sleep saved") { c.api.addSleep(session) }
+    fun logSleep(session: SleepSession) = act("Sleep saved") { c.ui.addSleep(session) }
 
-    fun saveCheckIn(checkIn: CheckIn) = act("Thanks for checking in") { c.api.saveCheckIn(checkIn) }
+    fun saveCheckIn(checkIn: CheckIn) = act("Thanks for checking in") { c.ui.saveCheckIn(checkIn) }
 
     /** A face tapped on Today: the mood, now. */
-    fun quickMood(mood: Int) = act("Mood saved") { c.api.addMood(MoodEntry(System.currentTimeMillis(), mood)) }
+    fun quickMood(mood: Int) = act("Mood saved") { c.ui.addMood(MoodEntry(System.currentTimeMillis(), mood)) }
 
     fun logContinence(kind: ContinenceKind) = act("${kind.label} noted") {
-        c.api.addContinence(ContinenceEntry(System.currentTimeMillis(), kind))
+        c.ui.addContinence(ContinenceEntry(System.currentTimeMillis(), kind))
     }
 
     /** Takes a scheduled dose; an injection or patch goes to the chosen site, or the one next in rotation. */
     fun takeDose(due: DueDose, site: String?) = act("${due.name} taken") {
         val rotates = due.form == MedForm.INJECTION || due.form == MedForm.PATCH
-        c.api.logDose(
+        c.ui.logDose(
             DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site ?: due.nextSite.takeIf { rotates }),
         )
     }

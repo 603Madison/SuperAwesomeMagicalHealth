@@ -78,6 +78,8 @@ object ModuleInfo {
         Module.SYMPTOMS -> Icons.Rounded.Healing
         Module.HORMONES -> Icons.Rounded.Science
         Module.APPOINTMENTS -> Icons.AutoMirrored.Rounded.EventNote
+        // Screens for these come with the next round of work; until then they share an icon.
+        Module.NEURO, Module.TRANSITION, Module.PHOTOS -> Icons.Rounded.Psychology
     }
 
     fun description(module: Module): String = when (module) {
@@ -94,6 +96,9 @@ object ModuleInfo {
         Module.SYMPTOMS -> "Symptoms, pain and migraines, and what goes with them."
         Module.HORMONES -> "Dose history, levels against your targets, and when labs are due."
         Module.APPOINTMENTS -> "Appointments, questions to ask, and notes afterwards."
+        Module.NEURO -> "Sensory life, overload and burnout, masking, focus tools, routines and communication cards."
+        Module.TRANSITION -> "Milestones, changes, voice, hair removal, and moments of euphoria."
+        Module.PHOTOS -> "Progress photos, encrypted and only ever yours to share."
     }
 
     /** The route each opt-in module's screen lives at. */

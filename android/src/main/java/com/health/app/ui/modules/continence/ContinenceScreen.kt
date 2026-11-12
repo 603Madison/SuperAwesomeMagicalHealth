@@ -131,8 +131,8 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.summary == null, error = null, today = LocalDate.now(c.zone())) }
         viewModelScope.launch {
             try {
-                val entries = async { c.api.continence(3) }
-                val summary = async { c.api.continenceSummary(14) }
+                val entries = async { c.ui.continence(3) }
+                val summary = async { c.ui.continenceSummary(14) }
                 _state.update { it.copy(entries = entries.await(), summary = summary.await(), loading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your diary") }
@@ -141,13 +141,13 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
     }
 
     fun save(entry: ContinenceEntry) = viewModelScope.launch {
-        runCatching { if (entry.id == null) c.api.addContinence(entry) else c.api.updateContinence(entry) }
+        runCatching { if (entry.id == null) c.ui.addContinence(entry) else c.ui.updateContinence(entry) }
             .onSuccess { c.tell("${it.kind.label} logged"); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun delete(id: String) = viewModelScope.launch {
-        runCatching { c.api.deleteContinence(id) }
+        runCatching { c.ui.deleteContinence(id) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't delete that") }
     }
@@ -191,6 +191,9 @@ fun kindIcon(kind: ContinenceKind): ImageVector = when (kind) {
     ContinenceKind.BOWEL -> Icons.Rounded.Waves
     ContinenceKind.PAD_CHANGE -> Icons.Rounded.Layers
     ContinenceKind.PELVIC_FLOOR -> Icons.Rounded.SelfImprovement
+    ContinenceKind.BOWEL_LEAK -> Icons.Rounded.Waves
+    ContinenceKind.CATHETER -> Icons.Rounded.Wc
+    ContinenceKind.BEDWETTING -> Icons.Rounded.WaterDrop
 }
 
 /** The four quick logs, in order. */
@@ -208,7 +211,7 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
             }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppCard(padding = 14.dp) {
+            if (!com.health.app.ui.care.LocalReadOnly.current) AppCard(padding = 14.dp) {
                 Text("Log", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 QuickButtons { kind -> actions.save(ContinenceEntry(System.currentTimeMillis(), kind)) }
@@ -368,11 +371,11 @@ fun EntryForm(initial: ContinenceEntry, onSave: (ContinenceEntry) -> Unit, onDel
             }
         }
         when (e.kind) {
-            ContinenceKind.URINATION -> {
+            ContinenceKind.URINATION, ContinenceKind.CATHETER -> {
                 StepScale("Urgency", e.urgency, "None", "Couldn't wait", { e = e.copy(urgency = it) }, range = 0..3)
                 NumberField(volume, { volume = it }, "Volume, if you measured", suffix = "ml", decimals = false)
             }
-            ContinenceKind.LEAK, ContinenceKind.PAD_CHANGE -> {
+            ContinenceKind.LEAK, ContinenceKind.PAD_CHANGE, ContinenceKind.BOWEL_LEAK, ContinenceKind.BEDWETTING -> {
                 Text(if (e.kind == ContinenceKind.LEAK) "How much" else "How wet", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     LeakSize.entries.forEach { size -> FilterChip(selected = e.leak == size, onClick = { e = e.copy(leak = if (e.leak == size) null else size) }, label = { Text(size.label) }) }
