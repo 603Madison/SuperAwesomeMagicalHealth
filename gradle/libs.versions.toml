@@ -25,6 +25,7 @@ logback = "1.5.20"
 garminFit = "21.221.0"
 pdfbox = "3.0.5"
 angusMail = "2.0.4"
+anthropic = "3.8.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -72,6 +73,7 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 garmin-fit = { module = "com.garmin:fit", version.ref = "garminFit" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 angus-mail = { module = "org.eclipse.angus:angus-mail", version.ref = "angusMail" }
+anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -188,6 +188,22 @@ class McpServer(private val services: Services) {
 
     private fun toolsFor(caller: Caller) = tools.filter { (!it.writes || caller.canLog) && (it.module == null || it.module in caller.scope) }
 
+    // ---- The in-app assistant (ai/) uses these tools too, through its own allowlist (ai/AiTools.kt) ----
+
+    /** A tool as the in-app assistant sees it. */
+    class AssistantTool(val name: String, val description: String, val inputSchema: JsonObject, val writes: Boolean, val module: Module?)
+
+    /** The tools [caller] may use, for the in-app assistant (which narrows them further). */
+    fun assistantTools(caller: Caller): List<AssistantTool> =
+        toolsFor(caller).map { AssistantTool(it.name, it.description, it.inputSchema, it.writes, it.module) }
+
+    /** Runs one for the in-app assistant: its text (failures throw, and become error results). */
+    suspend fun runAssistantTool(caller: Caller, name: String, arguments: JsonObject): String {
+        val tool = toolsFor(caller).firstOrNull { it.name == name } ?: throw IllegalArgumentException("No tool named $name")
+        log.info("Assistant of {}: {}", caller.user.username, name)
+        return tool.run(caller, arguments).take(MAX_TEXT)
+    }
+
     private fun initialize(params: JsonObject, caller: Caller): JsonObject {
         val asked = (params["protocolVersion"] as? JsonPrimitive)?.contentOrNull
         return buildJsonObject {
@@ -896,7 +912,7 @@ class McpServer(private val services: Services) {
         appendLine("Nights recorded in the last 7 days: ${sleep.size}. Workouts: ${workouts.size}.")
     }
 
-    private fun formatDay(d: DaySummary, units: Units, scope: Set<Module>): String = buildString {
+    internal fun formatDay(d: DaySummary, units: Units, scope: Set<Module>): String = buildString {
         appendLine("${d.date}${if (!d.hasData) " (nothing recorded)" else ""}")
         fun score(name: String, s: Score?) {
             if (s == null) {
@@ -962,7 +978,7 @@ class McpServer(private val services: Services) {
         }
     }
 
-    private fun trendsTable(rows: List<com.health.api.TrendDay>, scope: Set<Module>): String = buildString {
+    internal fun trendsTable(rows: List<com.health.api.TrendDay>, scope: Set<Module>): String = buildString {
         val extra = buildList {
             if (Module.MIND in scope) addAll(listOf("mood", "anxiety", "calm_min"))
             if (Module.CYCLE in scope) add("flow")
