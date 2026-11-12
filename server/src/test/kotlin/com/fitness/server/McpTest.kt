@@ -108,11 +108,21 @@ class McpTest {
         val now = System.currentTimeMillis()
         admin.postJson(
             "/api/ingest",
-            """{"device":{"kind":"COLMI_RING","identifier":"AA","name":"Ring"},"samples":[{"metric":"HEART_RATE","start":${now - 60_000},"value":64}]}""",
+            """{"device":{"kind":"COLMI_RING","identifier":"AA","name":"Ring 100%","battery":72},"samples":[{"metric":"HEART_RATE","start":${now - 60_000},"value":64},{"metric":"SPO2","start":${now - 60_000},"value":97}]}""",
         )
         val url = admin.postJson("/api/me/connectors", "{}").obj().str("url").substringAfter("localhost")
-        val check = createClient { }.call(url, "sync_check", """{"days":3}""").text()
-        assertTrue(check, check.contains("Ring [Colmi ring]"))
+        val client = createClient { }
+        val check = client.call(url, "sync_check", """{"days":3}""").text()
+        assertTrue(check, check.contains("Ring 100% [Colmi ring]"))
+        // Names and units with % in them (a battery, SpO2) come through as written.
+        val status = client.call(url, "status")
+        assertFalse(status.text(), status.failed())
+        assertTrue(status.text(), status.text().contains("battery 72%"))
+        val devices = client.call(url, "devices")
+        assertFalse(devices.text(), devices.failed())
+        assertTrue(devices.text(), devices.text().contains("Blood oxygen: 1 in 30 days, latest 97 %"))
+        val readings = client.call(url, "readings", """{"metric":"SPO2"}""")
+        assertFalse(readings.text(), readings.failed())
         assertTrue(check.contains("← nothing"))
         assertEquals(1L, services.users.count())
     }

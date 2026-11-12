@@ -480,7 +480,7 @@ class McpServer(private val services: Services) {
         appendLine()
         appendLine(if (devices.isEmpty()) "No devices have sent data yet." else "Devices:")
         devices.forEach { d ->
-            appendLine("- ${d.name} [${d.kind.label}${d.model?.let { ", $it" } ?: ""}]: last sync ${d.lastSyncAt?.let { ago(it) } ?: "never"}${d.battery?.let { ", battery $it%" } ?: ""}, %,d readings".format(d.samples))
+            appendLine("- ${d.name} [${d.kind.label}${d.model?.let { ", $it" } ?: ""}]: last sync ${d.lastSyncAt?.let { ago(it) } ?: "never"}${d.battery?.let { ", battery $it%" } ?: ""}, ${count(d.samples)} readings")
         }
         val now = services.clock()
         val week = services.records.samples(user.id, now - 7 * DAY_MS, now + DAY_MS)
@@ -490,7 +490,7 @@ class McpServer(private val services: Services) {
         } else {
             appendLine("Readings in the last 7 days:")
             week.groupBy { it.metric }.forEach { (metric, list) ->
-                appendLine("- ${metric.label}: %,d, latest ${ago(list.maxOf { it.start })}".format(list.size))
+                appendLine("- ${metric.label}: ${count(list.size.toLong())}, latest ${ago(list.maxOf { it.start })}")
             }
         }
         val sleep = services.records.sleep(user.id, now - 7 * DAY_MS, now + DAY_MS)
@@ -512,7 +512,7 @@ class McpServer(private val services: Services) {
         score("Sleep score", d.sleep)
         score("Activity score", d.activity)
         appendLine()
-        appendLine("Activity: %,d steps (goal %,d), %s, %d active kcal (goal %d)%s".format(d.steps, d.goals.steps, distance(d.distanceM, units), d.activeCalories.roundToInt(), d.goals.activeCalories, d.restingCalories?.let { ", resting energy so far ${it.roundToInt()} kcal" } ?: ""))
+        appendLine("Activity: %,d steps (goal %,d), %s, %d active kcal (goal %d)%s".format(d.steps, d.goals.steps, distance(d.distanceM, units), d.activeCalories.roundToInt(), d.goals.activeCalories, d.restingCalories?.let { ", resting energy ${it.roundToInt()} kcal" } ?: ""))
         val heart = listOfNotNull(
             d.restingHeartRate?.let { "resting ${it.roundToInt()} bpm" }, d.avgHeartRate?.let { "average ${it.roundToInt()}" },
             d.minHeartRate?.let { "min ${it.roundToInt()}" }, d.maxHeartRate?.let { "max ${it.roundToInt()}" },
@@ -616,7 +616,7 @@ class McpServer(private val services: Services) {
         val limit = args.int("limit")?.coerceIn(1, 3000) ?: 300
         val shown = list.takeLast(limit)
         return buildString {
-            appendLine("%,d ${metric.label.lowercase()} readings (%s)%s:".format(list.size, metric.unit.ifBlank { "score" }, if (shown.size < list.size) ", the latest ${shown.size} shown" else ""))
+            appendLine("${count(list.size.toLong())} ${metric.label.lowercase()} readings (${metric.unit.ifBlank { "score" }})${if (shown.size < list.size) ", the latest ${shown.size} shown" else ""}:")
             shown.forEach { s ->
                 appendLine("${formatTime(days, s.start)}${s.end?.let { "–" + formatTime(days, it).substringAfter(' ') } ?: ""}\t${num(s.value)}\t${s.deviceName}")
             }
@@ -630,11 +630,11 @@ class McpServer(private val services: Services) {
         list.forEach { d ->
             appendLine("${d.name} [${d.kind.label}] id ${d.id}")
             appendLine("  identifier ${d.identifier}${d.model?.let { ", model $it" } ?: ""}${d.firmware?.let { ", firmware $it" } ?: ""}${d.battery?.let { ", battery $it%" } ?: ""}")
-            appendLine("  added ${ago(d.createdAt)}, last sync ${d.lastSyncAt?.let { ago(it) } ?: "never"}, %,d readings in all".format(d.samples))
+            appendLine("  added ${ago(d.createdAt)}, last sync ${d.lastSyncAt?.let { ago(it) } ?: "never"}, ${count(d.samples)} readings in all")
             val recent = services.records.samples(user.id, now - 30 * DAY_MS, now + DAY_MS).filter { it.deviceId == d.id }
             recent.groupBy { it.metric }.forEach { (metric, samples) ->
                 val last = samples.maxBy { it.start }
-                appendLine("  ${metric.label}: %,d in 30 days, latest ${num(last.value)} ${metric.unit} ${ago(last.start)}".format(samples.size))
+                appendLine("  ${metric.label}: ${count(samples.size.toLong())} in 30 days, latest ${num(last.value)} ${metric.unit} ${ago(last.start)}")
             }
         }
         val sessions = services.sessions.list(user.id).filter { it.kind != SessionKind.WEB }
@@ -802,6 +802,8 @@ class McpServer(private val services: Services) {
 
     private fun weight(kg: Double, units: Units) =
         if (units == Units.IMPERIAL) String.format(Locale.ROOT, "%.1f lb (%.1f kg)", kg / 0.45359237, kg) else String.format(Locale.ROOT, "%.1f kg", kg)
+
+    private fun count(n: Long) = String.format(Locale.ROOT, "%,d", n)
 
     private fun num(v: Double) = if (v % 1.0 == 0.0) v.roundToInt().toString() else String.format(Locale.ROOT, "%.1f", v)
 
