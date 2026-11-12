@@ -1,5 +1,20 @@
 package com.health.app.net
 
+import com.health.api.CrisisResource
+import com.health.api.CycleDay
+import com.health.api.CycleOverview
+import com.health.api.ContinenceEntry
+import com.health.api.ContinenceSummary
+import com.health.api.DoseLog
+import com.health.api.JournalEntry
+import com.health.api.LabResult
+import com.health.api.Medication
+import com.health.api.MedsDay
+import com.health.api.MindSummary
+import com.health.api.MindfulnessSession
+import com.health.api.MoodEntry
+import com.health.api.ScreenerDefinition
+import com.health.api.ScreenerResult
 import com.health.api.ApiJson
 import com.health.api.AppTokenRequest
 import com.health.api.AuthConfig
@@ -166,9 +181,101 @@ class ServerApi(
     /** Sends a batch already turned into JSON (from the outbox). */
     suspend fun ingestJson(json: String): IngestResult = send("POST", "${base()}/api/ingest", json, IngestResult.serializer())
 
+    // ---- Mind ----
+
+    suspend fun moods(days: Int): List<MoodEntry> = get("${base()}/api/mind/moods?days=$days", ListSerializer(MoodEntry.serializer()))
+
+    suspend fun addMood(entry: MoodEntry): MoodEntry = post("/api/mind/moods", entry, MoodEntry.serializer())
+
+    suspend fun deleteMood(id: String) = delete("/api/mind/moods/${enc(id)}")
+
+    suspend fun journal(days: Int): List<JournalEntry> = get("${base()}/api/mind/journal?days=$days", ListSerializer(JournalEntry.serializer()))
+
+    suspend fun addJournal(entry: JournalEntry): JournalEntry = post("/api/mind/journal", entry, JournalEntry.serializer())
+
+    suspend fun updateJournal(entry: JournalEntry): JournalEntry =
+        send("PUT", "${base()}/api/mind/journal/${enc(entry.id!!)}", ApiJson.encodeToString(JournalEntry.serializer(), entry), JournalEntry.serializer())
+
+    suspend fun deleteJournal(id: String) = delete("/api/mind/journal/${enc(id)}")
+
+    suspend fun screeners(): List<ScreenerDefinition> = get("${base()}/api/mind/screeners", ListSerializer(ScreenerDefinition.serializer()))
+
+    suspend fun screenerResults(days: Int): List<ScreenerResult> =
+        get("${base()}/api/mind/screeners/results?days=$days", ListSerializer(ScreenerResult.serializer()))
+
+    suspend fun submitScreener(result: ScreenerResult): ScreenerResult = post("/api/mind/screeners/results", result, ScreenerResult.serializer())
+
+    suspend fun deleteScreener(id: String) = delete("/api/mind/screeners/results/${enc(id)}")
+
+    suspend fun mindSessions(days: Int): List<MindfulnessSession> =
+        get("${base()}/api/mind/sessions?days=$days", ListSerializer(MindfulnessSession.serializer()))
+
+    suspend fun addMindSession(session: MindfulnessSession): MindfulnessSession = post("/api/mind/sessions", session, MindfulnessSession.serializer())
+
+    suspend fun mindSummary(days: Int): MindSummary = get("${base()}/api/mind/summary?days=$days", MindSummary.serializer())
+
+    suspend fun crisisResources(): List<CrisisResource> = get("${base()}/api/mind/resources", ListSerializer(CrisisResource.serializer()))
+
+    // ---- Cycle ----
+
+    suspend fun cycle(months: Int = 12): CycleOverview = get("${base()}/api/cycle?months=$months", CycleOverview.serializer())
+
+    suspend fun saveCycleDay(day: CycleDay): CycleDay =
+        send("PUT", "${base()}/api/cycle/days/${enc(day.date)}", ApiJson.encodeToString(CycleDay.serializer(), day), CycleDay.serializer())
+
+    suspend fun deleteCycleDay(date: String) = delete("/api/cycle/days/${enc(date)}")
+
+    // ---- Bladder and bowel ----
+
+    suspend fun continence(days: Int): List<ContinenceEntry> =
+        get("${base()}/api/continence/entries?days=$days", ListSerializer(ContinenceEntry.serializer()))
+
+    suspend fun addContinence(entry: ContinenceEntry): ContinenceEntry = post("/api/continence/entries", entry, ContinenceEntry.serializer())
+
+    suspend fun updateContinence(entry: ContinenceEntry): ContinenceEntry =
+        send("PUT", "${base()}/api/continence/entries/${enc(entry.id!!)}", ApiJson.encodeToString(ContinenceEntry.serializer(), entry), ContinenceEntry.serializer())
+
+    suspend fun deleteContinence(id: String) = delete("/api/continence/entries/${enc(id)}")
+
+    suspend fun continenceSummary(days: Int): ContinenceSummary = get("${base()}/api/continence/summary?days=$days", ContinenceSummary.serializer())
+
+    // ---- Medications ----
+
+    suspend fun medications(all: Boolean = false): List<Medication> =
+        get("${base()}/api/meds${if (all) "?all=true" else ""}", ListSerializer(Medication.serializer()))
+
+    suspend fun addMedication(med: Medication): Medication = post("/api/meds", med, Medication.serializer())
+
+    suspend fun updateMedication(med: Medication): Medication =
+        send("PUT", "${base()}/api/meds/${enc(med.id!!)}", ApiJson.encodeToString(Medication.serializer(), med), Medication.serializer())
+
+    suspend fun deleteMedication(id: String) = delete("/api/meds/${enc(id)}")
+
+    suspend fun medsDay(date: String): MedsDay = get("${base()}/api/meds/day/${enc(date)}", MedsDay.serializer())
+
+    suspend fun doses(days: Int): List<DoseLog> = get("${base()}/api/meds/doses?days=$days", ListSerializer(DoseLog.serializer()))
+
+    suspend fun logDose(dose: DoseLog): DoseLog = post("/api/meds/doses", dose, DoseLog.serializer())
+
+    /** Sends a dose already turned into JSON (from the reminders' outbox). */
+    suspend fun logDoseJson(json: String): DoseLog = send("POST", "${base()}/api/meds/doses", json, DoseLog.serializer())
+
+    suspend fun deleteDose(id: String) = delete("/api/meds/doses/${enc(id)}")
+
+    suspend fun labs(days: Int = 3650): List<LabResult> = get("${base()}/api/labs?days=$days", ListSerializer(LabResult.serializer()))
+
+    suspend fun addLab(lab: LabResult): LabResult = post("/api/labs", lab, LabResult.serializer())
+
+    suspend fun deleteLab(id: String) = delete("/api/labs/${enc(id)}")
+
     // ---- Plumbing ----
 
     private suspend fun <T> get(url: String, serializer: KSerializer<T>, auth: Boolean = true): T = send("GET", url, null, serializer, auth)
+
+    private suspend fun <T> post(path: String, body: T, serializer: KSerializer<T>): T =
+        send("POST", "${base()}$path", ApiJson.encodeToString(serializer, body), serializer)
+
+    private suspend fun delete(path: String) = send("DELETE", "${base()}$path", null, Unit.serializer())
 
     private suspend fun <T> send(method: String, url: String, body: String?, serializer: KSerializer<T>, auth: Boolean = true): T =
         withContext(Dispatchers.IO) {

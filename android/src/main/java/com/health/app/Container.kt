@@ -2,6 +2,7 @@ package com.health.app
 
 import android.content.Context
 import android.util.Log
+import com.health.api.Module
 import com.health.api.Profile
 import com.health.app.data.Prefs
 import com.health.app.data.Settings
@@ -10,6 +11,9 @@ import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
 import com.health.app.net.ServerApi
 import com.health.app.net.SignIn
+import com.health.app.reminders.DoseOutbox
+import com.health.app.reminders.MedsCache
+import com.health.app.reminders.Reminders
 import com.health.app.sync.Outbox
 import com.health.app.sync.SyncManager
 import com.health.app.sync.SyncStore
@@ -69,6 +73,11 @@ class Container(val context: Context) {
         onNewData = { dataChanged() },
     )
 
+    /** Medications kept on the phone for reminders, the reminders themselves, and doses waiting to be sent. */
+    val medsCache = MedsCache(context)
+    val reminders = Reminders(context, medsCache, ::zone)
+    val doseOutbox = DoseOutbox(File(context.filesDir, "dose-outbox"))
+
     private val _profile = MutableStateFlow<Profile?>(null)
 
     /** The person's profile and goals on the server, once loaded. */
@@ -92,6 +101,35 @@ class Container(val context: Context) {
         _revision.value++
     }
 
+    /** The modules the person has on (the defaults until the profile has loaded). */
+    fun modules(): Set<Module> = profile.value?.modules ?: Module.DEFAULT
+
+    /**
+     * Brings the phone's copy of the medications up to date and sets the next reminder; with
+     * Medications off, forgets them and takes any reminders away.
+     */
+    suspend fun refreshReminders() {
+        if (Module.MEDICATIONS !in modules()) {
+            medsCache.clear()
+            reminders.cancelAll()
+            return
+        }
+        try {
+            medsCache.save(api.medications())
+            runCatching { api.medsDay(java.time.LocalDate.now(zone()).toString()) }.getOrNull()?.let(medsCache::saveSites)
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't load the medications; reminders use the ones kept", e)
+        }
+        reminders.reschedule()
+    }
+
+    /** Sends doses marked from notifications while offline. */
+    suspend fun flushDoses() {
+        if (doseOutbox.size() == 0) return
+        val sent = doseOutbox.flush { api.logDoseJson(it) }
+        if (sent > 0) dataChanged()
+    }
+
     /** The person's time zone: the profile's, else the phone's. */
     fun zone(): ZoneId = profile.value?.timezone?.takeIf { it.isNotBlank() }
         ?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
@@ -100,7 +138,13 @@ class Container(val context: Context) {
         scope.launch {
             settings.map { Triple(it.signedIn, it.backgroundSync, it.syncOnWifiOnly) }.distinctUntilChanged().collect { (signedIn, on, wifi) ->
                 SyncWorker.schedule(context, signedIn && on, wifi)
-                if (signedIn) loadProfile() else _profile.value = null
+                if (signedIn) {
+                    loadProfile()
+                    runCatching { refreshReminders() }
+                    runCatching { flushDoses() }
+                } else {
+                    _profile.value = null
+                }
             }
         }
     }
@@ -118,10 +162,12 @@ class Container(val context: Context) {
     }
 
     suspend fun saveProfile(profile: Profile): Profile {
+        val before = _profile.value?.modules
         val saved = api.saveProfile(profile)
         _profile.value = saved
         prefs.update { it.copy(units = saved.units) }
         dataChanged()
+        if (before != saved.modules) runCatching { refreshReminders() }
         return saved
     }
 
@@ -140,7 +186,10 @@ class Container(val context: Context) {
         val now = System.currentTimeMillis()
         if (now - lastQuietSync < 15 * 60_000L || sync.running.value != null) return
         lastQuietSync = now
-        scope.launch { runCatching { sync.sync() } }
+        scope.launch {
+            runCatching { flushDoses() }
+            runCatching { sync.sync() }
+        }
     }
 
     suspend fun signOut(callServer: Boolean = true) {
@@ -148,6 +197,9 @@ class Container(val context: Context) {
         prefs.signOut()
         syncStore.clear()
         outbox.clear()
+        doseOutbox.clear()
+        medsCache.clear()
+        reminders.cancelAll()
         _profile.value = null
     }
 
