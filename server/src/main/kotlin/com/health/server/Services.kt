@@ -114,6 +114,9 @@ class Services(
     /** Reminders, push, webhooks, digests, reports, exports and the watch. */
     val platform: Platform by lazy { Platform(this) }
 
+    /** The optional AI assistant (off until the admin turns it on; each person opts in). */
+    val ai: com.health.server.ai.AiService by lazy { com.health.server.ai.AiService(this) }
+
     override fun close() {
         db.close()
     }

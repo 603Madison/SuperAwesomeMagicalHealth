@@ -54,6 +54,8 @@ dependencies {
     implementation(libs.garmin.fit)
     implementation(libs.pdfbox)
     implementation(libs.angus.mail)
+    // The optional AI assistant (ai/): the official Anthropic Java SDK.
+    implementation(libs.anthropic.java)
 
     testImplementation(libs.junit)
     testImplementation(libs.ktor.server.test.host)
