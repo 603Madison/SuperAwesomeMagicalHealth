@@ -148,10 +148,12 @@ fun MindHome(state: MindState, zone: ZoneId, actions: MindActions, initialMood: 
             }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppCard(padding = 18.dp) {
-                Text("How are you feeling?", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(12.dp))
-                FaceScale(null, { it?.let { m -> moodSheet = m } })
+            if (!com.health.app.ui.care.LocalReadOnly.current) {
+                AppCard(padding = 18.dp) {
+                    Text("How are you feeling?", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(12.dp))
+                    FaceScale(null, { it?.let { m -> moodSheet = m } })
+                }
             }
             when {
                 state.loading && state.summary == null -> Loading()
@@ -289,7 +291,7 @@ private fun CheckInsCard(state: MindState, onCheck: (Screener) -> Unit) {
     InfoCard("Check-ins", icon = Icons.Rounded.Psychology) {
         Hint("Short, widely used questionnaires about the last two weeks. Every few weeks is plenty.")
         Spacer(Modifier.height(6.dp))
-        Screener.entries.forEach { s ->
+        com.health.app.ui.care.StageMath.screenersFor(state.stage).forEach { s ->
             val definition = state.screeners.firstOrNull { it.id == s }
             val last = state.latest(s)
             NavRow(
@@ -600,14 +602,14 @@ fun ScreenerScreen(
                         Text("${i + 1}. $item", style = MaterialTheme.typography.bodyLarge)
                         Spacer(Modifier.height(8.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                            definition.options.forEachIndexed { value, option ->
+                            com.health.app.ui.care.StageMath.optionsFor(definition, i).forEachIndexed { value, option ->
                                 FilterChip(selected = answers[i] == value, onClick = { answers[i] = value }, label = { Text(option) })
                             }
                         }
                     }
                 }
                 Button(
-                    enabled = answers.all { it != null },
+                    enabled = com.health.app.ui.care.StageMath.complete(definition, answers),
                     onClick = { onSubmit(ScreenerResult(definition.id, System.currentTimeMillis(), answers.map { it!! })) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(if (answers.all { it != null }) "See my score" else "${answers.count { it == null }} to go") }
@@ -616,7 +618,7 @@ fun ScreenerScreen(
                 SectionTitle("Before", Modifier.padding(start = 0.dp))
                 AppCard(padding = 14.dp) {
                     if (past.size >= 2) {
-                        val max = definition.items.size * (definition.options.size - 1)
+                        val max = com.health.app.ui.care.StageMath.maxScore(definition)
                         LineChart(past.reversed().map { it.score.toDouble() }, min = 0.0, max = max.toDouble(), height = 72.dp)
                         Spacer(Modifier.height(8.dp))
                     }
@@ -636,7 +638,7 @@ fun ScreenerScreen(
 
 @Composable
 private fun ResultCard(definition: ScreenerDefinition, result: ScreenerResult, onSupport: () -> Unit) {
-    val max = definition.items.size * (definition.options.size - 1)
+    val max = com.health.app.ui.care.StageMath.maxScore(definition)
     val high = result.score >= (definition.bands.getOrNull(2)?.from ?: 10)
     AppCard(padding = 18.dp) {
         Text("Your score", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

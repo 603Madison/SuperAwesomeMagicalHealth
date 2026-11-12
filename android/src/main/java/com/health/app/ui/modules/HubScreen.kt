@@ -30,7 +30,7 @@ import com.health.app.ui.components.appContainer
 fun HubRoute(onOpen: (String) -> Unit, showDevices: Boolean) {
     val c = appContainer()
     val profile by c.profile.collectAsState()
-    HubScreen(profile?.modules ?: Module.DEFAULT, showDevices, onOpen)
+    HubScreen(com.health.app.ui.care.shownModules(), showDevices, onOpen)
 }
 
 /** The opt-in modules that are on, one tap each, and the way to the rest. */

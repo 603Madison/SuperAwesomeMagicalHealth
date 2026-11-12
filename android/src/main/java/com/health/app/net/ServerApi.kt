@@ -63,12 +63,15 @@ class ServerException(val code: Int, message: String) : IOException(message)
 /**
  * The server's API (docs/API.md), as the app uses it. [base] is the server's address and [token]
  * the app's sign-in; [onSignedOut] is told when the server says the sign-in is no longer good.
+ * With [viewAs] (an owner's account id, from a share), reads show that person's data
+ * (`X-SAMH-View`) and nothing can be changed: writes are refused here, before they leave.
  */
 class ServerApi(
     private val http: OkHttpClient,
     internal val base: () -> String,
     private val token: () -> String?,
     private val onSignedOut: () -> Unit = {},
+    private val viewAs: () -> String? = { null },
 ) {
     // ---- Accounts ----
 
@@ -279,6 +282,7 @@ class ServerApi(
 
     internal suspend fun <T> send(method: String, url: String, body: String?, serializer: KSerializer<T>, auth: Boolean = true): T =
         withContext(Dispatchers.IO) {
+            if (method != "GET" && viewAs() != null) throw ServerException(403, VIEWING_MESSAGE)
             val response = try {
                 http.newCall(request(method, url, body, auth)).execute()
             } catch (e: IOException) {
@@ -291,7 +295,27 @@ class ServerApi(
         val requestBody = body?.toRequestBody(JSON) ?: if (method == "GET" || method == "DELETE") null else "{}".toRequestBody(JSON)
         return Request.Builder().url(url).method(method, requestBody).apply {
             if (auth) token()?.let { header("Authorization", "Bearer $it") }
+            // Only reads ever carry the owner's id.
+            if (method == "GET") viewAs()?.let { header(VIEW_HEADER, it) }
         }.build()
+    }
+
+    /** A file from the server (a PDF report, an export), as bytes. */
+    internal suspend fun bytes(path: String): ByteArray = withContext(Dispatchers.IO) {
+        val response = try {
+            http.newCall(request("GET", "${base()}$path", null, auth = true)).execute()
+        } catch (e: IOException) {
+            throw ServerException(0, "Can't reach the server (${e.message ?: e.javaClass.simpleName})")
+        }
+        response.use {
+            if (!it.isSuccessful) {
+                if (it.code == 401 && token() != null) onSignedOut()
+                val text = it.body?.string().orEmpty()
+                val message = runCatching { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
+                throw ServerException(it.code, message ?: "The server answered HTTP ${it.code}")
+            }
+            it.body?.bytes() ?: ByteArray(0)
+        }
     }
 
     private fun <T> parse(response: okhttp3.Response, serializer: KSerializer<T>, auth: Boolean): T {
@@ -320,6 +344,11 @@ class ServerApi(
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /** The header that asks for a shared account's data (GET only). */
+        const val VIEW_HEADER = "X-SAMH-View"
+
+        const val VIEWING_MESSAGE = "You're viewing someone else's data, which you can't change"
 
         /** A server address as typed ("health.local", "http://10.0.0.5:8080/") made whole, or null. */
         fun normalize(raw: String): String? {

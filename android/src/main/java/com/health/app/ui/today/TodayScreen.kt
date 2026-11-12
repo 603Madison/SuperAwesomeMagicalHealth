@@ -135,7 +135,7 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
         state = state,
         units = settings.units,
         zone = c.zone(),
-        modules = profile?.modules ?: Module.DEFAULT,
+        modules = com.health.app.ui.care.shownModules(),
         actions = TodayActions(
             go = vm::go,
             refresh = vm::refresh,
@@ -181,7 +181,9 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                         if (tracking) Scores(summary) { name, score -> sheet = name to score }
                         if (!summary.hasData && tracking) NoDataCard(actions.openDevices)
                         summary.insights.forEach { InsightCard(it) }
-                        QuickActions(
+                        // Someone viewing a share only looks: no logging from here.
+                        val readOnly = com.health.app.ui.care.LocalReadOnly.current
+                        if (!readOnly) QuickActions(
                             modules,
                             onFood = { actions.logFood(state.date) },
                             onWater = { actions.addWater(250) },
@@ -202,13 +204,15 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                         if (Module.CONTINENCE in modules) {
                             ContinenceTodayCard(summary.modules.continence, actions.logContinence) { actions.open("continence") }
                         }
+                        // Hormone therapy, the life stage and this week's appointments.
+                        CareTodayCards(summary.modules, modules, state.date, zone, System.currentTimeMillis(), actions.open)
                         if (Module.ACTIVITY in modules) ActivityCard(summary, units)
                         if (Module.SLEEP in modules) SleepCard(summary.sleepSummary, zone) { dialog = Dialog.SLEEP }
                         if (tracking) HeartCard(summary, units, zone)
                         if (Module.NUTRITION in modules) FoodCard(summary, units, onLog = { actions.logFood(state.date) }, onWater = actions.addWater)
                         if (summary.workouts.isNotEmpty() && Module.ACTIVITY in modules) WorkoutsCard(summary.workouts, units, zone)
                         if (Module.BODY in modules) BodyCard(summary, units) { dialog = Dialog.WEIGHT }
-                        CheckInCard(summary.checkIn) { dialog = Dialog.CHECK_IN }
+                        if (!readOnly) CheckInCard(summary.checkIn) { dialog = Dialog.CHECK_IN }
                     }
                 }
             }
@@ -381,7 +385,7 @@ private fun SleepCard(sleep: SleepSummary?, zone: ZoneId, onAdd: () -> Unit) {
     InfoCard("Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem) {
         if (sleep == null) {
             Hint("No sleep recorded for last night.")
-            TextButton(onClick = onAdd, contentPadding = PaddingValues(0.dp)) { Text("Add it by hand") }
+            if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = onAdd, contentPadding = PaddingValues(0.dp)) { Text("Add it by hand") }
             return@InfoCard
         }
         Row(verticalAlignment = Alignment.Bottom) {
@@ -453,7 +457,7 @@ private fun FoodCard(summary: DaySummary, units: Units, onLog: () -> Unit, onWat
     val target = summary.nutritionTarget
     val eaten = summary.nutrition
     InfoCard("Food", icon = Icons.Rounded.Restaurant, trailing = {
-        TextButton(onClick = onLog) {
+        if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = onLog) {
             Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
             Text("Log food")
@@ -494,7 +498,7 @@ private fun FoodCard(summary: DaySummary, units: Units, onLog: () -> Unit, onWat
                 ProgressBar(if (waterGoal > 0) summary.waterMl.toFloat() / waterGoal else 0f, color = AppTheme.data.water)
             }
             Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { onWater(250) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("+250 ml") }
+            if (!com.health.app.ui.care.LocalReadOnly.current) OutlinedButton(onClick = { onWater(250) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("+250 ml") }
         }
     }
 }
@@ -533,7 +537,7 @@ fun WorkoutRow(w: Workout, units: Units, zone: ZoneId) {
 @Composable
 private fun BodyCard(summary: DaySummary, units: Units, onLog: () -> Unit) {
     InfoCard("Body", icon = Icons.Rounded.MonitorWeight, trailing = {
-        TextButton(onClick = onLog) { Text(if (summary.weightKg == null) "Weigh in" else "Update") }
+        if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = onLog) { Text(if (summary.weightKg == null) "Weigh in" else "Update") }
     }) {
         Row(Modifier.fillMaxWidth()) {
             Stat(summary.weightKg?.let { Format.compact(Format.weightValue(it, units)) } ?: "—", "weight", Modifier.weight(1f), unit = Format.weightUnit(units))

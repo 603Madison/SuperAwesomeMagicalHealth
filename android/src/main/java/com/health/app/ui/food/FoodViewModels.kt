@@ -46,7 +46,7 @@ class FoodViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(today = today, loading = !quiet || it.day == null, error = null) }
         job = viewModelScope.launch {
             try {
-                val day = c.api.foodDay(date.toString())
+                val day = c.ui.foodDay(date.toString())
                 _state.update { if (it.date == date) it.copy(day = day, loading = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load the day") }
@@ -71,18 +71,18 @@ class FoodViewModel(private val c: Container) : ViewModel() {
         }
     }
 
-    fun delete(id: String) = act("Removed") { c.api.deleteFood(id) }
+    fun delete(id: String) = act("Removed") { c.ui.deleteFood(id) }
 
-    fun change(id: String, change: FoodEntryChange) = act(null) { c.api.changeFood(id, change) }
+    fun change(id: String, change: FoodEntryChange) = act(null) { c.ui.changeFood(id, change) }
 
-    fun addWater(ml: Int) = act("Added $ml ml of water") { c.api.addWater(WaterEntry(_state.value.date.toString(), ml)) }
+    fun addWater(ml: Int) = act("Added $ml ml of water") { c.ui.addWater(WaterEntry(_state.value.date.toString(), ml)) }
 
-    fun deleteWater(id: String) = act(null) { c.api.deleteWater(id) }
+    fun deleteWater(id: String) = act(null) { c.ui.deleteWater(id) }
 
     /** Copies yesterday's [meal] (or the whole day) to the day shown. */
     fun copyYesterday(meal: Meal?) = act("Copied from the day before") {
         val to = _state.value.date
-        c.api.copyFood(to.minusDays(1).toString(), to.toString(), meal)
+        c.ui.copyFood(to.minusDays(1).toString(), to.toString(), meal)
     }
 }
 
@@ -106,7 +106,7 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
 
     init {
         viewModelScope.launch {
-            runCatching { c.api.recentFoods() }.onSuccess { recent -> _state.update { it.copy(recent = recent) } }
+            runCatching { c.ui.recentFoods() }.onSuccess { recent -> _state.update { it.copy(recent = recent) } }
         }
     }
 
@@ -121,7 +121,7 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
             delay(350)
             _state.update { it.copy(searching = true) }
             try {
-                val results = c.api.searchFoods(text.trim())
+                val results = c.ui.searchFoods(text.trim())
                 _state.update { if (it.query == text) it.copy(results = results, searching = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(searching = false, error = e.message ?: "Couldn't search") }
@@ -135,7 +135,7 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
         viewModelScope.launch {
             _state.update { it.copy(searching = true, error = null) }
             try {
-                val food = c.api.barcode(code)
+                val food = c.ui.barcode(code)
                 _state.update { it.copy(searching = false, picked = food, unknownBarcode = if (food == null) code else null) }
             } catch (e: Exception) {
                 _state.update { it.copy(searching = false, error = e.message ?: "Couldn't look that up") }
@@ -145,15 +145,15 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
 
     fun dismissUnknown() = _state.update { it.copy(unknownBarcode = null) }
 
-    fun add(food: Food, servings: Double) = save { c.api.addFood(FoodEntryInput(date.toString(), meal, servings, food = food)) }
+    fun add(food: Food, servings: Double) = save { c.ui.addFood(FoodEntryInput(date.toString(), meal, servings, food = food)) }
 
     fun quickAdd(name: String, nutrients: Nutrients) =
-        save { c.api.addFood(FoodEntryInput(date.toString(), meal, 1.0, name = name.ifBlank { "Quick add" }, nutrients = nutrients)) }
+        save { c.ui.addFood(FoodEntryInput(date.toString(), meal, 1.0, name = name.ifBlank { "Quick add" }, nutrients = nutrients)) }
 
     /** Saves a new food of the person's own, then logs [servings] of it. */
     fun create(food: Food, servings: Double) = save {
-        val saved = c.api.createFood(food)
-        c.api.addFood(FoodEntryInput(date.toString(), meal, servings, food = saved))
+        val saved = c.ui.createFood(food)
+        c.ui.addFood(FoodEntryInput(date.toString(), meal, servings, food = saved))
     }
 
     private fun save(block: suspend () -> Unit) {

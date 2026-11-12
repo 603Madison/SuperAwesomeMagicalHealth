@@ -24,14 +24,15 @@ class ReminderReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_FIRE -> {
                 val at = intent.getLongExtra(EXTRA_AT, 0)
-                if (at > 0) c.reminders.notify(ReminderPlanner.dueAt(c.medsCache.medications(), at, c.zone()))
+                if (at > 0) c.reminders.fire(at)
                 c.reminders.reschedule()
             }
             ACTION_SNOOZED -> doseOf(intent)?.let { c.reminders.notify(listOf(it)) }
             ACTION_SNOOZE -> doseOf(intent)?.let { c.reminders.snooze(it) }
             ACTION_TAKEN -> {
                 val dose = doseOf(intent) ?: return
-                c.reminders.dismiss(dose)
+                // No more reminders for it, here or again later.
+                c.reminders.marked(dose)
                 val site = c.medsCache.nextSite(dose.medicationId)?.takeIf { dose.form == MedForm.INJECTION || dose.form == MedForm.PATCH }
                 val log = DoseLog(dose.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = dose.at, site = site)
                 val pending = goAsync()

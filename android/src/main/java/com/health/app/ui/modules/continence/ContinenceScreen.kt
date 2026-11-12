@@ -131,8 +131,8 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.summary == null, error = null, today = LocalDate.now(c.zone())) }
         viewModelScope.launch {
             try {
-                val entries = async { c.api.continence(3) }
-                val summary = async { c.api.continenceSummary(14) }
+                val entries = async { c.ui.continence(3) }
+                val summary = async { c.ui.continenceSummary(14) }
                 _state.update { it.copy(entries = entries.await(), summary = summary.await(), loading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your diary") }
@@ -141,13 +141,13 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
     }
 
     fun save(entry: ContinenceEntry) = viewModelScope.launch {
-        runCatching { if (entry.id == null) c.api.addContinence(entry) else c.api.updateContinence(entry) }
+        runCatching { if (entry.id == null) c.ui.addContinence(entry) else c.ui.updateContinence(entry) }
             .onSuccess { c.tell("${it.kind.label} logged"); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun delete(id: String) = viewModelScope.launch {
-        runCatching { c.api.deleteContinence(id) }
+        runCatching { c.ui.deleteContinence(id) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't delete that") }
     }
@@ -208,7 +208,7 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
             }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppCard(padding = 14.dp) {
+            if (!com.health.app.ui.care.LocalReadOnly.current) AppCard(padding = 14.dp) {
                 Text("Log", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 QuickButtons { kind -> actions.save(ContinenceEntry(System.currentTimeMillis(), kind)) }

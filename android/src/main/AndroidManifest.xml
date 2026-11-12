@@ -111,6 +111,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Reports and exports handed to the share sheet. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- WorkManager is set up by HealthApp (Configuration.Provider). -->
         <provider
             android:name="androidx.startup.InitializationProvider"

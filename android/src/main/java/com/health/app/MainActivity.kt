@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
     private val finishing = mutableStateOf(false)
     private val signInError = mutableStateOf<String?>(null)
 
+    /** A page a notification asked to open ("meds", "appointments", "digest"). */
+    private val openRoute = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -46,7 +49,11 @@ class MainActivity : ComponentActivity() {
             }
             HealthTheme(settings.themeMode, settings.wallpaperColors, settings.boldText, settings.palette) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    if (settings.signedIn && !finishing.value) MainScaffold() else SignInRoute(finishing.value, signInError.value)
+                    if (settings.signedIn && !finishing.value) {
+                        MainScaffold(open = openRoute.value, onOpened = { openRoute.value = null })
+                    } else {
+                        SignInRoute(finishing.value, signInError.value)
+                    }
                 }
             }
         }
@@ -66,6 +73,7 @@ class MainActivity : ComponentActivity() {
 
     /** The server's sign-in page sends the app back here with its one-time code. */
     private fun handle(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_OPEN)?.takeIf { it.matches(Regex("[a-z/?=&-]{1,40}")) }?.let { openRoute.value = it }
         val link = intent?.data ?: return
         if (link.scheme != "samhealth" || link.host != "signed-in") return
         finishing.value = true
@@ -78,5 +86,10 @@ class MainActivity : ComponentActivity() {
             }
             finishing.value = false
         }
+    }
+
+    companion object {
+        /** An extra naming the page to open, from a notification. */
+        const val EXTRA_OPEN = "open"
     }
 }
