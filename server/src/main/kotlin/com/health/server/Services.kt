@@ -99,6 +99,24 @@ class Services(
         TrackingService(vitals, drinks, symptoms, habits, weather, days, clock).also { days.parts += it }
     }
 
+    // Conditions and goals, each person's own settings, supplies (bladder and bowel, periods).
+    val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
+    val conditions = com.health.server.conditions.ConditionsService(userSettings, profiles)
+    val supplies = com.health.server.modules.SuppliesService(db, box, entries, profiles, clock)
+    init {
+        modules.continence.supplies = supplies
+        modules.continence.settings = userSettings
+        modules.continence.caffeine = { userId, from, to ->
+            tracking.drinks.list(userId, from, to).groupBy { profiles.days(userId).dateOf(it.at) }.mapValues { (_, l) -> l.sumOf { it.caffeineMg } }
+        }
+        modules.cycle.supplies = supplies
+        modules.cycle.settings = userSettings
+        modules.supplies = supplies
+        modules.plainCycle = { userId ->
+            modules.cycle.settings(userId).neutralWording || !conditions.shows(userId, com.health.api.Fields.CYCLE_FERTILITY)
+        }
+    }
+
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(
@@ -108,6 +126,9 @@ class Services(
             *com.health.server.care.CoreQuestions.all(modules.mind, modules.cycle, modules.continence, modules.meds, days, clock).toTypedArray(),
             VitalsHooks(tracking.vitals, clock), DrinksHooks(tracking.drinks), SymptomsHooks(tracking.symptoms),
             HabitsHooks(tracking.habits), StressHooks(days),
+            com.health.server.modules.ContinenceHooks(modules.continence, clock, supplies),
+            com.health.server.modules.SuppliesHooks(supplies, profiles, clock),
+            com.health.server.modules.CycleHooks(modules.cycle, clock),
         )
     }
 

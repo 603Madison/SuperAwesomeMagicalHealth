@@ -15,6 +15,8 @@ enum class EntryKind {
     HORMONE_SETTINGS, DOSE_CHANGE, LIFE_STAGE, KICKS, CONTRACTION, FEED, HOT_FLASH, APPOINTMENT,
     // Symptoms and migraines (tracking/Symptoms.kt).
     SYMPTOM, MIGRAINE,
+    // Bladder and bowel check-ins, and changes to supplies (modules/Continence.kt, modules/Supplies.kt).
+    CONTINENCE_CHECKIN, SUPPLY_LOG,
 }
 
 /** An entry as stored: its row's id, day and time, and what it holds. */

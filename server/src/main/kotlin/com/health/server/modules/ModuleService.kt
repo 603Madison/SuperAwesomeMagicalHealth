@@ -24,6 +24,12 @@ class ModuleService(
     /** Hormone therapy, life stages and appointments, once they exist (care/CareDay). */
     var care: com.health.server.care.CareDay? = null
 
+    /** Supplies (bladder and bowel, periods), for what's running low. Set at start-up. */
+    var supplies: SuppliesService? = null
+
+    /** Whether the person wants cycle copy without fertility words (neutral wording, or the fertile window hidden). Set at start-up. */
+    var plainCycle: (suspend (userId: String) -> Boolean)? = null
+
     override suspend fun today(userId: String, profile: Profile, date: LocalDate): DayExtrasResult {
         val on = profile.modules
         val days = Days(Days.zoneOf(profile.timezone))
@@ -69,8 +75,36 @@ class ModuleService(
             continence.daysOf(userId, date, date)[date]?.also { d ->
                 if (d.leaks >= 3) insights += 50 to Insight("info", "${d.leaks} leaks today", "Noting what came before each one (a cough, a sudden urge) helps find what helps.", "droplet", Module.CONTINENCE)
                 if (d.nightVoids >= 2) insights += 48 to Insight("info", "Up ${d.nightVoids} times last night", "Less to drink in the two hours before bed often helps.", "moon", Module.CONTINENCE)
+            }.also {
+                // The detail: signs of an infection, leaks that came through, sore skin.
+                val day = continence.entriesOn(userId, date)
+                if (day.any { it.utiSigns.isNotEmpty() }) {
+                    insights += 90 to Insight("warn", "Signs that can go with a urine infection", "Worth telling a doctor or nurse about soon, and today if you have a fever or back pain.", "thermometer", Module.CONTINENCE)
+                }
+                if (day.any { it.leakedThrough }) {
+                    insights += 45 to Insight("info", "A leak came through", "A more absorbent product, a better fit, or changing a little sooner can help.", "droplet", Module.CONTINENCE)
+                }
+                if (day.any { (it.skin ?: 0) >= 2 }) {
+                    insights += 44 to Insight("info", "Sore skin today", "Changing soon after a leak, gentle cleansing and a barrier cream help. If it breaks or doesn't settle, a nurse or pharmacist can help.", "droplet", Module.CONTINENCE)
+                }
             }
         } else null
+
+        // Supplies running low, for the features they belong to.
+        val supplyCategories = buildSet {
+            if (Module.CONTINENCE in on) { add(com.health.api.SupplyCategory.CONTINENCE); add(com.health.api.SupplyCategory.OTHER) }
+            if (Module.CYCLE in on) add(com.health.api.SupplyCategory.PERIOD)
+        }
+        val lowSupplies = if (supplyCategories.isEmpty()) null else supplies?.low(userId, supplyCategories)?.takeIf { it.isNotEmpty() }
+        lowSupplies?.firstOrNull()?.let { s ->
+            val period = s.supply.kind.category == com.health.api.SupplyCategory.PERIOD
+            insights += 62 to Insight(
+                "info", if (s.supply.onHand == 0) "Out of ${s.supply.name}" else "Running low on ${s.supply.name}",
+                (if (s.supply.onHand == 0) "Time to restock." else "${s.supply.onHand} left${s.daysLeft?.let { d -> ", about $d ${if (d == 1) "day" else "days"}" } ?: ""}: time to restock.") +
+                    if (lowSupplies.size > 1) " ${lowSupplies.size - 1} more running low too." else "",
+                "droplet", if (period) Module.CYCLE else Module.CONTINENCE,
+            )
+        }
 
         val medsDay = if (Module.MEDICATIONS in on) {
             meds.day(userId, date).takeIf { it.due.isNotEmpty() || it.asNeeded.isNotEmpty() }?.also { m ->
@@ -89,10 +123,21 @@ class ModuleService(
             }
         } else null
 
-        var modulesToday = ModulesToday(mindDay, cycleToday, continenceDay, medsDay)
+        var modulesToday = ModulesToday(mindDay, cycleToday, continenceDay, medsDay, lowSupplies = lowSupplies)
         // Hormone therapy, life stages and appointments (care/), after the others, since life stages read them.
         care?.let { modulesToday = it.today(userId, profile, date, modulesToday, insights) }
+        // No fertile window or ovulation for people who'd rather not see them.
+        if (Module.CYCLE in on && plainCycle?.invoke(userId) == true) {
+            insights.removeAll { (_, i) -> mentionsFertility(i.title + " " + i.body) }
+            modulesToday.lifeStage?.takeIf { mentionsFertility(it.headline) }?.let { ls ->
+                modulesToday = modulesToday.copy(lifeStage = ls.copy(headline = cycleToday?.cycleDay?.let { "Cycle day $it" } ?: "Trying to conceive"))
+            }
+        }
         return DayExtrasResult(modulesToday, insights, phase)
+    }
+
+    companion object {
+        fun mentionsFertility(text: String) = text.lowercase().let { "fertile" in it || "ovulat" in it }
     }
 
     override suspend fun trends(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, ModuleTrend> {
@@ -110,7 +155,7 @@ class ModuleService(
         }
         if (Module.CONTINENCE in on) {
             continence.daysOf(userId, from, to).forEach { (date, d) ->
-                out[date.toString()] = at(date).copy(voids = d.voids, nightVoids = d.nightVoids, leaks = d.leaks)
+                out[date.toString()] = at(date).copy(voids = d.voids, nightVoids = d.nightVoids, leaks = d.leaks + d.bowelLeaks)
             }
         }
         if (Module.MEDICATIONS in on) {

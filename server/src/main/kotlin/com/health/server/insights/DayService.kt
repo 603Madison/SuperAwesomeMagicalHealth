@@ -85,6 +85,7 @@ fun ModulesToday.merge(o: ModulesToday) = ModulesToday(
     mind = mind ?: o.mind, cycle = cycle ?: o.cycle, continence = continence ?: o.continence, meds = meds ?: o.meds,
     vitals = vitals ?: o.vitals, habits = habits ?: o.habits, symptoms = symptoms ?: o.symptoms, hormones = hormones ?: o.hormones,
     lifeStage = lifeStage ?: o.lifeStage, appointments = appointments ?: o.appointments,
+    lowSupplies = lowSupplies ?: o.lowSupplies, neuro = neuro ?: o.neuro, transition = transition ?: o.transition,
 )
 
 /** A day's numbers from the health modules, for trends. */

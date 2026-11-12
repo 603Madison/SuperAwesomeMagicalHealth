@@ -9,6 +9,7 @@ import com.health.server.health.deviceRoutes
 import com.health.server.health.healthRoutes
 import com.health.server.mcp.mcpRoutes
 import com.health.server.care.careRoutes
+import com.health.server.modules.diaryRoutes
 import com.health.server.modules.moduleRoutes
 import com.health.server.tracking.trackingRoutes
 import com.health.server.platform.platformRoutes
@@ -93,6 +94,7 @@ fun Application.module(services: Services) {
         mcpRoutes(services)
         moduleRoutes(services)
         careRoutes(services)
+        diaryRoutes(services)
         trackingRoutes(services)
         platformRoutes(services)
         route("/api/{...}") {

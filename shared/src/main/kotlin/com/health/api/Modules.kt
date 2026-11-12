@@ -579,6 +579,15 @@ data class ContinenceDay(
     /** Water logged that day. */
     val fluidMl: Int = 0,
     val urgentTrips: Int = 0,
+    val bowelLeaks: Int = 0,
+    val wetNights: Int = 0,
+    /** Products used (pads, briefs…), counting each change's count. */
+    val products: Int = 0,
+    val leakedThrough: Int = 0,
+    val catheters: Int = 0,
+    val catheterMl: Int? = null,
+    /** Grams lost, from weighed pads. */
+    val lossG: Double? = null,
 )
 
 @Serializable

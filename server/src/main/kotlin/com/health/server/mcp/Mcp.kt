@@ -799,6 +799,67 @@ class McpServer(private val services: Services) {
             if (tick.count == 0) "Cleared ${habit.name} on ${tick.date}." else "Ticked ${habit.name} on ${tick.date}${if (habit.perDay > 1) " (${tick.count} of ${habit.perDay})" else ""}."
         },
         *careTools().toTypedArray(),
+        *diaryTools().toTypedArray(),
+    )
+
+    // ---- Supplies, bladder and bowel progress, conditions (modules/Supplies.kt, Continence.kt, conditions/) ----
+
+    private fun diaryTools(): List<Tool> = listOf(
+        Tool(
+            "supplies", "Supplies",
+            "Pads, briefs, bed pads and other bladder and bowel supplies on hand (and period products, if the link may see the cycle): " +
+                "how many are left, how fast they're used, and which are running low.",
+            schema(),
+            module = Module.CONTINENCE,
+        ) { caller, _ ->
+            val categories = buildSet {
+                add(com.health.api.SupplyCategory.CONTINENCE); add(com.health.api.SupplyCategory.OTHER)
+                if (Module.CYCLE in caller.scope) add(com.health.api.SupplyCategory.PERIOD)
+            }
+            val list = services.supplies.status(caller.user.id).filter { it.supply.kind.category in categories }
+            if (list.isEmpty()) "No supplies added." else buildString {
+                list.forEach { s ->
+                    val x = s.supply
+                    appendLine(
+                        "${x.name} (${x.kind.label.lowercase()}${x.absorbency?.let { ", $it" } ?: ""}): ${x.onHand} on hand" +
+                            (s.perDay?.let { ", about %.1f used a day".format(it) } ?: "") + (s.daysLeft?.let { ", about $it days left" } ?: "") +
+                            (if (s.low) " — running low" else "") + (if (x.reusable) " (reusable)" else ""),
+                    )
+                }
+            }
+        },
+        Tool(
+            "continence_progress", "Bladder and bowel progress",
+            "Whether bladder and bowel symptoms are getting better or worse: the last weeks against the ones before (leaks, bowel " +
+                "accidents, urgency, night-time trips, products used, how full they were, weighed loss, and how much it bothers the person), " +
+                "week by week, with what went along with the change.",
+            schema("weeks" to intProperty("How many weeks (default 12, at most 52)")),
+            module = Module.CONTINENCE,
+        ) { caller, args ->
+            val p = services.modules.continence.progress(caller.user.id, args.int("weeks")?.coerceIn(2, 52) ?: 12)
+            buildString {
+                appendLine("${p.verdict.label}. ${p.headline}")
+                p.metrics.forEach { m -> appendLine("${m.label}: ${m.before ?: "–"} before, ${m.after ?: "–"} in the last ${p.recentWeeks} weeks (${m.verdict.label.lowercase()}).") }
+                p.notes.forEach { appendLine("Note: $it") }
+                appendLine("week	days	trips	night	leaks	bowel_leaks	urgency	products	fullness	loss_g	bother	pelvic_floor_sets")
+                p.weeks.forEach { w ->
+                    appendLine(listOf(w.weekStart, w.days, w.voidsPerDay, w.nightVoidsPerDay, w.leaksPerDay, w.bowelLeaksPerDay, w.urgency, w.productsPerDay, w.fullness, w.lossGPerDay, w.bother, w.pelvicFloorSets).joinToString("\t") { it?.toString() ?: "" })
+                }
+            }
+        },
+        Tool(
+            "conditions", "Conditions and goals",
+            "The conditions and goals the person keeps track of (only those whose private features this link may see), with how long and any notes.",
+            schema(),
+        ) { caller, _ ->
+            if (caller.everyone || caller.scope.isEmpty()) return@Tool "Conditions are private: this link wasn't given any private features."
+            val visible = services.conditions.get(caller.user.id).conditions.filter { c ->
+                com.health.server.conditions.ConditionsService.modulesOf(c).filter { it.sensitive }.all { it in caller.scope }
+            }
+            if (visible.isEmpty()) "None that this link may see." else visible.joinToString("\n") { c ->
+                "${c.name}${c.status?.let { " (${it.label.lowercase()})" } ?: ""}${c.since?.let { ", since $it" } ?: ""}${c.notes?.let { ": $it" } ?: ""}"
+            }
+        },
     )
 
     // ---- Hormone therapy, life stages and appointments (care/) ----
@@ -1243,7 +1304,14 @@ class McpServer(private val services: Services) {
     private fun cycleDayText(d: CycleDay): String = listOfNotNull(
         d.flow?.label?.lowercase()?.let { "flow $it" }, d.symptoms.takeIf { it.isNotEmpty() }?.joinToString(", "),
         d.pain?.let { "pain $it/10" }, d.mucus?.label?.lowercase()?.let { "mucus $it" }, d.ovulationTest?.label?.lowercase()?.let { "ovulation test $it" },
-        d.temperature?.let { "BBT %.2f °C".format(it) }, d.note,
+        d.temperature?.let { "BBT %.2f °C".format(it) },
+        d.products.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.count} ${it.kind.label.lowercase()}${it.fullness?.let { f -> " (${f.label.lowercase()})" } ?: ""}" },
+        d.clots?.takeIf { it != com.health.api.Clots.NONE }?.let { "clots ${it.label.lowercase()}" }, d.color?.let { "colour $it" },
+        d.painAreas.takeIf { it.isNotEmpty() }?.let { "pain in ${it.joinToString(", ")}" },
+        d.symptomSeverity.takeIf { it.isNotEmpty() }?.entries?.joinToString(", ") { "${it.key} ${listOf("", "mild", "moderate", "severe")[it.value.coerceIn(1, 3)]}" },
+        d.mood.takeIf { it.isNotEmpty() }?.let { "mood ${it.joinToString(", ")}" }, d.energy?.let { "energy $it/5" }, d.libido?.let { "sex drive $it/5" },
+        d.lh?.let { "LH $it" }, d.pregnancyTest?.label?.lowercase()?.let { "pregnancy test $it" }, d.discharge?.let { "discharge $it" },
+        d.tags.takeIf { it.isNotEmpty() }?.joinToString(", "), d.note,
     ).joinToString("; ").ifEmpty { "nothing" }
 
     private suspend fun cycleText(user: User, months: Int): String = buildString {
@@ -1253,9 +1321,14 @@ class McpServer(private val services: Services) {
                 (o.daysUntilPeriod?.let { if (it >= 0) ", next period in about $it days" else ", period ${-it} days later than expected" } ?: "") + ".",
         )
         appendLine("Averages: cycle ${o.averageCycle?.let { "%.1f days".format(it) } ?: "unknown"}, period ${o.averagePeriod?.let { "%.1f days".format(it) } ?: "unknown"}${o.variation?.let { ", cycles vary by ±%.1f days".format(it) } ?: ""}.")
+        val plain = services.modules.plainCycle?.invoke(user.id) == true
         o.prediction?.let { p ->
-            appendLine("Prediction (${p.confidence} confidence): next period ${p.nextPeriod} (between ${p.earliest} and ${p.latest}); estimated fertile window ${p.fertileStart} to ${p.fertileEnd}, ovulation about ${p.ovulation}.")
+            appendLine(
+                "Prediction (${p.confidence} confidence): next period ${p.nextPeriod} (between ${p.earliest} and ${p.latest})" +
+                    (if (plain) "." else "; estimated fertile window ${p.fertileStart} to ${p.fertileEnd}, ovulation about ${p.ovulation}."),
+            )
         }
+        if (plain) appendLine("The person prefers cycle wording without the fertile window or ovulation: leave those out.")
         appendLine(o.caveat)
         if (o.cycles.isNotEmpty()) {
             appendLine("Cycles:")
@@ -1274,8 +1347,8 @@ class McpServer(private val services: Services) {
         appendLine("Over $count days: ${s.averageVoids?.let { "%.1f toilet trips a day".format(it) } ?: "no trips logged"}, ${s.averageNightVoids?.let { "%.1f at night".format(it) } ?: "-"}, ${s.averageLeaks?.let { "%.1f leaks a day".format(it) } ?: "-"}${s.averageInterval?.let { "; longest daytime gap averages ${Scoring.hm(it)}" } ?: ""}.")
         if (s.triggers.isNotEmpty()) appendLine("Leak triggers: ${s.triggers.joinToString { "${it.name} (${it.count})" }}")
         s.patterns.forEach { appendLine("Pattern: ${it.title}. ${it.body}") }
-        appendLine("date\ttrips\tnight\tleaks\tbowel\tpads\tpelvic_floor\tvoided_ml\tfluid_ml\turgent")
-        s.days.forEach { d -> appendLine("${d.date}\t${d.voids}\t${d.nightVoids}\t${d.leaks}\t${d.bowel}\t${d.pads}\t${d.pelvicFloor}\t${d.voidedMl ?: ""}\t${d.fluidMl}\t${d.urgentTrips}") }
+        appendLine("date\ttrips\tnight\tleaks\tbowel\tpads\tpelvic_floor\tvoided_ml\tfluid_ml\turgent\tbowel_leaks\twet_nights\tproducts\tleaked_through\tcatheters\tloss_g")
+        s.days.forEach { d -> appendLine("${d.date}\t${d.voids}\t${d.nightVoids}\t${d.leaks}\t${d.bowel}\t${d.pads}\t${d.pelvicFloor}\t${d.voidedMl ?: ""}\t${d.fluidMl}\t${d.urgentTrips}\t${d.bowelLeaks}\t${d.wetNights}\t${d.products}\t${d.leakedThrough}\t${d.catheters}\t${d.lossG ?: ""}") }
         val days = services.profiles.days(user.id)
         val entries = c.list(user.id, count).reversed()
         if (entries.isNotEmpty()) {
@@ -1284,7 +1357,14 @@ class McpServer(private val services: Services) {
                 appendLine("  ${formatTime(days, e.at)}${if (e.night) " (night)" else ""}: ${e.kind.label}" + listOfNotNull(
                     e.volumeMl?.let { "$it ml" }, e.urgency?.let { "urgency $it/3" }, e.leak?.label?.lowercase()?.let { "leak: $it" },
                     e.triggers.takeIf { it.isNotEmpty() }?.joinToString(", "), e.bristol?.let { "Bristol type $it" },
-                    "pain".takeIf { e.pain }, "blood".takeIf { e.blood }, e.reps?.let { "$it reps" }, e.holdSeconds?.let { "${it}s holds" }, e.note,
+                    "pain".takeIf { e.pain }, "blood".takeIf { e.blood }, e.reps?.let { "$it reps" }, e.holdSeconds?.let { "${it}s holds" },
+                    e.contents?.label?.lowercase(), e.activity.takeIf { it.isNotEmpty() }?.let { "while ${it.joinToString(", ")}" },
+                    e.awareness?.label?.lowercase(), e.reachedToilet?.label?.lowercase(), e.warningSeconds?.let { "${it}s warning" },
+                    e.location?.let { "at $it" }, e.fullness?.label?.lowercase()?.let { "product $it" }, e.lossG?.let { "lost ${it} g" },
+                    e.count?.let { "$it used" }, "leaked through".takeIf { e.leakedThrough }, "changed clothes".takeIf { e.changedClothes },
+                    "changed bedding".takeIf { e.changedBedding }, e.skin?.takeIf { it > 0 }?.let { "skin soreness $it/3" },
+                    e.utiSigns.takeIf { it.isNotEmpty() }?.let { "infection signs: ${it.joinToString(", ")}" },
+                    e.tags.takeIf { it.isNotEmpty() }?.joinToString(", "), e.note,
                 ).joinToString(", ", ", ").ifEmpty { "" }.let { if (it == ", ") "" else it })
             }
         }
