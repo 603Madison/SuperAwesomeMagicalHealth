@@ -2,7 +2,7 @@ name: Release
 
 # Builds the signed APK and publishes it as a GitHub release, with notes from
 # release-notes/<version>.md, and publishes the server's container image to
-# ghcr.io/<owner>/<repository>. Start it from the Actions tab ("Run workflow") with the version,
+# ghcr.io/<owner>/superawesomemagicalhealth. Start it from the Actions tab ("Run workflow") with the version,
 # or push a v* tag. The release's tag is created on the built commit if it doesn't exist yet.
 on:
   push:
@@ -91,7 +91,7 @@ jobs:
           fi
 
   # The server and web app, for amd64 and arm64 (a Raspberry Pi), at
-  # ghcr.io/<owner>/<repository>:<version> and :latest.
+  # ghcr.io/<owner>/superawesomemagicalhealth:<version> and :latest, whatever the repository is called.
   image:
     runs-on: ubuntu-latest
     permissions:
@@ -106,7 +106,7 @@ jobs:
 
       - name: Image name and tags
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/superawesomemagicalhealth"
           VERSION="${TAG#v}"
           {
             echo "TAGS<<EOF"
