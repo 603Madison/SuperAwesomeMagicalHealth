@@ -95,6 +95,9 @@ data class TrendsState(
     val weights: List<Sample> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
+    // Combined devices: today's readings more than one device measured, for "From 2 devices" under their charts (ui/components/Sources.kt).
+    val combined: List<com.health.api.CombinedValue> = emptyList(),
+    val combinedSleep: com.health.api.CombinedSleep? = null,
 )
 
 class TrendsViewModel(private val c: Container) : ViewModel() {
@@ -119,6 +122,10 @@ class TrendsViewModel(private val c: Container) : ViewModel() {
                 val trends = c.ui.trends(days)
                 val weights = runCatching { c.ui.measurements(Metric.WEIGHT, maxOf(days, 90)) }.getOrDefault(emptyList())
                 _state.update { if (it.days == days) it.copy(trends = trends, weights = weights, loading = false) else it }
+                // Combined devices: today's, for the charts' "From 2 devices" (ui/components/Sources.kt).
+                runCatching { c.ui.day(LocalDate.now(c.zone()).toString()) }.getOrNull()?.let { day ->
+                    _state.update { it.copy(combined = day.combined, combinedSleep = day.sleepSummary?.combined) }
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your trends") }
             }
@@ -214,7 +221,10 @@ fun TrendsScreen(
                             "scores" -> ScoresCard(days, labels)
                             "weight" -> WeightCard(state.weights, units, goals, zone, onAdd = { weighing = true }, onDelete = actions.deleteWeight)
                             "workouts" -> WorkoutsSummary(days)
-                            in TREND_CHARTS -> TrendChart(id, days, labels, goals, units)
+                            // Combined devices: the chart's "From 2 devices", if today's reading has more than one (ui/components/Sources.kt).
+                            in TREND_CHARTS -> androidx.compose.runtime.CompositionLocalProvider(
+                                com.health.app.ui.components.LocalChartSources provides com.health.app.ui.components.Sources.chart(id, state.combined, state.combinedSleep, units, zone),
+                            ) { TrendChart(id, days, labels, goals, units) }
                             else -> TrackingTrend(id, days, labels, vitalsTargets)
                         }
                     }
@@ -325,6 +335,8 @@ internal fun ChartCard(
         chart()
         AxisLabels(labels.first, labels.second, labels.third)
         footer?.let { Hint(it, Modifier.padding(top = 6.dp)) }
+        // Combined devices: "From 2 devices", where TrendsScreen provides one for this chart (ui/components/Sources.kt).
+        com.health.app.ui.components.LocalChartSources.current?.invoke()
     }
 }
 

@@ -48,6 +48,45 @@ object ColmiMapping {
         return if (perStep in 0.005..0.25) slot.calories else slot.steps * KCAL_PER_STEP
     }
 
+    /** Stress as the ring rates it, 1–100, at each half hour that has a reading. */
+    fun stress(date: LocalDate, log: HalfHourLog, zone: ZoneId, now: Long): List<Sample> =
+        halfHourly(Metric.STRESS, date, log, 1..100, zone, now)
+
+    /** HRV in ms at each half hour that has a reading (a byte's top values are taken as no reading). */
+    fun hrv(date: LocalDate, log: HalfHourLog, zone: ZoneId, now: Long): List<Sample> =
+        halfHourly(Metric.HRV, date, log, 1..250, zone, now)
+
+    /**
+     * A reading per half hour of [date] in [valid]; none from the future (as with heart rate, a
+     * ring can hold an earlier day's value in a slot it hasn't reached yet).
+     */
+    private fun halfHourly(metric: Metric, date: LocalDate, log: HalfHourLog, valid: IntRange, zone: ZoneId, now: Long): List<Sample> =
+        log.values.take(HalfHourLog.SLOTS).mapIndexedNotNull { slot, value ->
+            if (value !in valid) return@mapIndexedNotNull null
+            val t = at(date.atStartOfDay().plusMinutes(slot.toLong() * HalfHourLog.MINUTES), zone)
+            if (t > now) null else Sample(metric, t, value = value.toDouble())
+        }
+
+    /** Each hour's blood oxygen, the middle of its lowest and highest (as Gadgetbridge keeps it), on the hour. */
+    fun spo2(hours: List<Spo2Hour>, zone: ZoneId, now: Long): List<Sample> = hours.mapNotNull { h ->
+        val value = (h.min + h.max) / 2.0
+        val t = at(h.date.atTime(h.hour, 0), zone)
+        if (value < MIN_SPO2 || value > 100.0 || t > now) null else Sample(Metric.SPO2, t, value = value)
+    }
+
+    /**
+     * Skin temperatures in °C. Readings outside what a finger can be are left out: a ring off the
+     * finger (charging, on a table) reads the room.
+     */
+    fun skinTemperature(readings: List<TemperatureReading>, zone: ZoneId, now: Long): List<Sample> = readings.mapNotNull { r ->
+        val t = at(r.time, zone)
+        if (r.celsius !in SKIN_CELSIUS || t > now) null else Sample(Metric.SKIN_TEMPERATURE, t, value = r.celsius)
+    }
+
+    /** Below this, a blood-oxygen reading is a poor fit on the finger rather than a reading. */
+    private const val MIN_SPO2 = 70.0
+    private val SKIN_CELSIUS = 25.0..42.0
+
     fun sleep(nights: List<RingNight>, zone: ZoneId): List<SleepSession> = nights.map { night ->
         var cursor = night.start
         val spans = night.stages.map { (stage, minutes) ->

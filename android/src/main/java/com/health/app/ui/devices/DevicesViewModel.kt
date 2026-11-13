@@ -7,10 +7,17 @@ import androidx.lifecycle.viewModelScope
 import com.health.api.Device
 import com.health.app.Container
 import com.health.app.devices.colmi.ColmiConduit
+import com.health.app.devices.colmi.RingReadingsState
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
+import com.health.app.net.choosing
+import com.health.app.net.choosingSleep
+import com.health.app.net.deviceChoices
+import com.health.app.net.saveDeviceChoices
 import com.health.app.sync.ConduitStatus
 import com.health.app.sync.PairedRing
+import com.health.app.ui.components.Sources
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +40,10 @@ data class DevicesState(
     val loading: Boolean = true,
     val error: String? = null,
     val outbox: Int = 0,
+    /** Which readings the paired ring gives, and when each last came in. */
+    val ringReadings: RingReadingsState = RingReadingsState(),
+    /** Readings more than one device measures, and which the person uses (empty until loaded, or if the server can't say). */
+    val overlaps: List<Overlap> = emptyList(),
 )
 
 class DevicesViewModel(private val c: Container) : ViewModel() {
@@ -41,8 +52,11 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            combine(c.syncStore.ring, c.syncStore.statuses, c.sync.running, c.syncStore.gadgetbridgeUri) { ring, statuses, running, gb ->
-                _state.value.copy(ring = ring, statuses = statuses, running = running, gadgetbridgeFile = gb?.let { c.gadgetbridge.fileName() ?: "Export file" }, outbox = c.outbox.size)
+            combine(c.syncStore.ring, c.syncStore.statuses, c.sync.running, c.syncStore.gadgetbridgeUri, c.colmi.readings.state) { ring, statuses, running, gb, readings ->
+                _state.value.copy(
+                    ring = ring, statuses = statuses, running = running, gadgetbridgeFile = gb?.let { c.gadgetbridge.fileName() ?: "Export file" }, outbox = c.outbox.size,
+                    ringReadings = readings,
+                )
             }.collect { _state.value = it }
         }
         viewModelScope.launch { c.syncStore.healthConnectOn.collect { refreshHealthConnect() } }
@@ -55,8 +69,39 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
             try {
                 val devices = c.api.devices()
                 _state.update { it.copy(serverDevices = devices, loading = false, error = null) }
+                loadOverlaps(devices)
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your devices") }
+            }
+        }
+    }
+
+    /**
+     * Where devices overlap: from the last two days (today alone can be thin early in the
+     * morning) and the person's choices. Always the person's own ([Container.api]). A server that
+     * can't say (or isn't reached) leaves the section out.
+     */
+    private suspend fun loadOverlaps(devices: List<Device>) {
+        val choices = runCatching { c.api.deviceChoices() }.getOrNull() ?: return _state.update { it.copy(overlaps = emptyList()) }
+        val today = LocalDate.now(c.zone())
+        val days = listOf(today, today.minusDays(1)).mapNotNull { runCatching { c.api.day(it.toString()) }.getOrNull() }
+        _state.update { it.copy(overlaps = Overlaps.of(days, choices, devices)) }
+    }
+
+    /** Uses only [deviceId] (named [device]) for [overlap]'s reading, or (null) combines them again. */
+    fun choose(overlap: Overlap, deviceId: String?) {
+        val device = overlap.devices.firstOrNull { it.id == deviceId }?.name
+        _state.update { s -> s.copy(overlaps = s.overlaps.map { if (it.metric == overlap.metric) it.copy(chosen = deviceId) else it }) }
+        viewModelScope.launch {
+            try {
+                val current = c.api.deviceChoices()
+                c.api.saveDeviceChoices(overlap.metric?.let { current.choosing(it, deviceId) } ?: current.choosingSleep(deviceId))
+                c.tell(Sources.chosen(overlap.reading, device))
+                // Today and Trends reload; so does this page (loadServer, on the revision).
+                c.dataChanged()
+            } catch (e: Exception) {
+                c.tell(e.message ?: "Couldn't save that")
+                loadServer()
             }
         }
     }

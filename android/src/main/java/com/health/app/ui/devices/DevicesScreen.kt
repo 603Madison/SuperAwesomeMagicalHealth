@@ -89,6 +89,8 @@ class DevicesActions(
     val rename: (Device, String) -> Unit = { _, _ -> },
     val forget: (Device, Boolean) -> Unit = { _, _ -> },
     val retry: () -> Unit = {},
+    /** Uses one device for a reading (or, with null, combines them). */
+    val choose: (Overlap, String?) -> Unit = { _, _ -> },
 )
 
 @Composable
@@ -138,6 +140,7 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}) {
             rename = vm::rename,
             forget = vm::forget,
             retry = vm::loadServer,
+            choose = vm::choose,
         ),
         monitors = MonitorsUi(
             pairedMonitors,
@@ -172,6 +175,10 @@ fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = Syst
                 MonitorsUi(monitors.monitors, state.statuses[VitalsConduit.ID], state.running == VitalsConduit.ID, monitors.find, { actions.sync(VitalsConduit.ID) }, monitors.forget),
                 now,
             )
+        }
+        if (state.overlaps.isNotEmpty()) {
+            SectionTitle("When devices overlap")
+            Column(Modifier.padding(horizontal = 16.dp)) { OverlapsCard(state.overlaps, actions.choose) }
         }
         SectionTitle("Pebble and Garmin")
         Column(Modifier.padding(horizontal = 16.dp)) { OtherDevicesCard() }
@@ -264,13 +271,15 @@ private fun RingCard(state: DevicesState, actions: DevicesActions, now: Long) {
         if (ring == null) {
             SourceHeader(Icons.Rounded.Radar, "Smart ring", "Colmi R02–R12, Colmi Ring 2 and other rings that use the QRing app")
             Spacer(Modifier.height(10.dp))
-            Hint("The app becomes your ring's companion: it sets the ring's clock and brings in heart rate, steps and sleep over Bluetooth. (If the QRing app is connected to the ring, close it first.)")
+            Hint("The app becomes your ring's companion: it sets the ring's clock and brings in heart rate, steps, sleep, blood oxygen, HRV and stress over Bluetooth (and skin temperature, on rings that measure it). (If the QRing app is connected to the ring, close it first.)")
             Spacer(Modifier.height(12.dp))
             FilledTonalButton(onClick = actions.findRing) { Text("Find my ring") }
         } else {
             SourceHeader(Icons.Rounded.Radar, ring.name, listOfNotNull(ring.battery?.let { "$it% battery" }, ring.firmware?.let { "firmware $it" }, ring.address).joinToString(" · "))
             Spacer(Modifier.height(10.dp))
             StatusLine(state.statuses[ColmiConduit.ID], state.running == ColmiConduit.ID, now)
+            Spacer(Modifier.height(12.dp))
+            RingReadingsList(state.ringReadings.takeIf { it.address == ring.address }, now)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = { actions.sync(ColmiConduit.ID) }, enabled = state.running == null) { Text("Sync now") }
