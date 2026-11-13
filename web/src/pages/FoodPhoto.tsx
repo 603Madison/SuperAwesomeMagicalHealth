@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Camera, ExternalLink, ImagePlus, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
+import { useFoodNumbers } from "../lib/fields";
 import { num } from "../lib/format";
 import { useSession } from "../lib/session";
 import { useReadOnly } from "../lib/viewing";
@@ -227,7 +228,9 @@ function Review({ estimate, date, meal, mealLabel, onRetake, onClose, onAdded }:
   estimate: FoodPhotoEstimate; date: string; meal: Meal; mealLabel: string; onRetake: () => void; onClose: () => void; onAdded: () => void;
 }) {
   // In eating-disorder recovery, foods and amounts only: no calorie or macro numbers here (they're still logged).
-  const hide = estimate.hideNumbers;
+  // The estimate says so, and so do the person's fields.
+  const foodNumbers = useFoodNumbers();
+  const hide = estimate.hideNumbers || !foodNumbers;
   const next = useRef(estimate.items.length);
   const [rows, setRows] = useState<Row[]>(() => estimate.items.map((item, key) => ({
     key, item, name: item.name, amount: String(Math.round(item.grams)), calories: "", useMine: false, added: false,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useModules } from "../App";
 import {
   BatteryMedium, Brain, Check, CircleUserRound, Gauge, ListChecks, MessageSquareText, Pause, Pencil, Play, Plus, Printer, Sparkles, Square,
@@ -62,7 +62,9 @@ export function Neuro() {
   // The tabs are this page's sections: the person puts them in their order, and hides the ones they don't use.
   const arranged = useArrange(layoutKey("neuro"), "Autism & ADHD", all.map((t) => ({ id: t.id, label: t.label, when: t.on, node: null })));
   const tabs = arranged.shown as { id: Tab; label: string }[];
-  const [chosen, setTab] = useState<Tab | null>(null);
+  // A link can open a tab: /neuro#routines (Today's "Start" on a routine that's due).
+  const { hash } = useLocation();
+  const [chosen, setTab] = useState<Tab | null>(() => (hash ? (decodeURIComponent(hash.slice(1)) as Tab) : null));
   // The chosen tab, or the first in the person's order (also when the chosen one has since been hidden).
   const tab: Tab | undefined = chosen && tabs.some((t) => t.id === chosen) ? chosen : tabs[0]?.id;
   return (
@@ -693,20 +695,5 @@ export function CalmMode() {
       </div>
       {card && <ShowCard card={card} onClose={() => setCard(null)} />}
     </div>
-  );
-}
-
-/** A small summary for Today. */
-export function NeuroTodayCard({ data }: { data: { overloadsToday: number; energyLeft?: number; socialBattery?: number; routinesDue: string[]; focusMinutes: number } }) {
-  return (
-    <Card title="Autism & ADHD" icon={<Brain size={18} />} link={{ to: "/neuro", label: "Open Autism & ADHD" }}>
-      <div className="stats">
-        {data.energyLeft != null && <Stat label="Energy left" value={data.energyLeft} sub="spoons" />}
-        {data.socialBattery != null && <Stat label="Social battery" value={`${data.socialBattery * 10}%`} />}
-        {data.focusMinutes > 0 && <Stat label="Focus" value={hm(data.focusMinutes)} />}
-      </div>
-      {data.routinesDue.length > 0 && <p className="muted small">Still to do: {data.routinesDue.join(", ")}</p>}
-      {data.overloadsToday > 0 && <p className="muted small">A hard moment today. Go gently: <Link to="/calm">calm mode</Link> is here if it helps.</p>}
-    </Card>
   );
 }

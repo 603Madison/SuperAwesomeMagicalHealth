@@ -2186,6 +2186,15 @@ export type TodaySection =
   | "VITALS" | "DRINKS" | "SYMPTOMS" | "HABITS" | "HORMONES" | "LIFE_STAGE" | "APPOINTMENTS" | "ACTIVITY" | "SLEEP"
   | "HEART" | "STRESS" | "FOOD" | "WATER" | "WORKOUTS" | "BODY" | "ALSO";
 
+/** Today's sections' names, for Arrange (TodaySection.label). */
+export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
+  SCORES: "Readiness, sleep and activity scores", UP_NEXT: "Up next", INSIGHTS: "For you", QUICK: "Quick log", MEDS: "Medications",
+  MIND: "Mind", CYCLE: "Cycle", CONTINENCE: "Bladder & bowel", SUPPLIES: "Supplies running low", NEURO: "Autism & ADHD", TRANSITION: "Transition",
+  VITALS: "Blood pressure & glucose", DRINKS: "Drinks", SYMPTOMS: "Symptoms", HABITS: "Habits", HORMONES: "Hormone therapy", LIFE_STAGE: "Life stage",
+  APPOINTMENTS: "Appointments", ACTIVITY: "Activity", SLEEP: "Sleep", HEART: "Heart", STRESS: "Stress", FOOD: "Food", WATER: "Water",
+  WORKOUTS: "Workouts", BODY: "Body", ALSO: "Also today",
+};
+
 export type QuickAction =
   | "FOOD" | "WATER" | "MOOD" | "PERIOD" | "BLADDER" | "DOSE" | "WEIGHT" | "COFFEE" | "DRINK" | "WORKOUT" | "SLEEP"
   | "CHECK_IN" | "SYMPTOM" | "BLOOD_PRESSURE" | "GLUCOSE" | "HABIT" | "ENERGY" | "OVERLOAD" | "CALM" | "MOMENT"
@@ -2206,8 +2215,7 @@ export const QUICK_ACTIONS: { id: QuickAction; label: string; module: Module | n
   { id: "PHOTO", label: "Photo", module: "PHOTOS" }, { id: "MEASUREMENTS", label: "Measurements", module: "BODY" },
   { id: "APPOINTMENT", label: "Appointment", module: "APPOINTMENTS" },
 ];
-/** How many quick actions show before "More", unless the person has arranged them. */
-export const QUICK_SHOWN = 6;
+/* How many quick actions show in Today's row (QuickAction.SHOWN) is lib/today.ts's QUICK_ROW. */
 
 export type NavPage = "TODAY" | "TRENDS" | "FOOD" | "REPORTS" | "DEVICES" | "CONDITIONS" | "ASSISTANT";
 

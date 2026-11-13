@@ -1000,7 +1000,8 @@ button.row:hover { background: var(--surface-2); }
 .viewing-banner > span { flex: 1; min-width: 200px; }
 .phone-tab-only { display: none; }
 /* Belt and braces: anything that changes data stays hidden while viewing. */
-.is-viewing .row-actions, .is-viewing .dose-actions, .is-viewing .write-only, .is-viewing .quick { display: none !important; }
+.is-viewing .row-actions, .is-viewing .dose-actions, .is-viewing .write-only, .is-viewing .quick, .is-viewing .quick-log,
+.is-viewing .log-btn, .is-viewing .up-next-actions, .is-viewing .also-add { display: none !important; }
 @media (max-width: 760px) {
   .view-switcher { display: none; }
   .phone-tab-only { display: flex; }
@@ -1075,7 +1076,7 @@ input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 28p
 .condition-card.is-picked { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
 .condition-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .first-run { flex-direction: row; align-items: flex-start; gap: 16px; margin-bottom: 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--glow-1) 18%, var(--card)), color-mix(in srgb, var(--glow-2) 14%, var(--card))); }
-.first-run h3 { margin: 0 0 6px; }
+.first-run h2 { margin: 0 0 6px; font-size: 1rem; font-weight: var(--w-semibold); }
 .first-run p { margin: 0 0 12px; }
 .first-run-icon { flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--primary-container); color: var(--on-primary-container); }
 
@@ -1339,25 +1340,131 @@ input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 28p
 .btn-small { min-height: 32px; padding: 0 12px; font-size: 0.85rem; }
 
 /* ---------- Today ---------- */
+/* One calm column: the scores, Up next, For you, the quick row, the feature cards ("Your day", two
+   columns on wide screens) and Also today; sections 24 px apart, cards 16 (16 everywhere on
+   phones). One type scale: every card title the same, every headline number the same. Colour is
+   for what means something: the scores, what's late, and what can be pressed. */
 
-.today .page-header { align-items: center; }
-.score-line {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 16px 12px 18px; border-radius: 18px; color: var(--muted);
-  background: var(--card); border: 1px solid color-mix(in srgb, var(--outline) 30%, transparent); font-size: 0.92rem;
-}
-.score-line svg { color: var(--primary); flex: none; }
-.score-line > span { flex: 1; min-width: 180px; }
-.score-line-link { display: inline-flex; align-items: center; gap: 2px; color: var(--primary); font-weight: var(--w-semibold); }
+.today { max-width: 960px; }
+.today-header { align-items: center; }
+.log-btn { padding: 0 18px 0 14px; }
+.today-stack { display: flex; flex-direction: column; gap: 24px; }
+.today .panel-card { padding: 18px 20px 20px; gap: 12px; }
+.today .card-head { min-height: 36px; }
+.today .card-heading svg { color: var(--muted); }
+/* A card's one action is quiet until it's pointed at: the colour is for what's due. */
+.today .day-card .card-primary { background: none; color: var(--primary); }
+.today .day-card .card-primary:hover:not(:disabled) { background: var(--primary-container); color: var(--on-primary-container); }
+.today .idea-chip-add { background: color-mix(in srgb, var(--primary) 13%, transparent); color: var(--primary); }
 .insights:empty { display: none; }
 button.insight { text-align: left; cursor: pointer; font: inherit; color: inherit; }
 button.insight:hover { background: var(--surface-2); }
 .digest-card .insight-icon { background: var(--primary-container); color: var(--on-primary-container); }
-.chip-more svg { color: var(--muted); }
-.water-row { grid-template-columns: 76px minmax(0, 1fr) auto auto; }
+
+/* The scores: a slim strip of small rings, or one quiet line until there are any. */
+.score-strip {
+  display: grid; gap: 8px; padding: 10px; background: var(--card); border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--outline) 30%, transparent);
+}
+.score-item {
+  display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; padding: 6px 8px; border: 0; border-radius: 16px;
+  background: none; color: inherit; font: inherit; text-align: left;
+}
+button.score-item { cursor: pointer; transition: background 0.15s; }
+button.score-item:hover { background: var(--surface-2); }
+.mini-ring { flex: none; display: block; overflow: visible; }
+.score-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.score-name { font-weight: var(--w-semibold); font-size: 0.92rem; white-space: nowrap; }
+.score-word { color: var(--muted); font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score-line { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 4px; color: var(--muted); font-size: 0.9rem; }
+.score-line svg { flex: none; }
+.score-line > span { flex: 0 1 auto; min-width: 0; }
+.score-line-link { flex: none; display: inline-flex; align-items: center; gap: 2px; color: var(--primary); font-weight: var(--w-semibold); }
+
+/* Up next: a row for each thing to do, with its one action. */
+.up-next-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.up-next-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; }
+.up-next-row + .up-next-row { border-top: 1px solid color-mix(in srgb, var(--outline) 26%, transparent); }
+.up-next-icon { width: 36px; height: 36px; border-radius: 12px; flex: none; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.up-next-row.is-late .up-next-icon { background: color-mix(in srgb, var(--c3) 16%, transparent); color: var(--c3); }
+.up-next-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.up-next-title { font-weight: var(--w-semibold); font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-next-sub { color: var(--muted); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-next-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.btn-soft { background: var(--primary-container); color: var(--on-primary-container); }
+.btn-soft:hover:not(:disabled) { filter: brightness(1.06); }
+.up-next-skip { color: var(--muted); }
+.up-next-skip:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+
+/* The quick row: round buttons with a word under each, one row that never wraps. */
+.quick-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.quick-btn {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 2px 0; border: 0; border-radius: 16px;
+  background: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.quick-icon {
+  width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); transition: background 0.15s, color 0.15s;
+}
+.quick-btn:hover .quick-icon, .quick-btn.is-on .quick-icon { background: var(--primary-container); color: var(--on-primary-container); border-color: transparent; }
+.quick-more .quick-icon { color: var(--muted); }
+.quick-label { max-width: 100%; font-size: 0.78rem; font-weight: var(--w-medium); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-btn:focus-visible { outline: none; }
+.quick-btn:focus-visible .quick-icon { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Your day: every card the same, a headline and at most one line under it. */
+.day-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.day-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.day-value {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; margin: 0; min-height: 1.875rem;
+  font-size: 1.5rem; font-weight: var(--w-semibold); letter-spacing: -0.01em; line-height: 1.25; font-variant-numeric: tabular-nums;
+}
+.day-value.is-text { font-size: 1.15rem; letter-spacing: 0; align-items: center; }
+.day-unit { font-size: 0.9rem; font-weight: var(--w-medium); color: var(--muted); letter-spacing: 0; }
+.day-support { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--muted); font-size: 0.85rem; }
+.day-support .sources-link { padding: 0; font-size: 0.85rem; }
+
+/* Also today: a short row for each feature with nothing yet, and a + that logs. */
+.also-rows { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+.also-row { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 52px; padding: 4px 0; border-top: 1px solid color-mix(in srgb, var(--outline) 26%, transparent); }
+.also-row:nth-child(-n + 2) { border-top: 0; }
+.also-icon { width: 32px; height: 32px; border-radius: 10px; flex: none; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.also-name { flex: 1; min-width: 0; font-weight: var(--w-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.also-state { flex: none; color: var(--faint); font-size: 0.85rem; }
+.also-add { width: 36px; height: 36px; color: var(--primary); }
+.also-add:hover:not(:disabled) { background: var(--primary-container); color: var(--on-primary-container); }
+
+/* + Log: everything to log, a feature at a time, as chips. */
+.log-group-title { margin: 2px 0 8px 2px; font-size: 0.75rem; font-weight: var(--w-semibold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.log-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.log-chip {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 12px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); background: var(--card); color: var(--text);
+  font: inherit; font-size: 0.92rem; font-weight: var(--w-medium); cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.log-chip svg { flex: none; color: var(--primary); }
+.log-chip:hover { background: var(--primary-container); color: var(--on-primary-container); }
+.log-chip:hover svg { color: inherit; }
+
 @media (max-width: 760px) {
-  .water-row { grid-template-columns: 64px minmax(0, 1fr) auto; }
-  .water-row .btn { grid-column: 1 / -1; justify-self: start; }
-  .today .page-header { align-items: flex-end; }
+  .today-stack { gap: 16px; }
+  .today .panel-card { padding: 14px 16px 16px; }
+  .today-header { align-items: flex-end; }
+  .today-header .page-actions { width: 100%; flex-wrap: nowrap; }
+  .today-header .date-nav { flex: 1 1 auto; min-width: 0; }
+  .today-header .date-nav-label { flex: 1; min-width: 72px; }
+  .day-grid { grid-template-columns: 1fr; }
+  .score-strip { padding: 6px 4px; gap: 0; }
+  .score-item { flex-direction: column; gap: 4px; padding: 4px; }
+  .score-item .mini-ring { width: 44px; height: 44px; }
+  .score-name { font-size: 0.85rem; }
+  .score-word { display: none; }
+  .quick-row { gap: 4px; }
+  .quick-icon { width: 48px; height: 48px; }
+  .quick-label { font-size: 0.72rem; }
+  .also-rows { grid-template-columns: 1fr; }
+  .also-row:nth-child(2) { border-top: 1px solid color-mix(in srgb, var(--outline) 26%, transparent); }
+  .up-next-row { gap: 10px; }
 }
 
 /* ---------- Settings: a small index of its sections ---------- */

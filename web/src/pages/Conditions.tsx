@@ -215,7 +215,7 @@ export function FirstRunPrompt({ onDismiss }: { onDismiss: () => void }) {
     <section className="panel-card first-run">
       <div className="first-run-icon"><Sparkles size={22} /></div>
       <div>
-        <h3>What would you like to keep track of?</h3>
+        <h2>What would you like to keep track of?</h2>
         <p className="muted">Tell the app about the conditions and goals that matter to you (a bladder condition, endometriosis, ADHD, losing weight, transition…) and it shows the right tools, and only those.</p>
         <div className="button-row">
           <Button variant="primary" onClick={() => navigate("/conditions")}>Choose</Button>

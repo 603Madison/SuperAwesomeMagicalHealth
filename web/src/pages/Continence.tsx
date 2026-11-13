@@ -11,6 +11,7 @@ import type {
 } from "../lib/types";
 import { AWARENESS, FULLNESS, LEAK_CONTENTS, REACHED_TOILET, VERDICT_LABEL, supplyKindLabel } from "../lib/types";
 import { F, useFields } from "../lib/fields";
+import { trainingMinutes } from "../lib/today";
 import { useReadOnly } from "../lib/viewing";
 import { BarChart, LineChart } from "../components/charts";
 import { Button, Card, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
@@ -400,10 +401,7 @@ function CheckInsCard({ readOnly, onSaved }: { readOnly: boolean; onSaved: () =>
 
 /** Today's gap between trips, if bladder training is on. */
 export function trainingInterval(s: ContinenceSettings, date = today()): number {
-  const t = s.bladderTraining;
-  if (!t.startedOn) return t.intervalMinutes;
-  const days = Math.max(0, Math.floor((new Date(`${date}T12:00`).getTime() - new Date(`${t.startedOn}T12:00`).getTime()) / 86_400_000));
-  return Math.min(t.goalMinutes, t.intervalMinutes + Math.floor(days / Math.max(1, t.stepEveryDays)) * t.stepMinutes);
+  return trainingMinutes(s.bladderTraining, date);
 }
 
 function TrainingCard({ settings }: { settings: ContinenceSettings }) {

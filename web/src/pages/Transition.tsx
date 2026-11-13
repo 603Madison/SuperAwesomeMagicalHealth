@@ -381,18 +381,6 @@ function HairDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   );
 }
 
-/** A line for Today. */
-export function TransitionTodayCard({ headline, milestonesDue, euphoriaThisWeek }: { headline?: string; milestonesDue: string[]; euphoriaThisWeek: number }) {
-  if (!headline && milestonesDue.length === 0 && euphoriaThisWeek === 0) return null;
-  return (
-    <Card title="Transition" icon={<Sparkles size={18} />} link={{ to: "/transition", label: "Open Transition" }}>
-      {headline && <p>{headline}</p>}
-      {euphoriaThisWeek > 0 && <p className="muted small">{euphoriaThisWeek} {euphoriaThisWeek === 1 ? "moment" : "moments"} of euphoria this week.</p>}
-      {milestonesDue.length > 0 && <p className="muted small">Coming up: {milestonesDue.join(", ")}</p>}
-    </Card>
-  );
-}
-
 export function EmptyTransition() {
   return <Empty icon={<Sparkles size={32} />} title="Transition">Turn on Transition in Settings › Features to keep milestones, changes and moments here.</Empty>;
 }

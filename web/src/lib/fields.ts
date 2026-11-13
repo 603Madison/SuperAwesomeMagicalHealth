@@ -206,6 +206,18 @@ export async function setField(key: string, on: boolean): Promise<void> {
 }
 
 /**
+ * Whether amounts of food show (FieldLayout.foodNumbers): calories, macros and targets. False for
+ * people in eating disorder recovery: foods and meals show, and the numbers are still logged
+ * quietly. False until the layout has loaded, so no number shows for a moment first; true from
+ * older servers that don't say.
+ */
+export function useFoodNumbers(): boolean {
+  const layout = useFieldStore((s) => s.layout);
+  if (!layout && !pending) void loadFields();
+  return layout != null && layout.foodNumbers !== false;
+}
+
+/**
  * Whether water shows (Food's `nutrition.water` field, on by default): the quick button, the goal,
  * the water card and chart, the water drink and habit, and the watch's water. Off, drinks still
  * count caffeine and alcohol.
