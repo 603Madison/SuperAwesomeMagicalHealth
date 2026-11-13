@@ -666,9 +666,9 @@ button.row:hover { background: var(--surface-2); }
 @media (max-width: 760px) {
   .hero .ring { padding: 4px; min-width: 0; }
   .hero .ring svg { width: min(100%, 104px); height: auto; }
-  .quick { flex-wrap: nowrap; overflow-x: auto; margin: 0 -14px 16px; padding: 0 14px; scrollbar-width: none; }
-  .quick::-webkit-scrollbar { display: none; }
-  .quick .chip { flex: none; }
+  /* A few quick actions (the rest are under More), so they wrap rather than scroll out of sight. */
+  .quick { gap: 6px; }
+  .quick .chip { padding: 8px 12px; }
 }
 
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
