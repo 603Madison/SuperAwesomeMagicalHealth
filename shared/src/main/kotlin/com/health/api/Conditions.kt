@@ -66,6 +66,11 @@ data class FieldLayout(
     val hide: Set<String> = emptySet(),
     /** Each field's reason for showing, for the settings page: "default", "you", or a condition's name. */
     val because: Map<String, String> = emptyMap(),
+    /**
+     * Whether amounts of food show at all (calories, macros, targets): not for people in eating disorder
+     * recovery, where numbers about food can make things harder. The apps still log them, quietly.
+     */
+    val foodNumbers: Boolean = true,
 )
 
 /** What the person changes: PUT /api/fields. */

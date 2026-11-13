@@ -53,4 +53,12 @@ class LayoutTest {
         // Someone viewing a share keeps their own arrangement: the header isn't allowed here.
         assertEquals(HttpStatusCode.Forbidden, admin.get("/api/layout") { header("X-SAMH-View", "someone") }.status)
     }
+
+    @Test
+    fun `people in eating disorder recovery see no amounts of food`() = serverTest { _ ->
+        val admin = adminBrowser()
+        assertTrue(admin.get("/api/fields").obj()["foodNumbers"]!!.jsonPrimitive.content.toBoolean())
+        assertEquals(HttpStatusCode.OK, admin.putJson("/api/conditions", """{"conditions":[{"id":"eating-disorder","name":"Eating disorder recovery"}]}""").status)
+        assertFalse(admin.get("/api/fields").obj()["foodNumbers"]!!.jsonPrimitive.content.toBoolean())
+    }
 }

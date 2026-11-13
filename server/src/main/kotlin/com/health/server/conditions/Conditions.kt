@@ -39,7 +39,10 @@ class ConditionsService(private val settings: UserSettingsStore, private val pro
         return layout(userId)
     }
 
-    suspend fun layout(userId: String): FieldLayout = layout(get(userId), choices(userId))
+    suspend fun layout(userId: String): FieldLayout {
+        val mine = get(userId)
+        return layout(mine, choices(userId)).copy(foodNumbers = mine.conditions.none { it.id == EATING_DISORDER })
+    }
 
     /** Whether [field] shows for this person. */
     suspend fun shows(userId: String, field: String): Boolean = field in layout(userId).effective
@@ -66,6 +69,8 @@ class ConditionsService(private val settings: UserSettingsStore, private val pro
     companion object {
         const val KEY = "conditions"
         const val FIELDS_KEY = "fields"
+        /** The condition whose people see no amounts of food. */
+        const val EATING_DISORDER = "eating-disorder"
 
         fun modulesOf(c: MyCondition): Set<Module> = ConditionCatalog.byId(c.id)?.modules ?: c.modules
         fun fieldsOf(c: MyCondition): Set<String> = ConditionCatalog.byId(c.id)?.fields ?: c.fields

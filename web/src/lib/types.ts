@@ -1409,6 +1409,8 @@ export interface FieldLayout {
   show: string[];
   hide: string[];
   because: Record<string, string>;
+  /** False for people in eating disorder recovery: no amounts of food anywhere (still logged quietly). Older servers leave it out. */
+  foodNumbers?: boolean;
 }
 
 export interface FieldChoices {
