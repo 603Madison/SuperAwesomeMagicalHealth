@@ -227,6 +227,25 @@ apps show only what's useful. Kept encrypted.
 | `GET /api/conditions` · `PUT` | `MyConditions` (a PUT turns on the features they need; it never turns features off) |
 | `GET /api/fields` · `PUT` | `FieldLayout` / `FieldChoices`: which fields show, and why |
 
+Food's water is a field too (`nutrition.water`, on by default): hidden, the apps and the server
+leave out water everywhere (the quick button, the goal, insights, the digest, the watch, habits,
+exports to other apps); drinks still count caffeine and alcohol.
+
+### Arranging screens
+
+| | |
+|---|---|
+| `GET /api/layout` | `LayoutPrefs`: each arranged screen's `ScreenLayout` (order, hidden), by key |
+| `PUT /api/layout` | Replaces them all |
+| `PUT /api/layout/{key}` · `DELETE /api/layout/{key}` | One screen's `ScreenLayout` · puts it back as it was (so does an empty one) |
+
+Keys (`Layouts` in `shared/…/Layouts.kt`): `today` (`TodaySection` names), `today.quick`
+(`QuickAction` names; hidden ones go under "More"), `nav` (`Module` and `NavPage` names, for the
+web's sidebar and the phone's Health tab), shared by both apps; and `web.<screen>` or
+`android.<screen>` for the rest, with ids each app keeps stable. Sections a saved order doesn't
+name go where they'd be by default (`Layouts.arrange`). Always the person's own: refused with
+`X-SAMH-View`. Up to 100 screens, 80 sections each, ids of letters, digits, `.`, `-` and `_`.
+
 ### Bladder and bowel, in detail
 
 | | |

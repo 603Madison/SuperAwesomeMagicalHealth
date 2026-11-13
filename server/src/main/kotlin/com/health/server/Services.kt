@@ -102,6 +102,9 @@ class Services(
     /** Each person's own settings, sealed one row per key (conditions, a feature's diary settings, Autism & ADHD, transition). */
     val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
 
+    /** How each person arranges the apps' screens. */
+    val layouts = com.health.server.platform.LayoutService(userSettings)
+
     // Autism & ADHD, transition and progress photos (neuro/, transition/, photos/).
     val neuro = com.health.server.neuro.NeuroService(entries, userSettings, profiles, days, modules.cycle, clock)
     val transition = com.health.server.transition.TransitionService(entries, userSettings, profiles, hormones, records, clock)

@@ -1860,3 +1860,72 @@ export interface AiAuditEntry {
   inputTokens: number;
   outputTokens: number;
 }
+
+// ---------------------------------------------------------------- Arranging screens (Layouts.kt)
+
+/** One screen: its sections in the person's order, and those hidden. */
+export interface ScreenLayout {
+  order: string[];
+  hidden: string[];
+}
+
+/** Every screen the person has arranged (GET/PUT /api/layout), by key. */
+export interface LayoutPrefs {
+  screens: Record<string, ScreenLayout>;
+}
+
+/** Keys shared with the phone app; other screens are "web.<screen>". */
+export const LAYOUT_TODAY = "today";
+export const LAYOUT_QUICK = "today.quick";
+export const LAYOUT_NAV = "nav";
+export const layoutKey = (screen: string) => `web.${screen}`;
+export const LAYOUT_MAX_SECTIONS = 80;
+
+export type TodaySection =
+  | "SCORES" | "INSIGHTS" | "QUICK" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "NEURO" | "TRANSITION"
+  | "VITALS" | "DRINKS" | "SYMPTOMS" | "HABITS" | "HORMONES" | "LIFE_STAGE" | "APPOINTMENTS" | "ACTIVITY" | "SLEEP"
+  | "HEART" | "STRESS" | "FOOD" | "WATER" | "WORKOUTS" | "BODY";
+
+export type QuickAction =
+  | "FOOD" | "WATER" | "MOOD" | "PERIOD" | "BLADDER" | "DOSE" | "WEIGHT" | "COFFEE" | "DRINK" | "WORKOUT" | "SLEEP"
+  | "CHECK_IN" | "SYMPTOM" | "BLOOD_PRESSURE" | "GLUCOSE" | "HABIT" | "ENERGY" | "OVERLOAD" | "CALM" | "MOMENT"
+  | "PHOTO" | "MEASUREMENTS" | "APPOINTMENT";
+
+/** Quick actions, in the default order, with the feature each needs (null: always). */
+export const QUICK_ACTIONS: { id: QuickAction; label: string; module: Module | null }[] = [
+  { id: "FOOD", label: "Log food", module: "NUTRITION" }, { id: "WATER", label: "Water", module: "NUTRITION" },
+  { id: "MOOD", label: "Mood", module: "MIND" }, { id: "PERIOD", label: "Period", module: "CYCLE" },
+  { id: "BLADDER", label: "Bladder & bowel", module: "CONTINENCE" }, { id: "DOSE", label: "Medications", module: "MEDICATIONS" },
+  { id: "WEIGHT", label: "Weight", module: "BODY" }, { id: "COFFEE", label: "Coffee", module: "NUTRITION" },
+  { id: "DRINK", label: "A drink", module: "NUTRITION" }, { id: "WORKOUT", label: "Workout", module: "ACTIVITY" },
+  { id: "SLEEP", label: "Add a night", module: "SLEEP" }, { id: "CHECK_IN", label: "Check in", module: null },
+  { id: "SYMPTOM", label: "Symptom", module: "SYMPTOMS" }, { id: "BLOOD_PRESSURE", label: "Blood pressure", module: "VITALS" },
+  { id: "GLUCOSE", label: "Glucose", module: "VITALS" }, { id: "HABIT", label: "Habits", module: "HABITS" },
+  { id: "ENERGY", label: "Energy & focus", module: "NEURO" }, { id: "OVERLOAD", label: "Too much", module: "NEURO" },
+  { id: "CALM", label: "Calm", module: "MIND" }, { id: "MOMENT", label: "Euphoria", module: "TRANSITION" },
+  { id: "PHOTO", label: "Photo", module: "PHOTOS" }, { id: "MEASUREMENTS", label: "Measurements", module: "BODY" },
+  { id: "APPOINTMENT", label: "Appointment", module: "APPOINTMENTS" },
+];
+/** How many quick actions show before "More", unless the person has arranged them. */
+export const QUICK_SHOWN = 6;
+
+export type NavPage = "TODAY" | "TRENDS" | "FOOD" | "REPORTS" | "DEVICES" | "CONDITIONS" | "ASSISTANT";
+
+/** Applies a saved layout to a screen's sections (ids in the default order): the person's order, then new ones where they'd be. */
+export function arrange<T>(defaults: T[], id: (t: T) => string, layout?: ScreenLayout): T[] {
+  if (!layout || layout.order.length === 0) return defaults;
+  const byId = new Map(defaults.map((d) => [id(d), d] as const));
+  const placed: T[] = layout.order.map((k) => byId.get(k)).filter((d): d is T => d !== undefined);
+  defaults.forEach((item, i) => {
+    if (layout.order.includes(id(item))) return;
+    const before = defaults.slice(0, i).reverse().find((prev) => placed.includes(prev));
+    placed.splice(before === undefined ? 0 : placed.indexOf(before) + 1, 0, item);
+  });
+  return placed;
+}
+
+/** arrange(), less what's hidden. */
+export function visible<T>(defaults: T[], id: (t: T) => string, layout?: ScreenLayout): T[] {
+  const hidden = new Set(layout?.hidden ?? []);
+  return arrange(defaults, id, layout).filter((d) => !hidden.has(id(d)));
+}

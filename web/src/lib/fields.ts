@@ -78,6 +78,7 @@ export const F = {
   TRANSITION_MEASUREMENTS: "transition.measurements",
 
   BODY_MEASUREMENTS: "body.measurements",
+  NUTRITION_WATER: "nutrition.water",
 } as const;
 
 /** On for everyone who has the feature, until hidden (the server's Fields.DEFAULTS). */
@@ -86,6 +87,7 @@ export const DEFAULT_FIELDS: string[] = [
   F.CYCLE_FLOW, F.CYCLE_PAIN, F.CYCLE_SYMPTOM_SEVERITY, F.CYCLE_MUCUS, F.CYCLE_OVULATION_TEST, F.CYCLE_BBT, F.CYCLE_FERTILITY,
   F.NEURO_ABOUT_ME, F.NEURO_CALM, F.NEURO_CARDS,
   F.TRANSITION_MILESTONES, F.TRANSITION_CHANGES, F.TRANSITION_MOMENTS,
+  F.NUTRITION_WATER,
 ];
 
 /** Every field, in the order settings pages list them: its feature and label. */
@@ -154,6 +156,7 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
   { key: F.TRANSITION_MOMENTS, module: "TRANSITION", label: "Euphoria and dysphoria" },
   { key: F.TRANSITION_MEASUREMENTS, module: "TRANSITION", label: "Body measurements" },
   { key: F.BODY_MEASUREMENTS, module: "BODY", label: "Body measurements" },
+  { key: F.NUTRITION_WATER, module: "NUTRITION", label: "Water" },
 ];
 
 export const fieldLabel = (key: string) => ALL_FIELDS.find((f) => f.key === key)?.label ?? key;

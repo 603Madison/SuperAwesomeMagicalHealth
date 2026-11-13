@@ -167,12 +167,16 @@ object Fields {
     // Body
     const val BODY_MEASUREMENTS = "body.measurements"
 
+    // Food: water (and the water goal) can be left out; drinks still count caffeine and alcohol.
+    const val NUTRITION_WATER = "nutrition.water"
+
     /** On for everyone who has the feature, until hidden. */
     val DEFAULTS: Set<String> = setOf(
         CONTINENCE_URGENCY, CONTINENCE_VOLUME, CONTINENCE_LEAK_SIZE, CONTINENCE_TRIGGERS, CONTINENCE_BRISTOL, CONTINENCE_PELVIC_FLOOR,
         CYCLE_FLOW, CYCLE_PAIN, CYCLE_SYMPTOM_SEVERITY, CYCLE_MUCUS, CYCLE_OVULATION_TEST, CYCLE_BBT, CYCLE_FERTILITY,
         NEURO_ABOUT_ME, NEURO_CALM, NEURO_CARDS,
         TRANSITION_MILESTONES, TRANSITION_CHANGES, TRANSITION_MOMENTS,
+        NUTRITION_WATER,
     )
 
     /** Every field, for settings pages: key to its feature and label. */
@@ -241,5 +245,6 @@ object Fields {
         TRANSITION_MOMENTS to (Module.TRANSITION to "Euphoria and dysphoria"),
         TRANSITION_MEASUREMENTS to (Module.TRANSITION to "Body measurements"),
         BODY_MEASUREMENTS to (Module.BODY to "Body measurements"),
+        NUTRITION_WATER to (Module.NUTRITION to "Water"),
     )
 }

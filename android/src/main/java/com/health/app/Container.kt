@@ -17,6 +17,8 @@ import com.health.app.net.SignIn
 import com.health.app.net.appointments
 import com.health.app.net.continenceSettings
 import com.health.app.net.fields
+import com.health.app.net.layout
+import com.health.app.net.saveScreenLayout
 import com.health.app.net.habitsForReminders
 import com.health.app.reminders.DigestWorker
 import com.health.app.reminders.DoseOutbox
@@ -142,6 +144,31 @@ class Container(val context: Context) {
         }
     }
 
+    private val _layout = MutableStateFlow(com.health.api.LayoutPrefs())
+
+    /** How the person has arranged each screen (their own, also while viewing a share). */
+    val layout: StateFlow<com.health.api.LayoutPrefs> = _layout.asStateFlow()
+
+    /** Reloads [layout] from the server, keeping what's there if it can't. */
+    suspend fun refreshLayout() {
+        runCatching { api.layout() }.onSuccess { _layout.value = it }.onFailure { Log.w(TAG, "Couldn't load the layout", it) }
+    }
+
+    /**
+     * Saves one screen's arrangement ([com.health.api.Layouts] keys): shown at once, then sent to the
+     * server; if that fails, it goes back to what was saved. An empty layout resets the screen.
+     */
+    suspend fun saveLayout(key: String, screen: com.health.api.ScreenLayout) {
+        val before = _layout.value
+        _layout.value = before.copy(screens = if (screen.order.isEmpty() && screen.hidden.isEmpty()) before.screens - key else before.screens + (key to screen))
+        try {
+            _layout.value = api.saveScreenLayout(key, screen)
+        } catch (e: Exception) {
+            _layout.value = before
+            throw e
+        }
+    }
+
     /** The features to show: the viewed person's shared ones while viewing, else the person's own. */
     fun shownModules(): Set<Module> = if (_viewing.value != null) _viewProfile.value?.modules ?: _viewing.value?.modules.orEmpty() else modules()
 
@@ -247,6 +274,7 @@ class Container(val context: Context) {
                 } else {
                     _profile.value = null
                     _fields.value = null
+                    _layout.value = com.health.api.LayoutPrefs()
                 }
             }
         }
@@ -278,6 +306,7 @@ class Container(val context: Context) {
         _profile.value = p
         prefs.update { it.copy(units = p.units) }
         refreshFields()
+        refreshLayout()
         p
     } catch (e: Exception) {
         Log.w(TAG, "Couldn't load the profile", e)
@@ -331,6 +360,7 @@ class Container(val context: Context) {
         _viewProfile.value = null
         _profile.value = null
         _fields.value = null
+        _layout.value = com.health.api.LayoutPrefs()
         // The person's own cycle wording, cached for Today's card.
         com.health.app.ui.modules.cycle.CycleWording.neutral.value = null
     }
