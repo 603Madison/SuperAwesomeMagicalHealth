@@ -305,7 +305,8 @@ class McpServer(private val services: Services) {
             "day", "Day summary",
             "One day in full: readiness, sleep and activity scores with each contributor; steps, calories, heart rate, HRV, " +
                 "SpO2, temperature; the night's sleep with its stages; food eaten against the day's targets; workouts; the " +
-                "person's check-in (mood, energy, tags); and the insights the app showed.",
+                "person's check-in (mood, energy, tags); and the insights the app showed. Where more than one device measured " +
+                "something, a line gives the app's combined number, each device's own, and how it was worked out.",
             schema(dateProperty, account),
         ) { caller, args ->
             val user = accountOf(caller, args)
@@ -1103,7 +1104,16 @@ class McpServer(private val services: Services) {
             d.stress?.let { "stress ${it.roundToInt()}" },
         )
         if (heart.isNotEmpty()) appendLine("Heart and body: ${heart.joinToString(", ")}")
+        // Readings more than one device measured: the app's own number, each device's, and how.
+        d.combined.forEach { c ->
+            val names = com.health.server.insights.Combine.shortNamesOf(c.sources)
+            val each = c.sources.joinToString(", ") { s -> "${names[s.deviceId]} ${combinedValue(c.metric, s.value, units, unit = false)}${if (s.weight == 0.0) " (left out)" else ""}" }
+            appendLine("${c.metric.label} ${combinedValue(c.metric, c.value, units, unit = true)} ($each): ${c.how}")
+        }
         d.sleepSummary?.let { appendLine("Sleep: ${nightText(it)}") }
+        d.sleepSummary?.combined?.let { c ->
+            appendLine("  Recorded by ${c.sources.joinToString(" and ") { "${it.device} (${Scoring.hm(it.asleepMinutes)} asleep${if (it.staged) ", with stages" else ""})" }}: ${c.how}")
+        }
         d.naps.forEach { appendLine("Nap: ${nightText(it)}") }
         d.workouts.forEach { appendLine("Workout: ${workoutText(it, units)}") }
         val n = d.nutrition
@@ -1684,6 +1694,16 @@ class McpServer(private val services: Services) {
     ).joinToString("; ").ifEmpty { "nothing recorded" }
 
     private fun nutrientText(n: Nutrients) = "%d kcal, protein %s g, carbs %s g, fat %s g".format(n.calories.roundToInt(), num(n.protein), num(n.carbs), num(n.fat))
+
+    /** A combined reading's value as text: "53", "48 ms", "7,912". */
+    private fun combinedValue(metric: Metric, v: Double, units: Units, unit: Boolean): String = when (metric) {
+        Metric.STEPS, Metric.FLOORS -> String.format(Locale.ROOT, "%,d", v.roundToInt())
+        Metric.DISTANCE -> distance(v, units).let { if (unit) it else it.substringBefore(' ') }
+        Metric.RESPIRATORY_RATE, Metric.SKIN_TEMPERATURE -> String.format(Locale.ROOT, "%.1f", v) + if (unit) " ${metric.unit}" else ""
+        Metric.TEMPERATURE_DEVIATION -> Scoring.signed(v) + if (unit) " °C" else ""
+        Metric.HEART_RATE, Metric.RESTING_HEART_RATE, Metric.STRESS -> v.roundToInt().toString()
+        else -> v.roundToInt().toString() + if (unit && metric.unit.isNotEmpty()) (if (metric.unit == "%") "%" else " ${metric.unit}") else ""
+    }
 
     private fun distance(m: Double, units: Units) =
         if (units == Units.IMPERIAL) String.format(Locale.ROOT, "%.2f mi", m / 1609.344) else String.format(Locale.ROOT, "%.2f km", m / 1000)

@@ -73,7 +73,8 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 |---|---|
 | `GET /api/devices` | `[Device]` |
 | `PATCH /api/devices/{id}` | `{name}` → `Device` |
-| `DELETE /api/devices/{id}` | Forgets a device and everything it recorded |
+| `DELETE /api/devices/{id}` | Forgets a device and everything it recorded (and any choice of it) |
+| `GET /api/devices/choices` · `PUT` | `DeviceChoices`: which device to use for a reading, and for sleep |
 | `POST /api/devices/upload-keys` | `UploadKeyRequest` → `UploadKey` (shown once) |
 | `POST /api/ingest` | `IngestBatch` → `IngestResult` |
 | `POST /api/import/fit` | multipart `file` (one or more `.fit`) → `FitImportResult` |
@@ -81,6 +82,70 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 `POST /api/ingest` is idempotent: a sample is identified by device, metric and start time, a
 sleep session and a workout by device and start time, so the app can resend a whole day
 whenever it likes. Batches over 20,000 samples are refused; send them in parts.
+
+### More than one device
+
+When two devices measure the same thing (a ring and a watch, say), the server works out its own
+number from both (`server/…/insights/Combine.kt`). With one device, its numbers are used as they
+are. `DaySummary.combined` lists each reading more than one device measured that day (or that the
+person chose one of several for): the result, each device's value and share (`SourceValue.weight`,
+0–1), and `how`, in plain words. `SleepSummary.combined` does the same for a night.
+
+- **Steps, distance, active calories, floors:** each quarter hour, the device that counted most.
+  The same walk isn't counted twice, and a device taken off doesn't lose the steps the other
+  counted. Hourly steps come from the same quarter hours. A reading longer than an hour (a day's
+  total from Health Connect, say) is spread over its time but only tops up what the others
+  counted then.
+- **Heart rate:** merged every 5 minutes (each device's average there, then the average of the
+  devices that had readings), so one that samples every minute doesn't outweigh one that samples
+  every five. Average, lowest and highest come from the merged line; so does the day's chart.
+- **Resting heart rate:** the devices' own resting figures where they give them (weighted as
+  below); otherwise the lowest the merged night line stayed (the lowest three five-minute points
+  in a row).
+- **HRV, blood oxygen, breathing rate, skin temperature, a device's temperature deviation and
+  stress:** each device's own night value (for stress, its day's), weighted by how much of the
+  night (or day) it measured and how well it suits the reading:
+
+  | | Ring (finger) | Watch (wrist) | Phone | Other |
+  |---|---|---|---|---|
+  | Resting heart rate | 1.0 | 0.8 | 0.2 | 0.6 |
+  | HRV | 1.0 | 0.6 | 0.1 | 0.5 |
+  | Blood oxygen | 1.0 | 0.5 | 0.1 | 0.5 |
+  | Breathing rate | 0.9 | 0.7 | 0.2 | 0.6 |
+  | Skin temperature, temperature deviation | 1.0 | 0.5 | 0.1 | 0.5 |
+  | Stress (the day's) | 0.6 | 1.0 | 0.2 | 0.7 |
+  | Time asleep | 1.0 | 0.9 | 0.4 | 0.7 |
+
+  A Colmi ring is a finger; a Pebble or Garmin a wrist; Gadgetbridge, Health Connect and other
+  devices by their name ("ring", "watch", "band"…). How much it measured: up to 90 minutes from
+  each reading, against the night's length (one reading is the device's summary, and counts in
+  full); under half is noted "only part of the night".
+
+  HRV and skin temperature read differently on a finger and a wrist, so each device is compared
+  with its own usual first (the median of its last 14 nights, once it has 3): the combined
+  difference (for HRV, as a share) is shown on the scale of the device that counts most, its
+  usual plus the difference. Until a device's usual is known, it isn't used ("still learning its
+  usual"); until any is, the best-suited device's own value is. The skin temperature difference
+  is the day's temperature deviation, unless a device gives one of its own.
+
+  A device far from its own usual while another isn't counts for a quarter of its weight ("far from
+  its usual": HRV 35%, blood oxygen and breathing 3, temperature 1 °C, stress 25).
+- **Sleep:** nights from different devices that overlap by more than half are one night. Bedtime
+  and waking are averaged where they're within 45 minutes of each other, otherwise the staged
+  device's; the stages come from the device that tells them apart (light sleep takes up any
+  difference, so the stages add up); time asleep is a weighted average (a night with no stages
+  counts half). Nights entered by hand stay as they are; the main night and naps are picked as
+  before.
+
+`DeviceChoices` picks one device for a reading (`MetricChoice`: `metric` and `deviceId`) and one
+for sleep (`sleepDeviceId`); a reading with no choice is combined. A chosen device's values are
+used alone (it has weight 1, the others 0, "not chosen"); on a day it has none, the readings are
+combined and `how` says so ("You chose the watch, which had none that day. …"). Choices can be made
+for steps, distance, active calories, floors, heart rate, resting heart rate, HRV, blood oxygen,
+breathing rate, skin temperature, temperature deviation and stress; others, and devices that
+aren't the person's, are refused with 400. Changing the choices (or renaming or forgetting a
+device) works every day out again. A share sees the combined numbers for what it's shown, never
+the choices.
 
 ## Health modules
 
@@ -368,9 +433,9 @@ shared features (and to those the owner has on): `/api/day` and `/api/trends` le
 `/api/profile` gives only units, time zone, goals and the features shared, and each feature's own
 endpoints need it shared (`/api/series` and `/api/measurements` by their `metric`; photos only with
 `PHOTOS`). `/api/fields` gives only the shared features' fields, without the conditions behind them;
-`/api/conditions` is never shared. Anything else
-with the header (a change, or `/api/me`, devices, settings, admin, reports, exports) is refused with
-403. Shares go to existing accounts by username, and only for the features picked.
+`/api/conditions` is never shared. A day's `combined` keeps only the readings of shared features.
+Anything else with the header (a change, or `/api/me`, devices and their choices, settings, admin,
+reports, exports) is refused with 403. Shares go to existing accounts by username, and only for the features picked.
 
 ## Reminders, digest, webhooks and Home Assistant
 

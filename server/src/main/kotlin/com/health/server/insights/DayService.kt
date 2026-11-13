@@ -8,7 +8,9 @@ import com.health.api.Insight
 import com.health.api.ModulesToday
 import com.health.api.Profile
 import com.health.api.ApiJson
+import com.health.api.CombinedValue
 import com.health.api.DaySummary
+import com.health.api.DeviceChoices
 import com.health.api.Metric
 import com.health.api.Nutrients
 import com.health.api.Point
@@ -21,6 +23,7 @@ import com.health.server.db.Database
 import com.health.server.health.ProfileStore
 import com.health.server.health.Records
 import com.health.server.health.StoredSample
+import com.health.server.insights.Combine.withReading
 import com.health.server.util.Days
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
@@ -58,12 +61,23 @@ data class DayStats(
     val hasData: Boolean = false,
     /** Quarter hours awake and still, for daytime stress (see [Stress]). */
     val stressWindows: List<StressWindow> = emptyList(),
+    /** Each device's own night (or day) value for the readings combined by weight, for each device's usual. */
+    val readings: List<DeviceReading> = emptyList(),
+    /** The day's numbers more than one device measured (or the person chose one of several for), and how each was worked out. */
+    val combined: List<CombinedValue> = emptyList(),
+    /** Skin temperature against each device's own usual, where more than one device measured it. */
+    val skinDeviation: Double? = null,
     val version: Int = VERSION,
 ) {
     companion object {
         /** Raised whenever the way days are worked out changes, so kept ones are worked out again. */
-        const val VERSION = 2
+        const val VERSION = 3
     }
+}
+
+/** A person's devices and the choices among them, for working out their days. */
+class DeviceContext(val devices: Map<String, DeviceRef>, val choices: DeviceChoices) {
+    fun chosen(metric: Metric): String? = choices.choices.lastOrNull { it.metric == metric }?.deviceId
 }
 
 /** What the health modules add to a day (see modules/ModuleService). */
@@ -139,6 +153,11 @@ class DayService(
      */
     var showsWater: suspend (userId: String) -> Boolean = { true }
 
+    /** Which device the person picked for each reading (see [com.health.server.health.DeviceChoicesService]): set at start-up. */
+    var choices: suspend (userId: String) -> DeviceChoices = { DeviceChoices() }
+
+    private suspend fun deviceContext(userId: String) = DeviceContext(records.deviceRefs(userId), choices(userId))
+
     private fun allExtras(): List<DayExtras> = listOfNotNull(extras) + parts
 
     private suspend fun extrasToday(userId: String, profile: Profile, date: LocalDate): DayExtrasResult? {
@@ -176,8 +195,26 @@ class DayService(
 
     // ---- Stats ----
 
-    /** Each day's stats from [from] to [to], kept ones where they're current. */
-    suspend fun stats(userId: String, from: LocalDate, to: LocalDate, days: Days): List<DayStats> {
+    /**
+     * Each day's stats from [from] to [to], kept ones where they're current. Readings more than one
+     * device measured are then set against each device's own usual over the days before, which
+     * isn't kept, so it's always up to date.
+     */
+    suspend fun stats(userId: String, from: LocalDate, to: LocalDate, days: Days, context: DeviceContext? = null): List<DayStats> {
+        var known = context
+        val ctx: suspend () -> DeviceContext = { known ?: deviceContext(userId).also { known = it } }
+        val raw = kept(userId, from, to, days, ctx)
+        if (raw.none(Combine::needsBaselines)) return raw
+        val earlier = kept(userId, from.minusDays(Combine.BASELINE_DAYS.toLong()), from.minusDays(1), days, ctx)
+        val all = earlier + raw
+        val c = ctx()
+        return raw.mapIndexed { i, day ->
+            val at = earlier.size + i
+            if (Combine.needsBaselines(day)) Combine.finish(day, all.subList(maxOf(0, at - Combine.BASELINE_DAYS), at), c.choices, c.devices) else day
+        }
+    }
+
+    private suspend fun kept(userId: String, from: LocalDate, to: LocalDate, days: Days, ctx: suspend () -> DeviceContext): List<DayStats> {
         val kept = db.tx {
             query("SELECT date, data FROM day_cache WHERE user_id = ? AND date >= ? AND date <= ?", userId, from.toString(), to.toString()) {
                 it.string("date") to it.string("data")
@@ -188,7 +225,7 @@ class DayService(
         val result = mutableListOf<DayStats>()
         var date = from
         while (!date.isAfter(to)) {
-            val stats = kept[date.toString()] ?: compute(userId, date, days).also { fresh ->
+            val stats = kept[date.toString()] ?: compute(userId, date, days, ctx()).also { fresh ->
                 db.tx { update("INSERT OR REPLACE INTO day_cache (user_id, date, data) VALUES (?, ?, ?)", userId, fresh.date, ApiJson.encodeToString(DayStats.serializer(), fresh)) }
             }
             result += stats
@@ -198,7 +235,9 @@ class DayService(
     }
 
     /** Works out one day from what's stored. */
-    suspend fun compute(userId: String, date: LocalDate, days: Days): DayStats {
+    suspend fun compute(userId: String, date: LocalDate, days: Days, context: DeviceContext? = null): DayStats {
+        val ctx = context ?: deviceContext(userId)
+        val devices = ctx.devices
         val start = days.start(date)
         val end = days.end(date)
         val sessions = records.sleep(userId, start, end)
@@ -207,63 +246,66 @@ class DayService(
         val all = records.samples(userId, from, end)
         val today = all.filter { it.start in start until end }
 
-        // Sums (steps, calories…) come from one device a day, the one that counted most, so a ring and a
-        // phone don't both count the same walk.
-        fun sum(metric: Metric): Pair<Double, List<StoredSample>>? = today.filter { it.metric == metric }.groupBy { it.deviceId }
-            .map { (_, list) -> list.sumOf { it.value } to list }.maxByOrNull { it.first }
-
-        val steps = sum(Metric.STEPS)
-        val hourly = steps?.let { (_, list) ->
-            IntArray(24).also { hours -> list.forEach { hours[days.hourOf(it.start)] += it.value.roundToInt() } }.toList()
+        // Sums (steps, calories…): each quarter hour from the device that counted most, so a ring and a
+        // phone don't both count the same walk, and one taken off doesn't lose the other's steps.
+        fun count(metric: Metric) = Combine.counts(metric, today, devices, ctx.chosen(metric), start, end)
+        val steps = count(Metric.STEPS)
+        val distance = count(Metric.DISTANCE)
+        val calories = count(Metric.ACTIVE_CALORIES)
+        val floors = count(Metric.FLOORS)
+        val hourly = steps?.let { c ->
+            DoubleArray(24).also { hours -> c.slots.forEachIndexed { i, v -> hours[days.hourOf(c.slotStart + i * Combine.SLOT_MS)] += v } }.map { it.roundToInt() }
         }.orEmpty()
 
-        fun values(metric: Metric, within: LongRange? = null) = today.filter { it.metric == metric && (within == null || it.start in within) }.map { it.value }
         fun latest(metric: Metric) = today.lastOrNull { it.metric == metric }?.value
 
-        val nights = pickNights(sessions, all)
+        val heartChoice = ctx.chosen(Metric.HEART_RATE)
+        val nights = pickNights(Combine.nights(sessions, devices, ctx.choices.sleepDeviceId), all, heartChoice)
         val main = nights.firstOrNull()
         val mainSpan = main?.let { it.start..it.end }
-        val inNight = { metric: Metric -> mainSpan?.let { span -> all.filter { it.metric == metric && it.start in span }.map { it.value } }.orEmpty() }
+        val nightHeartAll = mainSpan?.let { span -> all.filter { it.metric == Metric.HEART_RATE && it.start in span } }.orEmpty()
+        val nightHeart = Combine.pick(nightHeartAll, Metric.HEART_RATE, heartChoice)
 
-        val heart = values(Metric.HEART_RATE)
-        val restingExplicit = values(Metric.RESTING_HEART_RATE)
-        val resting = restingExplicit.takeIf { it.isNotEmpty() }?.average() ?: main?.lowestHeartRate
-        val hrv = inNight(Metric.HRV).ifEmpty { values(Metric.HRV) }
-        val spo2 = inNight(Metric.SPO2).ifEmpty { values(Metric.SPO2) }
-        val breathing = inNight(Metric.RESPIRATORY_RATE).ifEmpty { values(Metric.RESPIRATORY_RATE) }
-        val skin = inNight(Metric.SKIN_TEMPERATURE).ifEmpty { values(Metric.SKIN_TEMPERATURE) }
-        val deviation = values(Metric.TEMPERATURE_DEVIATION)
-        val stress = values(Metric.STRESS)
-        val lowestAt = mainSpan?.let { span -> lowestPosition(all.filter { it.metric == Metric.HEART_RATE && it.start in span }, span) }
+        val heart = Combine.heart(today, devices, heartChoice)
+        val restingChoice = ctx.chosen(Metric.RESTING_HEART_RATE)
+        val (resting, restingCombined) = Combine.resting(
+            today.filter { it.metric == Metric.RESTING_HEART_RATE },
+            // A choice for resting heart rate picks among every device's own; otherwise it follows the heart-rate choice.
+            if (restingChoice != null) nightHeartAll else nightHeart,
+            devices, restingChoice,
+        )
+        // HRV, blood oxygen, breathing and skin temperature: each device's own night (or the day, without
+        // one); stress and a device's own temperature deviation: the day's.
+        val readings = Combine.WEIGHTED.flatMap { metric ->
+            val inNight = if (metric in NIGHT_READINGS && mainSpan != null) all.filter { it.metric == metric && it.start in mainSpan } else emptyList()
+            Combine.readings(metric, inNight.ifEmpty { today.filter { it.metric == metric } }, devices, mainSpan.takeIf { inNight.isNotEmpty() })
+        }
+        val nightLine = if (nightHeart.map { it.deviceId }.distinct().size >= 2) Combine.line(nightHeart) else nightHeart.map { Point(it.start, it.value) }
+        val lowestAt = mainSpan?.let { span -> lowestPosition(nightLine, span) }
 
         val workouts = records.workouts(userId, start, end)
         val (nutrition, water) = food(userId, date)
         // Tonight's sleep (which ends tomorrow) closes the day's waking hours.
         val tonight = records.sleep(userId, end, end + 16 * HOUR).filter { it.start < end }.minOfOrNull { it.start }
         val windows = stressWindows(
-            today, workouts.map { it.start until it.end }, sessions.map { it.start until it.end },
+            listOf(Metric.HEART_RATE, Metric.HRV, Metric.STRESS).fold(today) { list, m -> Combine.pick(list, m, ctx.chosen(m)) },
+            workouts.map { it.start until it.end }, sessions.map { it.start until it.end },
             wakeStart = main?.end?.takeIf { it in start until end } ?: (start + 7 * HOUR),
             wakeEnd = minOf(end, clock(), tonight ?: Long.MAX_VALUE),
             dayStart = start,
         )
 
-        val stats = DayStats(
+        var stats = DayStats(
             date = date.toString(),
-            steps = steps?.first?.roundToInt(),
-            distanceM = sum(Metric.DISTANCE)?.first,
-            activeCalories = sum(Metric.ACTIVE_CALORIES)?.first ?: workouts.mapNotNull { it.activeCalories }.takeIf { it.isNotEmpty() }?.sum(),
-            floors = sum(Metric.FLOORS)?.first,
+            steps = steps?.total?.roundToInt(),
+            distanceM = distance?.total,
+            activeCalories = calories?.total ?: workouts.mapNotNull { it.activeCalories }.takeIf { it.isNotEmpty() }?.sum(),
+            floors = floors?.total,
             hourlySteps = hourly,
             restingHr = resting,
-            avgHr = heart.takeIf { it.isNotEmpty() }?.average(),
-            minHr = heart.minOrNull(),
-            maxHr = heart.maxOrNull(),
-            hrv = hrv.takeIf { it.isNotEmpty() }?.average(),
-            spo2 = spo2.takeIf { it.isNotEmpty() }?.average(),
-            respiratoryRate = breathing.takeIf { it.isNotEmpty() }?.average(),
-            skinTemp = skin.takeIf { it.isNotEmpty() }?.average(),
-            tempDeviation = deviation.takeIf { it.isNotEmpty() }?.average(),
-            stress = stress.takeIf { it.isNotEmpty() }?.average(),
+            avgHr = heart.avg,
+            minHr = heart.min,
+            maxHr = heart.max,
             sleep = main,
             naps = nights.drop(1),
             lowestHrPosition = lowestAt,
@@ -274,7 +316,11 @@ class DayService(
             workouts = workouts.size,
             workoutMinutes = workouts.sumOf { ((it.end - it.start) / 60_000).toInt() },
             stressWindows = windows,
+            readings = readings,
+            combined = listOfNotNull(steps?.combined, distance?.combined, calories?.combined, floors?.combined, heart.combined, restingCombined),
         )
+        // Each device's usual isn't known here (see [stats]): this is the plain weighted value.
+        Combine.WEIGHTED.forEach { m -> stats = stats.withReading(m, Combine.weighted(m, readings, emptyMap(), ctx.chosen(m), devices)) }
         return stats.copy(hasData = today.isNotEmpty() || nights.isNotEmpty() || workouts.isNotEmpty() || nutrition != null || water > 0)
     }
 
@@ -287,16 +333,38 @@ class DayService(
         (if (entries.isEmpty()) null else entries.reduce(Nutrients::plus)) to water
     }
 
-    /** The main night first, then naps; where devices recorded the same night twice, the one with stages wins. */
-    private fun pickNights(sessions: List<SleepSession>, samples: List<StoredSample>): List<SleepSummary> {
-        val ranked = sessions.sortedWith(compareByDescending<SleepSession> { s -> s.stages.any { it.stage != SleepStage.AWAKE && it.stage != SleepStage.ASLEEP } }.thenByDescending { it.end - it.start })
-        val kept = mutableListOf<SleepSession>()
-        ranked.forEach { s ->
-            val overlapping = kept.any { k -> overlap(k.start, k.end, s.start, s.end) > 0.5 * minOf(k.end - k.start, s.end - s.start) }
-            if (!overlapping) kept += s
+    /**
+     * The main night first, then naps. Nights more than one device recorded come already combined
+     * (see [Combine.nights]); where one still overlaps another (a night entered by hand), the one with stages wins.
+     */
+    private fun pickNights(nights: List<Combine.Night>, samples: List<StoredSample>, heartChoice: String?): List<SleepSummary> {
+        val ranked = nights.sortedWith(
+            compareByDescending<Combine.Night> { n -> n.session.stages.any { it.stage != SleepStage.AWAKE && it.stage != SleepStage.ASLEEP } }
+                .thenByDescending { it.session.end - it.session.start },
+        )
+        val kept = mutableListOf<Combine.Night>()
+        ranked.forEach { n ->
+            val s = n.session
+            val overlapping = kept.any { k -> overlap(k.session.start, k.session.end, s.start, s.end) > 0.5 * minOf(k.session.end - k.session.start, s.end - s.start) }
+            if (!overlapping) kept += n
         }
-        val main = kept.maxByOrNull { if (it.end - it.start >= 3 * HOUR) it.end - it.start + 100 * HOUR else it.end - it.start }
-        return listOfNotNull(main).plus(kept.filter { it !== main }.sortedBy { it.start }).map { summarize(it, samples) }
+        val main = kept.maxByOrNull { val d = it.session.end - it.session.start; if (d >= 3 * HOUR) d + 100 * HOUR else d }
+        return listOfNotNull(main).plus(kept.filter { it !== main }.sortedBy { it.session.start }).map { night(it, samples, heartChoice) }
+    }
+
+    /** A night's summary, with time asleep from every device that recorded it. */
+    private fun night(n: Combine.Night, samples: List<StoredSample>, heartChoice: String?): SleepSummary {
+        val s = n.session
+        val during = Combine.pick(samples.filter { it.start in s.start..s.end }, Metric.HEART_RATE, heartChoice)
+        val summary = summarize(s, during).copy(combined = n.combined)
+        val asleep = n.asleepMinutes ?: return summary
+        return summary.copy(
+            asleepMinutes = asleep,
+            efficiency = if (summary.inBedMinutes > 0) (asleep * 100 / summary.inBedMinutes).coerceIn(0, 100) else 0,
+            awakeMinutes = (summary.inBedMinutes - asleep).coerceAtLeast(0),
+            // The stages are one device's; light sleep takes up the difference, so they add up to the time asleep.
+            lightMinutes = if (summary.staged) (asleep - summary.deepMinutes - summary.remMinutes).coerceAtLeast(0) else summary.lightMinutes,
+        )
     }
 
     private fun overlap(a1: Long, a2: Long, b1: Long, b2: Long) = (minOf(a2, b2) - maxOf(a1, b1)).coerceAtLeast(0).toDouble()
@@ -307,7 +375,8 @@ class DayService(
         val profile = profiles.get(userId)
         val days = Days(Days.zoneOf(profile.timezone))
         val date = days.parse(dateText, clock())
-        val history = stats(userId, date.minusDays(HISTORY_DAYS), date, days)
+        val ctx = deviceContext(userId)
+        val history = stats(userId, date.minusDays(HISTORY_DAYS), date, days, ctx)
         val today = history.last()
         val before = history.dropLast(1)
         val goals = profile.goals
@@ -319,7 +388,7 @@ class DayService(
         val target = Energy.target(profile, weight, resting, averageActive(before))
         val start = days.start(date)
         val end = days.end(date)
-        val heart = records.samples(userId, start, end, listOf(Metric.HEART_RATE))
+        val heart = Combine.pick(records.samples(userId, start, end, listOf(Metric.HEART_RATE)), Metric.HEART_RATE, ctx.chosen(Metric.HEART_RATE))
         val workouts = records.workouts(userId, start, end)
         val checkIn = checkIn(userId, date)
         val more = extrasToday(userId, profile, date)
@@ -374,10 +443,12 @@ class DayService(
             checkIn = checkIn,
             insights = insights,
             hourlySteps = today.hourlySteps,
-            heartRate = bucket(heart.map { Point(it.start, it.value) }, 5 * 60_000L),
+            // Merged every five minutes, so two devices make one line.
+            heartRate = Combine.line(heart).map { Point(it.t, (it.v * 10).roundToInt() / 10.0) },
             goals = goals,
             hasData = today.hasData,
             modules = more?.modules ?: ModulesToday(),
+            combined = today.combined,
         )
     }
 
@@ -492,6 +563,8 @@ class DayService(
 
     companion object {
         private const val HOUR = 3_600_000L
+        /** Readings taken from the night where there is one (as their own night value). */
+        private val NIGHT_READINGS = setOf(Metric.HRV, Metric.SPO2, Metric.RESPIRATORY_RATE, Metric.SKIN_TEMPERATURE)
         /** Days of history behind each score: baselines look back a month. */
         const val HISTORY_DAYS = 30L
 
@@ -510,8 +583,10 @@ class DayService(
                 val list = byWindow[index].orEmpty()
                 index++
                 if (busy.any { it.first < to && from < it.last }) continue
-                if (list.filter { it.metric == Metric.STEPS }.sumOf { it.value } > Stress.ACTIVE_STEPS) continue
-                fun avg(metric: Metric) = list.filter { it.metric == metric }.map { it.value }.takeIf { it.isNotEmpty() }?.average()?.let { (it * 10).roundToInt() / 10.0 }
+                // Steps from the device that counted most, and each device's average (so two devices aren't counted twice).
+                if ((list.filter { it.metric == Metric.STEPS }.groupBy { it.deviceId }.values.maxOfOrNull { l -> l.sumOf { it.value } } ?: 0.0) > Stress.ACTIVE_STEPS) continue
+                fun avg(metric: Metric) = list.filter { it.metric == metric }.groupBy { it.deviceId }.values.map { l -> l.sumOf { it.value } / l.size }
+                    .takeIf { it.isNotEmpty() }?.average()?.let { (it * 10).roundToInt() / 10.0 }
                 val hr = avg(Metric.HEART_RATE)
                 val device = avg(Metric.STRESS)
                 if (hr == null && device == null) continue
@@ -536,8 +611,9 @@ class DayService(
             fun minutes(stage: SleepStage) = (stages.filter { it.stage == stage }.sumOf { it.end - it.start } / 60_000).toInt()
             val asleep = if (stages.isEmpty()) inBed else stages.filter { it.stage != SleepStage.AWAKE }.sumOf { it.end - it.start }.let { (it / 60_000).toInt() }
             val firstAsleep = stages.firstOrNull { it.stage != SleepStage.AWAKE }?.start
-            val heart = samples.filter { it.metric == Metric.HEART_RATE && it.start in s.start..s.end }.map { it.value }
-            val hrv = samples.filter { it.metric == Metric.HRV && it.start in s.start..s.end }.map { it.value }
+            // With more than one device, heart rate merged every five minutes and each device's own HRV averaged.
+            val heart = Combine.nightHeart(samples.filter { it.metric == Metric.HEART_RATE && it.start in s.start..s.end })
+            val hrv = samples.filter { it.metric == Metric.HRV && it.start in s.start..s.end }.groupBy { it.deviceId }.values.map { l -> l.sumOf { it.value } / l.size }
             return SleepSummary(
                 start = s.start,
                 end = s.end,
@@ -550,7 +626,7 @@ class DayService(
                 awakeMinutes = (inBed - asleep).coerceAtLeast(0),
                 staged = staged,
                 latencyMinutes = firstAsleep?.let { ((it - s.start) / 60_000).toInt() }?.takeIf { stages.isNotEmpty() },
-                lowestHeartRate = lowest(heart),
+                lowestHeartRate = Combine.lowest(heart),
                 avgHeartRate = heart.takeIf { it.isNotEmpty() }?.average(),
                 avgHrv = hrv.takeIf { it.isNotEmpty() }?.average(),
                 stages = stages,
@@ -559,17 +635,10 @@ class DayService(
             )
         }
 
-        /** The lowest of three readings in a row, so one dropped reading isn't taken for the lowest. */
-        private fun lowest(values: List<Double>): Double? = when {
-            values.isEmpty() -> null
-            values.size < 3 -> values.min()
-            else -> values.windowed(3).minOf { it.average() }
-        }
-
-        private fun lowestPosition(heart: List<StoredSample>, span: LongRange): Double? {
+        private fun lowestPosition(heart: List<Point>, span: LongRange): Double? {
             if (heart.size < 6 || span.last <= span.first) return null
-            val window = heart.windowed(3).minByOrNull { w -> w.sumOf { it.value } } ?: return null
-            return ((window[1].start - span.first).toDouble() / (span.last - span.first)).coerceIn(0.0, 1.0)
+            val window = heart.windowed(3).minByOrNull { w -> w.sumOf { it.v } } ?: return null
+            return ((window[1].t - span.first).toDouble() / (span.last - span.first)).coerceIn(0.0, 1.0)
         }
     }
 }
