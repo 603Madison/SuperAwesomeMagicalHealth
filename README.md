@@ -332,7 +332,13 @@ it, it says plainly what that means:
   and handled under its [commercial terms](https://www.anthropic.com/legal/commercial-terms) and
   [privacy policy](https://www.anthropic.com/legal/privacy).
 - **You choose the features it may look at.** Private ones (mind, cycle, bladder and bowel,
-  medications…) are never ticked for you and need a separate OK. It **never sees photos**.
+  medications…) are never ticked for you and need a separate OK. It **never sees your progress
+  photos**.
+- **Food photo estimates**: with Food allowed, **Snap a photo** when adding food sends that one
+  photo (shrunk, without its location or camera details) to Anthropic to estimate what's on the
+  plate and roughly how much. You check and change everything before it's logged, it can use your
+  own foods where the names match, and the photo isn't kept on your server. A photo goes only when
+  you take one. In eating-disorder recovery it shows foods and portions without numbers.
 - Letting it log things for you is a separate choice, and only if the admin allows it.
 - Each answer shows what it looked at, and a log keeps which features and tools it used (never
   your words). You can stop and withdraw your choice at any time.

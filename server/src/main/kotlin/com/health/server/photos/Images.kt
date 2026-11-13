@@ -45,6 +45,19 @@ object Images {
         return Processed(jpeg(kept, 0.9f), jpeg(scaled(kept, THUMB_SIDE), 0.82f), kept.width, kept.height)
     }
 
+    /**
+     * A picture as it's sent on (to the AI assistant, for a food photo): upright, at most [side]
+     * pixels on its long side, written out again as a plain JPEG without EXIF, location or camera
+     * details, whatever the device sent. In memory only.
+     */
+    fun shrunk(bytes: ByteArray, side: Int, quality: Float = 0.85f): ByteArray {
+        if (bytes.size > MAX_BYTES) throw ApiError(io.ktor.http.HttpStatusCode.PayloadTooLarge, "Photos can be up to 20 MB")
+        val format = sniff(bytes) ?: throw ApiError.badRequest("Photos can be JPEG, PNG or WebP")
+        val decoded = decode(bytes)
+        val upright = if (format == Format.JPEG) orient(decoded, exifOrientation(bytes)) else flatten(decoded)
+        return jpeg(scaled(upright, side), quality)
+    }
+
     /** Decodes, refusing pictures too big to be a photo (a decompression bomb) before reading their pixels. */
     private fun decode(bytes: ByteArray): BufferedImage {
         val input = ImageIO.createImageInputStream(ByteArrayInputStream(bytes)) ?: throw ApiError.badRequest("That picture couldn't be read")

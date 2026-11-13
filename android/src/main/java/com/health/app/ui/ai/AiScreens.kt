@@ -255,7 +255,8 @@ fun AiScreen(state: AiState, on: Set<Module>, onBack: () -> Unit, actions: AiAct
 
 /**
  * Before the assistant is turned on: what it means, plainly. What it looks at goes to Anthropic
- * (the server's own notice, with their terms and privacy policy); it never sees photos; it can
+ * (the server's own notice, with their terms and privacy policy); it never sees progress photos
+ * (a food photo goes only when the person snaps one, from Food); it can
  * be wrong and isn't medical advice; the person picks what it may look at (private features
  * each need ticking, and their own tick); logging for them is a separate choice.
  */
@@ -290,7 +291,8 @@ fun AiConsentScreen(status: AiStatus, on: Set<Module>, onBack: () -> Unit, onAgr
                 }
             }
             Point(Icons.Rounded.HideImage, "What it never sees") {
-                Text("Your photos, and anyone else's data.", style = MaterialTheme.typography.bodyMedium)
+                Text("Your progress photos, and anyone else's data.", style = MaterialTheme.typography.bodyMedium)
+                Hint("With Food allowed, you can snap a photo of a meal to estimate what's in it. That photo goes to ${status.provider} only when you take one, and isn't kept on your server.")
             }
             Point(Icons.Rounded.WarningAmber, "It can be wrong") {
                 Text(
@@ -477,7 +479,12 @@ fun AiAuditScreen(audit: List<AiAuditEntry>?, zone: ZoneId, onBack: () -> Unit, 
                         if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         Column(Modifier.semantics(mergeDescendants = true) {}) {
                             Text(
-                                CareFormat.dayTime(a.at, zone) + " · " + if (a.kind == "chat") "A question" else a.kind.replaceFirstChar { it.uppercase() },
+                                CareFormat.dayTime(a.at, zone) + " · " + when (a.kind) {
+                                    "chat" -> "A question"
+                                    "food_photo" -> "A food photo"
+                                    "breakdown" -> "Breaking down a task"
+                                    else -> a.kind.replaceFirstChar { it.uppercase() }
+                                },
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Hint(

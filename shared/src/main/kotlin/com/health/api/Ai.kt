@@ -6,7 +6,8 @@ import kotlinx.serialization.Serializable
  * The optional AI assistant. Off unless the server's admin turns it on with an Anthropic API key,
  * and then only for each person who opts in after reading what it means: what the assistant looks
  * at is sent to Anthropic, a company outside this server. It reads only the features the person
- * allows (sensitive ones are never pre-selected), never photos, and logs what it looked at.
+ * allows (sensitive ones are never pre-selected), never progress photos, and logs what it looked
+ * at. A photo of food goes only when the person snaps one to estimate a meal (FoodPhotoEstimate).
  */
 
 /** The admin's settings (GET/PUT /api/admin/ai). The key is set separately and never returned. */
@@ -83,3 +84,43 @@ data class AiBreakdownReply(val steps: List<RoutineStep>)
 /** One request, as logged (GET /api/ai/audit?days=30). */
 @Serializable
 data class AiAuditEntry(val at: Long, val kind: String, val modules: Set<Module>, val tools: List<String>, val model: String, val inputTokens: Int = 0, val outputTokens: Int = 0)
+
+/** How close a food photo's estimate is likely to be. */
+@Serializable
+enum class EstimateConfidence(val label: String) { LOW("A rough guess"), MEDIUM("A fair guess"), HIGH("A close guess") }
+
+/**
+ * One food or drink seen in a photo: its portion ([grams], or millilitres when [unit] is "ml") and
+ * what that portion holds, all estimated. [match] is one of the person's own foods with a similar
+ * name, to log instead of the estimate.
+ */
+@Serializable
+data class FoodPhotoItem(
+    val name: String,
+    val grams: Double,
+    val nutrients: Nutrients,
+    val confidence: EstimateConfidence = EstimateConfidence.MEDIUM,
+    /** What it assumed, in a line: "assumed cooked weight", "dressing not visible". */
+    val assumption: String = "",
+    val match: Food? = null,
+    /** "g", or "ml" for a drink. */
+    val unit: String = "g",
+)
+
+/**
+ * POST /api/ai/food-photo (multipart: `photo`, and optional `meal` and `note`): what's in a photo
+ * of a meal, estimated, to check and change before logging it. The photo goes to Anthropic for
+ * this and isn't kept. [refused] says it couldn't make the photo out ([notes] says what to try).
+ */
+@Serializable
+data class FoodPhotoEstimate(
+    val items: List<FoodPhotoItem> = emptyList(),
+    val notes: String = "",
+    val refused: Boolean = false,
+    val usedToday: Int = 0,
+    /**
+     * Eating-disorder recovery: the apps show the foods and portions without calorie or macro
+     * numbers. The numbers are still here, so logging works as usual.
+     */
+    val hideNumbers: Boolean = false,
+)

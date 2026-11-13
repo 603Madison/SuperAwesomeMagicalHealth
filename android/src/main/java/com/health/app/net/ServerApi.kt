@@ -332,14 +332,18 @@ class ServerApi(
         }
     }.build()
 
-    /** POSTs [parts] to [path] as multipart/form-data and reads the answer as [serializer]; refused while viewing a share. */
-    internal suspend fun <T> multipart(path: String, parts: List<Part>, serializer: KSerializer<T>): T = withContext(Dispatchers.IO) {
+    /**
+     * POSTs [parts] to [path] as multipart/form-data and reads the answer as [serializer]; refused
+     * while viewing a share. [readTimeoutSeconds] gives a slow answer (the assistant's) longer.
+     */
+    internal suspend fun <T> multipart(path: String, parts: List<Part>, serializer: KSerializer<T>, readTimeoutSeconds: Long? = null): T = withContext(Dispatchers.IO) {
         if (viewAs() != null) throw ServerException(403, VIEWING_MESSAGE)
         val request = Request.Builder().url("${base()}$path").post(multipartBody(parts)).apply {
             token()?.let { header("Authorization", "Bearer $it") }
         }.build()
+        val client = readTimeoutSeconds?.let { http.newBuilder().readTimeout(it, java.util.concurrent.TimeUnit.SECONDS).build() } ?: http
         val response = try {
-            http.newCall(request).execute()
+            client.newCall(request).execute()
         } catch (e: IOException) {
             throw ServerException(0, "Can't reach the server (${e.message ?: e.javaClass.simpleName})")
         }

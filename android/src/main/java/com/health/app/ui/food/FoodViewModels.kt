@@ -19,6 +19,7 @@ import com.health.api.Nutrients
 import com.health.api.WaterEntry
 import com.health.app.Container
 import com.health.app.net.addDrink
+import com.health.app.net.aiStatus
 import com.health.app.net.deleteDrink
 import com.health.app.net.drinksDay
 import com.health.app.net.updateDrink
@@ -169,6 +170,8 @@ data class AddFoodState(
     /** A barcode nobody knows, offered for a new food. */
     val unknownBarcode: String? = null,
     val done: Boolean = false,
+    /** "Snap a photo" (FoodPhoto.kt), a line pointing to Settings, or nothing. */
+    val photoOffer: PhotoOffer? = null,
 )
 
 class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: Meal) : ViewModel() {
@@ -179,6 +182,10 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
     init {
         viewModelScope.launch {
             runCatching { c.ui.recentFoods() }.onSuccess { recent -> _state.update { it.copy(recent = recent) } }
+        }
+        // The assistant is only ever the person's own: nothing is offered while viewing a share.
+        if (c.viewing.value == null) viewModelScope.launch {
+            runCatching { c.api.aiStatus() }.onSuccess { s -> _state.update { it.copy(photoOffer = FoodPhotoText.offer(s, c.viewing.value != null)) } }
         }
     }
 

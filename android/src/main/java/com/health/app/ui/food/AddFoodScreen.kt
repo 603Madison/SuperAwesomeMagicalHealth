@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Restaurant
@@ -40,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,7 @@ import com.health.api.FoodSource
 import com.health.api.Meal
 import com.health.api.Nutrients
 import com.health.app.ui.Format
+import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.CardItem
 import com.health.app.ui.components.EmptyState
@@ -75,6 +78,7 @@ class AddFoodActions(
     val quickAdd: (String, Nutrients) -> Unit = { _, _ -> },
     val create: (Food, Double) -> Unit = { _, _ -> },
     val dismissUnknown: () -> Unit = {},
+    val snap: () -> Unit = {},
 )
 
 @Composable
@@ -84,8 +88,13 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
     val state by vm.state.collectAsState()
     LaunchedEffect(state.done) { if (state.done) onDone() }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result -> result.contents?.let(vm::barcode) }
+    var snapping by rememberSaveable { mutableStateOf(false) }
+    if (snapping && !LocalReadOnly.current) {
+        FoodPhotoRoute(date, meal, onBack = { snapping = false }, onDone = onDone)
+        return
+    }
     AddFoodScreen(
-        meal, state,
+        meal, if (LocalReadOnly.current) state.copy(photoOffer = null) else state,
         AddFoodActions(
             back = onDone,
             query = vm::query,
@@ -103,6 +112,7 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
             quickAdd = vm::quickAdd,
             create = vm::create,
             dismissUnknown = vm::dismissUnknown,
+            snap = { snapping = true },
         ),
     )
 }
@@ -116,6 +126,11 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions) {
         BackBar(actions.back, "Add to ${meal.label.lowercase()}")
         SearchField(state.query, actions.query, "Search foods", busy = state.searching, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.photoOffer == PhotoOffer.READY) {
+                FilledTonalButton(onClick = actions.snap, contentPadding = PaddingValues(horizontal = 14.dp)) {
+                    Icon(Icons.Rounded.PhotoCamera, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Snap a photo")
+                }
+            }
             FilledTonalButton(onClick = actions.scan, contentPadding = PaddingValues(horizontal = 14.dp)) {
                 Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Scan barcode")
             }
@@ -126,6 +141,7 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("New food")
             }
         }
+        if (state.photoOffer == PhotoOffer.SETTINGS) Hint(FoodPhotoText.SETTINGS_LINE, Modifier.padding(horizontal = 20.dp))
         state.error?.let { ErrorCard(it, Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         val results = state.results
