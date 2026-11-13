@@ -70,7 +70,7 @@ class WatchService(private val services: Services) {
             }
             WatchLogKind.WATER -> {
                 // An older watch app (or a tap queued before water was turned off) may still send one.
-                if (!services.days.showsWater(userId)) throw ApiError.badRequest("Water is turned off. You can turn it on in Food's settings.")
+                if (!services.days.showsWater(userId)) throw ApiError.badRequest("Water is turned off. You can turn it on in Settings › Features, under Food.")
                 val ml = (log.value ?: 250).takeIf { it in 1..3000 } ?: throw ApiError.badRequest("Water is 1 to 3000 ml")
                 val entry = services.foods.addWater(userId, WaterEntry(zone.dateOf(at).toString(), ml, at = at))
                 services.days.changedDate(userId, java.time.LocalDate.parse(entry.date))

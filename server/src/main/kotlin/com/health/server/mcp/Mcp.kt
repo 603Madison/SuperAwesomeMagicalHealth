@@ -249,7 +249,7 @@ class McpServer(private val services: Services) {
                     tools.any { it.name == name && it.module != null && it.module !in caller.scope } ->
                         "This link wasn't given ${tools.first { it.name == name }.module!!.label}; make one that includes it in Settings"
                     tools.any { it.name == name && it.water } && !caller.water ->
-                        "This person has turned water off, so there's no water to log. They can turn it back on in Food's settings"
+                        "This person has turned water off, so there's no water to log. They can turn it back on in Settings › Features, under Food"
                     tools.any { it.name == name } -> "This link can only read; make one that may log entries in Settings"
                     else -> "No tool named $name"
                 },

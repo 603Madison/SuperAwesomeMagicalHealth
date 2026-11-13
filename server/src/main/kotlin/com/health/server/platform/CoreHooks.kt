@@ -123,20 +123,19 @@ private class OverviewHooks(private val services: Services) : FeatureHooks {
     override suspend fun export(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, List<List<String>>> {
         val zone = zoneOf(profile)
         val rows = services.trendRows(userId, from, to)
-        // The water column only while water is turned on.
-        val water = services.days.showsWater(userId)
+        // The export is everything the person logged, so water stays in it even while it's turned off.
         val daily = listOf(
             listOf(
                 "date", "readiness", "sleep_score", "activity_score", "steps", "active_kcal", "resting_hr", "hrv_ms", "sleep_min", "deep_min",
                 "rem_min", "spo2", "temperature_deviation_c", "weight_kg", "body_fat_pct", "kcal_eaten", "protein_g", "carbs_g", "fat_g",
-            ) + listOfNotNull("water_ml".takeIf { water }) + listOf("workouts", "workout_min"),
+            ) + listOf("water_ml", "workouts", "workout_min"),
         ) + rows.map { d ->
             listOf(
                 d.date, d.readiness?.toString().orEmpty(), d.sleepScore?.toString().orEmpty(), d.activityScore?.toString().orEmpty(), d.steps?.toString().orEmpty(),
                 Csv.num(d.activeCalories, 0), Csv.num(d.restingHeartRate, 1), Csv.num(d.hrv, 1), d.sleepMinutes?.toString().orEmpty(), d.deepMinutes?.toString().orEmpty(),
                 d.remMinutes?.toString().orEmpty(), Csv.num(d.spo2, 1), Csv.num(d.temperatureDeviation, 2), Csv.num(d.weightKg, 2), Csv.num(d.bodyFat, 1),
                 Csv.num(d.calories, 0), Csv.num(d.protein, 1), Csv.num(d.carbs, 1), Csv.num(d.fat, 1),
-            ) + listOfNotNull(d.waterMl?.toString().orEmpty().takeIf { water }) + listOf(d.workouts.toString(), d.workoutMinutes.toString())
+            ) + listOf(d.waterMl?.toString().orEmpty(), d.workouts.toString(), d.workoutMinutes.toString())
         }
         val samples = services.records.samples(userId, zone.start(from), zone.end(to))
         val sampleRows = listOf(listOf("metric", "start", "end", "value", "unit", "source")) + samples.map {
@@ -475,8 +474,7 @@ private class NutritionHooks(private val services: Services) : FeatureHooks {
                     )
                 },
         )
-        // Water that was logged stays stored, but isn't exported while it's turned off.
-        if (!services.days.showsWater(userId)) return files
+        // Water that was logged is exported even while it's turned off: the export is everything.
         val water = services.db.tx {
             query("SELECT date, ml, at FROM water WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY at", userId, from.toString(), to.toString()) {
                 Triple(it.string("date"), it.int("ml"), it.long("at"))

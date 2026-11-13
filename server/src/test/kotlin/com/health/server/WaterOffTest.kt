@@ -163,12 +163,12 @@ class WaterOffTest {
             assertTrue(what, words.any { it == "Caffeine (mg)" })
             report.flatMap { it.tables }.forEach { t -> assertTrue(what, t.rows.all { it.size == t.header.size }) }
 
-            // The export: water's column and file only while it's on.
+            // The export is everything logged: water's column and file stay, on or off.
             val zip = admin.get("/api/export.zip?from=$monday&to=$today").bodyAsBytes()
             val files = mutableMapOf<String, String>()
             ZipInputStream(ByteArrayInputStream(zip)).use { z -> generateSequence { z.nextEntry }.forEach { files[it.name] = String(z.readBytes()) } }
-            assertEquals(what, on, files["daily.csv"]!!.lines().first().split(",").contains("water_ml"))
-            assertEquals(what, on, "water.csv" in files)
+            assertTrue(what, files["daily.csv"]!!.lines().first().split(",").contains("water_ml"))
+            assertTrue(what, "water.csv" in files)
             assertTrue(what, files["food.csv"]!!.contains("Soup"))
             val daily = files["daily.csv"]!!.lines().filter { it.isNotBlank() }.map { it.split(",").size }
             assertEquals(what, 1, daily.distinct().size)

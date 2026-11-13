@@ -205,7 +205,7 @@ class HabitsService(
         /** How far back streaks are counted. */
         const val LOOKBACK_DAYS = 371L
         /** Why a new water-goal habit isn't taken while water is off. */
-        const val WATER_OFF = "Water is turned off for you, so there's no water goal to follow. You can turn it back on in Food's settings."
+        const val WATER_OFF = "Water is turned off for you, so there's no water goal to follow. You can turn it back on in Settings › Features, under Food."
         private val MILESTONES = setOf(4, 8, 12, 26, 52)
         private val TIME = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
 

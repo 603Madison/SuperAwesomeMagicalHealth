@@ -31,7 +31,7 @@ The menu shows what you have turned on in **Settings › Features** on the serve
 |---|---|
 | **Today** | Readiness, sleep and activity scores; steps and water against your goals; how the day feels right now (stressed, engaged, relaxed or restored) |
 | **Mood** | Five faces, from very low to great |
-| **Water** · **Coffee** | A glass or a bottle; a cup, a mug or a small cup (water, and its line on Today, only while water is turned on in Food's settings) |
+| **Water** · **Coffee** | A glass or a bottle; a cup, a mug or a small cup (water, and its line on Today, only while water is turned on in Settings › Features, under Food) |
 | **Bladder & bowel** | A toilet trip, a leak or a bowel movement |
 | **Medications** | Today's doses: choose one and **Taken** to mark it |
 | **Habits** | Today's habits: choose one to tick it |

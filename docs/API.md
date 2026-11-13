@@ -231,7 +231,8 @@ Food's water is a field too (`nutrition.water`, on by default): hidden, the apps
 leave out water everywhere (the quick button, the goal, insights, the digest, the watch, habits,
 exports to other apps); drinks still count caffeine and alcohol. What's logged stays stored, and
 `DaySummary.waterMl` is still filled in (the apps decide what to show). On the server that means:
-no water insights or tips; no water line in the digest (kept ones too), the report or the export;
+no water insights or tips; no water line in the digest (kept ones too) or the report (the CSV
+export still has everything logged, water included);
 `WatchToday.water` is false, with no water figures, and a watch `WATER` tap is refused; a new
 `WATER_GOAL` habit is refused (a kept one still counts, but never reminds); Home Assistant's state
 leaves out `water_ml` and `water_goal`; and the AI connector and assistant leave water out of

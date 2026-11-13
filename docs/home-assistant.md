@@ -57,7 +57,7 @@ Everything the state holds: `date`, `readiness`, `readiness_label`, `sleep_score
 `stress_state`, `water_ml`, `water_goal`, `weight_kg`, `doses_left_today`, `doses_taken_today`,
 `next_dose_at`, `device_battery_min`, `devices` (each device's battery by name) and `updated_at`.
 Values the server doesn't have are `null`. Medications appear only as counts and times, never
-names. With water turned off (in Food's settings), `water_ml` and `water_goal` are left out.
+names. With water turned off (in Settings › Features, under Food), `water_ml` and `water_goal` are left out.
 
 ## Webhooks
 
