@@ -79,7 +79,7 @@ data class FoodEntry(
 /**
  * Logging something eaten. With [food] (a search result, or one of the person's foods) the
  * server works out the nutrients for [servings]; without, [nutrients] are taken as given (a quick
- * add of calories).
+ * add of calories, or a photo's estimate, with its [serving] like "about 180 g").
  */
 @Serializable
 data class FoodEntryInput(
@@ -89,6 +89,7 @@ data class FoodEntryInput(
     val food: Food? = null,
     val name: String? = null,
     val nutrients: Nutrients? = null,
+    val serving: String? = null,
 )
 
 @Serializable

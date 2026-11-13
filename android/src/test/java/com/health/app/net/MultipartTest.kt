@@ -73,4 +73,39 @@ class MultipartTest {
         }
         assertEquals(0, server.requestCount)
     }
+
+    @Test
+    fun `a food photo goes as the meal, the note and the picture, and reads the estimate back`() = runBlocking {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody(
+                """{"items":[{"name":"Toast","grams":40,"nutrients":{"calories":110,"protein":3.6,"carbs":20,"fat":1.2},"confidence":"HIGH","assumption":""}],"notes":"","refused":false,"usedToday":2,"hideNumbers":false}""",
+            ),
+        )
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2, 0xFF.toByte(), 0xD9.toByte())
+        val estimate = api.foodPhoto(jpeg, com.health.api.Meal.BREAKFAST, "  half eaten ")
+        assertEquals("Toast", estimate.items.single().name)
+        assertEquals(com.health.api.EstimateConfidence.HIGH, estimate.items.single().confidence)
+        assertEquals("g", estimate.items.single().unit)
+        assertEquals(2, estimate.usedToday)
+        val request = server.takeRequest()
+        assertEquals("/api/ai/food-photo", request.path)
+        val text = request.body.readUtf8()
+        assertTrue(text, text.contains("name=\"meal\"") && text.contains("BREAKFAST"))
+        assertTrue(text, text.contains("name=\"note\"") && text.contains("\r\nhalf eaten\r\n"))
+        assertTrue(text, text.contains("name=\"photo\"") && text.contains("filename=\"meal.jpg\"") && text.contains("Content-Type: image/jpeg"))
+        // No note, no meal: only the picture.
+        assertEquals(listOf("photo"), foodPhotoParts(jpeg, null, " ").map { it.name })
+    }
+
+    @Test
+    fun `no food photo is sent while viewing someone's share`() = runBlocking {
+        val viewer = ServerApi(OkHttpClient(), { server.url("/").toString().trimEnd('/') }, { "app-token" }, viewAs = { "owner-1" })
+        try {
+            viewer.foodPhoto(byteArrayOf(1), null, null)
+            fail("A viewer can't send one")
+        } catch (e: ServerException) {
+            assertEquals(403, e.code)
+        }
+        assertEquals(0, server.requestCount)
+    }
 }

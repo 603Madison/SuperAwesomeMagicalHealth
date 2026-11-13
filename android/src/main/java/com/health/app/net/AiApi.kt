@@ -6,6 +6,8 @@ import com.health.api.AiChatRequest
 import com.health.api.AiConsent
 import com.health.api.AiStatus
 import com.health.api.ApiJson
+import com.health.api.FoodPhotoEstimate
+import com.health.api.Meal
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 
@@ -27,3 +29,14 @@ suspend fun ServerApi.aiChat(request: AiChatRequest): AiChatReply = send(
 )
 
 suspend fun ServerApi.aiAudit(days: Int = 30): List<AiAuditEntry> = get("${base()}/api/ai/audit?days=$days", ListSerializer(AiAuditEntry.serializer()))
+
+/** The parts of a food photo: the picture (already shrunk and stripped of its details) as `photo`, the meal and a note. */
+internal fun foodPhotoParts(jpeg: ByteArray, meal: Meal?, note: String?): List<ServerApi.Part> = listOfNotNull(
+    meal?.let { ServerApi.Part("meal", text = it.name) },
+    note?.trim()?.takeIf { it.isNotEmpty() }?.let { ServerApi.Part("note", text = it.take(200)) },
+    ServerApi.Part("photo", bytes = jpeg, fileName = "meal.jpg", type = "image/jpeg"),
+)
+
+/** A photo of a meal, estimated by the assistant (never kept by the server). Can take a while. */
+suspend fun ServerApi.foodPhoto(jpeg: ByteArray, meal: Meal?, note: String?): FoodPhotoEstimate =
+    multipart("/api/ai/food-photo", foodPhotoParts(jpeg, meal, note), FoodPhotoEstimate.serializer(), readTimeoutSeconds = 180)

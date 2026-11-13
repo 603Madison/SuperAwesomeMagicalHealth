@@ -13,7 +13,8 @@ import { Button, Card, Empty, Field, Modal, PageHeader, Spinner, Toggle, errorTo
 /*
  * The optional AI assistant. Nothing here goes anywhere until the admin has turned it on and
  * the person has read what it means and said yes. Even then it sees only the features they
- * tick (private ones never pre-ticked), never photos, and every reply says what it looked at.
+ * tick (private ones never pre-ticked), never progress photos, and every reply says what it looked at.
+ * A photo of food goes only when the person snaps one to estimate a meal (pages/FoodPhoto.tsx).
  */
 
 const useAiStore = create<{ status: AiStatus | null; loaded: boolean }>(() => ({ status: null, loaded: false }));
@@ -91,6 +92,7 @@ function Consent({ status, onDone, onCancel }: { status: AiStatus; onDone: () =>
             <li>Your questions, and the parts of your health data the assistant looks at to answer them, are sent to <strong>{status.provider}</strong>, a company outside this server{status.model ? `, to its ${status.model} model` : ""}.</li>
             <li>They're handled under {status.provider}'s <a href={status.termsUrl} target="_blank" rel="noreferrer">commercial terms <ExternalLink size={12} /></a> and <a href={status.privacyUrl} target="_blank" rel="noreferrer">privacy policy <ExternalLink size={12} /></a>, and the admin's account settings with them.</li>
             <li>It only looks at the features you tick below. It never sees your progress photos.</li>
+            <li>With Food ticked, you can snap a photo of a meal to estimate what's in it: that photo goes to {status.provider} only when you take one, and isn't kept on this server.</li>
             <li>Every reply shows what it looked at, and <Link to="/assistant/sent">What it's sent</Link> keeps a list. Your conversations stay in this browser.</li>
             <li>It can be wrong. It isn't a doctor, and it isn't for emergencies.</li>
           </ul>
@@ -225,7 +227,7 @@ export function AssistantSent() {
               <tbody>
                 {[...audit.data].sort((a, b) => b.at - a.at).map((a, i) => (
                   <tr key={i}>
-                    <td>{when(a.at)}</td><td>{a.kind === "breakdown" ? "Break down a task" : "Question"}</td>
+                    <td>{when(a.at)}</td><td>{a.kind === "breakdown" ? "Break down a task" : a.kind === "food_photo" ? "Food photo" : "Question"}</td>
                     <td>{a.modules.map(featureName).join(", ") || "None"}</td><td>{a.model}</td>
                     <td>{a.inputTokens + a.outputTokens > 0 ? `${a.inputTokens.toLocaleString()} in, ${a.outputTokens.toLocaleString()} out` : "–"}</td>
                   </tr>
@@ -292,7 +294,7 @@ export function AiAdminCard() {
           <Button variant="primary" disabled={!ack} onClick={() => { setWarn(false); void save({ ...s, enabled: true, acknowledgedAt: Date.now() }); }}>Turn it on</Button>
         </>}>
           <p>When people use the assistant, their questions and the health data it looks at to answer are sent to <strong>Anthropic</strong>, a company outside this server, using your API key and under your account's terms with Anthropic.</p>
-          <p>That can include private health information (mental health, periods, bladder and bowel, medications) for anyone who chooses to let it. Each person has to opt in themselves and choose what it may see; it never sees photos.</p>
+          <p>That can include private health information (mental health, periods, bladder and bowel, medications) for anyone who chooses to let it. Each person has to opt in themselves and choose what it may see; it never sees progress photos. A photo of food is sent only when someone with Food allowed snaps one to estimate a meal.</p>
           <Toggle label="I understand, and I'm comfortable offering this on this server" checked={ack} onChange={setAck} />
         </Modal>
       )}

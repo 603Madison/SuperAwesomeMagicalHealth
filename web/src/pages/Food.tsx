@@ -13,6 +13,7 @@ import { useModules } from "../App";
 import { Macros } from "./Today";
 import { DrinksCard } from "./Drinks";
 import { useReadOnly } from "../lib/viewing";
+import { FoodPhotoFlow, SnapPhoto } from "./FoodPhoto";
 
 const MEALS: { id: Meal; label: string }[] = [
   { id: "BREAKFAST", label: "Breakfast" },
@@ -179,10 +180,13 @@ function scaled(n: Nutrients, factor: number): Nutrients {
 function AddFood({ date, meal, onClose, onAdded }: { date: string; meal: Meal; onClose: () => void; onAdded: () => void }) {
   const [tab, setTab] = useState<"search" | "recent" | "quick" | "new">("search");
   const [chosen, setChosen] = useState<FoodItem | null>(null);
+  const [photo, setPhoto] = useState(false);
   const label = MEALS.find((m) => m.id === meal)!.label;
   if (chosen) return <Servings food={chosen} date={date} meal={meal} onBack={() => setChosen(null)} onClose={onClose} onAdded={onAdded} />;
+  if (photo) return <FoodPhotoFlow date={date} meal={meal} mealLabel={label} onBack={() => setPhoto(false)} onClose={onClose} onAdded={onAdded} />;
   return (
     <Modal title={`Add to ${label.toLowerCase()}`} onClose={onClose} wide>
+      <SnapPhoto onSnap={() => setPhoto(true)} />
       <Segmented label="How to add" value={tab} onChange={setTab} options={[
         { value: "search", label: "Search" }, { value: "recent", label: "Recent" }, { value: "quick", label: "Quick add" }, { value: "new", label: "New food" },
       ]} />

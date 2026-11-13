@@ -475,7 +475,7 @@ class DiaryScreenshotTest {
     // ---- AI assistant ----
 
     private val notice = "When you ask the assistant something, your question, and whatever health data it looks at to answer, is sent to Anthropic, a company " +
-        "outside this server, where its Claude model reads it. It only looks at the features you allow here, and never at your photos. Anthropic handles what " +
+        "outside this server, where its Claude model reads it. It only looks at the features you allow here, and never at your progress photos; a photo of your food goes only when you take one to estimate a meal. Anthropic handles what " +
         "it's sent under its commercial terms and privacy policy, and the settings of the Anthropic account your server's admin set up apply to it. Your " +
         "conversations aren't kept on this server; a log of when you asked and which features it looked at is, so you can check. If you'd rather your data " +
         "didn't leave your server, leave this off: everything else works without it."

@@ -11,7 +11,7 @@ import type {
   Supply, SupplyStatus, SupplyAdjustment, CycleSettings, NeuroProfile, OverloadEvent, EnergyDay, NeuroCheckIn, FocusSession,
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
-  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout,
+  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, FoodPhotoEstimate,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -141,7 +141,7 @@ export const api = {
   series: (metric: Metric, from: number, to: number) => get<Point[]>(`/api/series?metric=${metric}&from=${from}&to=${to}`),
 
   foodDay: (date: string) => get<FoodDay>(`/api/food/${q(date)}`),
-  logFood: (entry: { date: string; meal: Meal; servings: number; food?: Food; name?: string; nutrients?: Nutrients }) => post<FoodEntry>("/api/food/entries", entry),
+  logFood: (entry: { date: string; meal: Meal; servings: number; food?: Food; name?: string; nutrients?: Nutrients; serving?: string }) => post<FoodEntry>("/api/food/entries", entry),
   changeEntry: (id: string, change: { meal?: Meal; servings?: number; date?: string }) => patch<FoodEntry>(`/api/food/entries/${q(id)}`, change),
   deleteEntry: (id: string) => del<unknown>(`/api/food/entries/${q(id)}`),
   copyMeal: (from: string, to: string, meal?: Meal) => post<{ copied: number }>("/api/food/copy", { from, to, meal }),
@@ -403,6 +403,15 @@ export const api = {
   aiChat: (messages: AiMessage[]) => post<AiChatReply>("/api/ai/chat", { messages }),
   aiBreakdown: (task: string, detail?: string) => post<AiBreakdownReply>("/api/ai/breakdown", { task, detail }),
   aiAudit: (days = 30) => get<AiAuditEntry[]>(`/api/ai/audit?days=${days}`),
+  /** A photo of a meal (already shrunk and stripped of its details here), estimated. Never while viewing a share. */
+  aiFoodPhoto: (photo: Blob, meal?: Meal, note?: string) => {
+    if (viewingOwner()) return Promise.reject(new ApiError(403, "You're looking at someone else's data, so nothing can be changed here."));
+    const form = new FormData();
+    form.append("photo", photo, "meal.jpg");
+    if (meal) form.append("meal", meal);
+    if (note?.trim()) form.append("note", note.trim());
+    return post<FoodPhotoEstimate>("/api/ai/food-photo", form);
+  },
 
   users: () => get<User[]>("/api/admin/users"),
   createUser: (username: string, displayName: string, password: string, role: string) =>

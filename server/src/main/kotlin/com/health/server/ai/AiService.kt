@@ -10,9 +10,11 @@ import com.anthropic.errors.PermissionDeniedException
 import com.anthropic.errors.RateLimitException
 import com.anthropic.errors.UnauthorizedException
 import com.anthropic.models.beta.AnthropicBeta
+import com.anthropic.models.beta.messages.BetaBase64ImageSource
 import com.anthropic.models.beta.messages.BetaCacheControlEphemeral
 import com.anthropic.models.beta.messages.BetaContentBlockParam
 import com.anthropic.models.beta.messages.BetaFallbacksParam
+import com.anthropic.models.beta.messages.BetaImageBlockParam
 import com.anthropic.models.beta.messages.BetaJsonOutputFormat
 import com.anthropic.models.beta.messages.BetaMessage
 import com.anthropic.models.beta.messages.BetaOutputConfig
@@ -21,6 +23,8 @@ import com.anthropic.models.beta.messages.BetaTextBlockParam
 import com.anthropic.models.beta.messages.BetaTool
 import com.anthropic.models.beta.messages.BetaToolResultBlockParam
 import com.anthropic.models.beta.messages.MessageCreateParams
+import com.anthropic.models.beta.messages.StructuredOutputConfig
+import com.anthropic.services.blocking.beta.MessageService
 import com.health.api.AiAuditEntry
 import com.health.api.AiBreakdownReply
 import com.health.api.AiBreakdownRequest
@@ -30,6 +34,9 @@ import com.health.api.AiConsent
 import com.health.api.AiLook
 import com.health.api.AiSettings
 import com.health.api.AiStatus
+import com.health.api.FoodPhotoEstimate
+import com.health.api.FoodPhotoItem
+import com.health.api.Meal
 import com.health.api.Metric
 import com.health.api.Module
 import com.health.api.RoutineStep
@@ -38,6 +45,7 @@ import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.care.SharedView
 import com.health.server.mcp.McpServer
+import com.health.server.photos.Images
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,14 +63,16 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.format.TextStyle
+import java.util.Base64
 import java.util.Locale
 
 /**
  * The optional AI assistant: off until the admin turns it on with an Anthropic key, and then only
  * for people who opt in. It answers from the person's own data by calling the AI connector's tools
- * (through [AiTools]' allowlist), limited to the features they allowed; it never sees photos or
- * other accounts. Conversations aren't kept; each request is logged (kind, features, tools, model,
- * tokens) without its text.
+ * (through [AiTools]' allowlist), limited to the features they allowed; it never sees progress
+ * photos or other accounts. A photo of food goes only when the person takes one for an estimate
+ * ([foodPhoto]), and isn't kept. Conversations aren't kept; each request is logged (kind,
+ * features, tools, model, tokens) without its text.
  */
 class AiService(private val services: Services) {
     private val log = LoggerFactory.getLogger("samh.ai")
@@ -406,6 +416,65 @@ class AiService(private val services: Services) {
         text.lines().map { it.trim().trimStart('-', '*', '•', ' ').trim() }.filter { it.isNotEmpty() }.take(20).map { RoutineStep(it.take(200)) }
     }
 
+    // ---------------------------------------------------------------- Food photos
+
+    /**
+     * What's in a photo of a meal, estimated, for the person to check and change before logging
+     * it. Needs the assistant on, the person's consent, and Food among the features they allowed.
+     * The photo is turned upright, shrunk and stripped of its details here, sent to Anthropic in
+     * this one request, and never written anywhere: not to disk, the database or the log. The
+     * audit row says only that a food photo was looked at (Food), with the model and tokens.
+     */
+    suspend fun foodPhoto(user: User, photo: ByteArray, meal: Meal?, note: String?): FoodPhotoEstimate {
+        val ready = ready(user)
+        if (Module.NUTRITION !in ready.consent.modules - AiTools.NEVER) {
+            throw ApiError.forbidden("Let the assistant see Food first, in Settings › AI assistant")
+        }
+        val jpeg = withContext(Dispatchers.Default) { Images.shrunk(photo, FoodPhoto.SIDE) }
+        val image = BetaImageBlockParam.builder()
+            .source(BetaBase64ImageSource.builder().mediaType(BetaBase64ImageSource.MediaType.IMAGE_JPEG).data(Base64.getEncoder().encodeToString(jpeg)).build())
+            .build()
+        val response = send(ready.key) { messages ->
+            messages.create(
+                base(ready.settings.model, FoodPhoto.MAX_TOKENS)
+                    .systemOfBetaTextBlockParams(listOf(BetaTextBlockParam.builder().text(FoodPhoto.SYSTEM_PROMPT).build()))
+                    // Structured output: the reply is exactly a FoodPhoto.Reading (its schema made from the class).
+                    .outputConfig(
+                        StructuredOutputConfig.builder<FoodPhoto.Reading>()
+                            .format(FoodPhoto.Reading::class.java)
+                            .effort(BetaOutputConfig.Effort.of(ready.settings.effort))
+                            .build(),
+                    )
+                    .addUserMessageOfContentBlockParams(
+                        listOf(BetaContentBlockParam.ofImage(image), BetaContentBlockParam.ofText(FoodPhoto.request(meal, note?.take(MAX_NOTE_CHARS)))),
+                    )
+                    .build(),
+            )
+        }
+        val usage = response.usage()
+        store.audit(user.id, AiAuditEntry(services.clock(), "food_photo", setOf(Module.NUTRITION), emptyList(), response.model().asString(), usage.inputTokens().toInt(), usage.outputTokens().toInt()))
+        val used = ready.used + 1
+        val hide = FoodPhoto.hidesNumbers(services.conditions.get(user.id))
+        val reading = when (response.stopReason().orElse(null)) {
+            BetaStopReason.REFUSAL, BetaStopReason.MAX_TOKENS -> null
+            // Only the kind of problem is logged: the reply names foods, and the log keeps no words.
+            else -> runCatching { response.content().firstNotNullOfOrNull { it.text().orElse(null) }?.text() }
+                .onFailure { log.warn("A food photo's estimate couldn't be read ({})", it.javaClass.simpleName) }
+                .getOrNull()
+        } ?: return FoodPhotoEstimate(notes = FoodPhoto.COULD_NOT, refused = true, usedToday = used, hideNumbers = hide)
+        val items = FoodPhoto.items(reading)
+        val notes = reading.notes.trim().take(300).ifEmpty { if (items.isEmpty()) FoodPhoto.NOTHING_SEEN else "" }
+        return FoodPhotoEstimate(withMatches(user.id, items), notes, refused = false, usedToday = used, hideNumbers = hide)
+    }
+
+    /** Each item with the person's own food of a similar name, if they've logged one. */
+    private suspend fun withMatches(userId: String, items: List<FoodPhotoItem>): List<FoodPhotoItem> {
+        if (items.isEmpty()) return items
+        val searched = items.flatMap { FoodPhoto.words(it.name) }.distinct().take(30).flatMap { services.foods.search(userId, it, 10) }
+        val foods = (services.foods.recent(userId, 300) + searched).distinctBy { it.id }
+        return items.map { it.copy(match = FoodPhoto.match(it.name, foods)) }
+    }
+
     // ---------------------------------------------------------------- Calling Anthropic
 
     /** The request's common start: the model, its output budget, and the refusal fallback where the model has it. */
@@ -419,8 +488,11 @@ class AiService(private val services: Services) {
             }
         }
 
-    private suspend fun call(key: String, params: () -> MessageCreateParams): BetaMessage = try {
-        withContext(Dispatchers.IO) { client(key).beta().messages().create(params()) }
+    private suspend fun call(key: String, params: () -> MessageCreateParams): BetaMessage = send(key) { it.create(params()) }
+
+    /** One request with this server's client, with what went wrong said plainly. */
+    private suspend fun <R> send(key: String, request: (MessageService) -> R): R = try {
+        withContext(Dispatchers.IO) { request(client(key).beta().messages()) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: ApiError) {
@@ -447,6 +519,7 @@ class AiService(private val services: Services) {
         private const val MAX_ROUNDS = 8
         private const val MAX_MESSAGES = 40
         private const val MAX_MESSAGE_CHARS = 8_000
+        private const val MAX_NOTE_CHARS = 200
         private val EFFORTS = setOf("low", "medium", "high", "xhigh", "max")
         private val MODEL_ID = Regex("claude-[a-z0-9.-]{2,60}")
 
@@ -456,7 +529,7 @@ class AiService(private val services: Services) {
         const val DATA_NOTICE =
             "When you ask the assistant something, your question, and whatever health data it looks at to answer, is sent to " +
                 "Anthropic, a company outside this server, where its Claude model reads it. It only looks at the features you allow " +
-                "here, and never at your photos. Anthropic handles what it's sent under its commercial terms and privacy policy, and " +
+                "here, and never at your progress photos; a photo of your food goes only when you take one to estimate a meal. Anthropic handles what it's sent under its commercial terms and privacy policy, and " +
                 "the settings of the Anthropic account your server's admin set up apply to it. Your conversations aren't kept on this " +
                 "server; a log of when you asked and which features it looked at is, so you can check. If you'd rather your data didn't " +
                 "leave your server, leave this off: everything else works without it."

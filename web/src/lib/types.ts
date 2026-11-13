@@ -1863,6 +1863,32 @@ export interface AiAuditEntry {
   outputTokens: number;
 }
 
+/** How close a food photo's estimate is likely to be. */
+export type EstimateConfidence = "LOW" | "MEDIUM" | "HIGH";
+
+/** One food or drink seen in a photo: its portion (grams, or ml when unit is "ml") and what it holds, estimated. */
+export interface FoodPhotoItem {
+  name: string;
+  grams: number;
+  nutrients: Nutrients;
+  confidence: EstimateConfidence;
+  /** What it assumed: "assumed cooked weight". */
+  assumption: string;
+  /** One of the person's own foods with a similar name, to log instead. */
+  match?: Food;
+  unit: "g" | "ml";
+}
+
+/** POST /api/ai/food-photo (multipart: photo, meal?, note?). */
+export interface FoodPhotoEstimate {
+  items: FoodPhotoItem[];
+  notes: string;
+  refused: boolean;
+  usedToday: number;
+  /** Eating-disorder recovery: show foods and portions without calorie or macro numbers (they're still here, for logging). */
+  hideNumbers: boolean;
+}
+
 // ---------------------------------------------------------------- Arranging screens (Layouts.kt)
 
 /** One screen: its sections in the person's order, and those hidden. */

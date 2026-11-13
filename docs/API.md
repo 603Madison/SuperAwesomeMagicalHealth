@@ -47,7 +47,7 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 | | |
 |---|---|
 | `GET /api/food/{date}` | `FoodDay`: entries, water, totals and the day's target |
-| `POST /api/food/entries` | `FoodEntryInput` → `FoodEntry` |
+| `POST /api/food/entries` | `FoodEntryInput` → `FoodEntry` (without a `food`: `name`, `nutrients` and an optional `serving` label, like "about 180 g") |
 | `PATCH /api/food/entries/{id}` · `DELETE …` | `FoodEntryChange` → `FoodEntry` |
 | `POST /api/food/copy` | `{from, to, meal?}`: copies a day's meal (or whole day) to another day |
 | `GET /api/foods/search?q=` | `FoodSearch`: the person's foods, then Open Food Facts |
@@ -354,7 +354,22 @@ in. What it looks at is sent to Anthropic, under Anthropic's commercial terms an
 | `PUT /api/ai/consent` · `DELETE` | `AiConsent` |
 | `POST /api/ai/chat` | `AiChatRequest` → `AiChatReply` (with what it looked at) |
 | `POST /api/ai/breakdown` | `AiBreakdownRequest` → `AiBreakdownReply` (a task's text only) |
+| `POST /api/ai/food-photo` | multipart: `photo` (JPEG, PNG or WebP, up to 20 MB), optional `meal` (`Meal`) and `note` → `FoodPhotoEstimate` |
 | `GET /api/ai/audit?days=30` | `[AiAuditEntry]` |
+
+**Food photo estimates.** With Food among the features the person allowed, `POST /api/ai/food-photo`
+sends one photo of a meal to Anthropic and returns what's in it: each food and drink with its
+portion (grams, or ml), estimated kcal, protein, carbs, fat and fibre, a confidence (`LOW`,
+`MEDIUM`, `HIGH`) and a line on what it assumed, plus `match`, the person's own food with a
+similar name, if they have one. The apps shrink the photo to 1024 px and re-encode it (dropping
+location and camera details); the server does the same again, sends it in that one request, and
+never keeps it (not on disk, in the database or in the log). The reply is a structured output, so
+it's exactly that shape. `refused: true` (with `notes`) means it couldn't make the photo out. It
+counts towards the day's limit, and the audit log records `food_photo`, Food, the model and the
+tokens. With the condition `eating-disorder`, `hideNumbers` is true: the apps show foods and
+portions without calorie or macro numbers (the numbers are still there, for logging). Nothing is
+logged until the person checks the estimate and logs it with `POST /api/food/entries`. Someone
+viewing a share can't send one.
 
 ## Sharing
 

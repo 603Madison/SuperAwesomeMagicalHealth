@@ -87,7 +87,7 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
                 }
                 givenNutrients != null -> {
                     val n = checked(givenNutrients)
-                    Logged(null, input.name?.trim()?.take(120)?.ifBlank { null } ?: "Quick add", null, "1 serving", n * servings)
+                    Logged(null, input.name?.trim()?.take(120)?.ifBlank { null } ?: "Quick add", null, input.serving?.trim()?.take(80)?.ifBlank { null } ?: "1 serving", n * servings)
                 }
                 else -> throw ApiError.badRequest("Say what was eaten: a food, or its calories")
             }
