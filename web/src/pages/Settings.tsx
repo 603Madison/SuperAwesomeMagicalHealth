@@ -1,28 +1,39 @@
-import { useEffect, useState } from "react";
-import { Bot, Copy, FileText, Home, Inbox, KeyRound, Lock, LogOut, Monitor, Shield, Smartphone, Watch } from "lucide-react";
-import { useModules } from "../App";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowUpDown, Bot, ChevronRight, Copy, Home, Inbox, KeyRound, Lock, LogOut, Monitor, Package, Shield, Smartphone, Watch } from "lucide-react";
+import { useModules, useNavItems, useNavShown } from "../App";
 import type { Module } from "../lib/types";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { KG_PER_LB, toKg, when } from "../lib/format";
+import { F, setField, useWater } from "../lib/fields";
+import { resetAllScreens, useLayoutStore, useScreenLayout } from "../lib/layout";
 import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
-import { SENSITIVE, type Goals, type Profile as ProfileModel } from "../lib/types";
+import { LAYOUT_NAV, SENSITIVE, layoutKey, type Goals, type Profile as ProfileModel } from "../lib/types";
 import { Button, Field, IconButton, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
+import { useArrange, type Section } from "../components/Arrange";
 import { DigestSettings, IntegrationSettings, NotificationSettings, SharingSettings } from "./SettingsExtra";
 import { AssistantSettingsCard, useAiStatus } from "./Assistant";
 import { FieldsEditor } from "../components/FieldKit";
-import { Package } from "lucide-react";
-
-/** The features phones show as tabs; the rest are links at the top of Settings. */
-const TABS: Module[] = ["NUTRITION", "MIND"];
 
 /** Features whose fields are chosen right here (bladder and bowel, and cycle, have their own pages). */
 const RECORDED: { module: Module; name: string }[] = [
-  { module: "MIND", name: "Mind" }, { module: "NEURO", name: "Autism & ADHD" }, { module: "TRANSITION", name: "Transition" }, { module: "BODY", name: "Body" },
+  { module: "NUTRITION", name: "Food" }, { module: "MIND", name: "Mind" }, { module: "NEURO", name: "Autism & ADHD" }, { module: "TRANSITION", name: "Transition" },
+  { module: "BODY", name: "Body" },
 ];
+
+/** Settings, in a few groups: each is a tab, and /settings#digest lands on the digest's. */
+const GROUPS = [
+  { id: "you", label: "You" },
+  { id: "features", label: "Features" },
+  { id: "reminders", label: "Reminders & sharing" },
+  { id: "connections", label: "Connections" },
+  { id: "appearance", label: "Appearance" },
+] as const;
+type Group = (typeof GROUPS)[number]["id"];
+const label = (g: Group) => GROUPS.find((x) => x.id === g)!.label;
 
 /** The conditions and goals picked, with a way to change them. */
 function TrackingSummary() {
@@ -37,126 +48,170 @@ function TrackingSummary() {
   );
 }
 
+function Panel({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return <section className="panel" id={id}><h2>{title}</h2>{children}</section>;
+}
+
 export function Settings() {
   const ai = useAiStatus();
   const user = useSession((s) => s.user)!;
   const profile = useSession((s) => s.profile);
   const on = useModules();
+  const water = useWater(on);
+  const location = useLocation();
+  const navigate = useNavigate();
   // A new connector link or upload key shows in the list of sign-ins at once.
   const [signIns, setSignIns] = useState(0);
-  useEffect(() => {
-    // Links like /settings#digest land on their section.
-    const id = window.location.hash.slice(1);
-    if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 50);
-  }, []);
-  return (
-    <div className="page settings">
-      <PageHeader title="Settings" />
-      {/* Phones show five tabs; the rest of the app is a tap away here. */}
-      <nav className="phone-only more-links" aria-label="More">
-        {FEATURES.filter((f) => on.includes(f.id) && f.route && !TABS.includes(f.id)).map((f) => (
-          <NavLink key={f.id} to={f.route!} className="chip"><f.icon size={18} /> {f.name}</NavLink>
-        ))}
-        {(on.includes("CONTINENCE") || on.includes("CYCLE")) && <NavLink to="/supplies" className="chip"><Package size={18} /> Supplies</NavLink>}
-        {ai?.available && <NavLink to="/assistant" className="chip"><Bot size={18} /> Assistant</NavLink>}
-        <NavLink to="/reports" className="chip"><FileText size={18} /> Reports</NavLink>
-        <NavLink to="/digest" className="chip"><Inbox size={18} /> Your week</NavLink>
-        <NavLink to="/devices" className="chip"><Watch size={18} /> Devices</NavLink>
-        {user.role === "ADMIN" && <NavLink to="/admin" className="chip"><Shield size={18} /> Admin</NavLink>}
-      </nav>
 
-      <section className="panel" id="tracking">
-        <h2>What you're tracking</h2>
-        <TrackingSummary />
-      </section>
-
-      <section className="panel" id="features">
-        <h2>Features</h2>
-        <p className="muted">Turn on the parts you want. The rest stay out of your way.</p>
-        {profile ? <Features profile={profile} /> : <Spinner />}
-      </section>
-
-      {RECORDED.some((m) => on.includes(m.module)) && (
-        <section className="panel" id="fields">
-          <h2>What to record</h2>
-          <p className="muted">What you're tracking decides what each form asks for. Show or hide any of it here; it's saved straight away.</p>
-          {on.includes("CONTINENCE") && <p><NavLink to="/bladder/settings">Bladder &amp; bowel settings</NavLink>: quick buttons, your own words and fields, bladder training.</p>}
-          {on.includes("CYCLE") && <p><NavLink to="/cycle/settings">Cycle settings</NavLink>: your own symptoms, lengths, reminders and plain wording.</p>}
-          {RECORDED.filter((m) => on.includes(m.module)).map((m) => (
-            <details key={m.module} className="field-group">
-              <summary>{m.name}</summary>
-              <FieldsEditor module={m.module} />
-            </details>
-          ))}
-        </section>
-      )}
-
-      <AssistantSettingsCard />
-
-      <section className="panel" id="profile">
-        <h2>You and your goals</h2>
+  const sections: (Section & { group: string })[] = [
+    { id: "profile", group: label("you"), label: "You and your goals", node: (
+      <Panel id="profile" title="You and your goals">
         <p className="muted">Your profile works out resting energy and calorie targets; goals shape your scores.</p>
-        {profile ? <ProfileForm initial={profile} /> : <Spinner />}
+        {profile ? <ProfileForm initial={profile} water={water} /> : <Spinner />}
         {profile && (on.includes("SYMPTOMS") || profile.place) && (
           <>
             <h3>Weather</h3>
             <PlacePicker />
           </>
         )}
-      </section>
-
-      <section className="panel" id="reminders">
-        <h2>Reminders and notifications</h2>
-        <NotificationSettings />
-      </section>
-
-      <section className="panel" id="digest">
-        <h2>Weekly digest</h2>
-        <DigestSettings />
-      </section>
-
-      <section className="panel" id="sharing">
-        <h2>Sharing</h2>
-        <SharingSettings />
-      </section>
-
-      <section className="panel">
-        <h2>Appearance in this browser</h2>
-        <AppearanceSettings />
-      </section>
-
-      <section className="panel" id="connector">
-        <h2>AI connector (MCP)</h2>
-        <Connector onMade={() => setSignIns((n) => n + 1)} />
-      </section>
-
-      <section className="panel" id="integrations">
-        <h2>Webhooks and Home Assistant</h2>
-        <IntegrationSettings />
-      </section>
-
-      <section className="panel" id="watch">
-        <h2>Pebble watch</h2>
-        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs a mood, water, coffee or a toilet trip with a tap. Connected watches are listed under "Signed in on".</p>
-      </section>
-
-      <section className="panel">
-        <h2>Account</h2>
+      </Panel>
+    ) },
+    { id: "account", group: label("you"), label: "Account", node: (
+      <Panel id="account" title="Account">
         <NameForm />
         {user.hasPassword && <PasswordChange />}
         {user.oidc && !user.hasPassword && <p className="muted">You sign in through single sign-on; your password is managed there.</p>}
-      </section>
+      </Panel>
+    ) },
+    { id: "signins", group: label("you"), label: "Signed in on", node: (
+      <Panel id="signins" title="Signed in on"><SignIns key={signIns} /></Panel>
+    ) },
+    { id: "tracking", group: label("features"), label: "What you're tracking", node: (
+      <Panel id="tracking" title="What you're tracking"><TrackingSummary /></Panel>
+    ) },
+    { id: "features", group: label("features"), label: "Features", node: (
+      <Panel id="features" title="Features">
+        <p className="muted">Turn on the parts you want. The rest stay out of your way.</p>
+        {profile ? <Features profile={profile} water={water} /> : <Spinner />}
+      </Panel>
+    ) },
+    { id: "fields", group: label("features"), label: "What to record", when: RECORDED.some((m) => on.includes(m.module)) || on.includes("CONTINENCE") || on.includes("CYCLE"), node: (
+      <Panel id="fields" title="What to record">
+        <p className="muted">What you're tracking decides what each form asks for. Show or hide any of it here; it's saved straight away.</p>
+        {on.includes("CONTINENCE") && <p><NavLink to="/bladder/settings">Bladder &amp; bowel settings</NavLink>: quick buttons, your own words and fields, bladder training.</p>}
+        {on.includes("CYCLE") && <p><NavLink to="/cycle/settings">Cycle settings</NavLink>: your own symptoms, lengths, reminders and plain wording.</p>}
+        {RECORDED.filter((m) => on.includes(m.module)).map((m) => (
+          <details key={m.module} className="field-group">
+            <summary>{m.name}</summary>
+            <FieldsEditor module={m.module} />
+          </details>
+        ))}
+      </Panel>
+    ) },
+    { id: "reminders", group: label("reminders"), label: "Reminders and notifications", node: (
+      <Panel id="reminders" title="Reminders and notifications"><NotificationSettings /></Panel>
+    ) },
+    { id: "digest", group: label("reminders"), label: "Weekly digest", node: (
+      <Panel id="digest" title="Weekly digest"><DigestSettings /></Panel>
+    ) },
+    { id: "sharing", group: label("reminders"), label: "Sharing", node: (
+      <Panel id="sharing" title="Sharing"><SharingSettings /></Panel>
+    ) },
+    { id: "devices", group: label("connections"), label: "Devices", node: (
+      <Panel id="devices" title="Devices">
+        <p className="muted">Rings, watches, the phone app, FIT files and upload keys.</p>
+        <div><Link className="btn btn-tonal" to="/devices"><Watch size={18} /> Devices</Link></div>
+      </Panel>
+    ) },
+    { id: "assistant", group: label("connections"), label: "AI assistant", when: !!ai?.available, node: <AssistantSettingsCard /> },
+    { id: "connector", group: label("connections"), label: "AI connector (MCP)", node: (
+      <Panel id="connector" title="AI connector (MCP)"><Connector water={water} onMade={() => setSignIns((n) => n + 1)} /></Panel>
+    ) },
+    { id: "integrations", group: label("connections"), label: "Webhooks and Home Assistant", node: (
+      <Panel id="integrations" title="Webhooks and Home Assistant"><IntegrationSettings /></Panel>
+    ) },
+    { id: "watch", group: label("connections"), label: "Pebble watch", node: (
+      <Panel id="watch" title="Pebble watch">
+        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs {water ? "a mood, water, coffee or a toilet trip" : "a mood, coffee or a toilet trip"} with a tap. Connected watches are listed in You › Signed in on.</p>
+      </Panel>
+    ) },
+    { id: "appearance", group: label("appearance"), label: "Appearance in this browser", node: (
+      <Panel id="appearance" title="Appearance in this browser"><AppearanceSettings /></Panel>
+    ) },
+    { id: "screens", group: label("appearance"), label: "Arranged screens", node: (
+      <Panel id="screens" title="Arranged screens"><ArrangedScreens /></Panel>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("settings"), "Settings", sections, { groups: GROUPS.map((g) => g.label) });
 
-      <section className="panel">
-        <h2>Signed in on</h2>
-        <SignIns key={signIns} />
-      </section>
+  // The tab: from the address (#features, or a section's #digest), else the first.
+  const hash = location.hash.slice(1);
+  const ofSection = sections.find((x) => x.id === hash)?.group;
+  const group: Group = GROUPS.find((g) => g.id === hash || g.label === ofSection)?.id ?? "you";
+  const choose = (g: Group) => navigate({ hash: g === "you" ? "" : g }, { replace: true });
+  useEffect(() => {
+    // Links like /settings#digest land on their section.
+    if (hash && sections.some((x) => x.id === hash)) setTimeout(() => document.getElementById(hash)?.scrollIntoView({ block: "start" }), 50);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hash]);
+  const shown = arranged.shown.filter((x) => x.group === label(group));
+
+  return (
+    <div className="page settings">
+      <PageHeader title="Settings" actions={arranged.button} />
+      <MoreLinks admin={user.role === "ADMIN"} />
+      <div className="settings-tabs">
+        <div className="tabs" role="tablist" aria-label="Settings">
+          {GROUPS.map((g) => (
+            <button key={g.id} type="button" role="tab" id={`tab-${g.id}`} aria-selected={group === g.id} aria-controls="settings-panel" className={group === g.id ? "is-active" : ""} onClick={() => choose(g.id)}>{g.label}</button>
+          ))}
+        </div>
+      </div>
+      <div id="settings-panel" role="tabpanel" aria-labelledby={`tab-${group}`}>
+        {shown.map((x) => <div key={x.id}>{x.node}</div>)}
+        {shown.length === 0 && <p className="muted">Everything here is hidden. Use Arrange, at the top, to show it again.</p>}
+      </div>
     </div>
   );
 }
 
-function Features({ profile }: { profile: ProfileModel }) {
+/** Phones show five tabs; the rest of the app is a tap away here, in the sidebar's order. */
+function MoreLinks({ admin }: { admin: boolean }) {
+  const on = useModules();
+  const items = useNavShown(useNavItems()).filter((i) => !i.tab);
+  return (
+    <nav className="phone-only more-links" aria-label="More">
+      {items.map((i) => <NavLink key={i.id} to={i.to} className="chip"><i.icon size={18} /> {i.label}</NavLink>)}
+      {(on.includes("CONTINENCE") || on.includes("CYCLE")) && <NavLink to="/supplies" className="chip"><Package size={18} /> Supplies</NavLink>}
+      <NavLink to="/digest" className="chip"><Inbox size={18} /> Your week</NavLink>
+      {admin && <NavLink to="/admin" className="chip"><Shield size={18} /> Admin</NavLink>}
+    </nav>
+  );
+}
+
+/** How many screens the person has arranged, and a way to put them all back. */
+function ArrangedScreens() {
+  const count = useLayoutStore((s) => Object.keys(s.screens).length);
   const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <p className="muted">Each page has an <ArrowUpDown size={14} style={{ verticalAlign: -2 }} /> Arrange button at the top: move what matters to the top, and hide what you don't use. Today, its quick actions and the sidebar are arranged the same way in the phone app.</p>
+      <div className="button-row">
+        <Button busy={busy} disabled={count === 0} onClick={async () => {
+          setBusy(true);
+          try { await resetAllScreens(); toast("Every screen is back as it was"); } catch (e) { errorToast(e); }
+          setBusy(false);
+        }}>Put every screen back as it was</Button>
+        <span className="muted small" style={{ alignSelf: "center" }}>{count === 0 ? "Nothing arranged yet." : `${count} ${count === 1 ? "screen" : "screens"} arranged.`}</span>
+      </div>
+    </>
+  );
+}
+
+function Features({ profile, water }: { profile: ProfileModel; water: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [waterBusy, setWaterBusy] = useState(false);
+  const nav = useScreenLayout(LAYOUT_NAV);
   const toggle = async (id: Module, enabled: boolean) => {
     setBusy(true);
     const modules = enabled ? [...profile.modules, id] : profile.modules.filter((m) => m !== id);
@@ -165,15 +220,39 @@ function Features({ profile }: { profile: ProfileModel }) {
   };
   return (
     <div className="form-stack">
-      {FEATURES.map((f) => (
-        <Toggle key={f.id} disabled={busy} checked={profile.modules.includes(f.id)} onChange={(v) => void toggle(f.id, v)}
-          label={f.name} help={<>{f.about}{SENSITIVE.includes(f.id) && <><br /><Lock size={11} style={{ verticalAlign: -1 }} /> Encrypted on the server; AI connectors only see it if you allow them.</>}</>} />
-      ))}
+      <p className="muted small"><Lock size={12} style={{ verticalAlign: -1 }} /> Private features are encrypted on the server, and AI connectors only see them if you allow them.</p>
+      {FEATURES.map((f) => {
+        const isOn = profile.modules.includes(f.id);
+        const navId = f.id === "NUTRITION" ? "FOOD" : f.id;
+        const offSidebar = isOn && nav?.hidden.includes(navId);
+        return (
+          <div key={f.id} className="form-stack" style={{ gap: 10 }}>
+            <div className="feature-row">
+              <Toggle disabled={busy} checked={isOn} onChange={(v) => void toggle(f.id, v)}
+                label={<>{f.name}{SENSITIVE.includes(f.id) && <Lock size={13} className="feature-lock" aria-label="Private" />}</>}
+                help={<>{f.id === "NUTRITION" && !water ? "A food diary with calories, protein, carbs, fat, coffee and drinks." : f.about}{offSidebar && " Not in the sidebar: arrange it to show it again."}</>} />
+              {isOn && f.route ? <Link className="icon-btn" to={f.route} aria-label={`Open ${f.name}`} title={`Open ${f.name}`}><ChevronRight size={20} /></Link> : <span className="icon-btn-space" aria-hidden="true" />}
+            </div>
+            {f.id === "NUTRITION" && isOn && (
+              <div className="feature-row feature-sub">
+                <Toggle disabled={waterBusy} checked={water} label="Water"
+                  help="Your water goal, the quick +250 ml, water among drinks, in Trends and on the watch. Off, drinks still count caffeine and alcohol."
+                  onChange={async (v) => {
+                    setWaterBusy(true);
+                    try { await setField(F.NUTRITION_WATER, v); toast(v ? "Water is back" : "Water is hidden"); } catch (e) { errorToast(e); }
+                    setWaterBusy(false);
+                  }} />
+                <span className="icon-btn-space" aria-hidden="true" />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function ProfileForm({ initial }: { initial: ProfileModel }) {
+function ProfileForm({ initial, water }: { initial: ProfileModel; water: boolean }) {
   const [p, setP] = useState(initial);
   const [busy, setBusy] = useState(false);
   useEffect(() => setP(initial), [initial]);
@@ -256,7 +335,7 @@ function ProfileForm({ initial }: { initial: ProfileModel }) {
       </div>
       <div className="two-col">
         <Field label="Calories a day" help="Leave empty to work it out from what you burn and your aim"><input inputMode="numeric" value={g.calories ?? ""} onChange={(e) => setGoals({ calories: numOrNull(e.target.value) })} placeholder="Automatic" /></Field>
-        <Field label="Water a day (ml)"><input inputMode="numeric" value={g.waterMl} onChange={(e) => setGoals({ waterMl: Number(e.target.value) || 0 })} /></Field>
+        {water && <Field label="Water a day (ml)"><input inputMode="numeric" value={g.waterMl} onChange={(e) => setGoals({ waterMl: Number(e.target.value) || 0 })} /></Field>}
       </div>
       <div className="two-col">
         <Field label="Protein (g)" help="Empty: about 1.4 g per kg of body weight"><input inputMode="numeric" value={g.protein ?? ""} onChange={(e) => setGoals({ protein: numOrNull(e.target.value) })} placeholder="Automatic" /></Field>
@@ -352,14 +431,18 @@ const KIND_TEXT: Record<string, string> = {
 
 export function SignIns({ only }: { only?: string[] }) {
   const { data, error, loading, setData } = useLoad(() => api.sessions(), []);
+  const [all, setAll] = useState(false);
   if (loading && !data) return <Spinner />;
   if (error) return <div className="notice notice-error">{error}</div>;
   const list = (data ?? []).filter((s) => !only || only.includes(s.kind));
   if (only && list.length === 0) return null;
+  // The current one first; a long list shows its first few until asked.
+  const sorted = [...list].sort((a, b) => Number(b.current ?? false) - Number(a.current ?? false));
+  const SHOWN = 6;
   return (
     <>
       <ul className="device-list">
-        {list.map((s) => (
+        {(all ? sorted : sorted.slice(0, SHOWN)).map((s) => (
           <li key={s.id} className="device-row">
             {s.kind === "APP" ? <Smartphone size={20} /> : s.kind.startsWith("MCP") ? <Bot size={20} /> : s.kind === "UPLOAD" ? <KeyRound size={20} />
               : s.kind === "WATCH" ? <Watch size={20} /> : s.kind === "INTEGRATION" ? <Home size={20} /> : <Monitor size={20} />}
@@ -375,7 +458,10 @@ export function SignIns({ only }: { only?: string[] }) {
           </li>
         ))}
       </ul>
-      {!only && <Button variant="ghost" onClick={() => session.signOut()}><LogOut size={18} /> Sign out here</Button>}
+      <div className="button-row">
+        {sorted.length > SHOWN && <Button variant="ghost" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${sorted.length}`}</Button>}
+        {!only && <Button variant="ghost" onClick={() => session.signOut()}><LogOut size={18} /> Sign out here</Button>}
+      </div>
     </>
   );
 }
@@ -384,7 +470,7 @@ export function SignIns({ only }: { only?: string[] }) {
  * A link that brings this account's data to an AI over the Model Context Protocol (Claude, or any
  * MCP client). Shown once; listed and removed with the sign-ins.
  */
-function Connector({ onMade }: { onMade: () => void }) {
+function Connector({ water, onMade }: { water: boolean; onMade: () => void }) {
   const admin = useSession((s) => s.user)?.role === "ADMIN";
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -405,7 +491,7 @@ function Connector({ onMade }: { onMade: () => void }) {
             <code>{link}</code>
             <Button variant="ghost" onClick={() => { void navigator.clipboard?.writeText(link); toast("Copied"); }}><Copy size={16} /> Copy</Button>
           </div>
-          <p className="muted">This link is the key: keep it private. It's shown only now; it's listed under "Signed in on", where you can remove it.</p>
+          <p className="muted">This link is the key: keep it private. It's shown only now; it's listed in You › Signed in on, where you can remove it.</p>
           <ul className="muted small" style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
             <li><strong>Claude</strong>: Settings › Connectors › Add custom connector, and paste the link.</li>
             <li><strong>Other MCP clients</strong>: add it as a remote (Streamable HTTP) server. The token can go in the URL as here, or as <code>Authorization: Bearer</code> to <code>/mcp</code>.</li>
@@ -415,7 +501,7 @@ function Connector({ onMade }: { onMade: () => void }) {
       ) : (
         <>
           <Toggle checked={logging} onChange={(v) => { setLogging(v); if (v) setEveryone(false); }} label="Let it log entries"
-            help="It may also log food, water, weight, workouts and check-ins for you (say, from a photo of your lunch). Off: it only reads." />
+            help={`It may also log food, ${water ? "water, " : ""}weight, workouts and check-ins for you (say, from a photo of your lunch). Off: it only reads.`} />
           {sensitive.length > 0 && !everyone && (
             <Field label="Also let it see" help="Off unless you choose: these stay private otherwise.">
               <div className="tag-list">

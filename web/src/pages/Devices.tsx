@@ -3,7 +3,9 @@ import { Battery, Copy, FileUp, HeartPulse, KeyRound, MoreHorizontal, Pencil, Sm
 import { api } from "../lib/api";
 import { num, when } from "../lib/format";
 import type { Device } from "../lib/types";
-import { Button, Card, Empty, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { SignIns } from "./Settings";
 
 const KIND_LABEL: Record<string, string> = {
@@ -17,69 +19,75 @@ export function Devices() {
   const [forgetting, setForgetting] = useState<Device | null>(null);
   const [keys, setKeys] = useState(0);
 
-  return (
-    <div className="page">
-      <PageHeader title="Devices" subtitle="Where your data comes from, and how to bring in more" />
-      {error && <ErrorNotice message={error} onRetry={reload} />}
-      {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {data && (
-        <Card title="Your devices" icon={<Watch size={18} />}>
-          {data.length === 0 ? (
-            <Empty icon={<Watch size={36} />} title="Nothing connected yet">Devices appear here once they've sent data, from the phone app, an upload key or a FIT file.</Empty>
-          ) : (
-            <ul className="rows">
-              {data.map((d) => (
-                <li key={d.id} className="row">
-                  <div className={`device-icon kind-${d.kind}`}>{d.kind === "PHONE" || d.kind === "HEALTH_CONNECT" ? <Smartphone size={20} /> : d.kind === "MANUAL" ? <Pencil size={20} /> : <Watch size={20} />}</div>
-                  <div className="row-main">
-                    <div className="row-title">{d.name}</div>
-                    <div className="row-sub">
-                      {KIND_LABEL[d.kind]}{d.model ? ` · ${d.model}` : ""}{d.firmware ? ` · firmware ${d.firmware}` : ""} · {d.lastSyncAt ? `synced ${when(d.lastSyncAt)}` : `added ${when(d.createdAt)}`}
-                    </div>
+  const sections: Section[] = [
+    { id: "devices", label: "Your devices", node: data && (
+      <Card title="Your devices" icon={<Watch size={18} />} className="span-2">
+        {data.length === 0 ? (
+          <p className="muted">Nothing connected yet. Devices appear here once they've sent data: from the phone app, an upload key or a FIT file.</p>
+        ) : (
+          <ul className="rows">
+            {data.map((d) => (
+              <li key={d.id} className="row">
+                <div className={`device-icon kind-${d.kind}`}>{d.kind === "PHONE" || d.kind === "HEALTH_CONNECT" ? <Smartphone size={20} /> : d.kind === "MANUAL" ? <Pencil size={20} /> : <Watch size={20} />}</div>
+                <div className="row-main">
+                  <div className="row-title">{d.name}</div>
+                  <div className="row-sub">
+                    {KIND_LABEL[d.kind]}{d.model ? ` · ${d.model}` : ""}{d.firmware ? ` · firmware ${d.firmware}` : ""} · {d.lastSyncAt ? `synced ${when(d.lastSyncAt)}` : `added ${when(d.createdAt)}`}
                   </div>
-                  <div className="row-end">
-                    {d.battery != null && <div><Battery size={14} style={{ verticalAlign: -2 }} /> {d.battery}%</div>}
-                    <div className="muted">{num(d.samples)} readings</div>
-                  </div>
-                  <div className="row-actions">
-                    <Menu label={`More for ${d.name}`} trigger={<MoreHorizontal size={18} />} items={[
-                      { label: "Rename", icon: <Pencil size={18} />, onSelect: () => setRenaming(d) },
-                      { label: "Forget, with its data", icon: <Trash2 size={18} />, danger: true, onSelect: () => setForgetting(d) },
-                    ]} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      )}
-
-      <h2 className="section-title">Bring in data</h2>
-      <div className="how-to">
-        <Card title="Phone app (Android)" icon={<Smartphone size={18} />}>
-          <p>Sign in to this server from the SuperAwesomeMagicalHealth app. It carries data in from your wearables in the background:</p>
-          <p><strong>Colmi rings</strong> (R02–R12, Colmi Ring 2 and other QRing rings) directly over Bluetooth: heart rate, steps, calories and sleep stages.</p>
-          <p><strong>Health Connect</strong>: anything that writes to it, like Garmin Connect, Fitbit, Samsung Health or Gadgetbridge.</p>
-          <p><strong>Gadgetbridge</strong>'s database export, for the devices it supports.</p>
-        </Card>
-        <Card title="Pebble Time 2" icon={<Watch size={18} />}>
-          <p>Pair it with <strong>Gadgetbridge</strong>, which supports Core Devices' new Pebbles, and turn on its Health Connect sync or database export; the phone app picks it up from there.</p>
-          <p>A Pebble watch app that sends straight to this server with an upload key is planned.</p>
-        </Card>
-        <Card title="Garmin" icon={<HeartPulse size={18} />}>
-          <p>Let Garmin Connect share with <strong>Health Connect</strong> on your phone, or pair the watch with Gadgetbridge.</p>
-          <p>Or upload <strong>.FIT files</strong> below: workouts from the watch's <code>GARMIN/Activity</code> folder, or exported from Garmin Connect.</p>
-        </Card>
-      </div>
-
-      <h2 className="section-title">Garmin and other .FIT files</h2>
-      <FitImport onImported={reload} />
-
-      <h2 className="section-title">Upload keys</h2>
-      <Card title="For watch apps and scripts" icon={<KeyRound size={18} />}>
+                </div>
+                <div className="row-end">
+                  {d.battery != null && <div><Battery size={14} style={{ verticalAlign: -2 }} /> {d.battery}%</div>}
+                  <div className="muted">{num(d.samples)} readings</div>
+                </div>
+                <div className="row-actions">
+                  <Menu label={`More for ${d.name}`} trigger={<MoreHorizontal size={18} />} items={[
+                    { label: "Rename", icon: <Pencil size={18} />, onSelect: () => setRenaming(d) },
+                    { label: "Forget, with its data", icon: <Trash2 size={18} />, danger: true, onSelect: () => setForgetting(d) },
+                  ]} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    ) },
+    { id: "bring", label: "Bring in data", node: (
+      <section className="block span-2" aria-label="Bring in data">
+        <h2 className="section-title">Bring in data</h2>
+        <div className="how-to">
+          <Card title="Phone app (Android)" icon={<Smartphone size={18} />}>
+            <p>Sign in to this server from the SuperAwesomeMagicalHealth app. It carries data in from your wearables in the background:</p>
+            <p><strong>Colmi rings</strong> (R02–R12, Colmi Ring 2 and other QRing rings) directly over Bluetooth: heart rate, steps, calories and sleep stages.</p>
+            <p><strong>Health Connect</strong>: anything that writes to it, like Garmin Connect, Fitbit, Samsung Health or Gadgetbridge.</p>
+            <p><strong>Gadgetbridge</strong>'s database export, for the devices it supports.</p>
+          </Card>
+          <Card title="Pebble" icon={<Watch size={18} />}>
+            <p>Install the SuperAwesomeMagicalHealth watch app and connect it from its settings in the Pebble app: it shows today and logs with a tap.</p>
+            <p>For health data, pair the watch with <strong>Gadgetbridge</strong> and turn on its Health Connect sync or database export; the phone app picks it up from there.</p>
+          </Card>
+          <Card title="Garmin" icon={<HeartPulse size={18} />}>
+            <p>Let Garmin Connect share with <strong>Health Connect</strong> on your phone, or pair the watch with Gadgetbridge.</p>
+            <p>Or upload <strong>.FIT files</strong>: workouts from the watch's <code>GARMIN/Activity</code> folder, or exported from Garmin Connect.</p>
+          </Card>
+        </div>
+      </section>
+    ) },
+    { id: "fit", label: "FIT files", node: <FitImport onImported={reload} /> },
+    { id: "keys", label: "Upload keys", node: (
+      <Card title="Upload keys" icon={<KeyRound size={18} />} className="span-2">
         <UploadKeys onMade={() => setKeys((k) => k + 1)} />
         <SignIns key={keys} only={["UPLOAD"]} />
       </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("devices"), "Devices", sections);
+
+  return (
+    <div className="page">
+      <PageHeader title="Devices" subtitle="Where your data comes from, and how to bring in more" actions={arranged.button} />
+      {error && <ErrorNotice message={error} onRetry={reload} />}
+      {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
+      {arranged.render()}
 
       {renaming && <Rename device={renaming} onClose={() => setRenaming(null)} onSaved={(d) => { setData((data ?? []).map((x) => (x.id === d.id ? d : x))); setRenaming(null); }} />}
       {forgetting && (
@@ -113,7 +121,7 @@ function FitImport({ onImported }: { onImported: () => void }) {
     setBusy(false);
   };
   return (
-    <Card>
+    <Card title="Garmin and other .FIT files" icon={<FileUp size={18} />} className="span-2">
       <div
         className={`dropzone ${over ? "is-over" : ""}`}
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}

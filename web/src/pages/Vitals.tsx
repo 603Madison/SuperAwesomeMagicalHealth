@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Droplets, HeartPulse, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { Droplets, HeartPulse, List as ListIcon, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, dayLabel, isoDate, localInput, num, shortDate } from "../lib/format";
 import { session, useSession } from "../lib/session";
@@ -7,7 +7,9 @@ import { useReadOnly } from "../lib/viewing";
 import type { BloodPressure, GlucoseContext, GlucoseReading, GlucoseUnit, VitalsTargets } from "../lib/types";
 import { BP_TEXT, DEFAULT_TARGETS, GLUCOSE_CONTEXTS, bpCategory, bpTone, glucoseText, glucoseValue, toMmol, unitLabel } from "../lib/vitals";
 import { LineChart } from "../components/charts";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
 
 export function Vitals() {
@@ -31,86 +33,88 @@ export function Vitals() {
   const glucose = data ? [...data.glucose].sort((a, b) => a.at - b.at) : [];
   const category = data?.category ?? (data?.systolicAverage != null && data.diastolicAverage != null ? bpCategory(data.systolicAverage, data.diastolicAverage) : undefined);
 
+  const sections: Section[] = [
+    { id: "bp", label: "Blood pressure", node: data && (
+      <Card title="Blood pressure" icon={<HeartPulse size={18} />} className="span-2" action={category && <span className={`tone-chip tone-${bpTone(category)}`}>{BP_TEXT[category]}</span>}>
+        {bp.length === 0 ? (
+          <p className="muted">No readings yet. Sit quietly for five minutes, then measure: two readings a minute apart, morning and evening, give the clearest picture.</p>
+        ) : (
+          <>
+            <div className="stats">
+              <Stat label="Average" value={`${num(data.systolicAverage)}/${num(data.diastolicAverage)}`} unit="mmHg" sub={`${bp.length} ${bp.length === 1 ? "reading" : "readings"}`} />
+              <Stat label="Latest" value={`${bp[bp.length - 1].systolic}/${bp[bp.length - 1].diastolic}`} unit="mmHg" sub={`${dayLabel(isoDate(new Date(bp[bp.length - 1].at)))}, ${clock(bp[bp.length - 1].at)}`} />
+              <Stat label="Your target" value={`under ${targets.systolicHigh}/${targets.diastolicHigh}`} />
+            </div>
+            <LineChart
+              label="Blood pressure readings" name="Top" color="var(--c1)" dots={bp.length <= 40} area={false}
+              points={bp.map((r) => ({ x: r.at, y: r.systolic }))}
+              extra={[{ name: "Bottom", color: "var(--c2)", points: bp.map((r) => ({ x: r.at, y: r.diastolic })) }]}
+              formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${Math.round(y)}`}
+            />
+            <ul className="legend">
+              <li><span className="legend-key" style={{ background: "var(--c1)" }} />Systolic (top number)</li>
+              <li><span className="legend-key" style={{ background: "var(--c2)" }} />Diastolic (bottom number)</li>
+            </ul>
+          </>
+        )}
+      </Card>
+    ) },
+    { id: "glucose", label: "Glucose", node: data && (
+      <Card title="Glucose" icon={<Droplets size={18} />} className="span-2" action={
+        <Segmented label="Glucose unit" value={unit} onChange={(u) => void setUnit(u)} options={[{ value: "MMOL_L", label: "mmol/L" }, { value: "MG_DL", label: "mg/dL" }]} />
+      }>
+        {glucose.length === 0 ? (
+          <p className="muted">No glucose readings yet. Readings from a meter or sensor show here, with time in your target range.</p>
+        ) : (
+          <>
+            <div className="stats">
+              <Stat label="Average" value={glucoseValue(data.glucoseAverage ?? 0, unit)} unit={unitLabel(unit)} />
+              {data.fastingAverage != null && <Stat label="Fasting average" value={glucoseValue(data.fastingAverage, unit)} unit={unitLabel(unit)} />}
+              {data.timeInRange != null && <Stat label="In your range" value={data.timeInRange} unit="%" sub={`${glucoseValue(targets.glucoseLow, unit)}–${glucoseValue(targets.glucoseHigh, unit)} ${unitLabel(unit)}`} />}
+              {data.gmi != null && <Stat label="A1c estimate (GMI)" value={num(data.gmi, 1)} unit="%" sub="From 14+ days of sensor data" />}
+            </div>
+            {data.timeInRange != null && <RangeBar below={data.timeBelow ?? 0} inRange={data.timeInRange} above={data.timeAbove ?? 0} />}
+            <LineChart
+              label="Glucose readings" color="var(--c1)" dots={glucose.length <= 40} area={false}
+              band={[glucoseValue(targets.glucoseLow, unit), glucoseValue(targets.glucoseHigh, unit)]}
+              points={glucose.map((g) => ({ x: g.at, y: glucoseValue(g.mmolL, unit) }))}
+              formatX={(x) => `${shortDate(isoDate(new Date(x)))} ${clock(x)}`} formatY={(y) => (unit === "MG_DL" ? `${Math.round(y)}` : y.toFixed(1))}
+            />
+          </>
+        )}
+      </Card>
+    ) },
+    { id: "patterns", label: "Worth knowing", node: data && data.patterns.length > 0 && (
+      <Card title="Worth knowing" icon={<Sparkles size={18} />} className="span-2">
+        <div className="insights" style={{ margin: 0 }}>
+          {data.patterns.map((p, i) => {
+            const Icon = INSIGHT_ICONS[p.icon] ?? Sparkles;
+            return <article key={i} className={`insight tone-${p.tone}`}><div className="insight-icon"><Icon size={20} /></div><div><h4>{p.title}</h4><p>{p.body}</p></div></article>;
+          })}
+        </div>
+      </Card>
+    ) },
+    { id: "readings", label: "Recent readings", node: data && (bp.length > 0 || glucose.length > 0) && (
+      <Card title="Recent readings" icon={<ListIcon size={18} />} className="span-2" action={!readOnly && <CardAction label="Your targets" onClick={() => setOpen("targets")}><Settings2 size={18} /></CardAction>}>
+        <Readings bp={[...bp].reverse()} glucose={[...glucose].reverse()} unit={unit} readOnly={readOnly} onChanged={reload} />
+        <p className="muted small">Categories follow the American Heart Association. One reading isn't a diagnosis: patterns over days are what count. Your clinician may set different targets for you.</p>
+      </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("vitals"), "Blood pressure & glucose", sections);
+
   return (
     <div className="page">
       <PageHeader title="Blood pressure & glucose" subtitle="Your readings, against your own targets" actions={<>
         <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 7, label: "Week" }, { value: 30, label: "Month" }, { value: 90, label: "3 months" }]} />
         {!readOnly && <Button variant="primary" onClick={() => setOpen("bp")}><Plus size={18} /> Blood pressure</Button>}
         {!readOnly && <Button onClick={() => setOpen("glucose")}><Plus size={18} /> Glucose</Button>}
+        {arranged.button}
       </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {data && (
-        <div className="grid grid-2" style={{ opacity: loading ? 0.6 : 1 }}>
-          {data.bloodPressure.some((r) => r.systolic > 180 || r.diastolic > 120) && <CrisisNotice />}
-
-          <Card title="Blood pressure" icon={<HeartPulse size={18} />} className="span-2" action={category && <span className={`tone-chip tone-${bpTone(category)}`}>{BP_TEXT[category]}</span>}>
-            {bp.length === 0 ? (
-              <Empty icon={<HeartPulse size={32} />} title="No readings yet">
-                Sit quietly for five minutes, then measure. Two readings a minute apart, morning and evening, give the clearest picture.
-              </Empty>
-            ) : (
-              <>
-                <div className="stats">
-                  <Stat label="Average" value={`${num(data.systolicAverage)}/${num(data.diastolicAverage)}`} unit="mmHg" sub={`${bp.length} ${bp.length === 1 ? "reading" : "readings"}`} />
-                  <Stat label="Latest" value={`${bp[bp.length - 1].systolic}/${bp[bp.length - 1].diastolic}`} unit="mmHg" sub={`${dayLabel(isoDate(new Date(bp[bp.length - 1].at)))}, ${clock(bp[bp.length - 1].at)}`} />
-                  <Stat label="Your target" value={`under ${targets.systolicHigh}/${targets.diastolicHigh}`} />
-                </div>
-                <LineChart
-                  label="Blood pressure readings" name="Top" color="var(--c1)" dots={bp.length <= 40} area={false}
-                  points={bp.map((r) => ({ x: r.at, y: r.systolic }))}
-                  extra={[{ name: "Bottom", color: "var(--c2)", points: bp.map((r) => ({ x: r.at, y: r.diastolic })) }]}
-                  formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${Math.round(y)}`}
-                />
-                <ul className="legend">
-                  <li><span className="legend-key" style={{ background: "var(--c1)" }} />Systolic (top number)</li>
-                  <li><span className="legend-key" style={{ background: "var(--c2)" }} />Diastolic (bottom number)</li>
-                </ul>
-              </>
-            )}
-          </Card>
-
-          <Card title="Glucose" icon={<Droplets size={18} />} className="span-2" action={
-            <Segmented label="Glucose unit" value={unit} onChange={(u) => void setUnit(u)} options={[{ value: "MMOL_L", label: "mmol/L" }, { value: "MG_DL", label: "mg/dL" }]} />
-          }>
-            {glucose.length === 0 ? (
-              <Empty icon={<Droplets size={32} />} title="No glucose readings yet">Readings from a meter or sensor show here, with time in your target range.</Empty>
-            ) : (
-              <>
-                <div className="stats">
-                  <Stat label="Average" value={glucoseValue(data.glucoseAverage ?? 0, unit)} unit={unitLabel(unit)} />
-                  {data.fastingAverage != null && <Stat label="Fasting average" value={glucoseValue(data.fastingAverage, unit)} unit={unitLabel(unit)} />}
-                  {data.timeInRange != null && <Stat label="In your range" value={data.timeInRange} unit="%" sub={`${glucoseValue(targets.glucoseLow, unit)}–${glucoseValue(targets.glucoseHigh, unit)} ${unitLabel(unit)}`} />}
-                  {data.gmi != null && <Stat label="A1c estimate (GMI)" value={num(data.gmi, 1)} unit="%" sub="From 14+ days of sensor data" />}
-                </div>
-                {data.timeInRange != null && <RangeBar below={data.timeBelow ?? 0} inRange={data.timeInRange} above={data.timeAbove ?? 0} />}
-                <LineChart
-                  label="Glucose readings" color="var(--c1)" dots={glucose.length <= 40} area={false}
-                  band={[glucoseValue(targets.glucoseLow, unit), glucoseValue(targets.glucoseHigh, unit)]}
-                  points={glucose.map((g) => ({ x: g.at, y: glucoseValue(g.mmolL, unit) }))}
-                  formatX={(x) => `${shortDate(isoDate(new Date(x)))} ${clock(x)}`} formatY={(y) => (unit === "MG_DL" ? `${Math.round(y)}` : y.toFixed(1))}
-                />
-              </>
-            )}
-          </Card>
-
-          {data.patterns.length > 0 && (
-            <Card title="Worth knowing" icon={<Sparkles size={18} />} className="span-2">
-              <div className="insights" style={{ margin: 0 }}>
-                {data.patterns.map((p, i) => {
-                  const Icon = INSIGHT_ICONS[p.icon] ?? Sparkles;
-                  return <article key={i} className={`insight tone-${p.tone}`}><div className="insight-icon"><Icon size={20} /></div><div><h4>{p.title}</h4><p>{p.body}</p></div></article>;
-                })}
-              </div>
-            </Card>
-          )}
-
-          <Card title="Recent readings" className="span-2" action={!readOnly && <Button variant="ghost" onClick={() => setOpen("targets")}><Settings2 size={16} /> Targets</Button>}>
-            <Readings bp={[...bp].reverse()} glucose={[...glucose].reverse()} unit={unit} readOnly={readOnly} onChanged={reload} />
-            <p className="muted small">Categories follow the American Heart Association. One reading isn't a diagnosis: patterns over days are what count. Your clinician may set different targets for you.</p>
-          </Card>
-        </div>
-      )}
+      {data && data.bloodPressure.some((r) => r.systolic > 180 || r.diastolic > 120) && <CrisisNotice />}
+      <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
       {open === "bp" && <BloodPressureDialog onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "glucose" && <GlucoseDialog unit={unit} onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "targets" && profile && <TargetsDialog unit={unit} onClose={() => setOpen(null)} onSaved={reload} />}
@@ -120,7 +124,7 @@ export function Vitals() {
 
 function CrisisNotice() {
   return (
-    <div className="notice notice-error span-2" role="alert">
+    <div className="notice notice-error" role="alert">
       A reading was above 180/120. Wait a few minutes and measure again. If it's still that high, contact your doctor straight away;
       with chest pain, shortness of breath, weakness, or trouble seeing or speaking, call emergency services.
     </div>

@@ -4,6 +4,8 @@ import { Watch } from "lucide-react";
 import { api } from "../lib/api";
 import { useSession } from "../lib/session";
 import { Button } from "../components/ui";
+import { useWater } from "../lib/fields";
+import { useModules } from "../App";
 
 /**
  * The watch app's settings page: the Pebble app opens it (through /pebble/config) with a
@@ -17,6 +19,7 @@ export function WatchSetup() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const water = useWater(useModules());
   const returnTo = params.get("return_to") ?? "";
   // Only the Pebble app's own address: anywhere else could keep the key.
   const valid = returnTo.toLowerCase().startsWith("pebblejs://close");
@@ -52,14 +55,14 @@ export function WatchSetup() {
           <>
             <h1>Connect your watch?</h1>
             <p className="login-sub">
-              Your Pebble watch will show today's scores, steps, water and doses from {config?.serverName ?? "this server"} for{" "}
-              <strong>{user?.displayName}</strong> ({user?.username}), and can log a mood, water, coffee, toilet trips, doses and habits with a tap.
+              Your Pebble watch will show today's scores, steps{water ? ", water" : ""} and doses from {config?.serverName ?? "this server"} for{" "}
+              <strong>{user?.displayName}</strong> ({user?.username}), and can log a mood, {water ? "water, " : ""}coffee, toilet trips, doses and habits with a tap.
               It can't see anything else.
             </p>
             {error && <div className="notice notice-error">{error}</div>}
             <Button variant="primary" className="wide" busy={busy} onClick={connect}>Connect my watch</Button>
             <Button variant="ghost" className="wide" onClick={() => window.close()}>Cancel</Button>
-            <p className="login-version">You can disconnect it any time in Settings › Signed in on.</p>
+            <p className="login-version">You can disconnect it any time in Settings › You › Signed in on.</p>
           </>
         )}
       </div>

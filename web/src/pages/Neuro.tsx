@@ -14,7 +14,9 @@ import type {
 import { FOCUS_KINDS, OVERLOAD_KINDS, SENSES, senseLabel } from "../lib/types";
 import { F, useFields } from "../lib/fields";
 import { useReadOnly } from "../lib/viewing";
-import { Button, Card, Empty, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, Empty, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { ChipPicker, OneOf, ScaleRow, WordList } from "../components/FieldKit";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
 import { useAiAvailable } from "./Assistant";
@@ -47,7 +49,7 @@ export function Neuro() {
   const readOnly = useReadOnly();
   const navigate = useNavigate();
   const mindOn = useModules().includes("MIND");
-  const tabs = ([
+  const all = ([
     { id: "about", label: "About me", on: has(F.NEURO_ABOUT_ME) || has(F.NEURO_SENSORY) },
     { id: "overwhelm", label: "Overwhelm", on: has(F.NEURO_OVERLOAD) || has(F.NEURO_SENSORY) },
     { id: "energy", label: "Energy", on: has(F.MIND_ENERGY_BUDGET) || has(F.NEURO_SOCIAL) || has(F.NEURO_BURNOUT) },
@@ -56,23 +58,31 @@ export function Neuro() {
     { id: "routines", label: "Routines", on: has(F.NEURO_ROUTINES) },
     { id: "cards", label: "Cards", on: has(F.NEURO_CARDS) },
     { id: "patterns", label: "Patterns", on: true },
-  ] as { id: Tab; label: string; on: boolean }[]).filter((t) => t.on);
-  const [chosen, setTab] = useState<Tab>(tabs[0]?.id ?? "patterns");
-  // The chosen tab, or the first that shows if the field layout has since hidden it.
-  const tab: Tab = tabs.some((t) => t.id === chosen) ? chosen : tabs[0]?.id ?? "patterns";
+  ] as { id: Tab; label: string; on: boolean }[]);
+  // The tabs are this page's sections: the person puts them in their order, and hides the ones they don't use.
+  const arranged = useArrange(layoutKey("neuro"), "Autism & ADHD", all.map((t) => ({ id: t.id, label: t.label, when: t.on, node: null })));
+  const tabs = arranged.shown as { id: Tab; label: string }[];
+  const [chosen, setTab] = useState<Tab | null>(null);
+  // The chosen tab, or the first in the person's order (also when the chosen one has since been hidden).
+  const tab: Tab | undefined = chosen && tabs.some((t) => t.id === chosen) ? chosen : tabs[0]?.id;
   return (
     <div className="page">
       <PageHeader title="Autism & ADHD" subtitle="Your sensory life, energy, focus and what helps, in your words"
-        actions={has(F.NEURO_CALM) && <Button variant="primary" onClick={() => navigate("/calm")}><Waves size={18} /> Calm mode</Button>} />
+        actions={<>
+          {has(F.NEURO_CALM) && <Button variant="primary" onClick={() => navigate("/calm")}><Waves size={18} /> Calm mode</Button>}
+          {arranged.button}
+        </>} />
       {mindOn && (
         <nav className="tabs" aria-label="Mind sections">
           <NavLink to="/mind" end className={({ isActive }) => (isActive ? "is-active" : "")}>Mind</NavLink>
           <NavLink to="/neuro" className={({ isActive }) => (isActive ? "is-active" : "")}>Autism &amp; ADHD</NavLink>
         </nav>
       )}
-      <div className="tabs tabs-sub" role="tablist" aria-label="Sections">
-        {tabs.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "is-active" : ""} onClick={() => setTab(t.id)}>{t.label}</button>)}
-      </div>
+      {tabs.length > 0 ? (
+        <div className="tabs tabs-sub" role="tablist" aria-label="Sections">
+          {tabs.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "is-active" : ""} onClick={() => setTab(t.id)}>{t.label}</button>)}
+        </div>
+      ) : arranged.render()}
       {tab === "about" && <AboutMe readOnly={readOnly} />}
       {tab === "overwhelm" && <Overwhelm readOnly={readOnly} />}
       {tab === "energy" && <div className="grid grid-2"><EnergyBudgetCard readOnly={readOnly} /></div>}
@@ -115,7 +125,7 @@ function AboutMe({ readOnly }: { readOnly: boolean }) {
   const setSense = (s: Sense, response: number) => setP({ ...p, senses: [...p.senses.filter((x) => x.sense !== s), { ...sense(s), response }] });
   return (
     <div className="grid grid-2">
-      <Card title="About me" icon={<CircleUserRound size={18} />} action={<Button variant="ghost" onClick={() => setCard(true)}><Printer size={16} /> Card</Button>}>
+      <Card title="About me" icon={<CircleUserRound size={18} />} action={<CardAction label="Show or print your About me card" onClick={() => setCard(true)}><Printer size={18} /></CardAction>}>
         <ChipPicker label="How I describe myself" options={IDENTITIES} value={p.identities} onChange={(identities) => setP({ ...p, identities })} />
         <OneOf<Wording> label="Words I prefer" options={[{ id: "IDENTITY_FIRST", label: "Autistic person / ADHDer" }, { id: "PERSON_FIRST", label: "Person with autism / ADHD" }]}
           value={p.wording} onChange={(wording) => setP({ ...p, wording: wording ?? "IDENTITY_FIRST" })} />
@@ -177,7 +187,7 @@ function Overwhelm({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="grid grid-2">
       <Card title="When things get too much" icon={<Waves size={18} />} className="span-2"
-        action={!readOnly && <Button variant="primary" onClick={() => setDraft({ start: Date.now(), kind: "OVERWHELM", intensity: 3, senses: [], triggers: [], warningSigns: [], whatHelped: [] })}><Plus size={16} /> Log one</Button>}>
+        action={!readOnly && <CardAction label="Log a time things got too much" onClick={() => setDraft({ start: Date.now(), kind: "OVERWHELM", intensity: 3, senses: [], triggers: [], warningSigns: [], whatHelped: [] })}><Plus size={18} /></CardAction>}>
         <p className="muted small">Overwhelm, meltdowns and shutdowns aren't anyone's fault: they're what a nervous system does when it's had too much. Logging them, when you're ready, shows what sets them off and what helps.</p>
         {list.loading && !list.data ? <Spinner /> : items.length === 0 ? <p className="muted">Nothing logged.</p> : (
           <ul className="rows">
@@ -491,7 +501,7 @@ function Routines({ readOnly }: { readOnly: boolean }) {
         const run = todayRuns.find((x) => x.routineId === r.id);
         const done = run?.done.length ?? 0;
         return (
-          <Card key={r.id} title={r.name} icon={<ListChecks size={18} />} action={!readOnly && <Button variant="ghost" aria-label={`Edit ${r.name}`} onClick={() => setEditing(r)}><Pencil size={16} /></Button>}>
+          <Card key={r.id} title={r.name} icon={<ListChecks size={18} />} action={!readOnly && <CardAction label={`Edit ${r.name}`} onClick={() => setEditing(r)}><Pencil size={18} /></CardAction>}>
             <div className="meter" aria-label={`${done} of ${r.steps.length} done`}><div className="meter-fill" style={{ width: `${r.steps.length ? (done / r.steps.length) * 100 : 0}%` }} /></div>
             <ul className="checklist">
               {r.steps.map((s, i) => {
@@ -556,7 +566,7 @@ function Cards({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="grid grid-2">
       <Card title="Cards to show someone" icon={<MessageSquareText size={18} />} className="span-2"
-        action={!readOnly && <Button variant="ghost" onClick={() => setEditing(true)}><Pencil size={16} /> Change</Button>}>
+        action={!readOnly && <CardAction label="Change your cards" onClick={() => setEditing(true)}><Pencil size={18} /></CardAction>}>
         <p className="muted small">When talking is hard, tap a card and turn your screen to whoever needs to see it.</p>
         <div className="card-grid">
           {cards.map((c, i) => <button key={c.id ?? i} className="comm-card" onClick={() => setShowing(c)}><strong>{c.text}</strong>{c.detail && <span>{c.detail}</span>}</button>)}
@@ -689,7 +699,7 @@ export function CalmMode() {
 /** A small summary for Today. */
 export function NeuroTodayCard({ data }: { data: { overloadsToday: number; energyLeft?: number; socialBattery?: number; routinesDue: string[]; focusMinutes: number } }) {
   return (
-    <Card title="Autism & ADHD" icon={<Brain size={18} />} action={<Link className="card-action" to="/neuro">Open</Link>}>
+    <Card title="Autism & ADHD" icon={<Brain size={18} />} link={{ to: "/neuro", label: "Open Autism & ADHD" }}>
       <div className="stats">
         {data.energyLeft != null && <Stat label="Energy left" value={data.energyLeft} sub="spoons" />}
         {data.socialBattery != null && <Stat label="Social battery" value={`${data.socialBattery * 10}%`} />}

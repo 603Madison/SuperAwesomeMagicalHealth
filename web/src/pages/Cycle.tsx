@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarHeart, ChevronLeft, ChevronRight, Droplets, Minus, Plus, Settings as SettingsIcon, Sprout, Thermometer, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarHeart, ChevronLeft, ChevronRight, Droplets, Minus, Package, Plus, Settings as SettingsIcon, Sprout, Thermometer, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { isoDate, num, shortDate, today } from "../lib/format";
 import { useReadOnly } from "../lib/viewing";
@@ -13,6 +13,8 @@ import { StageDialog, StagePanels, predicts, stageSubtitle } from "./LifeStage";
 import { LineChart } from "../components/charts";
 import { Button, Card, ErrorNotice, Field, IconButton, Modal, PageHeader, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { ChipPicker, CustomFieldInputs, CustomFieldsBuilder, FieldsEditor, FullnessPicker, OneOf, ScaleRow, WordList } from "../components/FieldKit";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 
 const FLOWS: { id: Flow; label: string }[] = [
   { id: "SPOTTING", label: "Spotting" }, { id: "LIGHT", label: "Light" }, { id: "MEDIUM", label: "Medium" }, { id: "HEAVY", label: "Heavy" },
@@ -55,72 +57,81 @@ export function Cycle() {
   // No period predictions while pregnant, after a birth or after menopause: the calendar still logs bleeding.
   const data = raw && !predict ? { ...raw, prediction: undefined, daysUntilPeriod: undefined } : raw;
   const reloadAll = () => { reload(); stageInfo.reload(); overview.reload(); };
+  const stagePanels = overview.data && <StagePanels overview={overview.data} readOnly={readOnly} onChanged={overview.reload} />;
+  const sections: Section[] = [
+    { id: "stage", label: "Life stage and tips", node: data && stagePanels },
+    { id: "now", label: "Now", when: predict, node: data && (
+      <Card title="Now" icon={<CalendarHeart size={18} />}>
+        <div className="stats">
+          <Stat label="Cycle day" value={data.cycleDay ?? "–"} sub={phaseText[data.phase]} />
+          <Stat label="Next period" value={untilText(data.daysUntilPeriod)} sub={data.prediction ? `${shortDate(data.prediction.earliest)} – ${shortDate(data.prediction.latest)}` : "Log a period to start"} />
+        </div>
+        {data.prediction && <p className="muted small">{data.prediction.confidence === "low" ? "Low confidence: predictions get better after three cycles." : `${data.prediction.confidence[0].toUpperCase()}${data.prediction.confidence.slice(1)} confidence.`} {fertility ? data.caveat : ""}</p>}
+        {stage === "PERIMENOPAUSE" && <p className="muted small">Cycles often vary a lot in perimenopause, so the range is wider and worth taking loosely.</p>}
+      </Card>
+    ) },
+    { id: "averages", label: "Averages", when: predict, node: data && (
+      <Card title="Averages">
+        <div className="stats">
+          <Stat label="Cycle" value={data.averageCycle != null ? num(data.averageCycle, 0) : "–"} unit="days" sub={data.variation != null ? `± ${num(data.variation, 1)} days` : undefined} />
+          <Stat label="Period" value={data.averagePeriod != null ? num(data.averagePeriod, 0) : "–"} unit="days" />
+          <Stat label="Cycles logged" value={data.cycles.length} />
+        </div>
+      </Card>
+    ) },
+    { id: "calendar", label: "Calendar", node: data && (
+      <Card className="span-2" title={month.toLocaleDateString(undefined, { month: "long", year: "numeric" })} icon={<CalendarDays size={18} />} action={<>
+        <IconButton label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={20} /></IconButton>
+        <IconButton label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={20} /></IconButton>
+      </>}>
+        <Calendar month={month} data={data} fertility={fertility} onPick={(d) => !readOnly && setEditing(d)} />
+        <ul className="legend">
+          <li><span className="legend-key flow-key" />{predict ? "Period" : "Bleeding"}</li>
+          {predict && <li><span className="legend-key predicted-key" />Predicted period</li>}
+          {predict && fertility && <li><span className="legend-key fertile-key" />Fertile window (estimate)</li>}
+          <li><span className="legend-key symptom-key" />Symptoms logged</li>
+        </ul>
+      </Card>
+    ) },
+    { id: "temperature", label: "Temperature", when: has(F.CYCLE_BBT) || fertility, node: data && data.temperatures.length > 4 && (
+      <Card title="Temperature" icon={<Thermometer size={18} />} className="span-2">
+        <LineChart
+          label="Nightly temperature" color="var(--c3)" dots
+          points={data.temperatures.map((t) => ({ x: new Date(`${t.date}T12:00`).getTime(), y: t.value }))}
+          formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${y > 30 ? y.toFixed(2) : (y >= 0 ? "+" : "−") + Math.abs(y).toFixed(2)} °C`}
+        />
+        <p className="muted small">{fertility ? "A rise that lasts three days or more usually means ovulation has happened." : "Temperature usually rises a little in the second half of a cycle."}</p>
+      </Card>
+    ) },
+    { id: "past", label: "Past cycles", node: data && data.cycles.length > 0 && (
+      <Card title="Past cycles" className="span-2">
+        <ul className="rows">
+          {[...data.cycles].reverse().slice(0, 12).map((c) => (
+            <li key={c.start} className="row">
+              <div className="row-main">
+                <div className="row-title">{new Date(`${c.start}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</div>
+                <div className="row-sub">Period {c.periodLength} days{c.ovulation && fertility ? ` · temperature rise around ${shortDate(c.ovulation)}` : ""}</div>
+              </div>
+              <div className="row-end">{c.length ? `${c.length} days` : predict ? "Now" : ""}</div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("cycle"), "Cycle", sections);
   return (
     <div className="page">
-      <PageHeader title="Cycle" subtitle={stageInfo.data ? stageSubtitle(stageInfo.data) : "Your periods, symptoms and what comes next"} actions={!readOnly && <>
-        <Button onClick={() => setChoosing(true)}><Sprout size={18} /> {stage === "CYCLING" ? "Life stage" : "Change stage"}</Button>
-        <Button variant="primary" onClick={() => setEditing(today())}><Droplets size={18} /> Log today</Button>
-        <Link className="btn btn-ghost" to="/cycle/settings" aria-label="Cycle settings"><SettingsIcon size={18} /></Link>
+      <PageHeader title="Cycle" subtitle={stageInfo.data ? stageSubtitle(stageInfo.data) : "Your periods, symptoms and what comes next"} actions={<>
+        {!readOnly && <Button onClick={() => setChoosing(true)}><Sprout size={18} /> {stage === "CYCLING" ? "Life stage" : "Change stage"}</Button>}
+        {!readOnly && <Button variant="primary" onClick={() => setEditing(today())}><Droplets size={18} /> Log today</Button>}
+        {has(F.CYCLE_PRODUCTS) && <Link className="btn btn-ghost" to="/supplies"><Package size={18} /> Supplies</Link>}
+        {!readOnly && <Link className="btn btn-ghost" to="/cycle/settings" aria-label="Cycle settings" title="Cycle settings"><SettingsIcon size={18} /></Link>}
+        {arranged.button}
       </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <Spinner />}
-      {data && (
-        <div className="grid grid-2">
-          {overview.data && <StagePanels overview={overview.data} readOnly={readOnly} onChanged={overview.reload} />}
-          {predict && <Card title="Now" icon={<CalendarHeart size={18} />}>
-            <div className="stats">
-              <Stat label="Cycle day" value={data.cycleDay ?? "–"} sub={phaseText[data.phase]} />
-              <Stat label="Next period" value={untilText(data.daysUntilPeriod)} sub={data.prediction ? `${shortDate(data.prediction.earliest)} – ${shortDate(data.prediction.latest)}` : "Log a period to start"} />
-            </div>
-            {data.prediction && <p className="muted small">{data.prediction.confidence === "low" ? "Low confidence: predictions get better after three cycles." : `${data.prediction.confidence[0].toUpperCase()}${data.prediction.confidence.slice(1)} confidence.`} {fertility ? data.caveat : ""}</p>}
-            {stage === "PERIMENOPAUSE" && <p className="muted small">Cycles often vary a lot in perimenopause, so the range is wider and worth taking loosely.</p>}
-          </Card>}
-          {predict && <Card title="Averages">
-            <div className="stats">
-              <Stat label="Cycle" value={data.averageCycle != null ? num(data.averageCycle, 0) : "–"} unit="days" sub={data.variation != null ? `± ${num(data.variation, 1)} days` : undefined} />
-              <Stat label="Period" value={data.averagePeriod != null ? num(data.averagePeriod, 0) : "–"} unit="days" />
-              <Stat label="Cycles logged" value={data.cycles.length} />
-            </div>
-          </Card>}
-          <Card className="span-2" title={month.toLocaleDateString(undefined, { month: "long", year: "numeric" })} action={<>
-            <IconButton label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={20} /></IconButton>
-            <IconButton label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={20} /></IconButton>
-          </>}>
-            <Calendar month={month} data={data} fertility={fertility} onPick={(d) => !readOnly && setEditing(d)} />
-            <ul className="legend">
-              <li><span className="legend-key flow-key" />{predict ? "Period" : "Bleeding"}</li>
-              {predict && <li><span className="legend-key predicted-key" />Predicted period</li>}
-              {predict && fertility && <li><span className="legend-key fertile-key" />Fertile window (estimate)</li>}
-              <li><span className="legend-key symptom-key" />Symptoms logged</li>
-            </ul>
-          </Card>
-          {data.temperatures.length > 4 && (has(F.CYCLE_BBT) || fertility) && (
-            <Card title="Temperature" icon={<Thermometer size={18} />} className="span-2">
-              <LineChart
-                label="Nightly temperature" color="var(--c3)" dots
-                points={data.temperatures.map((t) => ({ x: new Date(`${t.date}T12:00`).getTime(), y: t.value }))}
-                formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${y > 30 ? y.toFixed(2) : (y >= 0 ? "+" : "−") + Math.abs(y).toFixed(2)} °C`}
-              />
-              <p className="muted small">{fertility ? "A rise that lasts three days or more usually means ovulation has happened." : "Temperature usually rises a little in the second half of a cycle."}</p>
-            </Card>
-          )}
-          {data.cycles.length > 0 && (
-            <Card title="Past cycles" className="span-2">
-              <ul className="rows">
-                {[...data.cycles].reverse().slice(0, 12).map((c) => (
-                  <li key={c.start} className="row">
-                    <div className="row-main">
-                      <div className="row-title">{new Date(`${c.start}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</div>
-                      <div className="row-sub">Period {c.periodLength} days{c.ovulation && fertility ? ` · temperature rise around ${shortDate(c.ovulation)}` : ""}</div>
-                    </div>
-                    <div className="row-end">{c.length ? `${c.length} days` : predict ? "Now" : ""}</div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-      )}
+      {arranged.render()}
       {editing && !readOnly && (
         <DayDialog date={editing} day={data?.days.find((d) => d.date === editing)} settings={s} supplies={supplies.data ?? []} fertility={fertility}
           onClose={() => setEditing(null)} onSaved={reload} />

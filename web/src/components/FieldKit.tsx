@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Eye, EyeOff, Plus, Trash2, X } from "lucide-react";
-import type { CustomField, CustomFieldType, FieldLayout, Fullness, Module } from "../lib/types";
+import type { CustomField, CustomFieldType, Fullness, Module } from "../lib/types";
 import { FULLNESS } from "../lib/types";
-import { ALL_FIELDS, setFieldLayout, useFieldStore } from "../lib/fields";
-import { api } from "../lib/api";
+import { ALL_FIELDS, setField, useFieldStore } from "../lib/fields";
 import { Button, Field, errorToast } from "./ui";
 
 /*
@@ -224,14 +223,9 @@ export function FieldsEditor({ module, keys }: { module: Module; keys?: string[]
   const fields = ALL_FIELDS.filter((f) => f.module === module && (!keys || keys.includes(f.key)));
   if (!layout) return <p className="muted">Loading…</p>;
   const save = async (key: string, on: boolean) => {
-    const show = new Set(layout.show);
-    const hide = new Set(layout.hide);
-    show.delete(key); hide.delete(key);
-    if (on) show.add(key); else hide.add(key);
     setBusy(key);
     try {
-      const next: FieldLayout = await api.saveFields({ show: [...show], hide: [...hide] });
-      setFieldLayout(next);
+      await setField(key, on);
     } catch (e) {
       errorToast(e);
     } finally {

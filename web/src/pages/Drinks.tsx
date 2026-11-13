@@ -4,7 +4,9 @@ import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, localInput, num, today } from "../lib/format";
 import type { Drink, DrinkKind, DrinksDay } from "../lib/types";
-import { Button, Card, Field, Modal, errorToast, toast } from "../components/ui";
+import { Button, Card, CardAction, Field, Modal, errorToast, toast } from "../components/ui";
+import { useModules } from "../App";
+import { useWater } from "../lib/fields";
 
 /** Each kind of drink, as the server's DrinkKind has them: usual size, caffeine per 100 ml, alcohol %. */
 export const DRINKS: Record<DrinkKind, { label: string; ml: number; caffeine: number; alcohol: number; icon: LucideIcon }> = {
@@ -43,13 +45,22 @@ export async function quickDrink(kind: DrinkKind, date: string): Promise<void> {
 
 const QUICK: DrinkKind[] = ["COFFEE", "TEA", "WATER", "BEER", "WINE"];
 
+/** The kinds of drink to offer: water only while water shows. */
+export function useDrinkKinds(kinds: DrinkKind[] = Object.keys(DRINKS) as DrinkKind[]): DrinkKind[] {
+  const water = useWater(useModules());
+  return kinds.filter((k) => k !== "WATER" || water);
+}
+
 /** The day's drinks: caffeine, what's left of it at bedtime, alcohol, and one-tap buttons. */
 export function DrinksCard({ day, date, onChanged, readOnly, className = "" }: { day?: DrinksDay; date: string; onChanged: () => void; readOnly?: boolean; className?: string }) {
   const [adding, setAdding] = useState(false);
   const drinks = day?.drinks ?? [];
+  const quick = useDrinkKinds(QUICK);
+  const water = quick.includes("WATER");
   const add = async (kind: DrinkKind) => { try { await quickDrink(kind, date); onChanged(); } catch (e) { errorToast(e); } };
   return (
-    <Card title="Drinks" icon={<Coffee size={18} />} className={className}>
+    <Card id="drinks" title="Drinks" icon={<Coffee size={18} />} className={className}
+      action={!readOnly && <CardAction label="Another drink" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
       <div className="stats">
         <div className="stat"><div className="stat-label">Caffeine</div><div className="stat-value">{num(day?.caffeineMg ?? 0)}<span className="stat-unit">mg</span></div><div className="stat-sub">{day?.lastCaffeineAt ? `last at ${clock(day.lastCaffeineAt)}` : "none yet"}</div></div>
         {day?.caffeineAtBedtimeMg != null && day.caffeineMg > 0 && <div className="stat"><div className="stat-label">Still in you at bedtime</div><div className="stat-value">~{num(day.caffeineAtBedtimeMg)}<span className="stat-unit">mg</span></div><div className="stat-sub">{day.caffeineAtBedtimeMg >= 50 ? "may keep you up" : "about a quarter of a coffee or less"}</div></div>}
@@ -57,8 +68,7 @@ export function DrinksCard({ day, date, onChanged, readOnly, className = "" }: {
       </div>
       {!readOnly && (
         <div className="button-row">
-          {QUICK.map((k) => { const D = DRINKS[k]; return <Button key={k} onClick={() => add(k)}><D.icon size={16} /> {D.label}</Button>; })}
-          <Button variant="ghost" onClick={() => setAdding(true)}><Plus size={16} /> Other</Button>
+          {quick.map((k) => { const D = DRINKS[k]; return <Button key={k} onClick={() => add(k)}><D.icon size={16} /> {D.label}</Button>; })}
         </div>
       )}
       {drinks.length > 0 && (
@@ -78,13 +88,14 @@ export function DrinksCard({ day, date, onChanged, readOnly, className = "" }: {
           })}
         </ul>
       )}
-      <p className="muted small">Everything but alcohol counts towards your water.</p>
+      {water && <p className="muted small">Everything but alcohol counts towards your water.</p>}
       {adding && <DrinkDialog date={date} onClose={() => setAdding(false)} onSaved={onChanged} />}
     </Card>
   );
 }
 
 export function DrinkDialog({ date, onClose, onSaved }: { date: string; onClose: () => void; onSaved: () => void }) {
+  const kinds = useDrinkKinds();
   const [kind, setKind] = useState<DrinkKind>("COFFEE");
   const [ml, setMl] = useState(String(DRINKS.COFFEE.ml));
   const [caffeine, setCaffeine] = useState(String(drinkFor("COFFEE").caffeineMg));
@@ -114,7 +125,7 @@ export function DrinkDialog({ date, onClose, onSaved }: { date: string; onClose:
     <Modal title="A drink" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} disabled={!Number(ml)} onClick={save}>Save</Button></>}>
       <Field label="What">
         <div className="tag-list" role="radiogroup" aria-label="Kind of drink">
-          {(Object.keys(DRINKS) as DrinkKind[]).map((k) => <button key={k} type="button" role="radio" aria-checked={kind === k} className={`chip ${kind === k ? "is-on" : ""}`} onClick={() => choose(k)}>{DRINKS[k].label}</button>)}
+          {kinds.map((k) => <button key={k} type="button" role="radio" aria-checked={kind === k} className={`chip ${kind === k ? "is-on" : ""}`} onClick={() => choose(k)}>{DRINKS[k].label}</button>)}
         </div>
       </Field>
       <div className="two-col">

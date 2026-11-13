@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { CalendarClock, FlaskConical, History, Pill, Plus, Settings2, Syringe, Trash2, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { CalendarClock, FlaskConical, History, Plus, Settings2, Syringe, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
 import { isoDate, num, parseDate, shortDate, today } from "../lib/format";
 import { useReadOnly } from "../lib/viewing";
 import type { HormoneMed, HormoneOverview, HormoneSettings, LabSeries, LabTarget } from "../lib/types";
 import { LineChart } from "../components/charts";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { LabDialog, MedDialog, scheduleText } from "./Meds";
 
 /** "1 year, 3 months", "5 weeks", "4 days". */
@@ -33,45 +35,51 @@ export function Hormones() {
   const { data, error, loading, reload } = useLoad(() => api.hormones(), []);
   const [open, setOpen] = useState<"settings" | "change" | "med" | null>(null);
   const [lab, setLab] = useState<{ name: string; unit: string } | null>(null);
-  const navigate = useNavigate();
+
+  const sections: Section[] = [
+    { id: "labs-due", label: "When labs are due", node: data && <LabsDue data={data} /> },
+    { id: "medications", label: "Hormone medications", node: data && (data.medications.length === 0 ? (
+      <Card title="Hormone medications" icon={<Syringe size={18} />} className="span-2"
+        action={!readOnly && <CardAction label="Add a hormone medication" onClick={() => setOpen("med")}><Plus size={18} /></CardAction>}>
+        <p className="muted">Mark a medication as hormone therapy when you add or edit it, in <Link to="/meds">Medications</Link>: its dose changes are kept here from then on.</p>
+      </Card>
+    ) : (
+      <>
+        {data.medications.map((m) => <HormoneMedCard key={m.medication.id} med={m} readOnly={readOnly} onChanged={reload} />)}
+        {!readOnly && (
+          <div className="span-2 button-row">
+            <Button variant="ghost" onClick={() => setOpen("change")}><History size={16} /> Add an earlier dose change</Button>
+            <Button variant="ghost" onClick={() => setOpen("med")}><Plus size={16} /> Another medication</Button>
+          </div>
+        )}
+      </>
+    )) },
+    { id: "levels", label: "Levels", node: data && (data.labs.length === 0 ? (
+      <Card title="Levels" icon={<FlaskConical size={18} />} className="span-2"
+        action={!readOnly && <CardAction label="Add a lab result" onClick={() => setLab({ name: "", unit: "" })}><Plus size={18} /></CardAction>}>
+        <p className="muted">Add results as they come back, and set the target ranges your clinician gave you to see where you are.</p>
+      </Card>
+    ) : (
+      <section className="block span-2" aria-label="Levels">
+        <h2 className="section-title">Levels</h2>
+        <div className="grid grid-2">
+          {data.labs.map((series) => <LevelCard key={series.name} series={series} readOnly={readOnly} onAdd={() => setLab({ name: series.name, unit: series.unit })} />)}
+        </div>
+      </section>
+    )) },
+  ];
+  const arranged = useArrange(layoutKey("hormones"), "Hormone therapy", sections);
 
   return (
     <div className="page">
-      <PageHeader title="Hormone therapy" subtitle="Your doses over time, and your levels against your own targets" actions={!readOnly && <>
-        <Button onClick={() => setOpen("settings")}><Settings2 size={18} /> Targets</Button>
-        <Button variant="primary" onClick={() => setLab({ name: "", unit: "" })}><Plus size={18} /> Lab result</Button>
+      <PageHeader title="Hormone therapy" subtitle="Your doses over time, and your levels against your own targets" actions={<>
+        {!readOnly && <Button onClick={() => setOpen("settings")}><Settings2 size={18} /> Targets</Button>}
+        {!readOnly && <Button variant="primary" onClick={() => setLab({ name: "", unit: "" })}><Plus size={18} /> Lab result</Button>}
+        {arranged.button}
       </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {data && (
-        <div className="grid grid-2" style={{ opacity: loading ? 0.6 : 1 }}>
-          <LabsDue data={data} />
-          {data.medications.length === 0 ? (
-            <Card className="span-2">
-              <Empty icon={<Syringe size={36} />} title="No hormone medications yet">
-                Mark a medication as part of hormone therapy when you add or edit it. Its dose changes are kept here from then on.
-                {!readOnly && <div className="button-row" style={{ justifyContent: "center", marginTop: 12 }}>
-                  <Button variant="primary" onClick={() => setOpen("med")}><Plus size={18} /> Add one</Button>
-                  <Button onClick={() => navigate("/meds")}><Pill size={18} /> Medications</Button>
-                </div>}
-              </Empty>
-            </Card>
-          ) : data.medications.map((m) => <HormoneMedCard key={m.medication.id} med={m} readOnly={readOnly} onChanged={reload} />)}
-          {!readOnly && data.medications.length > 0 && (
-            <div className="span-2 button-row">
-              <Button variant="ghost" onClick={() => setOpen("change")}><History size={16} /> Add an earlier dose change</Button>
-              <Button variant="ghost" onClick={() => setOpen("med")}><Plus size={16} /> Another medication</Button>
-            </div>
-          )}
-
-          <div className="span-2 section-head" style={{ margin: "12px 0 0" }}>
-            <h2 className="section-title">Levels</h2>
-          </div>
-          {data.labs.length === 0 ? (
-            <Card className="span-2"><Empty icon={<FlaskConical size={32} />} title="No lab results yet">Add results as they come back, and set the target ranges your clinician gave you to see where you are.</Empty></Card>
-          ) : data.labs.map((series) => <LevelCard key={series.name} series={series} readOnly={readOnly} onAdd={() => setLab({ name: series.name, unit: series.unit })} />)}
-        </div>
-      )}
+      <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
       {open === "settings" && data && <SettingsDialog settings={data.settings} labs={data.labs} onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "change" && data && <ChangeDialog meds={data.medications} onClose={() => setOpen(null)} onSaved={reload} />}
       {open === "med" && <MedDialog hormone onClose={() => setOpen(null)} onSaved={reload} />}
@@ -139,7 +147,7 @@ function LevelCard({ series, readOnly, onAdd }: { series: LabSeries; readOnly: b
   const band: [number, number] | undefined = t && (t.low != null || t.high != null)
     ? [t.low ?? Math.min(...results.map((r) => r.value)) * 0.9, t.high ?? Math.max(...results.map((r) => r.value)) * 1.1] : undefined;
   return (
-    <Card title={series.name} icon={<FlaskConical size={18} />} action={!readOnly && <Button variant="ghost" onClick={onAdd}><Plus size={16} /> Result</Button>}>
+    <Card title={series.name} icon={<FlaskConical size={18} />} action={!readOnly && <CardAction label={`Add a ${series.name} result`} onClick={onAdd}><Plus size={18} /></CardAction>}>
       {latest && (
         <div className="level-head">
           <div className="big-number">{num(latest.value, latest.value % 1 ? 1 : 0)}<small>{series.unit}</small></div>

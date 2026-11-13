@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
   Apple, BedDouble, BookOpen, Brain, Check, Coffee, Droplet, Dumbbell, Flame, Footprints, Heart, Leaf, ListChecks, Minus, Moon, MoreHorizontal,
@@ -10,6 +11,10 @@ import { useReadOnly } from "../lib/viewing";
 import type { Habit, HabitSource, HabitStatus } from "../lib/types";
 import { Meter } from "../components/charts";
 import { Button, Card, DateNav, Empty, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
+import { useWater } from "../lib/fields";
+import { useModules } from "../App";
 
 /** The icons a habit can have, by the names the server keeps. */
 export const HABIT_ICONS: Record<string, LucideIcon> = {
@@ -42,51 +47,53 @@ export function Habits() {
   const readOnly = useReadOnly();
   const status = useLoad(() => api.habitsToday(date), [date]);
   const all = useLoad(() => api.habits(true), []);
-  const [editing, setEditing] = useState<Habit | "new" | null>(null);
+  const [params, setParams] = useSearchParams();
+  // Today's "Add a habit" comes here with ?new=1.
+  const [editing, setEditing] = useState<Habit | "new" | null>(() => (params.get("new") && !readOnly ? "new" : null));
+  useEffect(() => { if (params.get("new")) setParams({}, { replace: true }); }, [params, setParams]);
   const reload = () => { status.reload(); all.reload(); };
   const paused = (all.data ?? []).filter((h) => !h.active);
   const list = status.data ?? [];
+
+  const sections: Section[] = [
+    { id: "habits", label: "Your habits", node: status.data && (list.length === 0 ? (
+      <Card className="span-2">
+        <Empty icon={<ListChecks size={28} />} title="Start with one small habit">
+          A ten-minute walk, two minutes of breathing, a page of a book. Choose how many days a week to aim for: streaks count weeks that reach it.
+        </Empty>
+      </Card>
+    ) : (
+      <>{list.map((s) => <HabitCard key={s.habit.id} status={s} date={date} readOnly={readOnly} onChanged={status.reload} onEdit={() => setEditing(s.habit)} />)}</>
+    )) },
+    { id: "paused", label: "Paused", node: paused.length > 0 && (
+      <Card title="Paused" icon={<Pause size={18} />} className="span-2">
+        <ul className="rows">
+          {paused.map((h) => {
+            const Icon = habitIcon(h.icon);
+            return (
+              <li key={h.id} className="row is-off">
+                <div className="row-icon"><Icon size={18} /></div>
+                <div className="row-main"><div className="row-title">{h.name}</div><div className="row-sub">{HABIT_SOURCES.find((x) => x.id === h.source)?.label} · {h.timesPerWeek} days a week</div></div>
+                {!readOnly && <Button variant="ghost" onClick={async () => { try { await api.saveHabit({ ...h, active: true }); reload(); } catch (e) { errorToast(e); } }}><Play size={16} /> Start again</Button>}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("habits"), "Habits", sections);
 
   return (
     <div className="page">
       <PageHeader title="Habits" subtitle="Small things, most days. A rest day never breaks a streak." actions={<>
         <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
         {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> New habit</Button>}
+        {arranged.button}
       </>} />
       {status.error && <ErrorNotice message={status.error} onRetry={status.reload} />}
       {!status.data && status.loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {status.data && list.length === 0 && (
-        <Card>
-          <Empty icon={<ListChecks size={36} />} title="Start with one small habit">
-            A ten-minute walk, a glass of water when you wake, two minutes of breathing. Choose how many days a week to aim for: streaks count weeks that reach it.
-            {!readOnly && <div className="button-row" style={{ justifyContent: "center", marginTop: 12 }}><Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> New habit</Button></div>}
-          </Empty>
-        </Card>
-      )}
-      {list.length > 0 && (
-        <div className="grid grid-2" style={{ opacity: status.loading ? 0.6 : 1 }}>
-          {list.map((s) => <HabitCard key={s.habit.id} status={s} date={date} readOnly={readOnly} onChanged={status.reload} onEdit={() => setEditing(s.habit)} />)}
-        </div>
-      )}
-      {paused.length > 0 && (
-        <>
-          <h2 className="section-title">Paused</h2>
-          <Card>
-            <ul className="rows">
-              {paused.map((h) => {
-                const Icon = habitIcon(h.icon);
-                return (
-                  <li key={h.id} className="row is-off">
-                    <div className="row-icon"><Icon size={18} /></div>
-                    <div className="row-main"><div className="row-title">{h.name}</div><div className="row-sub">{HABIT_SOURCES.find((x) => x.id === h.source)?.label} · {h.timesPerWeek} days a week</div></div>
-                    {!readOnly && <Button variant="ghost" onClick={async () => { try { await api.saveHabit({ ...h, active: true }); reload(); } catch (e) { errorToast(e); } }}><Play size={16} /> Start again</Button>}
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        </>
-      )}
+      <div style={{ opacity: status.loading ? 0.6 : 1 }}>{arranged.render()}</div>
       {editing && <HabitDialog habit={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
   );
@@ -170,6 +177,8 @@ function HabitDialog({ habit, onClose, onSaved }: { habit?: Habit; onClose: () =
   const [h, setH] = useState<Habit>(habit ?? { name: "", icon: "sparkles", source: "MANUAL", timesPerWeek: 7, perDay: 1, active: true });
   const [busy, setBusy] = useState(false);
   const manual = h.source === "MANUAL";
+  const water = useWater(useModules());
+  const sources = HABIT_SOURCES.filter((x) => x.id !== "WATER_GOAL" || water || habit?.source === "WATER_GOAL");
   const save = async () => {
     if (!h.name.trim()) return;
     setBusy(true);
@@ -190,7 +199,7 @@ function HabitDialog({ habit, onClose, onSaved }: { habit?: Habit; onClose: () =
           const s = HABIT_SOURCES.find((x) => x.id === source)!;
           setH({ ...h, source, icon: s.icon, name: !h.name || HABIT_SOURCES.some((x) => x.label === h.name) ? (source === "MANUAL" ? "" : s.label) : h.name });
         }}>
-          {HABIT_SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          {sources.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
       </Field>
       <Field label="Name"><input autoFocus value={h.name} onChange={(e) => setH({ ...h, name: e.target.value })} placeholder="e.g. A ten-minute walk" maxLength={60} /></Field>
