@@ -150,6 +150,8 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
             }
             // Reminders, the digest, sharing, reports, the watch and integrations.
             com.health.app.ui.care.MoreSettings(onOpen)
+            // Export to other apps, calm mode and the photo lock (ui/settings/ExportSettings.kt).
+            MoreChoices(profile?.modules ?: Module.DEFAULT, onOpen)
             SectionCard("Appearance") {
                 Text("Theme", style = MaterialTheme.typography.bodyLarge)
                 val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

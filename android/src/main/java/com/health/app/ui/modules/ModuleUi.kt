@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Checklist
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.MonitorWeight
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.SentimentDissatisfied
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.rounded.SentimentNeutral
 import androidx.compose.material.icons.rounded.SentimentSatisfied
 import androidx.compose.material.icons.rounded.SentimentVeryDissatisfied
 import androidx.compose.material.icons.rounded.SentimentVerySatisfied
+import androidx.compose.material.icons.rounded.Transgender
 import androidx.compose.material.icons.rounded.Wc
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -78,8 +81,10 @@ object ModuleInfo {
         Module.SYMPTOMS -> Icons.Rounded.Healing
         Module.HORMONES -> Icons.Rounded.Science
         Module.APPOINTMENTS -> Icons.AutoMirrored.Rounded.EventNote
-        // Screens for these come with the next round of work; until then they share an icon.
-        Module.NEURO, Module.TRANSITION, Module.PHOTOS -> Icons.Rounded.Psychology
+        // The infinity loop many autistic and ADHD people use for neurodiversity.
+        Module.NEURO -> Icons.Rounded.AllInclusive
+        Module.TRANSITION -> Icons.Rounded.Transgender
+        Module.PHOTOS -> Icons.Rounded.PhotoLibrary
     }
 
     fun description(module: Module): String = when (module) {
@@ -96,9 +101,9 @@ object ModuleInfo {
         Module.SYMPTOMS -> "Symptoms, pain and migraines, and what goes with them."
         Module.HORMONES -> "Dose history, levels against your targets, and when labs are due."
         Module.APPOINTMENTS -> "Appointments, questions to ask, and notes afterwards."
-        Module.NEURO -> "Sensory life, overload and burnout, masking, focus tools, routines and communication cards."
-        Module.TRANSITION -> "Milestones, changes, voice, hair removal, and moments of euphoria."
-        Module.PHOTOS -> "Progress photos, encrypted and only ever yours to share."
+        Module.NEURO -> "Your senses, energy and overwhelm, focus tools, routines, and cards for when talking is hard."
+        Module.TRANSITION -> "Milestones, changes you notice, voice practice, and moments of euphoria, at your pace."
+        Module.PHOTOS -> "Progress photos to compare over time: encrypted, lockable, and only ever yours to share."
     }
 
     /** The route each opt-in module's screen lives at. */
@@ -112,13 +117,16 @@ object ModuleInfo {
         Module.SYMPTOMS -> "symptoms"
         Module.HORMONES -> "hormones"
         Module.APPOINTMENTS -> "appointments"
+        Module.NEURO -> "neuro"
+        Module.TRANSITION -> "transition"
+        Module.PHOTOS -> "photos"
         else -> null
     }
 
     /** The opt-in modules, in the order they're shown. */
     val OPT_IN = listOf(
-        Module.MIND, Module.CYCLE, Module.CONTINENCE, Module.MEDICATIONS,
-        Module.VITALS, Module.HABITS, Module.SYMPTOMS, Module.HORMONES, Module.APPOINTMENTS,
+        Module.MIND, Module.NEURO, Module.CYCLE, Module.CONTINENCE, Module.MEDICATIONS,
+        Module.VITALS, Module.HABITS, Module.SYMPTOMS, Module.HORMONES, Module.TRANSITION, Module.APPOINTMENTS, Module.PHOTOS,
     )
 }
 

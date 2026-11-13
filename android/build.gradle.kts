@@ -94,6 +94,12 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.health.connect)
     implementation(libs.zxing.embedded)
+    // Progress photos: the camera, and the photo lock (biometrics or the screen lock).
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.fragment)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)

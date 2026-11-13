@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Straighten
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material3.Icon
@@ -30,12 +31,12 @@ import com.health.app.ui.components.appContainer
 fun HubRoute(onOpen: (String) -> Unit, showDevices: Boolean) {
     val c = appContainer()
     val profile by c.profile.collectAsState()
-    HubScreen(com.health.app.ui.care.shownModules(), showDevices, onOpen)
+    HubScreen(com.health.app.ui.care.shownModules(), showDevices, showMeasurements = com.health.app.ui.modules.body.measurementsShown(), onOpen = onOpen)
 }
 
 /** The opt-in modules that are on, one tap each, and the way to the rest. */
 @Composable
-fun HubScreen(modules: Set<Module>, showDevices: Boolean, onOpen: (String) -> Unit) {
+fun HubScreen(modules: Set<Module>, showDevices: Boolean, showMeasurements: Boolean = false, onOpen: (String) -> Unit) {
     val on = ModuleInfo.OPT_IN.filter { it in modules }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Health", "Everything you've turned on")
@@ -43,6 +44,12 @@ fun HubScreen(modules: Set<Module>, showDevices: Boolean, onOpen: (String) -> Un
             if (on.isNotEmpty()) {
                 InfoCard(null) {
                     on.forEach { m -> NavRow(ModuleInfo.icon(m), m.label, ModuleInfo.description(m), onClick = { ModuleInfo.route(m)?.let(onOpen) }) }
+                }
+            }
+            // Body measurements (ui/modules/body), with Body on and the fields that bring them.
+            if (showMeasurements && Module.BODY in modules) {
+                InfoCard(null) {
+                    NavRow(Icons.Rounded.Straighten, "Body measurements", "Waist, hips, chest and more, over time", onClick = { onOpen("measurements") })
                 }
             }
             if (showDevices) {

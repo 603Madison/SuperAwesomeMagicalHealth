@@ -162,6 +162,8 @@ fun MindHome(state: MindState, zone: ZoneId, actions: MindActions, initialMood: 
                     MoodCard(state, zone)
                     state.summary?.patterns?.forEach { InsightCard(it) }
                     ToolsCard(actions.openTool)
+                    // Autism & ADHD and the energy budget, when they're on (ui/modules/neuro).
+                    com.health.app.ui.modules.neuro.MindNeuroSection()
                     JournalCard(state.journal, zone, actions)
                     CheckInsCard(state, actions.openCheck)
                 }

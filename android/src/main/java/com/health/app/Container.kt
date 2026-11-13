@@ -325,6 +325,46 @@ class Container(val context: Context) {
         _fields.value = null
     }
 
+    // ---- Wave 3: writing to Health Connect after each sync (Settings › Export), routine
+    // reminders (Autism & ADHD), and forgetting both, the focus timer and photos on signing out ----
+
+    val healthConnectWriter = com.health.app.devices.healthconnect.HealthConnectWriter(context, api, com.health.app.data.DeviceChoices.of(context), ::zone)
+
+    val routineReminders = com.health.app.reminders.RoutineReminders(context)
+
+    /** Keeps the routines' reminders on the phone in step with the server (only the person's own). */
+    suspend fun refreshRoutineReminders() {
+        if (!settings.value.signedIn || _viewing.value != null) return
+        if (Module.NEURO !in modules()) return routineReminders.clear()
+        routineReminders.refresh(api, zone())
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun startWaveThree() {
+        sync.afterSync = { healthConnectWriter.run() }
+        scope.launch {
+            profile.map { it?.modules }.distinctUntilChanged().collect { runCatching { refreshRoutineReminders() } }
+        }
+        scope.launch {
+            revision.drop(1).debounce(5_000).collect { runCatching { refreshRoutineReminders() } }
+        }
+        scope.launch {
+            settings.map { it.signedIn }.distinctUntilChanged().drop(1).collect { signedIn ->
+                if (!signedIn) {
+                    com.health.app.data.DeviceChoices.of(context).forgetAccount()
+                    healthConnectWriter.forget()
+                    routineReminders.clear()
+                    com.health.app.reminders.FocusAlerts.stop(context)
+                    com.health.app.ui.modules.photos.PhotoUnlock.lock()
+                }
+            }
+        }
+    }
+
+    init {
+        startWaveThree()
+    }
+
     companion object {
         private const val TAG = "Health"
     }

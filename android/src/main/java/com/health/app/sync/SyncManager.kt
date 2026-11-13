@@ -36,6 +36,9 @@ class SyncManager(
 
     fun conduit(id: String): Conduit? = conduits.firstOrNull { it.id == id }
 
+    /** Runs after each full sync, once data's in: writing to Health Connect (Settings › Export). */
+    var afterSync: (suspend () -> Unit)? = null
+
     /** Syncs every source that's set up, or only [onlyId]. Returns a line for people. */
     suspend fun sync(onlyId: String? = null): String = mutex.withLock {
         var total = 0
@@ -53,6 +56,7 @@ class SyncManager(
                 if (!result.ok) problems += "${conduit.title}: ${result.message}"
                 total += result.samples + result.sleep + result.workouts
             }
+            if (onlyId == null) afterSync?.let { after -> runCatching { after() }.onFailure { Log.w(TAG, "After sync", it) } }
         } finally {
             _running.value = null
         }

@@ -44,6 +44,21 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+        Wave 3: the voice pitch meter (the microphone, asked for only when the meter opens; audio
+        never leaves the phone), progress photos (the camera), and writing to Health Connect what
+        the person picks in Settings › Export (each asked for only when that kind is turned on).
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
+    <uses-permission android:name="android.permission.health.WRITE_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.WRITE_BLOOD_PRESSURE" />
+    <uses-permission android:name="android.permission.health.WRITE_BLOOD_GLUCOSE" />
+    <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
+    <uses-permission android:name="android.permission.health.WRITE_NUTRITION" />
+    <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
+
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
@@ -111,6 +126,24 @@
                 <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
         </receiver>
+
+        <!--
+            Wave 3: routine reminders (set again after a restart), and the focus timer's
+            ongoing notification with its optional break chimes.
+        -->
+        <receiver
+            android:name=".reminders.RoutineReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".reminders.FocusReceiver"
+            android:exported="false" />
 
         <!-- Reports and exports handed to the share sheet. -->
         <provider

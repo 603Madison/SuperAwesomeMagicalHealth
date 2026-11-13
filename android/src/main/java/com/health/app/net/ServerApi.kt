@@ -318,6 +318,34 @@ class ServerApi(
         }
     }
 
+    // ---- Multipart uploads (progress photos, in net/PhotosApi.kt) ----
+
+    /** One part of a multipart request: a form field ([text]), or a file ([bytes] of [type], named [fileName]). */
+    internal class Part(val name: String, val text: String? = null, val bytes: ByteArray? = null, val fileName: String? = null, val type: String? = null)
+
+    /** The body for [parts], in their order (apart from sending, so tests can read it). */
+    internal fun multipartBody(parts: List<Part>): okhttp3.MultipartBody = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM).apply {
+        parts.forEach { p ->
+            val bytes = p.bytes
+            if (bytes != null) addFormDataPart(p.name, p.fileName ?: p.name, bytes.toRequestBody((p.type ?: "application/octet-stream").toMediaType()))
+            else addFormDataPart(p.name, p.text.orEmpty())
+        }
+    }.build()
+
+    /** POSTs [parts] to [path] as multipart/form-data and reads the answer as [serializer]; refused while viewing a share. */
+    internal suspend fun <T> multipart(path: String, parts: List<Part>, serializer: KSerializer<T>): T = withContext(Dispatchers.IO) {
+        if (viewAs() != null) throw ServerException(403, VIEWING_MESSAGE)
+        val request = Request.Builder().url("${base()}$path").post(multipartBody(parts)).apply {
+            token()?.let { header("Authorization", "Bearer $it") }
+        }.build()
+        val response = try {
+            http.newCall(request).execute()
+        } catch (e: IOException) {
+            throw ServerException(0, "Can't reach the server (${e.message ?: e.javaClass.simpleName})")
+        }
+        response.use { parse(it, serializer, auth = true) }
+    }
+
     private fun <T> parse(response: okhttp3.Response, serializer: KSerializer<T>, auth: Boolean): T {
         val text = response.body?.string().orEmpty()
         if (!response.isSuccessful) {
