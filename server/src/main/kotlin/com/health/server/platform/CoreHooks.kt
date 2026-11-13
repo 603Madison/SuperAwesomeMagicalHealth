@@ -128,14 +128,15 @@ private class OverviewHooks(private val services: Services) : FeatureHooks {
             listOf(
                 "date", "readiness", "sleep_score", "activity_score", "steps", "active_kcal", "resting_hr", "hrv_ms", "sleep_min", "deep_min",
                 "rem_min", "spo2", "temperature_deviation_c", "weight_kg", "body_fat_pct", "kcal_eaten", "protein_g", "carbs_g", "fat_g",
-            ) + listOf("water_ml", "workouts", "workout_min"),
+            ) + listOf("water_ml", "workouts", "workout_min") + NUTRIENT_COLUMNS,
         ) + rows.map { d ->
             listOf(
                 d.date, d.readiness?.toString().orEmpty(), d.sleepScore?.toString().orEmpty(), d.activityScore?.toString().orEmpty(), d.steps?.toString().orEmpty(),
                 Csv.num(d.activeCalories, 0), Csv.num(d.restingHeartRate, 1), Csv.num(d.hrv, 1), d.sleepMinutes?.toString().orEmpty(), d.deepMinutes?.toString().orEmpty(),
                 d.remMinutes?.toString().orEmpty(), Csv.num(d.spo2, 1), Csv.num(d.temperatureDeviation, 2), Csv.num(d.weightKg, 2), Csv.num(d.bodyFat, 1),
                 Csv.num(d.calories, 0), Csv.num(d.protein, 1), Csv.num(d.carbs, 1), Csv.num(d.fat, 1),
-            ) + listOf(d.waterMl?.toString().orEmpty(), d.workouts.toString(), d.workoutMinutes.toString())
+            ) + listOf(d.waterMl?.toString().orEmpty(), d.workouts.toString(), d.workoutMinutes.toString()) +
+                nutrientCells(d.fiber, d.sugar, d.saturatedFat, d.sodiumMg, d.micros)
         }
         val samples = services.records.samples(userId, zone.start(from), zone.end(to))
         val sampleRows = listOf(listOf("metric", "start", "end", "value", "unit", "source")) + samples.map {
@@ -466,12 +467,14 @@ private class NutritionHooks(private val services: Services) : FeatureHooks {
         val food = services.foods.entries(userId, from, to)
         val zone = zoneOf(profile).zone
         val files = mapOf(
-            "food.csv" to listOf(listOf("date", "meal", "name", "brand", "servings", "serving", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g")) +
+            // Vitamins, minerals and the finer fats after the rest: empty where the food didn't carry them.
+            "food.csv" to listOf(listOf("date", "meal", "name", "brand", "servings", "serving", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g") + NUTRIENT_COLUMNS.drop(2)) +
                 food.map { e ->
+                    val n = e.nutrients
                     listOf(
-                        e.date, e.meal.name, e.name, e.brand.orEmpty(), Csv.num(e.servings), e.serving, Csv.num(e.nutrients.calories, 0), Csv.num(e.nutrients.protein, 1),
-                        Csv.num(e.nutrients.carbs, 1), Csv.num(e.nutrients.fat, 1), Csv.num(e.nutrients.fiber, 1), Csv.num(e.nutrients.sugar, 1),
-                    )
+                        e.date, e.meal.name, e.name, e.brand.orEmpty(), Csv.num(e.servings), e.serving, Csv.num(n.calories, 0), Csv.num(n.protein, 1),
+                        Csv.num(n.carbs, 1), Csv.num(n.fat, 1), Csv.num(n.fiber, 1), Csv.num(n.sugar, 1),
+                    ) + nutrientCells(n.fiber, n.sugar, n.saturatedFat, n.sodiumMg, n.micros).drop(2)
                 },
         )
         // Water that was logged is exported even while it's turned off: the export is everything.
@@ -483,6 +486,15 @@ private class NutritionHooks(private val services: Services) : FeatureHooks {
         return files + ("water.csv" to listOf(listOf("date", "at", "ml")) + water.map { (date, ml, at) -> listOf(date, Csv.iso(at, zone), ml.toString()) })
     }
 }
+
+/** Fibre, sugar, saturated fat, sodium and each micronutrient, as CSV columns ("iron_mg", "vitamin_d_ug"). */
+internal val NUTRIENT_COLUMNS: List<String> =
+    listOf("fiber_g", "sugar_g", "saturated_fat_g", "sodium_mg") + com.health.api.Micronutrient.entries.map { com.health.server.food.Micros.column(it) }
+
+/** The cells for [NUTRIENT_COLUMNS]: empty where nothing logged carried that nutrient. */
+internal fun nutrientCells(fiber: Double?, sugar: Double?, saturatedFat: Double?, sodiumMg: Double?, micros: Map<com.health.api.Micronutrient, Double>): List<String> =
+    listOf(Csv.num(fiber, 1), Csv.num(sugar, 1), Csv.num(saturatedFat, 1), Csv.num(sodiumMg, 0)) +
+        com.health.api.Micronutrient.entries.map { Csv.num(micros[it], 3) }
 
 /** Food's digest section title with water, and how its water line starts, so a kept digest can lose them. */
 private const val FOOD_AND_WATER = "Food and water"

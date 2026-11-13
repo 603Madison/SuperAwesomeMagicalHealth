@@ -5,7 +5,7 @@ import type { Module } from "../lib/types";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { KG_PER_LB, toKg, when } from "../lib/format";
-import { F, setField, useWater } from "../lib/fields";
+import { F, setField, useMicros, useWater } from "../lib/fields";
 import { resetAllScreens, useLayoutStore, useScreenLayout } from "../lib/layout";
 import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
@@ -17,6 +17,7 @@ import { useArrange, type Section } from "../components/Arrange";
 import { DigestSettings, IntegrationSettings, NotificationSettings, SharingSettings } from "./SettingsExtra";
 import { AssistantSettingsCard, useAiStatus } from "./Assistant";
 import { FieldsEditor } from "../components/FieldKit";
+import { NutrientTargetsPanel } from "./NutrientTargets";
 
 /** Features whose fields are chosen right here (bladder and bowel, and cycle, have their own pages). */
 const RECORDED: { module: Module; name: string }[] = [
@@ -58,6 +59,8 @@ export function Settings() {
   const profile = useSession((s) => s.profile);
   const on = useModules();
   const water = useWater(on);
+  // Vitamin and mineral targets: with Food on and its vitamins shown (never in eating disorder recovery).
+  const micros = useMicros(on);
   const location = useLocation();
   const navigate = useNavigate();
   // A new connector link or upload key shows in the list of sign-ins at once.
@@ -75,6 +78,9 @@ export function Settings() {
           </>
         )}
       </Panel>
+    ) },
+    { id: "nutrients", group: label("you"), label: "Nutrient targets", when: micros, node: (
+      <Panel id="nutrients" title="Nutrient targets"><NutrientTargetsPanel /></Panel>
     ) },
     { id: "account", group: label("you"), label: "Account", node: (
       <Panel id="account" title="Account">

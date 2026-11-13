@@ -3,13 +3,14 @@ import { api } from "../lib/api";
 import { hm, isoDate, num, shortDate, useUnits, weightValue } from "../lib/format";
 import { useSession } from "../lib/session";
 import { DEFAULT_TARGETS, glucoseValue, unitLabel } from "../lib/vitals";
-import type { TrendDay } from "../lib/types";
+import type { NutritionTarget, TrendDay } from "../lib/types";
 import { BarChart, LineChart, scoreFloor } from "../components/charts";
 import { useModules } from "../App";
 import { Card, ErrorNotice, PageHeader, Segmented, Spinner, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
-import { useWater } from "../lib/fields";
+import { useMicros, useWater } from "../lib/fields";
+import { GROUPS, NUTRIENTS, amountText, infoOf, targetOf, trendValue, withUnit, type NutrientKey } from "../lib/micros";
 
 interface Series {
   /** Saved in the person's arrangement: keep it. */
@@ -39,6 +40,7 @@ export function Trends() {
   const unit = units === "IMPERIAL" ? "lb" : "kg";
   const vt = useSession((s) => s.profile?.vitalsTargets) ?? DEFAULT_TARGETS;
   const water = useWater(on);
+  const micros = useMicros(on);
   const all: Series[] = [
     { id: "readiness", title: "Readiness", value: (d) => d.readiness, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c2)", score: true, band: [85, 100] },
     { id: "sleep-score", title: "Sleep score", value: (d) => d.sleepScore, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c1)", score: true, band: [85, 100] },
@@ -123,6 +125,12 @@ export function Trends() {
       ),
     };
   });
+  // A nutrient's daily intake against its target, after protein (its id is saved: keep it).
+  if (micros) {
+    const nutrient: Section = { id: "nutrient", label: "Vitamins & minerals", node: data && <NutrientChart days={data.days} target={data.nutritionTarget} /> };
+    const after = sections.findIndex((x) => x.id === "protein");
+    sections.splice(after >= 0 ? after + 1 : sections.length, 0, nutrient);
+  }
   const arranged = useArrange(layoutKey("trends"), "Trends", sections);
 
   return (
@@ -136,6 +144,58 @@ export function Trends() {
       {data && arranged.nodes.length === 0 && arranged.shown.length > 0 && <p className="muted">Nothing recorded in this time yet.</p>}
       <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
     </div>
+  );
+}
+
+/** Which nutrient the chart shows, remembered in this browser. */
+const NUTRIENT_KEY = "samh.trends.nutrient";
+
+function chosenNutrient(): NutrientKey {
+  try {
+    const saved = localStorage.getItem(NUTRIENT_KEY);
+    if (saved && NUTRIENTS.some((x) => x.key === saved)) return saved as NutrientKey;
+  } catch { /* no storage: the default */ }
+  return "FIBER";
+}
+
+/**
+ * A chosen nutrient's daily intake against its target (or limit). A day nothing carried it is a
+ * gap, never a zero; only foods that came with it count.
+ */
+export function NutrientChart({ days, target }: { days: TrendDay[]; target?: NutritionTarget }) {
+  const [key, setKey] = useState<NutrientKey>(chosenNutrient);
+  const info = infoOf(key);
+  const t = targetOf(target, key);
+  const values = days.map((d) => trendValue(d, key));
+  const known = values.filter((v): v is number => v != null);
+  const choose = (k: NutrientKey) => {
+    setKey(k);
+    try { localStorage.setItem(NUTRIENT_KEY, k); } catch { /* fine without */ }
+  };
+  return (
+    <Card id="nutrient" title="Vitamins & minerals" action={known.length > 0 && <span className="muted small">average <strong>{withUnit(known.reduce((a, b) => a + b, 0) / known.length, info.unit)}</strong></span>}>
+      <label className="nutrient-pick">
+        <span className="sr-only">Nutrient</span>
+        <select value={key} onChange={(e) => choose(e.target.value as NutrientKey)}>
+          {GROUPS.map((g) => (
+            <optgroup key={g.id} label={g.label}>
+              {NUTRIENTS.filter((x) => x.group === g.id).map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+      {known.length === 0
+        ? <p className="muted small">No food in this time came with {info.label.toLowerCase()} numbers yet.</p>
+        : <BarChart
+            label={`${info.label} each day`} color={info.aim === "AT_MOST" ? "var(--c1)" : "var(--c2)"} goal={t?.amount} labelEvery={Math.ceil(days.length / 8)}
+            formatY={(v) => withUnit(v, info.unit)} formatTick={(v) => amountText(v)}
+            bars={days.map((d, i) => ({ key: d.date, label: shortDate(d.date), value: values[i] ?? null, detail: shortDate(d.date) }))}
+          />}
+      <Note>
+        {t ? `${info.aim === "AT_MOST" ? "The line is your limit" : "The line is your target"}: ${withUnit(t.amount, info.unit)} a day. ` : "No target for this one. "}
+        {info.label} came with food on {known.length} of {days.length} days; only the foods that carried it count.
+      </Note>
+    </Card>
   );
 }
 

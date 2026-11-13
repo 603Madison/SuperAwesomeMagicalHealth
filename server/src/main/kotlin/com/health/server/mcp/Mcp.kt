@@ -344,7 +344,8 @@ class McpServer(private val services: Services) {
         ) { caller, args -> workouts(accountOf(caller, args), args.int("days")?.coerceIn(1, 3650) ?: 30) },
         Tool(
             "food_log", "Food log",
-            "What was eaten each day, by meal, with calories and protein, carbs and fat, totals against the day's target, and water (where it's tracked).",
+            "What was eaten each day, by meal, with calories and protein, carbs and fat, totals against the day's target, water (where it's tracked), " +
+                "and fibre, sodium, vitamins and minerals where the foods carried them.",
             schema(dateProperty, "days" to intProperty("Several days ending on date (default 1, at most 31)"), account),
         ) { caller, args -> foodLog(accountOf(caller, args), args.string("date") ?: "today", args.int("days")?.coerceIn(1, 31) ?: 1) },
         Tool(
@@ -1126,6 +1127,7 @@ class McpServer(private val services: Services) {
                     if (water) "; water %d/%d ml".format(d.waterMl, t.waterMl) else "",
             )
             appendLine("  Target: ${t.basis}")
+            com.health.server.food.Micros.text(n)?.let { appendLine("  Also (from the foods that carried them): $it") }
         }
         d.weightKg?.let { appendLine("Weight: ${weight(it, units)}${d.bodyFat?.let { f -> ", body fat %.1f%%".format(f) } ?: ""}") }
         d.checkIn?.takeIf { it.mood != null || it.energy != null || it.stress != null || it.soreness != null || it.tags.isNotEmpty() || it.note != null }
@@ -1253,13 +1255,15 @@ class McpServer(private val services: Services) {
             day.totals.carbs.roundToInt(), day.target.carbs, day.totals.fat.roundToInt(), day.target.fat,
         ) + if (water) ", water %d/%d ml".format(day.waterMl, day.target.waterMl) else "")
         day.burned?.let { appendLine("  Burned so far: ${it.roundToInt()} kcal") }
+        // Only what the foods carried: a nutrient no food came with isn't counted as none.
+        com.health.server.food.Micros.text(day.totals)?.let { appendLine("  Also (from the foods that carried them): $it") }
         if (day.entries.isEmpty()) appendLine("  Nothing logged.")
         Meal.entries.forEach { meal ->
             val entries = day.entries.filter { it.meal == meal }
             if (entries.isNotEmpty()) {
                 appendLine("  ${meal.label}:")
                 entries.forEach { e ->
-                    appendLine("    - ${e.name}${e.brand?.let { " ($it)" } ?: ""}, ${num(e.servings)} × ${e.serving}: ${nutrientText(e.nutrients)}")
+                    appendLine("    - ${e.name}${e.brand?.let { " ($it)" } ?: ""}, ${num(e.servings)} × ${e.serving}: ${nutrientText(e.nutrients)}${com.health.server.food.Micros.text(e.nutrients)?.let { "; $it" } ?: ""}")
                 }
             }
         }

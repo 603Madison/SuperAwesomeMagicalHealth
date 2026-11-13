@@ -458,6 +458,7 @@ fun FoodPhotoReview(meal: Meal, state: FoodPhotoState, actions: FoodPhotoActions
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Hint(if (hide) FoodPhotoText.ESTIMATES_PLAIN else FoodPhotoText.ESTIMATES, Modifier.padding(horizontal = 4.dp))
             state.estimate?.notes?.takeIf { it.isNotBlank() }?.let { Hint(it, Modifier.padding(horizontal = 4.dp)) }
+            if (!hide) Hint(FoodPhotoText.NO_VITAMINS, Modifier.padding(horizontal = 4.dp))
             state.rows.forEach { row -> RowCard(row, hide, actions) }
             TextButton(onClick = actions.add) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Add something it missed")

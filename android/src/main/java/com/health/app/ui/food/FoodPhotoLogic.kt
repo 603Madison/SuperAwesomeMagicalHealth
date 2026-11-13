@@ -42,6 +42,9 @@ object FoodPhotoText {
     const val ESTIMATES_PLAIN = "These are estimates from a photo, so they can be off. Check the foods and amounts before you log them."
     const val SETTINGS_LINE = "To estimate a meal from a photo, let the assistant see Food in Settings › AI assistant."
 
+    /** Small print on the review: a photo shows fibre and the like, never vitamins. */
+    const val NO_VITAMINS = "Vitamins and minerals can't be judged from a photo."
+
     /** On, said yes to, with Food allowed: the button. On, but not that: the line. Otherwise (or while viewing a share) nothing. */
     fun offer(status: AiStatus?, viewing: Boolean): PhotoOffer? = when {
         viewing || status == null || !status.available -> null

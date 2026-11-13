@@ -6,11 +6,13 @@ import com.health.api.FoodEntryChange
 import com.health.api.FoodEntryInput
 import com.health.api.FoodSearch
 import com.health.api.Meal
+import com.health.api.NutrientTargetsChange
 import com.health.api.Nutrients
 import com.health.api.WaterEntry
 import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.auth.requireUser
+import com.health.server.care.viewScope
 import com.health.server.util.parseDate
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
@@ -45,10 +47,24 @@ fun Route.foodRoutes(services: Services) {
             }
             call.respond(services.suggestions.suggestions(user.id, date, meal))
         }
+        // Each nutrient's target: the reference intake for the person, its upper limit, and their own.
+        get("/targets") {
+            val user = call.requireUser(services)
+            val date = services.profiles.days(user.id).today(services.clock())
+            val (target, _) = services.days.nutritionFor(user.id, date, pregnancy = call.pregnancyShown())
+            call.respond(services.nutrientTargets.settings(user.id, date, target.calories, pregnancy = call.pregnancyShown()))
+        }
+        put("/targets") {
+            val user = call.requireUser(services)
+            services.nutrientTargets.save(user.id, call.receive<NutrientTargetsChange>())
+            val date = services.profiles.days(user.id).today(services.clock())
+            val (target, _) = services.days.nutritionFor(user.id, date)
+            call.respond(services.nutrientTargets.settings(user.id, date, target.calories))
+        }
         get("/{date}") {
             val user = call.requireUser(services)
             val date = services.profiles.days(user.id).parse(call.parameters["date"].orEmpty(), services.clock())
-            call.respond(foodDay(services, user.id, date))
+            call.respond(foodDay(services, user.id, date, pregnancy = call.pregnancyShown()))
         }
         post("/entries") {
             val user = call.requireUser(services)
@@ -141,9 +157,13 @@ fun Route.foodRoutes(services: Services) {
     }
 }
 
-suspend fun foodDay(services: Services, userId: String, date: LocalDate): FoodDay {
+/** Whether pregnancy's nutrient targets may show: not to someone viewing a share that leaves out the cycle. */
+private fun io.ktor.server.application.ApplicationCall.pregnancyShown(): Boolean =
+    viewScope?.let { com.health.api.Module.CYCLE in it.modules } ?: true
+
+suspend fun foodDay(services: Services, userId: String, date: LocalDate, pregnancy: Boolean = true): FoodDay {
     val (entries, water) = services.foods.day(userId, date)
-    val (target, burned) = services.days.nutritionFor(userId, date)
+    val (target, burned) = services.days.nutritionFor(userId, date, pregnancy)
     return FoodDay(
         date = date.toString(),
         entries = entries,

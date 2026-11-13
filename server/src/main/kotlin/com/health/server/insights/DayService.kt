@@ -75,6 +75,9 @@ data class DayStats(
     }
 }
 
+/** What a day's nutrient targets need beyond the profile: the person's own ([own], by nutrient name), and whether they're pregnant. */
+data class NutrientContext(val own: Map<String, Double> = emptyMap(), val pregnant: Boolean = false)
+
 /** A person's devices and the choices among them, for working out their days. */
 class DeviceContext(val devices: Map<String, DeviceRef>, val choices: DeviceChoices) {
     fun chosen(metric: Metric): String? = choices.choices.lastOrNull { it.metric == metric }?.deviceId
@@ -161,6 +164,19 @@ class DayService(
     /** Whether food numbers show, and ideas for the protein insight (food/Suggestions.kt): set at start-up. */
     var foodForInsights: suspend (userId: String, date: LocalDate, isToday: Boolean, today: DayStats, target: com.health.api.NutritionTarget) -> InsightRules.Food =
         { _, _, _, _, _ -> InsightRules.Food() }
+
+    /** The person's own nutrient targets, and whether they're pregnant on a day (food/Micros.kt): set at start-up. */
+    var nutrientContext: suspend (userId: String, date: LocalDate) -> NutrientContext = { _, _ -> NutrientContext() }
+
+    /**
+     * The day's food targets: calories and macros ([Energy.target]), then vitamins, minerals, fibre
+     * and the limits ([ReferenceIntakes]). Pregnancy's higher targets only with [pregnancy] (not
+     * for someone viewing a share that leaves out the cycle, which would give it away).
+     */
+    private suspend fun target(userId: String, profile: Profile, date: LocalDate, weight: Double?, resting: Double?, active: Double?, pregnancy: Boolean): com.health.api.NutritionTarget {
+        val context = nutrientContext(userId, date)
+        return ReferenceIntakes.apply(Energy.target(profile, weight, resting, active), profile, date, pregnancy && context.pregnant, context.own)
+    }
 
     private fun allExtras(): List<DayExtras> = listOfNotNull(extras) + parts
 
@@ -375,7 +391,7 @@ class DayService(
 
     // ---- Summaries ----
 
-    suspend fun summary(userId: String, dateText: String): DaySummary {
+    suspend fun summary(userId: String, dateText: String, pregnancy: Boolean = true): DaySummary {
         val profile = profiles.get(userId)
         val days = Days(Days.zoneOf(profile.timezone))
         val date = days.parse(dateText, clock())
@@ -389,7 +405,7 @@ class DayService(
         val activity = Scoring.activity(today, before, goals, hoursSoFar(date, days))
         val weight = today.weightKg ?: records.latest(userId, Metric.WEIGHT, days.end(date))?.value
         val resting = Energy.restingCalories(profile, weight, date)
-        val target = Energy.target(profile, weight, resting, averageActive(before))
+        val target = target(userId, profile, date, weight, resting, averageActive(before), pregnancy)
         val start = days.start(date)
         val end = days.end(date)
         val heart = Combine.pick(records.samples(userId, start, end, listOf(Metric.HEART_RATE)), Metric.HEART_RATE, ctx.chosen(Metric.HEART_RATE))
@@ -458,14 +474,14 @@ class DayService(
     }
 
     /** The day's nutrition target and the calories burned so far, for the food diary. */
-    suspend fun nutritionFor(userId: String, date: LocalDate): Pair<com.health.api.NutritionTarget, Double?> {
+    suspend fun nutritionFor(userId: String, date: LocalDate, pregnancy: Boolean = true): Pair<com.health.api.NutritionTarget, Double?> {
         val profile = profiles.get(userId)
         val days = Days(Days.zoneOf(profile.timezone))
         val history = stats(userId, date.minusDays(14), date, days)
         val today = history.last()
         val weight = today.weightKg ?: records.latest(userId, Metric.WEIGHT, days.end(date))?.value
         val resting = Energy.restingCalories(profile, weight, date)
-        val target = Energy.target(profile, weight, resting, averageActive(history.dropLast(1)))
+        val target = target(userId, profile, date, weight, resting, averageActive(history.dropLast(1)), pregnancy)
         val burned = resting?.let { r ->
             val isToday = date == days.today(clock())
             val fraction = if (isToday) ((clock() - days.start(date)).toDouble() / (days.end(date) - days.start(date))).coerceIn(0.0, 1.0) else 1.0
@@ -474,7 +490,7 @@ class DayService(
         return target to burned
     }
 
-    suspend fun trends(userId: String, from: LocalDate?, to: LocalDate?, dayCount: Int?): Trends {
+    suspend fun trends(userId: String, from: LocalDate?, to: LocalDate?, dayCount: Int?, pregnancy: Boolean = true): Trends {
         val profile = profiles.get(userId)
         val days = Days(Days.zoneOf(profile.timezone))
         val last = to ?: days.today(clock())
@@ -510,6 +526,11 @@ class DayService(
                 protein = day.nutrition?.protein,
                 carbs = day.nutrition?.carbs,
                 fat = day.nutrition?.fat,
+                fiber = day.nutrition?.fiber,
+                sugar = day.nutrition?.sugar,
+                saturatedFat = day.nutrition?.saturatedFat,
+                sodiumMg = day.nutrition?.sodiumMg,
+                micros = day.nutrition?.micros.orEmpty(),
                 waterMl = day.waterMl.takeIf { it > 0 },
                 workouts = day.workouts,
                 workoutMinutes = day.workoutMinutes,
@@ -528,7 +549,14 @@ class DayService(
                 } ?: row
             }
         }
-        return Trends(first.toString(), last.toString(), rows)
+        // The last day's food targets, for charting a nutrient against its target.
+        val nutrition = if (com.health.api.Module.NUTRITION in profile.modules) {
+            val weight = all.last().weightKg ?: records.latest(userId, Metric.WEIGHT, days.end(last))?.value
+            target(userId, profile, last, weight, Energy.restingCalories(profile, weight, last), averageActive(all.dropLast(1)), pregnancy)
+        } else {
+            null
+        }
+        return Trends(first.toString(), last.toString(), rows, nutrition)
     }
 
     /** A metric's readings over [from, to), thinned to about [points] for a chart. */

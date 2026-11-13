@@ -187,6 +187,43 @@ export interface Nutrients {
   sugar?: number;
   saturatedFat?: number;
   sodiumMg?: number;
+  /** Vitamins, minerals and the finer fats, where known, each in its unit (lib/micros.ts). Missing means unknown, never none. */
+  micros?: Partial<Record<Micronutrient, number>>;
+}
+
+/** Food.kt's Micronutrient: labels, units and groups are in lib/micros.ts. */
+export type Micronutrient =
+  | "TRANS_FAT" | "MONO_FAT" | "POLY_FAT" | "OMEGA_3" | "CHOLESTEROL"
+  | "POTASSIUM" | "CALCIUM" | "IRON" | "MAGNESIUM" | "ZINC" | "PHOSPHORUS" | "SELENIUM" | "IODINE"
+  | "VITAMIN_A" | "VITAMIN_C" | "VITAMIN_D" | "VITAMIN_E" | "VITAMIN_K" | "THIAMIN" | "RIBOFLAVIN" | "NIACIN" | "VITAMIN_B6" | "FOLATE" | "VITAMIN_B12";
+export type MicroGroup = "FATS" | "MINERALS" | "VITAMINS";
+/** Whether more is better (up to a point) or less is. */
+export type MicroAim = "AT_LEAST" | "AT_MOST";
+/** Fibre, sugar, saturated fat and sodium: Nutrients' own fields, each with a target on NutritionTarget. */
+export type ExtraNutrient = "FIBER" | "SUGAR" | "SATURATED_FAT" | "SODIUM";
+
+/** A day's target for one nutrient: to reach (AT_LEAST) or stay under (AT_MOST), with an upper limit where one is set. */
+export interface MicroTarget {
+  micro: Micronutrient;
+  amount: number;
+  upper?: number;
+  /** The person's own, not the reference intake. */
+  custom: boolean;
+}
+
+/** One nutrient in the targets settings (GET /api/food/targets): `key` is an ExtraNutrient or Micronutrient. */
+export interface NutrientTargetSetting {
+  key: ExtraNutrient | Micronutrient;
+  reference?: number;
+  upper?: number;
+  own?: number;
+}
+
+export interface NutrientTargets {
+  items: NutrientTargetSetting[];
+  /** "Adult reference intake, female values". */
+  basis: string;
+  source: string;
 }
 
 export interface Food {
@@ -228,6 +265,13 @@ export interface NutritionTarget {
   fat: number;
   waterMl: number;
   basis: string;
+  micros?: MicroTarget[];
+  fiberG?: number;
+  sugarG?: number;
+  saturatedFatG?: number;
+  sodiumMg?: number;
+  /** Where the nutrient targets come from: "Adult reference intake, female values". */
+  microBasis?: string;
 }
 
 export interface FoodDay {
@@ -281,6 +325,7 @@ export function entryInput(e: FoodEntry, date: string, meal: Meal): { date: stri
     ...(e.nutrients.sugar != null ? { sugar: e.nutrients.sugar * f } : {}),
     ...(e.nutrients.saturatedFat != null ? { saturatedFat: e.nutrients.saturatedFat * f } : {}),
     ...(e.nutrients.sodiumMg != null ? { sodiumMg: e.nutrients.sodiumMg * f } : {}),
+    ...(e.nutrients.micros ? { micros: Object.fromEntries(Object.entries(e.nutrients.micros).map(([k, v]) => [k, (v ?? 0) * f])) } : {}),
   };
   return e.foodId
     ? { date, meal, servings: e.servings, food: { name: e.name, nutrients: each, serving: e.serving, brand: e.brand, id: e.foodId, source: "CUSTOM", uses: 0 } }
@@ -447,6 +492,12 @@ export interface TrendDay {
   carbs?: number;
   fat?: number;
   waterMl?: number;
+  /** Only where a food that day carried them. */
+  fiber?: number;
+  sugar?: number;
+  saturatedFat?: number;
+  sodiumMg?: number;
+  micros?: Partial<Record<Micronutrient, number>>;
   workouts: number;
   workoutMinutes: number;
   mood?: number;
@@ -476,6 +527,8 @@ export interface Trends {
   from: string;
   to: string;
   days: TrendDay[];
+  /** The last day's food targets, for a nutrient's chart. */
+  nutritionTarget?: NutritionTarget;
 }
 
 export interface OidcSettings {

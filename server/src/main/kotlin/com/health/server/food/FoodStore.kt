@@ -212,17 +212,22 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
                 barcode = food.barcode?.trim()?.filter { it.isDigit() }?.take(20)?.ifBlank { null },
                 serving = food.serving.trim().take(80).ifBlank { "1 serving" },
                 servingGrams = food.servingGrams?.takeIf { it.isFinite() && it > 0 && it < 10_000 },
-                nutrients = checked(food.nutrients),
+                // What the person typed must make sense; a food database's odd values are left out.
+                nutrients = checked(food.nutrients, strict = food.source == FoodSource.CUSTOM),
             )
         }
 
-        fun checked(n: Nutrients): Nutrients {
+        /** [n], checked: the main four must make sense; fibre and the rest are left out when they don't, and micronutrients refused ([strict]) or left out. */
+        fun checked(n: Nutrients, strict: Boolean = true): Nutrients {
             fun ok(v: Double, max: Double) = v.isFinite() && v >= 0 && v <= max
             if (!ok(n.calories, 20_000.0) || !ok(n.protein, 2000.0) || !ok(n.carbs, 3000.0) || !ok(n.fat, 2000.0)) {
                 throw ApiError.badRequest("Those nutrients don't look right")
             }
             fun opt(v: Double?, max: Double) = v?.takeIf { ok(it, max) }
-            return n.copy(fiber = opt(n.fiber, 500.0), sugar = opt(n.sugar, 3000.0), saturatedFat = opt(n.saturatedFat, 2000.0), sodiumMg = opt(n.sodiumMg, 100_000.0))
+            return n.copy(
+                fiber = opt(n.fiber, 500.0), sugar = opt(n.sugar, 3000.0), saturatedFat = opt(n.saturatedFat, 2000.0), sodiumMg = opt(n.sodiumMg, 100_000.0),
+                micros = Micros.checked(n.micros, strict),
+            )
         }
     }
 }

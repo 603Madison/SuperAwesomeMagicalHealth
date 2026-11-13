@@ -15,7 +15,6 @@ import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.units.BloodGlucose
-import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Percentage
 import androidx.health.connect.client.units.Pressure
@@ -192,21 +191,11 @@ object HealthConnectExportMapping {
         val id = "food:${f.id ?: return null}"
         val at = f.loggedAt ?: LocalDate.parse(f.date).atTime(mealTime(f.meal)).atZone(zone).toInstant().toEpochMilli()
         val n = f.nutrients
+        // The fingerprint holds every nutrient (micronutrients included), so a change is written again.
         return Outgoing(ExportKind.NUTRITION, id, at, "$at:${f.name}:${f.meal}:$n") { v ->
-            NutritionRecord(
-                startTime = Instant.ofEpochMilli(at), startZoneOffset = zone(at, zone),
-                endTime = Instant.ofEpochMilli(at + 60_000), endZoneOffset = zone(at, zone),
-                metadata = meta(id, v),
-                energy = Energy.kilocalories(n.calories.coerceIn(0.0, 99_999.0)),
-                protein = Mass.grams(n.protein.coerceIn(0.0, 99_999.0)),
-                totalCarbohydrate = Mass.grams(n.carbs.coerceIn(0.0, 99_999.0)),
-                totalFat = Mass.grams(n.fat.coerceIn(0.0, 99_999.0)),
-                dietaryFiber = n.fiber?.let { Mass.grams(it.coerceIn(0.0, 99_999.0)) },
-                sugar = n.sugar?.let { Mass.grams(it.coerceIn(0.0, 99_999.0)) },
-                saturatedFat = n.saturatedFat?.let { Mass.grams(it.coerceIn(0.0, 99_999.0)) },
-                sodium = n.sodiumMg?.let { Mass.milligrams(it.coerceIn(0.0, 99_999_000.0)) },
-                name = f.name.take(100),
-                mealType = mealType(f.meal),
+            HealthConnectNutrition.record(
+                n, Instant.ofEpochMilli(at), zone(at, zone), Instant.ofEpochMilli(at + 60_000), zone(at, zone),
+                meta(id, v), f.name.take(100), mealType(f.meal),
             )
         }
     }

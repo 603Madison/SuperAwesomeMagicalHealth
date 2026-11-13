@@ -236,6 +236,12 @@ data class TrendDay(
     val carbs: Double? = null,
     val fat: Double? = null,
     val waterMl: Int? = null,
+    /** Fibre, sugar, saturated fat, sodium (mg) and the micronutrients: only where a food that day carried them. */
+    val fiber: Double? = null,
+    val sugar: Double? = null,
+    val saturatedFat: Double? = null,
+    val sodiumMg: Double? = null,
+    val micros: Map<Micronutrient, Double> = emptyMap(),
     val workouts: Int = 0,
     val workoutMinutes: Int = 0,
     /** The modules' numbers, where they're on and anything was logged. */
@@ -264,4 +270,10 @@ data class TrendDay(
 )
 
 @Serializable
-data class Trends(val from: String, val to: String, val days: List<TrendDay>)
+data class Trends(
+    val from: String,
+    val to: String,
+    val days: List<TrendDay>,
+    /** The last day's food targets, for charting a nutrient against its target (with Food on). */
+    val nutritionTarget: NutritionTarget? = null,
+)

@@ -79,6 +79,7 @@ export const F = {
 
   BODY_MEASUREMENTS: "body.measurements",
   NUTRITION_WATER: "nutrition.water",
+  NUTRITION_MICROS: "nutrition.micros",
 } as const;
 
 /** On for everyone who has the feature, until hidden (the server's Fields.DEFAULTS). */
@@ -88,6 +89,7 @@ export const DEFAULT_FIELDS: string[] = [
   F.NEURO_ABOUT_ME, F.NEURO_CALM, F.NEURO_CARDS,
   F.TRANSITION_MILESTONES, F.TRANSITION_CHANGES, F.TRANSITION_MOMENTS,
   F.NUTRITION_WATER,
+  F.NUTRITION_MICROS,
 ];
 
 /** Every field, in the order settings pages list them: its feature and label. */
@@ -157,6 +159,7 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
   { key: F.TRANSITION_MEASUREMENTS, module: "TRANSITION", label: "Body measurements" },
   { key: F.BODY_MEASUREMENTS, module: "BODY", label: "Body measurements" },
   { key: F.NUTRITION_WATER, module: "NUTRITION", label: "Water" },
+  { key: F.NUTRITION_MICROS, module: "NUTRITION", label: "Vitamins & minerals" },
 ];
 
 export const fieldLabel = (key: string) => ALL_FIELDS.find((f) => f.key === key)?.label ?? key;
@@ -225,4 +228,15 @@ export function useFoodNumbers(): boolean {
 export function useWater(modules: Module[]): boolean {
   const { has } = useFields();
   return modules.includes("NUTRITION") && has(F.NUTRITION_WATER);
+}
+
+/**
+ * Whether vitamins and minerals show (Food's `nutrition.micros` field, on by default): the Food
+ * page's section, what foods carry, "More nutrients" when adding one, the Trends chart and the
+ * targets. Never in eating disorder recovery, where no amounts of food show at all.
+ */
+export function useMicros(modules: Module[]): boolean {
+  const { has } = useFields();
+  const numbers = useFoodNumbers();
+  return modules.includes("NUTRITION") && has(F.NUTRITION_MICROS) && numbers;
 }

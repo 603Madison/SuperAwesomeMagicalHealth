@@ -43,8 +43,8 @@ object FoodPhoto {
           three. Use plain names people would search for, like "Spaghetti bolognese" or "Flat white".
         - Estimate each portion as it will be eaten: grams for food, millilitres for drinks. Use the plate, bowl, cutlery,
           hands and packaging for scale.
-        - Estimate calories (kcal), protein, carbs, fat and fibre (all in grams except calories) for that whole portion, from
-          typical values for the food.
+        - Estimate calories (kcal), protein, carbs, fat, fibre, sugar and saturated fat (all in grams except calories) and
+          sodium (milligrams) for that whole portion, from typical values for the food.
         - Give your confidence (LOW, MEDIUM or HIGH), and one short line on what you assumed, like "assumed cooked weight",
           "dressing not visible" or "assumed semi-skimmed milk".
         - If the person adds a note (like "half eaten" or "large plate"), take it into account.
@@ -91,6 +91,13 @@ object FoodPhoto {
         val fat: Double = 0.0,
         @field:JsonPropertyDescription("Fibre in the whole portion, grams")
         val fiber: Double = 0.0,
+        // Fibre, sugar, saturated fat and sodium are typical for a food, so a photo can say; vitamins and minerals it can't.
+        @field:JsonPropertyDescription("Total sugars in the whole portion, grams")
+        val sugar: Double = 0.0,
+        @field:JsonPropertyDescription("Saturated fat in the whole portion, grams")
+        val saturatedFat: Double = 0.0,
+        @field:JsonPropertyDescription("Sodium in the whole portion, milligrams")
+        val sodiumMg: Double = 0.0,
         @field:JsonPropertyDescription("How sure the estimate is")
         val confidence: Sure = Sure.MEDIUM,
         @field:JsonPropertyDescription("One short line on what was assumed, like \"assumed cooked weight\"")
@@ -111,6 +118,9 @@ object FoodPhoto {
                 carbs = n(item.carbs, 3_000.0),
                 fat = n(item.fat, 2_000.0),
                 fiber = n(item.fiber, 500.0),
+                sugar = n(item.sugar, 3_000.0),
+                saturatedFat = n(item.saturatedFat, 2_000.0),
+                sodiumMg = n(item.sodiumMg, 100_000.0),
             ),
             confidence = when (item.confidence) {
                 Sure.LOW -> EstimateConfidence.LOW

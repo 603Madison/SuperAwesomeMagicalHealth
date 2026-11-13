@@ -219,7 +219,10 @@ class FoodPhotoTest {
         val schema = format["schema"]!!.jsonObject
         assertTrue(schema["properties"]!!.jsonObject.keys.containsAll(listOf("items", "notes")))
         val itemSchema = schema.toString()
-        listOf("amount", "calories", "protein", "carbs", "fat", "fiber", "confidence", "assumption", "MILLILITRES").forEach { assertTrue(it, itemSchema.contains(it)) }
+        listOf("amount", "calories", "protein", "carbs", "fat", "fiber", "sugar", "saturatedFat", "sodiumMg", "confidence", "assumption", "MILLILITRES").forEach { assertTrue(it, itemSchema.contains(it)) }
+        // Vitamins and minerals can't be judged from a photo: the schema never asks for them.
+        com.health.api.Micronutrient.entries.forEach { m -> assertFalse(m.name, itemSchema.lowercase().contains(m.name.lowercase())) }
+        assertFalse(itemSchema.lowercase().contains("vitamin"))
         assertTrue(request["system"]!!.jsonArray.first().jsonObject.str("text").contains("grams for food"))
 
         // One user message: the image first, then the words (the meal and the note).

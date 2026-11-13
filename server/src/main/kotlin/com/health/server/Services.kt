@@ -135,6 +135,11 @@ class Services(
         days.showsWater = { userId -> conditions.shows(userId, com.health.api.Fields.NUTRITION_WATER) }
     }
 
+    /** Each person's own nutrient targets; with pregnancy, what the day's vitamin and mineral targets need. */
+    val nutrientTargets = com.health.server.food.NutrientTargetsService(userSettings, profiles, lifeStages).also { t ->
+        days.nutrientContext = { userId, date -> com.health.server.insights.NutrientContext(t.own(userId), t.pregnant(userId, date)) }
+    }
+
     /** Food ideas from what each person has eaten before, for the Food page and Today's protein insight. */
     val suggestions = com.health.server.food.SuggestionService(foods, days, profiles, conditions, clock).also { s ->
         days.foodForInsights = { userId, date, isToday, today, target -> s.forInsights(userId, date, isToday, today, target) }

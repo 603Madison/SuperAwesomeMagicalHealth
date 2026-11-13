@@ -165,14 +165,16 @@ fun TrendsRoute() {
         modules = com.health.app.ui.care.shownModules(),
         vitalsTargets = profile?.vitalsTargets ?: VitalsTargets(),
         water = showsField(Fields.NUTRITION_WATER),
+        micros = com.health.app.ui.food.showsMicros(),
     )
 }
 
 /**
  * Trends' charts for the features that are on, in the default order: the sections of
- * [FeatureScreens.TRENDS]. Water only while it's tracked. A chart with nothing in the range says so.
+ * [FeatureScreens.TRENDS]. Water only while it's tracked, and a nutrient's chart while vitamins and
+ * minerals show ([micros]). A chart with nothing in the range says so.
  */
-fun trendsSections(modules: Set<Module>, water: Boolean = true): List<ArrangeItem> = buildList {
+fun trendsSections(modules: Set<Module>, water: Boolean = true, micros: Boolean = false): List<ArrangeItem> = buildList {
     val tracking = Module.ACTIVITY in modules || Module.SLEEP in modules
     if (tracking) add(ArrangeItem("scores", "Scores"))
     if (Module.MIND in modules) add(ArrangeItem("mood", "Mood"))
@@ -190,6 +192,7 @@ fun trendsSections(modules: Set<Module>, water: Boolean = true): List<ArrangeIte
     }
     if (Module.NUTRITION in modules) add(ArrangeItem("calories", "Calories eaten"))
     if (Module.NUTRITION in modules && water) add(ArrangeItem("water", "Water"))
+    if (Module.NUTRITION in modules && micros) add(ArrangeItem(NUTRIENT, "Vitamins & minerals"))
     addAll(trackingTrendSections(modules))
     if (Module.BODY in modules) add(ArrangeItem("weight", "Weight"))
     if (Module.ACTIVITY in modules) add(ArrangeItem("workouts", "Workouts"))
@@ -200,9 +203,10 @@ fun TrendsScreen(
     state: TrendsState, units: Units, goals: Goals, zone: ZoneId, actions: TrendsActions, modules: Set<Module> = Module.DEFAULT,
     vitalsTargets: VitalsTargets = VitalsTargets(),
     water: Boolean = true,
+    micros: Boolean = false,
 ) {
     var weighing by remember { mutableStateOf(false) }
-    val sections = trendsSections(modules, water)
+    val sections = trendsSections(modules, water, micros)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Trends", "How things are going over time") {
             ArrangeAction(FeatureScreens.TRENDS, "Trends", sections)
@@ -221,6 +225,7 @@ fun TrendsScreen(
                             "scores" -> ScoresCard(days, labels)
                             "weight" -> WeightCard(state.weights, units, goals, zone, onAdd = { weighing = true }, onDelete = actions.deleteWeight)
                             "workouts" -> WorkoutsSummary(days)
+                            NUTRIENT -> NutrientTrendCard(days, trends.nutritionTarget, labels)
                             // Combined devices: the chart's "From 2 devices", if today's reading has more than one (ui/components/Sources.kt).
                             in TREND_CHARTS -> androidx.compose.runtime.CompositionLocalProvider(
                                 com.health.app.ui.components.LocalChartSources provides com.health.app.ui.components.Sources.chart(id, state.combined, state.combinedSleep, units, zone),
@@ -234,6 +239,9 @@ fun TrendsScreen(
     }
     if (weighing) WeightDialog(units, state.weights.lastOrNull()?.value, { weighing = false }) { actions.logWeight(it); weighing = false }
 }
+
+/** The chart of a chosen vitamin, mineral or the like (its id is saved: keep it). */
+internal const val NUTRIENT = "nutrient"
 
 /** Trends' own charts' ids; the rest are [TrackingTrend]'s. */
 private val TREND_CHARTS = setOf("mood", "doses", "period", "trips", "leaks", "sleep", "steps", "heart", "hrv", "calories", "water")
