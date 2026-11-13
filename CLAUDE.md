@@ -28,12 +28,12 @@
   `sync/`.
 - Health modules (`Module` in `shared/…/Modules.kt`, `server/…/modules/`): each person turns them
   on in `Profile.modules`, or their conditions do. The sensitive ones (mind, cycle, continence,
-  medications, symptoms, hormones, appointments, neuro, transition, photos) keep their entries sealed in the `entries` and `medications` tables
-  (`EntryStore`, `SecretBox`), add their part of a day (Today, Trends, insights tagged with their
-  `module`), and
-  are only visible to AI connector links whose `scope` names them; every-account links never see
-  them. Keep it that way, and keep the copy for these modules kind, plain and never gendered
-  (neurodiversity-affirming for Autism & ADHD; for transition, never assume a direction or steps).
+  medications, symptoms, hormones, appointments, neuro, transition, photos) keep their entries
+  sealed in the `entries` and `medications` tables (`EntryStore`, `SecretBox`), add their part of
+  a day (Today, Trends, insights tagged with their `module`), and are only visible to AI
+  connector links whose `scope` names them; every-account links never see them. Keep it that
+  way, and keep the copy for these modules kind, plain and never gendered (neurodiversity-
+  affirming for Autism & ADHD; for transition, never assume a direction or steps).
 - Fields: optional inputs within a feature have a key in `Fields` (`shared/…/Conditions.kt`) and
   show only when `GET /api/fields` says so (web `lib/fields.ts`, Android `showsField`). A new
   optional input gets a key there, and the catalog entries that should bring it.
