@@ -3,6 +3,7 @@ package com.health.app.devices.healthconnect
 import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
 import com.health.api.DeviceKind
 import com.health.api.GlucoseContext
@@ -31,6 +32,14 @@ object HealthConnectMapping {
         "com.whoop.android" to "WHOOP",
         "com.ultrahuman.android" to "Ultrahuman",
     )
+
+    /**
+     * Whether a record came from another app, and so is worth reading: not one this app wrote to
+     * Health Connect itself (its data origin is this app, or it carries this app's client record id).
+     */
+    fun fromOtherApp(record: Record, ownPackage: String): Boolean =
+        record.metadata.dataOrigin.packageName != ownPackage &&
+            record.metadata.clientRecordId?.startsWith(HealthConnectExportMapping.PREFIX) != true
 
     /** A name people recognise for the app that wrote some data. */
     fun friendlyName(packageName: String): String = NAMES[packageName] ?: when {

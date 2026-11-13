@@ -235,6 +235,7 @@ fun HealthTheme(
         LocalStatusColors provides if (dark) DarkStatus else LightStatus,
         LocalDataColors provides if (dark) DarkData else LightData,
     ) {
-        MaterialTheme(colorScheme = colors, shapes = AppShapes, typography = if (bold) BoldTypography else AppTypography, content = content)
+        // Calm mode (Autism & ADHD, ui/theme/Calm.kt) softens what's inside when it's on.
+        MaterialTheme(colorScheme = colors, shapes = AppShapes, typography = if (bold) BoldTypography else AppTypography) { CalmMode(content) }
     }
 }

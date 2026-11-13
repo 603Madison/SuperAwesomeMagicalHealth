@@ -2,7 +2,6 @@ package com.health.app
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -25,7 +24,8 @@ import kotlinx.coroutines.launch
 private val LIGHT_SCRIM = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
 private val DARK_SCRIM = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
-class MainActivity : ComponentActivity() {
+/** A FragmentActivity, so the progress photos' lock can ask for biometrics (androidx.biometric). */
+class MainActivity : androidx.fragment.app.FragmentActivity() {
     private val finishing = mutableStateOf(false)
     private val signInError = mutableStateOf<String?>(null)
 

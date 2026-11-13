@@ -152,6 +152,8 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
             com.health.app.ui.care.MoreSettings(onOpen)
             // Conditions and goals, fields, and the AI assistant.
             com.health.app.ui.conditions.YourHealthSettings(onOpen)
+            // Export to other apps, calm mode and the photo lock (ui/settings/ExportSettings.kt).
+            MoreChoices(profile?.modules ?: Module.DEFAULT, onOpen)
             SectionCard("Appearance") {
                 Text("Theme", style = MaterialTheme.typography.bodyLarge)
                 val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

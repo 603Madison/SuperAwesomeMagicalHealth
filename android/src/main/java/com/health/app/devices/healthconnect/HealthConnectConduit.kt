@@ -87,8 +87,9 @@ class HealthConnectConduit(
         val own = context.packageName
         val builders = LinkedHashMap<String, Builder>()
         fun builder(record: Record): Builder? {
+            // Never what this app wrote (Settings › Export): that would come back as a copy.
+            if (!HealthConnectMapping.fromOtherApp(record, own)) return null
             val origin = record.metadata.dataOrigin.packageName
-            if (origin == own) return null
             return builders.getOrPut(origin) { Builder(origin) }
         }
         val problems = ArrayList<String>()

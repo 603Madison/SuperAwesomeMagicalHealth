@@ -732,6 +732,8 @@ class ScreenshotTest {
         cycle = CycleToday(11, CyclePhase.FERTILE, 18, CycleDay(today.toString(), mucus = Mucus.WATERY)),
         continence = ContinenceDay(today.toString(), voids = 4, nightVoids = 1, leaks = 1, bowel = 1, pelvicFloor = 1),
         meds = medsDay,
+        neuro = com.health.api.NeuroToday(overloadsToday = 1, energyLeft = 5, socialBattery = 4, routinesDue = listOf("Evening"), focusMinutes = 50),
+        transition = com.health.api.TransitionToday(headline = "1 year, 3 months since you began", milestonesDue = listOf("Update my passport"), euphoriaThisWeek = 3),
     )
 
     private fun allTabs() = tabsFor(allModules)

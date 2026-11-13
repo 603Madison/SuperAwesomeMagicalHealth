@@ -158,3 +158,49 @@ fun MedsTodayCard(meds: MedsDay?, zone: ZoneId, onTake: (DueDose, String?) -> Un
         }
     }
 }
+
+/**
+ * Autism & ADHD on Today: energy left, the social battery, times things got too much, focus time
+ * and routines still to do. With only Mind on, just the energy budget (Mind's own).
+ */
+@Composable
+fun NeuroTodayCard(today: com.health.api.NeuroToday, energyOnly: Boolean, onOpen: () -> Unit) {
+    val title = if (energyOnly) "Energy" else Module.NEURO.label
+    InfoCard(title, icon = ModuleInfo.icon(if (energyOnly) Module.MIND else Module.NEURO), onClick = onOpen, trailing = { More(onOpen) }) {
+        Row(Modifier.fillMaxWidth()) {
+            today.energyLeft?.let { Stat("$it", if (it == 1) "spoon left" else "spoons left", Modifier.weight(1f)) }
+            today.socialBattery?.let { Stat("$it/10", "social battery", Modifier.weight(1f)) }
+            if (!energyOnly && today.focusMinutes > 0) Stat(Format.minutes(today.focusMinutes), "focus", Modifier.weight(1f))
+        }
+        if (energyOnly) {
+            if (today.energyLeft == null && today.socialBattery == null) Hint("No energy budget for today yet.")
+            return@InfoCard
+        }
+        if (today.overloadsToday > 0) {
+            Hint(
+                if (today.overloadsToday == 1) "Today's been a lot once already. Go gently." else "Today's been a lot ${today.overloadsToday} times. Go gently.",
+                Modifier.padding(top = 6.dp),
+            )
+        }
+        if (today.routinesDue.isNotEmpty()) Hint("Still to do: ${today.routinesDue.joinToString()}", Modifier.padding(top = 6.dp))
+        if (today.energyLeft == null && today.socialBattery == null && today.overloadsToday == 0 && today.routinesDue.isEmpty() && today.focusMinutes == 0) {
+            Hint("Nothing logged yet today.")
+        }
+    }
+}
+
+/** Transition on Today: the headline, moments of euphoria this week, and milestones coming up. */
+@Composable
+fun TransitionTodayCard(today: com.health.api.TransitionToday, onOpen: () -> Unit) {
+    InfoCard(Module.TRANSITION.label, icon = ModuleInfo.icon(Module.TRANSITION), onClick = onOpen, trailing = { More(onOpen) }) {
+        today.headline?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+        if (today.euphoriaThisWeek > 0) {
+            Hint(
+                if (today.euphoriaThisWeek == 1) "1 moment of euphoria this week" else "${today.euphoriaThisWeek} moments of euphoria this week",
+                Modifier.padding(top = 4.dp),
+            )
+        }
+        if (today.milestonesDue.isNotEmpty()) Hint("Coming up: ${today.milestonesDue.joinToString()}", Modifier.padding(top = 4.dp))
+        if (today.headline == null && today.euphoriaThisWeek == 0 && today.milestonesDue.isEmpty()) Hint("Your milestones, changes and moments, at your pace.")
+    }
+}

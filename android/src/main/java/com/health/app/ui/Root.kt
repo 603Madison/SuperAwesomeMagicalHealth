@@ -312,5 +312,28 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         composable("cycle/settings") { com.health.app.ui.modules.cycle.CycleSettingsRoute(onBack = { nav.popBackStack() }) }
         composable("settings/ai") { com.health.app.ui.ai.AiRoute(onBack = { nav.popBackStack() }, onAudit = { open("settings/ai/audit") }) }
         composable("settings/ai/audit") { com.health.app.ui.ai.AiAuditRoute(onBack = { nav.popBackStack() }) }
+        // Wave 3: Autism & ADHD (also reached from Mind), transition, progress photos, body
+        // measurements and Settings › Export (ui/modules/neuro, transition, photos, body; ui/settings/ExportSettings.kt).
+        fun arg(name: String) = navArgument(name) { type = NavType.StringType; nullable = true; defaultValue = null }
+        composable("neuro") { com.health.app.ui.modules.neuro.NeuroRoute(::open) }
+        composable("neuro/{page}?id={id}&show={show}", arguments = listOf(navArgument("page") { type = NavType.StringType }, arg("id"), arg("show"))) { back ->
+            val a = back.arguments
+            com.health.app.ui.modules.neuro.NeuroPage(a?.getString("page").orEmpty(), a?.getString("id"), a?.getString("show"), { nav.popBackStack() }, ::open)
+        }
+        composable("neuro/{page}/{sub}?id={id}", arguments = listOf(navArgument("page") { type = NavType.StringType }, navArgument("sub") { type = NavType.StringType }, arg("id"))) { back ->
+            val a = back.arguments
+            com.health.app.ui.modules.neuro.NeuroPage("${a?.getString("page")}/${a?.getString("sub")}", a?.getString("id"), null, { nav.popBackStack() }, ::open)
+        }
+        composable("transition") { com.health.app.ui.modules.transition.TransitionRoute(::open) }
+        composable("transition/{page}?id={id}", arguments = listOf(navArgument("page") { type = NavType.StringType }, arg("id"))) { back ->
+            com.health.app.ui.modules.transition.TransitionPage(back.arguments?.getString("page").orEmpty(), back.arguments?.getString("id"), { nav.popBackStack() }, ::open)
+        }
+        composable("photos") { com.health.app.ui.modules.photos.PhotosPage("", null, null, { nav.popBackStack() }, ::open) }
+        composable("photos/{page}?id={id}&album={album}", arguments = listOf(navArgument("page") { type = NavType.StringType }, arg("id"), arg("album"))) { back ->
+            val a = back.arguments
+            com.health.app.ui.modules.photos.PhotosPage(a?.getString("page").orEmpty(), a?.getString("id"), a?.getString("album"), { nav.popBackStack() }, ::open)
+        }
+        composable("measurements") { com.health.app.ui.modules.body.MeasurementsRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/export") { com.health.app.ui.settings.ExportRoute(onBack = { nav.popBackStack() }, onOpen = ::open) }
     }
 }

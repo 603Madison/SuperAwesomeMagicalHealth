@@ -210,6 +210,12 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                         if (Module.CONTINENCE in modules) {
                             ContinenceTodayCard(summary.modules.continence, actions.logContinence) { actions.open("continence") }
                         }
+                        // Autism & ADHD (or Mind's energy budget alone), and transition.
+                        summary.modules.neuro?.let { n ->
+                            val energyOnly = Module.NEURO !in modules
+                            NeuroTodayCard(n, energyOnly) { actions.open(if (energyOnly) "mind" else "neuro") }
+                        }
+                        if (Module.TRANSITION in modules) summary.modules.transition?.let { TransitionTodayCard(it) { actions.open("transition") } }
                         TrackingTodayCards(summary, modules, units, zone, actions.tracking, actions.open)
                         // Supplies running low (bladder and bowel, periods).
                         summary.modules.lowSupplies?.takeIf { it.isNotEmpty() }?.let { low ->
