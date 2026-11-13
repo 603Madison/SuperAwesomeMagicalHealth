@@ -314,6 +314,8 @@ const EVENT_GROUPS: { title: string; module?: Module; events: { id: WebhookEvent
   { title: "Symptoms", module: "SYMPTOMS", events: [{ id: "MIGRAINE", label: "A migraine started" }] },
   { title: "Habits", module: "HABITS", events: [{ id: "HABIT_DUE", label: "A habit isn't done yet" }] },
   { title: "Appointments", module: "APPOINTMENTS", events: [{ id: "APPOINTMENT_SOON", label: "An appointment is coming up" }] },
+  { title: "Bladder & bowel", module: "CONTINENCE", events: [{ id: "BLADDER_TRAINING", label: "Time for a bladder training trip" }, { id: "SUPPLIES_LOW", label: "Supplies are running low" }] },
+  { title: "Cycle", module: "CYCLE", events: [{ id: "CYCLE_REMINDER", label: "A period is due, or late" }] },
   { title: "Devices", events: [{ id: "DEVICE_BATTERY_LOW", label: "A device's battery is low" }, { id: "DEVICE_QUIET", label: "A device hasn't synced for a day" }] },
 ];
 

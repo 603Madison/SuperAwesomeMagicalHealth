@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Activity as ActivityIcon, CalendarClock, CalendarHeart, Coffee, Droplet, Droplets, Dumbbell, GlassWater, Heart, HeartPulse, Moon, Plus, Salad,
-  Smile, Sparkles, Stethoscope, Watch, Weight,
+  Smile, Sparkles, Stethoscope, Watch, Weight, Waves, Camera, Bot,
 } from "lucide-react";
+import { FirstRunPrompt } from "./Conditions";
+import { useAiAvailable } from "./Assistant";
 import { useModules } from "../App";
 import { MoodDialog } from "./Mind";
 import { api } from "../lib/api";
@@ -39,7 +41,13 @@ export function Today() {
   const rings = RINGS.filter((r) => r.key === "readiness" ? on.includes("SLEEP") || on.includes("ACTIVITY") : r.key === "sleep" ? on.includes("SLEEP") : on.includes("ACTIVITY"));
   const m = data?.modules;
   const moduleData = !!(m && (m.mind || m.cycle?.cycleDay != null || m.continence || m.meds || m.vitals?.bloodPressure || m.vitals?.glucose
-    || m.habits?.length || m.symptoms?.entries.length || m.symptoms?.migraines.length || m.lifeStage || m.appointments?.length));
+    || m.habits?.length || m.symptoms?.entries.length || m.symptoms?.migraines.length || m.lifeStage || m.appointments?.length
+    || m.lowSupplies?.length || m.neuro || m.transition));
+  const ai = useAiAvailable();
+  // Until something's picked in What you're tracking: a gentle prompt, dismissed per browser.
+  const [skipFirstRun, setSkipFirstRun] = useState(() => { try { return localStorage.getItem("samh.firstRun.skip") === "1"; } catch { return false; } });
+  const conditions = useLoad(() => (viewing || skipFirstRun ? Promise.resolve(null) : api.conditions().catch(() => null)), [viewing, skipFirstRun]);
+  const showFirstRun = !viewing && !skipFirstRun && conditions.data != null && conditions.data.conditions.length === 0;
   const navigate = useNavigate();
   const hour = new Date().getHours();
   const greeting = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -62,6 +70,7 @@ export function Today() {
         <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
       </header>
 
+      {showFirstRun && date === today() && <FirstRunPrompt onDismiss={() => { try { localStorage.setItem("samh.firstRun.skip", "1"); } catch { /* fine */ } setSkipFirstRun(true); }} />}
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
       {data && (
@@ -92,6 +101,11 @@ export function Today() {
             {on.includes("ACTIVITY") && <button className="chip" onClick={() => setOpen("workout")}><Dumbbell size={18} /> Workout</button>}
             {on.includes("SLEEP") && <button className="chip" onClick={() => setOpen("sleep")}><Moon size={18} /> Add a night</button>}
             {on.includes("APPOINTMENTS") && <button className="chip" onClick={() => navigate("/appointments")}><CalendarClock size={18} /> Appointment</button>}
+            {on.includes("NEURO") && <button className="chip" onClick={() => navigate("/neuro")}><Sparkles size={18} /> Energy &amp; focus</button>}
+            {on.includes("NEURO") && <button className="chip" onClick={() => navigate("/calm")}><Waves size={18} /> Calm mode</button>}
+            {on.includes("TRANSITION") && <button className="chip" onClick={() => navigate("/transition")}><Sparkles size={18} /> Transition</button>}
+            {on.includes("PHOTOS") && <button className="chip" onClick={() => navigate("/photos")}><Camera size={18} /> Photo</button>}
+            {ai && <button className="chip" onClick={() => navigate("/assistant")}><Bot size={18} /> Ask the assistant</button>}
             <button className={`chip ${data.checkIn?.mood ? "is-on" : ""}`} onClick={() => setOpen("checkin")}><Smile size={18} /> Check in</button>
           </div>}
 

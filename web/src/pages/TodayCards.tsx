@@ -15,6 +15,10 @@ import { HabitCard } from "./Habits";
 import { severityWord } from "./Symptoms";
 import { appointmentWhen } from "./Appointments";
 import { weekText } from "./Digest";
+import { VERDICT_LABEL } from "../lib/types";
+import { LowSuppliesCard } from "./Supplies";
+import { NeuroTodayCard } from "./Neuro";
+import { TransitionTodayCard } from "./Transition";
 
 /** The day's parts from the features that are on: doses, mood, cycle, bladder, vitals, habits… */
 export function ModuleCards({ day, date, on, readOnly, onChanged, onMood, onSymptom }: {
@@ -40,7 +44,11 @@ export function ModuleCards({ day, date, on, readOnly, onChanged, onMood, onSymp
     try { await api.logDose({ medicationId, at: Date.now(), status: "TAKEN", scheduledFor, site }); toast("Taken"); onChanged(); } catch (e) { errorToast(e); }
   };
   const lifeStageShown = lifeStage && lifeStage.stage !== "CYCLING" && lifeStage.stage !== "TRYING";
-  const anything = showMind || cycle || continence || meds || vitals || habits?.length || symptoms || hormones || lifeStageShown || appointments?.length;
+  const lowSupplies = (has("CONTINENCE") || has("CYCLE")) ? m.lowSupplies ?? [] : [];
+  const neuro = has("NEURO") ? m.neuro : undefined;
+  const transition = has("TRANSITION") ? m.transition : undefined;
+  const anything = showMind || cycle || continence || meds || vitals || habits?.length || symptoms || hormones || lifeStageShown || appointments?.length
+    || lowSupplies.length || neuro || transition;
   if (!anything) return null;
   return (
     <div className="grid grid-2" style={{ marginBottom: 16 }}>
@@ -138,11 +146,25 @@ export function ModuleCards({ day, date, on, readOnly, onChanged, onMood, onSymp
             <Stat label="Trips" value={continence.voids} sub={continence.nightVoids ? `${continence.nightVoids} at night` : undefined} />
             <Stat label="Leaks" value={continence.leaks} />
             <Stat label="Pelvic floor" value={continence.pelvicFloor} sub="sessions" />
+            {(continence.products ?? 0) > 0 && <Stat label="Products" value={continence.products} sub={continence.lossG != null ? `about ${Math.round(continence.lossG)} g lost` : "changed"} />}
+            {(continence.bowelLeaks ?? 0) > 0 && <Stat label="Bowel accidents" value={continence.bowelLeaks} />}
+            {(continence.catheters ?? 0) > 0 && <Stat label="Catheter" value={continence.catheters} sub={continence.catheterMl != null ? `${continence.catheterMl} ml` : undefined} />}
           </div>
+          {date === today() && <ContinenceVerdict />}
         </Card>
       )}
+      {lowSupplies.length > 0 && <LowSuppliesCard items={lowSupplies} />}
+      {neuro && <NeuroTodayCard data={neuro} />}
+      {transition && <TransitionTodayCard {...transition} />}
     </div>
   );
+}
+
+/** This week against the weeks before, in a line: getting better, about the same, or worse. */
+function ContinenceVerdict() {
+  const { data } = useLoad(() => api.continenceProgress(8).catch(() => null), []);
+  if (!data || data.verdict === "NOT_ENOUGH") return null;
+  return <p className={`verdict-line verdict-${data.verdict.toLowerCase()}`}><strong>{VERDICT_LABEL[data.verdict]}</strong> · {data.headline}</p>;
 }
 
 function labsDueText(date: string): string {

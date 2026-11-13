@@ -7,6 +7,11 @@ import type {
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
   LifeStageOverview, Migraine, Place, PushKey, PushMessage, PushSubscriptionInfo, ReportSectionKey, Shares, Share,
   SmtpSettings, SuggestedQuestion, SymptomEntry, SymptomsSummary, VitalsSummary, Webhook, WebhookDelivery,
+  ConditionDefinition, MyConditions, FieldLayout, FieldChoices, ContinenceSettings, ContinenceProgress, ContinenceCheckIn,
+  Supply, SupplyStatus, SupplyAdjustment, CycleSettings, NeuroProfile, OverloadEvent, EnergyDay, NeuroCheckIn, FocusSession,
+  Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
+  BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
+  AiChatReply, AiBreakdownReply, AiAuditEntry,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -27,8 +32,24 @@ export function setSignedOutHandler(handler: () => void) {
 const SHARED_PATHS = [
   "/api/day/", "/api/trends", "/api/series", "/api/food/", "/api/measurements", "/api/workouts", "/api/sleep", "/api/checkins/",
   "/api/mind/", "/api/cycle", "/api/continence/", "/api/meds", "/api/labs", "/api/vitals/", "/api/drinks", "/api/symptoms/",
-  "/api/habits", "/api/hormones", "/api/appointments",
+  "/api/habits", "/api/hormones", "/api/appointments", "/api/supplies", "/api/neuro/", "/api/transition", "/api/photos",
+  // Their field layout, filtered by the server to the features they shared.
+  "/api/fields",
 ];
+
+/** Where a photo's picture is, for an <img> (the session cookie goes with it). */
+export const photoUrl = (id: string, thumb = false) => `/api/photos/${encodeURIComponent(id)}/${thumb ? "thumb" : "image"}`;
+
+/**
+ * A photo as a blob URL, fetched with the X-SAMH-View header: an <img> can't send headers, so
+ * someone's shared photos are fetched this way. The caller revokes the URL when done.
+ */
+export async function sharedPhotoBlobUrl(id: string, thumb: boolean): Promise<string> {
+  const owner = viewingOwner();
+  const response = await fetch(photoUrl(id, thumb), { credentials: "same-origin", headers: owner ? { "X-SAMH-View": owner } : {} });
+  if (!response.ok) throw new ApiError(response.status, `The server answered ${response.status}`);
+  return URL.createObjectURL(await response.blob());
+}
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
@@ -281,6 +302,101 @@ export const api = {
     download(`/api/report.pdf?from=${q(from)}&to=${q(to)}&sections=${sections.join(",")}`, `health-report-${from}-to-${to}.pdf`),
   downloadExport: (from: string, to: string) => download(`/api/export.zip?from=${q(from)}&to=${q(to)}`, `health-export-${from}-to-${to}.zip`),
   watchKey: () => post<IntegrationKey>("/api/watch/keys"),
+  downloadFit: (from: string, to: string) => download(`/api/export/fit?from=${q(from)}&to=${q(to)}`, `health-fit-${from}-to-${to}.zip`),
+
+  // Conditions and goals, and which fields show
+  conditionCatalog: () => get<ConditionDefinition[]>("/api/conditions/catalog"),
+  conditions: () => get<MyConditions>("/api/conditions"),
+  saveConditions: (c: MyConditions) => put<MyConditions>("/api/conditions", c),
+  fields: () => get<FieldLayout>("/api/fields"),
+  saveFields: (c: FieldChoices) => put<FieldLayout>("/api/fields", c),
+
+  // Bladder and bowel, in detail; supplies
+  continenceSettings: () => get<ContinenceSettings>("/api/continence/settings"),
+  saveContinenceSettings: (s: ContinenceSettings) => put<ContinenceSettings>("/api/continence/settings", s),
+  continenceProgress: (weeks = 12) => get<ContinenceProgress>(`/api/continence/progress?weeks=${weeks}`),
+  continenceCheckIns: (days = 180) => get<ContinenceCheckIn[]>(`/api/continence/check-ins?days=${days}`),
+  addContinenceCheckIn: (c: ContinenceCheckIn) => post<ContinenceCheckIn>("/api/continence/check-ins", c),
+  deleteContinenceCheckIn: (id: string) => del<unknown>(`/api/continence/check-ins/${q(id)}`),
+  supplies: (all = false) => get<Supply[]>(`/api/supplies${all ? "?all=true" : ""}`),
+  saveSupply: (s: Supply) => (s.id ? put<Supply>(`/api/supplies/${q(s.id)}`, s) : post<Supply>("/api/supplies", s)),
+  deleteSupply: (id: string) => del<unknown>(`/api/supplies/${q(id)}`),
+  supplyStatus: () => get<SupplyStatus[]>("/api/supplies/status"),
+  adjustSupply: (id: string, a: SupplyAdjustment) => post<SupplyAdjustment>(`/api/supplies/${q(id)}/adjust`, a),
+  supplyLog: (id: string, days = 90) => get<SupplyAdjustment[]>(`/api/supplies/${q(id)}/log?days=${days}`),
+
+  // Cycle settings
+  cycleSettings: () => get<CycleSettings>("/api/cycle/settings"),
+  saveCycleSettings: (s: CycleSettings) => put<CycleSettings>("/api/cycle/settings", s),
+
+  // Autism and ADHD
+  neuroProfile: () => get<NeuroProfile>("/api/neuro/profile"),
+  saveNeuroProfile: (p: NeuroProfile) => put<NeuroProfile>("/api/neuro/profile", p),
+  overloads: (days = 90) => get<OverloadEvent[]>(`/api/neuro/events?days=${days}`),
+  saveOverload: (e: OverloadEvent) => (e.id ? put<OverloadEvent>(`/api/neuro/events/${q(e.id)}`, e) : post<OverloadEvent>("/api/neuro/events", e)),
+  deleteOverload: (id: string) => del<unknown>(`/api/neuro/events/${q(id)}`),
+  energy: (days = 30) => get<EnergyDay[]>(`/api/neuro/energy?days=${days}`),
+  saveEnergy: (d: EnergyDay) => put<EnergyDay>(`/api/neuro/energy/${q(d.date)}`, d),
+  neuroCheckIns: (days = 30) => get<NeuroCheckIn[]>(`/api/neuro/check-ins?days=${days}`),
+  addNeuroCheckIn: (c: NeuroCheckIn) => post<NeuroCheckIn>("/api/neuro/check-ins", c),
+  deleteNeuroCheckIn: (id: string) => del<unknown>(`/api/neuro/check-ins/${q(id)}`),
+  focusSessions: (days = 30) => get<FocusSession[]>(`/api/neuro/focus?days=${days}`),
+  saveFocus: (f: FocusSession) => (f.id ? put<FocusSession>(`/api/neuro/focus/${q(f.id)}`, f) : post<FocusSession>("/api/neuro/focus", f)),
+  deleteFocus: (id: string) => del<unknown>(`/api/neuro/focus/${q(id)}`),
+  routines: () => get<Routine[]>("/api/neuro/routines"),
+  saveRoutine: (r: Routine) => (r.id ? put<Routine>(`/api/neuro/routines/${q(r.id)}`, r) : post<Routine>("/api/neuro/routines", r)),
+  deleteRoutine: (id: string) => del<unknown>(`/api/neuro/routines/${q(id)}`),
+  routineRuns: (days = 14) => get<RoutineRun[]>(`/api/neuro/routines/runs?days=${days}`),
+  saveRoutineRun: (r: RoutineRun) => put<RoutineRun>(`/api/neuro/routines/${q(r.routineId)}/runs/${q(r.date)}`, r),
+  cards: () => get<CommunicationCard[]>("/api/neuro/cards"),
+  saveCards: (cards: CommunicationCard[]) => put<CommunicationCard[]>("/api/neuro/cards", cards),
+  neuroSummary: (days = 30) => get<NeuroSummary>(`/api/neuro/summary?days=${days}`),
+
+  // Transition
+  transition: () => get<TransitionOverview>("/api/transition"),
+  transitionProfile: () => get<TransitionProfile>("/api/transition/profile"),
+  saveTransitionProfile: (p: TransitionProfile) => put<TransitionProfile>("/api/transition/profile", p),
+  milestoneTemplates: () => get<MilestoneTemplate[]>("/api/transition/templates"),
+  milestones: () => get<Milestone[]>("/api/transition/milestones"),
+  saveMilestone: (m: Milestone) => (m.id ? put<Milestone>(`/api/transition/milestones/${q(m.id)}`, m) : post<Milestone>("/api/transition/milestones", m)),
+  deleteMilestone: (id: string) => del<unknown>(`/api/transition/milestones/${q(id)}`),
+  bodyChanges: () => get<BodyChange[]>("/api/transition/changes"),
+  saveBodyChange: (c: BodyChange) => (c.id ? put<BodyChange>(`/api/transition/changes/${q(c.id)}`, c) : post<BodyChange>("/api/transition/changes", c)),
+  deleteBodyChange: (id: string) => del<unknown>(`/api/transition/changes/${q(id)}`),
+  voiceSessions: (days = 180) => get<VoiceSession[]>(`/api/transition/voice?days=${days}`),
+  addVoiceSession: (v: VoiceSession) => post<VoiceSession>("/api/transition/voice", v),
+  deleteVoiceSession: (id: string) => del<unknown>(`/api/transition/voice/${q(id)}`),
+  hairRemoval: (days = 365) => get<HairRemovalSession[]>(`/api/transition/hair-removal?days=${days}`),
+  addHairRemoval: (h: HairRemovalSession) => post<HairRemovalSession>("/api/transition/hair-removal", h),
+  deleteHairRemoval: (id: string) => del<unknown>(`/api/transition/hair-removal/${q(id)}`),
+  moments: (days = 90) => get<GenderMoment[]>(`/api/transition/moments?days=${days}`),
+  addMoment: (m: GenderMoment) => post<GenderMoment>("/api/transition/moments", m),
+  deleteMoment: (id: string) => del<unknown>(`/api/transition/moments/${q(id)}`),
+
+  // Progress photos
+  photos: (album?: string, days?: number) => get<Photo[]>(`/api/photos?${album ? `album=${q(album)}&` : ""}${days ? `days=${days}` : ""}`),
+  photoAlbums: () => get<PhotoAlbum[]>("/api/photos/albums"),
+  uploadPhoto: (file: Blob, photo: Photo, name = "photo.jpg") => {
+    const form = new FormData();
+    form.append("file", file, name);
+    form.append("photo", JSON.stringify(photo));
+    return post<Photo>("/api/photos", form);
+  },
+  savePhoto: (p: Photo) => put<Photo>(`/api/photos/${q(p.id!)}`, p),
+  deletePhoto: (id: string) => del<unknown>(`/api/photos/${q(id)}`),
+
+  // The AI assistant
+  adminAi: () => get<AiSettings>("/api/admin/ai"),
+  saveAdminAi: (s: AiSettings) => put<AiSettings>("/api/admin/ai", s),
+  setAiKey: (apiKey: string) => put<unknown>("/api/admin/ai/key", { apiKey }),
+  deleteAiKey: () => del<unknown>("/api/admin/ai/key"),
+  testAi: () => post<{ ok: boolean; message: string }>("/api/admin/ai/test"),
+  aiStatus: () => get<AiStatus>("/api/ai/status"),
+  saveAiConsent: (c: AiConsent) => put<AiConsent>("/api/ai/consent", c),
+  withdrawAiConsent: () => del<unknown>("/api/ai/consent"),
+  aiChat: (messages: AiMessage[]) => post<AiChatReply>("/api/ai/chat", { messages }),
+  aiBreakdown: (task: string, detail?: string) => post<AiBreakdownReply>("/api/ai/breakdown", { task, detail }),
+  aiAudit: (days = 30) => get<AiAuditEntry[]>(`/api/ai/audit?days=${days}`),
 
   users: () => get<User[]>("/api/admin/users"),
   createUser: (username: string, displayName: string, password: string, role: string) =>

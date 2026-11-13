@@ -5,6 +5,7 @@ import { when } from "../lib/format";
 import { useSession } from "../lib/session";
 import type { AdminSettings, ServerSettings, SmtpSettings, User } from "../lib/types";
 import { Button, errorToast, Field, Menu, Modal, PageHeader, Spinner, toast, Toggle, useLoad } from "../components/ui";
+import { AiAdminCard } from "./Assistant";
 
 export function Admin() {
   return (
@@ -14,6 +15,7 @@ export function Admin() {
         <h2>People</h2>
         <Users />
       </section>
+      <AiAdminCard />
       <ServerPanels />
     </div>
   );

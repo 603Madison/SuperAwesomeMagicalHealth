@@ -12,11 +12,33 @@ import { Button, Field, IconButton, PageHeader, Spinner, Toggle, errorToast, toa
 import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
 import { DigestSettings, IntegrationSettings, NotificationSettings, SharingSettings } from "./SettingsExtra";
+import { AssistantSettingsCard, useAiStatus } from "./Assistant";
+import { FieldsEditor } from "../components/FieldKit";
+import { Package } from "lucide-react";
 
 /** The features phones show as tabs; the rest are links at the top of Settings. */
 const TABS: Module[] = ["NUTRITION", "MIND"];
 
+/** Features whose fields are chosen right here (bladder and bowel, and cycle, have their own pages). */
+const RECORDED: { module: Module; name: string }[] = [
+  { module: "MIND", name: "Mind" }, { module: "NEURO", name: "Autism & ADHD" }, { module: "TRANSITION", name: "Transition" }, { module: "BODY", name: "Body" },
+];
+
+/** The conditions and goals picked, with a way to change them. */
+function TrackingSummary() {
+  const mine = useLoad(() => api.conditions().catch(() => ({ conditions: [] })), []);
+  const list = mine.data?.conditions ?? [];
+  return (
+    <>
+      <p className="muted">Your conditions and goals decide which features and details the app shows.</p>
+      {list.length > 0 && <div className="tag-list">{list.map((c) => <span key={c.id} className="chip is-static">{c.name}</span>)}</div>}
+      <NavLink to="/conditions" className="btn btn-tonal">{list.length ? "Change" : "Choose"}</NavLink>
+    </>
+  );
+}
+
 export function Settings() {
+  const ai = useAiStatus();
   const user = useSession((s) => s.user)!;
   const profile = useSession((s) => s.profile);
   const on = useModules();
@@ -35,17 +57,41 @@ export function Settings() {
         {FEATURES.filter((f) => on.includes(f.id) && f.route && !TABS.includes(f.id)).map((f) => (
           <NavLink key={f.id} to={f.route!} className="chip"><f.icon size={18} /> {f.name}</NavLink>
         ))}
+        {(on.includes("CONTINENCE") || on.includes("CYCLE")) && <NavLink to="/supplies" className="chip"><Package size={18} /> Supplies</NavLink>}
+        {ai?.available && <NavLink to="/assistant" className="chip"><Bot size={18} /> Assistant</NavLink>}
         <NavLink to="/reports" className="chip"><FileText size={18} /> Reports</NavLink>
         <NavLink to="/digest" className="chip"><Inbox size={18} /> Your week</NavLink>
         <NavLink to="/devices" className="chip"><Watch size={18} /> Devices</NavLink>
         {user.role === "ADMIN" && <NavLink to="/admin" className="chip"><Shield size={18} /> Admin</NavLink>}
       </nav>
 
+      <section className="panel" id="tracking">
+        <h2>What you're tracking</h2>
+        <TrackingSummary />
+      </section>
+
       <section className="panel" id="features">
         <h2>Features</h2>
         <p className="muted">Turn on the parts you want. The rest stay out of your way.</p>
         {profile ? <Features profile={profile} /> : <Spinner />}
       </section>
+
+      {RECORDED.some((m) => on.includes(m.module)) && (
+        <section className="panel" id="fields">
+          <h2>What to record</h2>
+          <p className="muted">What you're tracking decides what each form asks for. Show or hide any of it here; it's saved straight away.</p>
+          {on.includes("CONTINENCE") && <p><NavLink to="/bladder/settings">Bladder &amp; bowel settings</NavLink>: quick buttons, your own words and fields, bladder training.</p>}
+          {on.includes("CYCLE") && <p><NavLink to="/cycle/settings">Cycle settings</NavLink>: your own symptoms, lengths, reminders and plain wording.</p>}
+          {RECORDED.filter((m) => on.includes(m.module)).map((m) => (
+            <details key={m.module} className="field-group">
+              <summary>{m.name}</summary>
+              <FieldsEditor module={m.module} />
+            </details>
+          ))}
+        </section>
+      )}
+
+      <AssistantSettingsCard />
 
       <section className="panel" id="profile">
         <h2>You and your goals</h2>

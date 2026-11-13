@@ -6,9 +6,14 @@ import { useSession } from "../lib/session";
 import { LineChart } from "../components/charts";
 import { Button, Card, Empty, ErrorNotice, PageHeader, Segmented, Spinner, Stat, errorToast, useLoad } from "../components/ui";
 import { WeightDialog } from "../components/LogDialogs";
+import { MeasurementsCard } from "../components/Measurements";
+import { F, useFields } from "../lib/fields";
+import { useReadOnly } from "../lib/viewing";
 
 export function Body() {
   const units = useUnits();
+  const { has } = useFields();
+  const readOnly = useReadOnly();
   const [days, setDays] = useState(90);
   const goals = useSession((s) => s.profile?.goals);
   const weights = useLoad(() => api.measurements("WEIGHT", days), [days]);
@@ -68,6 +73,7 @@ export function Body() {
           </Card>
         </div>
       )}
+      {has(F.BODY_MEASUREMENTS) && <div className="grid grid-2 section-gap"><MeasurementsCard imperial={units === "IMPERIAL"} readOnly={readOnly} /></div>}
       {adding && <WeightDialog onClose={() => setAdding(false)} onSaved={reload} />}
     </div>
   );

@@ -8,6 +8,9 @@ import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, 
 import { INSIGHT_ICONS } from "../components/LogDialogs";
 import { useModules } from "../App";
 import { useReadOnly } from "../lib/viewing";
+import { NavLink } from "react-router-dom";
+import { F, useFields } from "../lib/fields";
+import { EnergyBudgetCard } from "./Neuro";
 
 export const FACES = ["😣", "🙁", "😐", "🙂", "😄"];
 const FACE_LABELS = ["Very low", "Low", "Okay", "Good", "Great"];
@@ -33,7 +36,10 @@ export function Mind() {
   const [screener, setScreener] = useState<ScreenerDefinition | null>(null);
   const [writing, setWriting] = useState<JournalEntry | "new" | null>(null);
   const readOnly = useReadOnly();
-  const cycleOn = useModules().includes("CYCLE");
+  const modules = useModules();
+  const cycleOn = modules.includes("CYCLE");
+  const neuroOn = modules.includes("NEURO");
+  const { has } = useFields();
   // The EPDS is offered while pregnant and after a birth (from Cycle's life stage).
   const stage = useLoad(() => (cycleOn ? api.lifeStage().then((i) => i.stage).catch(() => null) : Promise.resolve(null)), [cycleOn]);
   const perinatal = stage.data === "PREGNANT" || stage.data === "POSTPARTUM";
@@ -45,6 +51,12 @@ export function Mind() {
       <PageHeader title="Mind" subtitle="How you feel, and what helps" actions={
         <Button variant="tonal" onClick={() => setSupport(true)}><LifeBuoy size={18} /> I need support</Button>
       } />
+      {neuroOn && (
+        <nav className="tabs" aria-label="Mind sections">
+          <NavLink to="/mind" end className={({ isActive }) => (isActive ? "is-active" : "")}>Mind</NavLink>
+          <NavLink to="/neuro" className={({ isActive }) => (isActive ? "is-active" : "")}>Autism &amp; ADHD</NavLink>
+        </nav>
+      )}
 
       {!readOnly && <Card title="How are you feeling?" icon={<Heart size={18} />}>
         <div className="scale scale-large" role="group" aria-label="Log your mood">
@@ -55,6 +67,8 @@ export function Mind() {
           ))}
         </div>
       </Card>}
+
+      {has(F.MIND_ENERGY_BUDGET) && <div className="grid grid-2 section-gap"><EnergyBudgetCard readOnly={readOnly} /></div>}
 
       {!readOnly && <>
         <h2 className="section-title">Calm tools</h2>
