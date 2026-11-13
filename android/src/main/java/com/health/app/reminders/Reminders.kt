@@ -53,6 +53,7 @@ class Reminders(
             modules = extra?.modules()?.takeIf { it.isNotEmpty() } ?: if (meds.isNotEmpty()) setOf(Module.MEDICATIONS) else emptySet(),
             habits = extra?.habits().orEmpty(),
             appointments = extra?.appointments().orEmpty(),
+            bladder = extra?.bladder(),
         )
     }
 
@@ -184,6 +185,7 @@ class Reminders(
         const val CHANNEL_REFILLS = "medication-refills"
         const val CHANNEL_HABITS = "habit-reminders"
         const val CHANNEL_APPOINTMENTS = "appointment-reminders"
+        const val CHANNEL_BLADDER = "bladder-training"
         private const val REQUEST_FIRE = 4100
 
         private val CHANNELS = listOf(
@@ -191,6 +193,7 @@ class Reminders(
             Channel(CHANNEL_REFILLS, "Refills", NotificationManager.IMPORTANCE_DEFAULT, "When a medication is running low."),
             Channel(CHANNEL_HABITS, "Habits", NotificationManager.IMPORTANCE_DEFAULT, "A nudge when a habit isn't ticked by its time."),
             Channel(CHANNEL_APPOINTMENTS, "Appointments", NotificationManager.IMPORTANCE_HIGH, "Before each appointment."),
+            Channel(CHANNEL_BLADDER, "Bladder training", NotificationManager.IMPORTANCE_DEFAULT, "Planned toilet trips while you're training your bladder."),
         )
 
         fun channelOf(kind: AlarmKind): String = when (kind) {
@@ -198,6 +201,7 @@ class Reminders(
             AlarmKind.REFILL -> CHANNEL_REFILLS
             AlarmKind.HABIT -> CHANNEL_HABITS
             AlarmKind.APPOINTMENT -> CHANNEL_APPOINTMENTS
+            AlarmKind.BLADDER -> CHANNEL_BLADDER
         }
 
         /** Where tapping a reminder goes in the app. */
@@ -205,6 +209,7 @@ class Reminders(
             AlarmKind.DOSE, AlarmKind.DOSE_AGAIN, AlarmKind.REFILL -> "meds"
             AlarmKind.HABIT -> "today"
             AlarmKind.APPOINTMENT -> "appointments"
+            AlarmKind.BLADDER -> "continence"
         }
 
         fun notificationId(dose: PlannedDose): Int = (dose.medicationId + dose.at).hashCode()

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,35 +21,39 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.EventNote
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.Bed
 import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.MedicalServices
+import androidx.compose.material.icons.rounded.Opacity
 import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Wc
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.Waves
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -59,9 +62,18 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
+import com.health.api.ContinenceProgress
+import com.health.api.ContinenceSettings
 import com.health.api.ContinenceSummary
-import com.health.api.LeakSize
+import com.health.api.Fields
+import com.health.api.SupplyCategory
+import com.health.api.SupplyStatus
+import com.health.api.Verdict
 import com.health.app.Container
+import com.health.app.net.continenceProgress
+import com.health.app.net.continenceSettings
+import com.health.app.net.supplyStatus
+import com.health.app.reminders.BladderTrainingPlan
 import com.health.app.ui.Format
 import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.AxisLabels
@@ -69,17 +81,14 @@ import com.health.app.ui.components.BarChart
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
-import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.Pill
 import com.health.app.ui.components.ScreenTitle
-import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.components.Stat
 import com.health.app.ui.components.appContainer
-import com.health.app.ui.log.NumberField
-import com.health.app.ui.modules.ChipPicker
+import com.health.app.ui.components.shownFields
 import com.health.app.ui.modules.IconTile
-import com.health.app.ui.modules.StepScale
+import com.health.app.ui.modules.NavRow
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.today.InsightCard
 import kotlinx.coroutines.async
@@ -113,6 +122,10 @@ data class ContinenceState(
     val summary: ContinenceSummary? = null,
     val loading: Boolean = true,
     val error: String? = null,
+    val settings: ContinenceSettings = ContinenceSettings(),
+    /** Supplies with how long they'll last (bladder and bowel, and periods: the screen picks). */
+    val supplies: List<SupplyStatus> = emptyList(),
+    val progress: ContinenceProgress? = null,
 ) {
     fun todays(zone: ZoneId): List<ContinenceEntry> =
         entries.filter { (it.date ?: Instant.ofEpochMilli(it.at).atZone(zone).toLocalDate().toString()) == today.toString() }.sortedByDescending { it.at }
@@ -133,7 +146,16 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
             try {
                 val entries = async { c.ui.continence(3) }
                 val summary = async { c.ui.continenceSummary(14) }
-                _state.update { it.copy(entries = entries.await(), summary = summary.await(), loading = false) }
+                // The detail: each can be missing without spoiling the diary.
+                val settings = async { runCatching { c.ui.continenceSettings() }.getOrNull() }
+                val supplies = async { runCatching { c.ui.supplyStatus() }.getOrNull() }
+                val progress = async { runCatching { c.ui.continenceProgress(12) }.getOrNull() }
+                _state.update {
+                    it.copy(
+                        entries = entries.await(), summary = summary.await(), loading = false,
+                        settings = settings.await() ?: it.settings, supplies = supplies.await() ?: it.supplies, progress = progress.await() ?: it.progress,
+                    )
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your diary") }
             }
@@ -159,10 +181,12 @@ class ContinenceActions(
     val share: () -> Unit = {},
     val pelvicFloor: () -> Unit = {},
     val retry: () -> Unit = {},
+    /** Opens one of the diary's pages: "supplies/continence", "continence/progress", "continence/settings", "continence/check-in". */
+    val open: (String) -> Unit = {},
 )
 
 @Composable
-fun ContinenceRoute(onPelvicFloor: () -> Unit) {
+fun ContinenceRoute(onPelvicFloor: () -> Unit, onOpen: (String) -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { ContinenceViewModel(c) }
     val state by vm.state.collectAsState()
@@ -181,7 +205,9 @@ fun ContinenceRoute(onPelvicFloor: () -> Unit) {
             },
             pelvicFloor = onPelvicFloor,
             retry = { vm.load() },
+            open = onOpen,
         ),
+        fields = shownFields(),
     )
 }
 
@@ -191,17 +217,25 @@ fun kindIcon(kind: ContinenceKind): ImageVector = when (kind) {
     ContinenceKind.BOWEL -> Icons.Rounded.Waves
     ContinenceKind.PAD_CHANGE -> Icons.Rounded.Layers
     ContinenceKind.PELVIC_FLOOR -> Icons.Rounded.SelfImprovement
-    ContinenceKind.BOWEL_LEAK -> Icons.Rounded.Waves
-    ContinenceKind.CATHETER -> Icons.Rounded.Wc
-    ContinenceKind.BEDWETTING -> Icons.Rounded.WaterDrop
+    ContinenceKind.BOWEL_LEAK -> Icons.Rounded.Opacity
+    ContinenceKind.CATHETER -> Icons.Rounded.MedicalServices
+    ContinenceKind.BEDWETTING -> Icons.Rounded.Bed
 }
 
-/** The four quick logs, in order. */
+/** The quick logs to start with, in order (the person can choose their own in the diary's settings). */
 val QUICK_KINDS = listOf(ContinenceKind.URINATION, ContinenceKind.LEAK, ContinenceKind.BOWEL, ContinenceKind.PAD_CHANGE)
 
+/** A quick log: now, of [kind], with the usual product for a change. */
+fun quickEntry(kind: ContinenceKind, settings: ContinenceSettings, supplies: List<SupplyStatus>, now: Long = System.currentTimeMillis()): ContinenceEntry {
+    val usual = settings.defaultSupplyId?.takeIf { id -> ContinenceText.suppliesFor(kind, supplies.map { it.supply }).any { it.id == id } }
+    return ContinenceEntry(now, kind, supplyId = usual.takeIf { kind == ContinenceKind.PAD_CHANGE })
+}
+
 @Composable
-fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceActions) {
+fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceActions, fields: Set<String> = Fields.DEFAULTS) {
     var editing by remember { mutableStateOf<ContinenceEntry?>(null) }
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    val supplies = state.supplies.map { it.supply }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Bladder & bowel", "A diary for you, and for your doctor or physio") {
             TextButton(onClick = actions.share) {
@@ -211,10 +245,10 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
             }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (!com.health.app.ui.care.LocalReadOnly.current) AppCard(padding = 14.dp) {
+            if (!readOnly) AppCard(padding = 14.dp) {
                 Text("Log", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                QuickButtons { kind -> actions.save(ContinenceEntry(System.currentTimeMillis(), kind)) }
+                QuickButtons({ kind -> actions.save(quickEntry(kind, state.settings, state.supplies)) }, quickButtonsFor(state.settings, fields))
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Hint("One tap logs it now. Tap an entry below to add details.", Modifier.weight(1f))
@@ -225,13 +259,37 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
                 state.loading && state.summary == null -> Loading()
                 state.error != null && state.summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
                 else -> {
-                    TodayTimeline(state.todays(zone), zone) { editing = it }
+                    // Signs of an infection come first, and stay in plain sight.
+                    val warnings = state.summary?.patterns.orEmpty().filter { it.tone == "warn" }
+                    warnings.forEach { InsightCard(it) }
+                    if (warnings.isEmpty() && ContinenceText.infectionSigns(state.entries)) InfectionNudge()
+                    TodayTimeline(state.todays(zone), zone, supplies) { if (!readOnly) editing = it }
+                    if (Fields.CONTINENCE_SUPPLIES in fields) {
+                        val low = ContinenceText.lowFor(state.supplies, setOf(SupplyCategory.CONTINENCE, SupplyCategory.OTHER))
+                        if (low.isNotEmpty()) LowSuppliesCard(low) { actions.open("supplies/continence") }
+                    }
                     state.summary?.let { SummaryCard(it) }
-                    state.summary?.patterns?.forEach { InsightCard(it) }
-                    InfoCard("Pelvic floor exercises", icon = Icons.Rounded.SelfImprovement) {
-                        Hint("A few minutes a day strengthens the muscles that hold urine in. A guide squeezes and relaxes with you.")
-                        Spacer(Modifier.height(10.dp))
-                        FilledTonalButton(onClick = actions.pelvicFloor) { Text("Start a set") }
+                    state.progress?.let { ProgressTeaser(it) { actions.open("continence/progress") } }
+                    state.summary?.patterns.orEmpty().filter { it.tone != "warn" }.forEach { InsightCard(it) }
+                    if (Fields.CONTINENCE_BLADDER_TRAINING in fields) {
+                        BladderTrainingCard(state.settings, state.today, readOnly) { actions.open("continence/settings") }
+                    }
+                    if (Fields.CONTINENCE_PELVIC_FLOOR in fields && !readOnly) {
+                        InfoCard("Pelvic floor exercises", icon = Icons.Rounded.SelfImprovement) {
+                            Hint("A few minutes a day strengthens the muscles that hold urine in. A guide squeezes and relaxes with you.")
+                            Spacer(Modifier.height(10.dp))
+                            FilledTonalButton(onClick = actions.pelvicFloor) { Text("Start a set") }
+                        }
+                    }
+                    InfoCard(null) {
+                        if (state.progress == null) NavRow(Icons.AutoMirrored.Rounded.TrendingUp, "How it's going", "Getting better or worse, week by week", onClick = { actions.open("continence/progress") })
+                        if (Fields.CONTINENCE_SUPPLIES in fields) {
+                            NavRow(Icons.Rounded.Inventory2, "Supplies", "Pads, briefs and the rest: what's on hand", onClick = { actions.open("supplies/continence") })
+                        }
+                        if (Fields.CONTINENCE_BOTHER in fields) {
+                            NavRow(Icons.AutoMirrored.Rounded.EventNote, "Weekly check-in", "How much it's bothered you", onClick = { actions.open("continence/check-in") })
+                        }
+                        if (!readOnly) NavRow(Icons.Rounded.Settings, "Diary settings", "Quick buttons, your own words and fields, night hours", onClick = { actions.open("continence/settings") })
                     }
                 }
             }
@@ -244,7 +302,7 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
     editing?.let { entry ->
         ModalBottomSheet(onDismissRequest = { editing = null }) {
             EntryForm(
-                entry,
+                entry, FormContext(fields, state.settings, supplies),
                 onSave = { actions.save(it); editing = null },
                 onDelete = entry.id?.let { id -> { actions.delete(id); editing = null } },
             )
@@ -253,9 +311,9 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
 }
 
 @Composable
-fun QuickButtons(onLog: (ContinenceKind) -> Unit) {
+fun QuickButtons(onLog: (ContinenceKind) -> Unit, kinds: List<ContinenceKind> = QUICK_KINDS) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        QUICK_KINDS.forEach { kind ->
+        kinds.forEach { kind ->
             FilledTonalButton(onClick = { onLog(kind) }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
                 Icon(kindIcon(kind), null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -266,20 +324,10 @@ fun QuickButtons(onLog: (ContinenceKind) -> Unit) {
 }
 
 /** "Urgency strong · 250 ml", "Small · cough, sneeze", "Type 4". */
-fun entryDetail(e: ContinenceEntry): String = listOfNotNull(
-    e.volumeMl?.let { "$it ml" },
-    e.urgency?.takeIf { it > 0 }?.let { "urgency ${URGENCY[it.coerceIn(0, 3)].lowercase()}" },
-    e.leak?.label,
-    e.triggers.takeIf { it.isNotEmpty() }?.joinToString(", "),
-    e.bristol?.let { "type $it" },
-    e.reps?.let { "$it reps" + (e.holdSeconds?.let { s -> " of ${s}s" } ?: "") },
-    "at night".takeIf { e.night },
-    "pain".takeIf { e.pain },
-    "blood".takeIf { e.blood },
-).joinToString(" · ")
+fun entryDetail(e: ContinenceEntry): String = ContinenceText.detail(e)
 
 @Composable
-private fun TodayTimeline(entries: List<ContinenceEntry>, zone: ZoneId, onOpen: (ContinenceEntry) -> Unit) {
+private fun TodayTimeline(entries: List<ContinenceEntry>, zone: ZoneId, supplies: List<com.health.api.Supply>, onOpen: (ContinenceEntry) -> Unit) {
     InfoCard("Today") {
         if (entries.isEmpty()) {
             Hint("Nothing logged today yet.")
@@ -287,12 +335,21 @@ private fun TodayTimeline(entries: List<ContinenceEntry>, zone: ZoneId, onOpen: 
         }
         Row(Modifier.fillMaxWidth()) {
             val trips = entries.count { it.kind == ContinenceKind.URINATION }
-            val leaks = entries.count { it.kind == ContinenceKind.LEAK }
+            val leaks = entries.count { it.kind == ContinenceKind.LEAK || it.kind == ContinenceKind.BEDWETTING }
             val bowel = entries.count { it.kind == ContinenceKind.BOWEL }
             Stat("$trips", if (trips == 1) "toilet trip" else "toilet trips", Modifier.weight(1f))
             Stat("$leaks", if (leaks == 1) "leak" else "leaks", Modifier.weight(1f))
             Stat("$bowel", if (bowel == 1) "bowel movement" else "bowel movements", Modifier.weight(1f))
         }
+        val bowelLeaks = entries.count { it.kind == ContinenceKind.BOWEL_LEAK }
+        val products = entries.sumOf { if (it.kind == ContinenceKind.PAD_CHANGE) it.count ?: 1 else 0 }
+        val catheters = entries.count { it.kind == ContinenceKind.CATHETER }
+        val more = listOfNotNull(
+            bowelLeaks.takeIf { it > 0 }?.let { "$it ${if (it == 1) "bowel accident" else "bowel accidents"}" },
+            products.takeIf { it > 0 }?.let { "$it ${if (it == 1) "product" else "products"} changed" },
+            catheters.takeIf { it > 0 }?.let { "$it ${if (it == 1) "catheter" else "catheters"}" },
+        )
+        if (more.isNotEmpty()) Hint(more.joinToString(" · "), Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(8.dp))
         entries.forEachIndexed { i, e ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -304,8 +361,9 @@ private fun TodayTimeline(entries: List<ContinenceEntry>, zone: ZoneId, onOpen: 
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(e.kind.label, style = MaterialTheme.typography.bodyLarge)
-                    val detail = entryDetail(e)
+                    val detail = ContinenceText.detail(e.copy(fullness = null, leakedThrough = e.leakedThrough && e.fullness != com.health.api.Fullness.LEAKED), supplies)
                     if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    e.fullness?.let { FullnessMeter(it, Modifier.padding(top = 4.dp)) }
                 }
                 Text(Format.timeOfDay(e.at, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -348,70 +406,41 @@ private fun SummaryCard(summary: ContinenceSummary) {
     }
 }
 
-/** An entry's details: what it was, when, and what's useful for that kind. */
 @Composable
-fun EntryForm(initial: ContinenceEntry, onSave: (ContinenceEntry) -> Unit, onDelete: (() -> Unit)?) {
-    var e by remember { mutableStateOf(initial) }
-    var volume by remember { mutableStateOf(initial.volumeMl?.toString().orEmpty()) }
-    var minutesAgo by remember { mutableIntStateOf(0) }
-    Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+fun verdictColor(v: Verdict): Color = when (v) {
+    Verdict.IMPROVING -> AppTheme.status.good
+    Verdict.WORSENING -> AppTheme.status.warn
+    Verdict.STEADY -> MaterialTheme.colorScheme.primary
+    Verdict.NOT_ENOUGH -> AppTheme.status.idle
+}
+
+/** The verdict and its headline, opening the week-by-week page. */
+@Composable
+private fun ProgressTeaser(p: ContinenceProgress, onOpen: () -> Unit) {
+    InfoCard(
+        "How it's going", icon = Icons.AutoMirrored.Rounded.TrendingUp, onClick = onOpen,
+        trailing = { Pill(p.verdict.label, verdictColor(p.verdict)) },
     ) {
-        Text(if (initial.id == null) "Add to your diary" else e.kind.label, style = MaterialTheme.typography.titleLarge)
-        if (initial.id == null) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                QUICK_KINDS.forEach { kind -> FilterChip(selected = e.kind == kind, onClick = { e = e.copy(kind = kind) }, label = { Text(kind.label) }) }
-            }
-            Text("When", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(0 to "Now", 15 to "15 min ago", 30 to "30 min ago", 60 to "1 hour ago", 120 to "2 hours ago").forEach { (m, label) ->
-                    FilterChip(selected = minutesAgo == m, onClick = { minutesAgo = m }, label = { Text(label) })
-                }
-            }
-        }
-        when (e.kind) {
-            ContinenceKind.URINATION, ContinenceKind.CATHETER -> {
-                StepScale("Urgency", e.urgency, "None", "Couldn't wait", { e = e.copy(urgency = it) }, range = 0..3)
-                NumberField(volume, { volume = it }, "Volume, if you measured", suffix = "ml", decimals = false)
-            }
-            ContinenceKind.LEAK, ContinenceKind.PAD_CHANGE, ContinenceKind.BOWEL_LEAK, ContinenceKind.BEDWETTING -> {
-                Text(if (e.kind == ContinenceKind.LEAK) "How much" else "How wet", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LeakSize.entries.forEach { size -> FilterChip(selected = e.leak == size, onClick = { e = e.copy(leak = if (e.leak == size) null else size) }, label = { Text(size.label) }) }
-                }
-                if (e.kind == ContinenceKind.LEAK) {
-                    Text("What was happening?", style = MaterialTheme.typography.titleSmall)
-                    ChipPicker(TRIGGERS, e.triggers.toSet(), { e = e.copy(triggers = it.toList()) }, addLabel = "Something else")
-                    StepScale("Urgency", e.urgency, "None", "Couldn't wait", { e = e.copy(urgency = it) }, range = 0..3)
-                }
-            }
-            ContinenceKind.BOWEL -> {
-                Text("Stool type (Bristol scale)", style = MaterialTheme.typography.titleSmall)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    BRISTOL.forEachIndexed { i, text ->
-                        FilterChip(selected = e.bristol == i + 1, onClick = { e = e.copy(bristol = if (e.bristol == i + 1) null else i + 1) }, label = { Text("${i + 1} · $text") })
-                    }
-                }
-                StepScale("Urgency", e.urgency, "None", "Couldn't wait", { e = e.copy(urgency = it) }, range = 0..3)
-            }
-            ContinenceKind.PELVIC_FLOOR -> {
-                Text(entryDetail(e).ifBlank { "A set of exercises" }, style = MaterialTheme.typography.bodyLarge)
-            }
-        }
-        if (e.kind == ContinenceKind.URINATION || e.kind == ContinenceKind.BOWEL) {
-            LabeledSwitch("It hurt", e.pain, { e = e.copy(pain = it) })
-            LabeledSwitch("There was blood", e.blood, { e = e.copy(blood = it) }, subtitle = if (e.blood) "Worth mentioning to your doctor soon." else null)
-        }
-        OutlinedTextField(e.note.orEmpty(), { e = e.copy(note = it.ifBlank { null }) }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp))
-        Button(
-            onClick = {
-                val at = if (initial.id == null) System.currentTimeMillis() - minutesAgo * 60_000L else e.at
-                onSave(e.copy(at = at, volumeMl = Format.parse(volume)?.toInt()?.takeIf { it in 1..2000 }, note = e.note?.trim()?.ifBlank { null }))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Save") }
-        if (onDelete != null) OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Delete") }
+        Text(if (ProgressText.enough(p)) p.headline else ProgressText.notEnough(p), style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) { Text("Week by week") }
     }
 }
 
+@Composable
+private fun BladderTrainingCard(settings: ContinenceSettings, today: LocalDate, readOnly: Boolean, onOpen: () -> Unit) {
+    val t = settings.bladderTraining
+    if (!t.enabled && readOnly) return
+    InfoCard("Bladder training", icon = Icons.Rounded.Alarm) {
+        if (t.enabled) {
+            Text(BladderTrainingPlan.today(t, today), style = MaterialTheme.typography.bodyLarge)
+            val interval = BladderTrainingPlan.interval(t, today)
+            Hint(
+                if (interval >= t.goalMinutes) "You've reached your goal of every ${BladderTrainingPlan.say(t.goalMinutes)}. Well done."
+                else "Going up by ${t.stepMinutes} minutes every ${t.stepEveryDays} ${if (t.stepEveryDays == 1) "day" else "days"}, to every ${BladderTrainingPlan.say(t.goalMinutes)}.",
+            )
+        } else {
+            Hint("Stretch the time between trips a little at a time, with gentle reminders. It often helps with sudden urges.")
+        }
+        if (!readOnly) TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) { Text(if (t.enabled) "Change" else "Set it up") }
+    }
+}

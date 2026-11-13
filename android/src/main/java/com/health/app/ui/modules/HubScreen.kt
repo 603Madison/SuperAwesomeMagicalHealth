@@ -53,6 +53,8 @@ fun HubScreen(modules: Set<Module>, showDevices: Boolean, onOpen: (String) -> Un
             InfoCard(null) {
                 NavRow(Icons.Rounded.Tune, "Choose features", "Turn parts of the app on or off", onClick = { onOpen("settings") })
             }
+            // Conditions and goals: what the app shows follows them.
+            InfoCard(null) { com.health.app.ui.conditions.ConditionsHubRow(onOpen) }
             if (on.any { it.sensitive }) {
                 AppCard(padding = 14.dp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

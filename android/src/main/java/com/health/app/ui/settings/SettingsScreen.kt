@@ -150,6 +150,8 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
             }
             // Reminders, the digest, sharing, reports, the watch and integrations.
             com.health.app.ui.care.MoreSettings(onOpen)
+            // Conditions and goals, fields, and the AI assistant.
+            com.health.app.ui.conditions.YourHealthSettings(onOpen)
             SectionCard("Appearance") {
                 Text("Theme", style = MaterialTheme.typography.bodyLarge)
                 val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

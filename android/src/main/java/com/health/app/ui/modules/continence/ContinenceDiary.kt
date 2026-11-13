@@ -33,6 +33,20 @@ object ContinenceDiary {
                     "pain".takeIf { e.pain },
                     "blood".takeIf { e.blood },
                     e.reps?.let { "$it reps" + (e.holdSeconds?.let { s -> " of ${s}s" } ?: "") },
+                    // The detail, where it was logged.
+                    e.contents?.label?.lowercase(),
+                    e.activity.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                    e.awareness?.label?.lowercase(),
+                    e.reachedToilet?.label?.lowercase(),
+                    e.warningSeconds?.let { ContinenceText.warning(it) },
+                    e.fullness?.let { "product ${it.label.lowercase()}" },
+                    e.lossG?.let { "${ContinenceText.fmt(it)} g lost" },
+                    "leaked through".takeIf { e.leakedThrough },
+                    "changed clothes".takeIf { e.changedClothes },
+                    "changed bedding".takeIf { e.changedBedding },
+                    e.skin?.takeIf { it > 0 }?.let { "skin ${ContinenceText.SKIN[it.coerceIn(0, 3)].lowercase()}" },
+                    e.utiSigns.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                    e.location,
                     e.note,
                 ).joinToString("; ")
                 appendLine(
