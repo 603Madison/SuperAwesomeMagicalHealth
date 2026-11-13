@@ -17,6 +17,7 @@ data class Nutrients(
     val saturatedFat: Double? = null,
     val sodiumMg: Double? = null,
     /** Vitamins, minerals and the rest, where known, each in its [Micronutrient.unit]. */
+    @Serializable(with = MicrosSerializer::class)
     val micros: Map<Micronutrient, Double> = emptyMap(),
 ) {
     operator fun plus(other: Nutrients) = Nutrients(
@@ -44,6 +45,19 @@ data class Nutrients(
     )
 
     private fun add(a: Double?, b: Double?): Double? = if (a == null && b == null) null else (a ?: 0.0) + (b ?: 0.0)
+}
+
+/**
+ * Micronutrients by name, skipping any this version doesn't know: a newer server may send a
+ * nutrient added later, and an older app should read the rest rather than fail.
+ */
+object MicrosSerializer : kotlinx.serialization.KSerializer<Map<Micronutrient, Double>> {
+    private val names = kotlinx.serialization.builtins.MapSerializer(kotlinx.serialization.serializer<String>(), kotlinx.serialization.serializer<Double>())
+    override val descriptor = names.descriptor
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Map<Micronutrient, Double>) =
+        names.serialize(encoder, value.mapKeys { it.key.name })
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Map<Micronutrient, Double> =
+        names.deserialize(decoder).mapNotNull { (k, v) -> Micronutrient.entries.firstOrNull { it.name == k }?.let { it to v } }.toMap()
 }
 
 /** Whether more is better (up to a point) or less is: for a target's bar and wording. */

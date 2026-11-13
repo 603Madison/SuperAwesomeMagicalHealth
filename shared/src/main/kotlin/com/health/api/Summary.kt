@@ -241,6 +241,7 @@ data class TrendDay(
     val sugar: Double? = null,
     val saturatedFat: Double? = null,
     val sodiumMg: Double? = null,
+    @Serializable(with = MicrosSerializer::class)
     val micros: Map<Micronutrient, Double> = emptyMap(),
     val workouts: Int = 0,
     val workoutMinutes: Int = 0,

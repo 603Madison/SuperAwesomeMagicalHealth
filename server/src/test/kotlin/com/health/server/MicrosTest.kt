@@ -249,7 +249,10 @@ class MicrosTest {
         assertEquals(2.5, entry.nutrients.micros[Micronutrient.IRON]!!, 1e-9)
         assertEquals(HttpStatusCode.BadRequest, browser.postJson("/api/food/entries", """{"date":"2026-03-02","meal":"LUNCH","name":"Odd","nutrients":{"calories":120,"micros":{"IRON":-1}}}""").status)
         assertEquals(HttpStatusCode.BadRequest, browser.postJson("/api/food/entries", """{"date":"2026-03-02","meal":"LUNCH","name":"Odd","nutrients":{"calories":120,"micros":{"POTASSIUM":200000}}}""").status)
-        assertEquals(HttpStatusCode.BadRequest, browser.postJson("/api/food/entries", """{"date":"2026-03-02","meal":"LUNCH","name":"Odd","nutrients":{"calories":120,"micros":{"NOT_A_VITAMIN":1}}}""").status)
+        // A nutrient this version doesn't know (from a newer app) is left out, not refused.
+        val unknown = browser.postJson("/api/food/entries", """{"date":"2026-03-09","meal":"LUNCH","name":"Odd","nutrients":{"calories":120,"micros":{"NOT_A_VITAMIN":1,"IRON":1}}}""")
+        assertEquals(HttpStatusCode.OK, unknown.status)
+        assertEquals(setOf(Micronutrient.IRON), ApiJson.decodeFromString(FoodEntry.serializer(), unknown.bodyAsText()).nutrients.micros.keys)
         // The person's own food: the same checks.
         val food = browser.postJson("/api/foods", """{"name":"Fortified milk","serving":"250 ml","nutrients":{"calories":120,"protein":8,"carbs":12,"fat":5,"micros":{"CALCIUM":300,"VITAMIN_D":2.5}}}""")
         assertEquals(HttpStatusCode.OK, food.status)
@@ -378,5 +381,13 @@ class MicrosTest {
         assertEquals("fibre 8 g, sodium 700 mg, iron 4.5 mg, folate 180 µg", Micros.text(Nutrients(300.0, fiber = 8.0, sodiumMg = 700.0, micros = mapOf(Micronutrient.IRON to 4.5, Micronutrient.FOLATE to 180.0))))
         assertNull(Micros.text(Nutrients(95.0)))
         assertEquals("vitamin_d_ug", Micros.column(Micronutrient.VITAMIN_D))
+    }
+
+    @Test
+    fun `a nutrient this version doesn't know is skipped, not a failure`() {
+        val json = """{"calories":100.0,"micros":{"IRON":2.5,"SOME_NEW_NUTRIENT":7.0}}"""
+        val n = com.health.api.ApiJson.decodeFromString(com.health.api.Nutrients.serializer(), json)
+        org.junit.Assert.assertEquals(mapOf(com.health.api.Micronutrient.IRON to 2.5), n.micros)
+        org.junit.Assert.assertTrue(com.health.api.ApiJson.encodeToString(com.health.api.Nutrients.serializer(), n).contains("\"IRON\":2.5"))
     }
 }
