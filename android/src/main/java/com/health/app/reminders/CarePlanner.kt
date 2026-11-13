@@ -19,6 +19,8 @@ enum class AlarmKind {
     DOSE, DOSE_AGAIN, REFILL, HABIT, APPOINTMENT,
     /** Bladder training (the bladder and bowel diary). */
     BLADDER,
+    /** Time to check or change what's being worn (the bladder and bowel diary). */
+    CHANGE,
 }
 
 /** A habit with a reminder time, and whether it's done on [date] (the day its status was loaded). */
@@ -53,6 +55,9 @@ data class ReminderInputs(
     val appointments: List<Appointment> = emptyList(),
     /** Bladder training's settings (the bladder and bowel diary), when it's on. */
     val bladder: com.health.api.BladderTraining? = null,
+    /** When a change is due, and when what's being worn went on (from the server, which allows for night): null for none. */
+    val changeDueAt: Long? = null,
+    val wornSince: Long? = null,
 )
 
 /**
@@ -78,6 +83,12 @@ object CarePlanner {
         if (Module.APPOINTMENTS in inputs.modules && inputs.prefs.appointments) out += appointments(inputs, from, until, zone)
         // Bladder training (the bladder and bowel diary).
         if (Module.CONTINENCE in inputs.modules) out += BladderTrainingPlan.alarms(inputs.bladder, from, until, zone) { quiet(inputs.prefs, it, zone) }
+        // A check or change of what's being worn: the same discreet words everywhere, never the product's name.
+        if (Module.CONTINENCE in inputs.modules) inputs.changeDueAt?.takeIf { it in from until until }?.let { at ->
+            val hours = inputs.wornSince?.let { ((at - it) / (60 * MINUTE)).toInt() }?.takeIf { it > 0 }
+            val body = hours?.let { "About $it ${if (it == 1) "hour" else "hours"} since your last change." } ?: "A good time for a check."
+            out += PlannedAlarm(at, AlarmKind.CHANGE, "change:$at", "Time for a check", body, "Time for a check", body, silent = quiet(inputs.prefs, at, zone))
+        }
         return out.sortedWith(compareBy({ it.at }, { it.kind.ordinal }, { it.key }))
     }
 

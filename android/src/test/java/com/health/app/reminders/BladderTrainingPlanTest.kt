@@ -65,4 +65,22 @@ class BladderTrainingPlanTest {
         assertEquals("45 minutes", BladderTrainingPlan.say(45))
         assertEquals("Every 1 h 15 min today, 08:00 to 12:00", BladderTrainingPlan.today(training, day))
     }
+
+    @Test
+    fun `a change reminder comes when it's due, in the same discreet words, never naming the product`() {
+        val since = at(day, 8)
+        val due = at(day, 14)
+        val inputs = ReminderInputs(modules = setOf(Module.CONTINENCE), changeDueAt = due, wornSince = since)
+        val planned = CarePlanner.plan(inputs, at(day, 0), at(day.plusDays(1), 0), zone).single()
+        assertEquals(AlarmKind.CHANGE, planned.kind)
+        assertEquals(due, planned.at)
+        assertEquals("Time for a check", planned.title)
+        assertEquals("About 6 hours since your last change.", planned.body)
+        assertEquals(planned.title, planned.privateTitle)
+        assertEquals(planned.body, planned.privateBody)
+        assertEquals("continence", Reminders.routeOf(AlarmKind.CHANGE))
+        // None without the diary, none once it's passed.
+        assertTrue(CarePlanner.plan(inputs.copy(modules = emptySet()), at(day, 0), at(day.plusDays(1), 0), zone).isEmpty())
+        assertTrue(CarePlanner.plan(inputs, due + 60_000, at(day.plusDays(1), 0), zone).isEmpty())
+    }
 }

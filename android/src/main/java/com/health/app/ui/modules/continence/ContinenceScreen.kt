@@ -187,14 +187,14 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
 
     fun save(entry: ContinenceEntry) = viewModelScope.launch {
         runCatching { if (entry.id == null) c.ui.addContinence(entry) else c.ui.updateContinence(entry) }
-            .onSuccess { c.tell("${it.kind.label} logged"); c.dataChanged() }
+            .onSuccess { c.tell("${it.kind.label} logged"); c.dataChanged(); if (it.kind == com.health.api.ContinenceKind.PAD_CHANGE) c.continenceChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     /** "Put on" alone, from "What are you wearing?". */
     fun putOn(supplyId: String) = viewModelScope.launch {
         runCatching { c.ui.addContinence(WearText.putOnEntry(supplyId, System.currentTimeMillis())) }
-            .onSuccess { c.tell("${_state.value.supplies.firstOrNull { s -> s.supply.id == supplyId }?.supply?.name ?: "It"} on"); c.dataChanged() }
+            .onSuccess { c.tell("${_state.value.supplies.firstOrNull { s -> s.supply.id == supplyId }?.supply?.name ?: "It"} on"); c.dataChanged(); c.continenceChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 

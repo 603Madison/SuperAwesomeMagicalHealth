@@ -54,6 +54,8 @@ class Reminders(
             habits = extra?.habits().orEmpty(),
             appointments = extra?.appointments().orEmpty(),
             bladder = extra?.bladder(),
+            changeDueAt = extra?.changeDue()?.first,
+            wornSince = extra?.changeDue()?.second,
         )
     }
 
@@ -186,6 +188,7 @@ class Reminders(
         const val CHANNEL_HABITS = "habit-reminders"
         const val CHANNEL_APPOINTMENTS = "appointment-reminders"
         const val CHANNEL_BLADDER = "bladder-training"
+        const val CHANNEL_CHANGE = "change-reminders"
         private const val REQUEST_FIRE = 4100
 
         private val CHANNELS = listOf(
@@ -194,6 +197,7 @@ class Reminders(
             Channel(CHANNEL_HABITS, "Habits", NotificationManager.IMPORTANCE_DEFAULT, "A nudge when a habit isn't ticked by its time."),
             Channel(CHANNEL_APPOINTMENTS, "Appointments", NotificationManager.IMPORTANCE_HIGH, "Before each appointment."),
             Channel(CHANNEL_BLADDER, "Bladder training", NotificationManager.IMPORTANCE_DEFAULT, "Planned toilet trips while you're training your bladder."),
+            Channel(CHANNEL_CHANGE, "Change reminders", NotificationManager.IMPORTANCE_DEFAULT, "A discreet nudge to check or change, after the hours you chose."),
         )
 
         fun channelOf(kind: AlarmKind): String = when (kind) {
@@ -202,6 +206,7 @@ class Reminders(
             AlarmKind.HABIT -> CHANNEL_HABITS
             AlarmKind.APPOINTMENT -> CHANNEL_APPOINTMENTS
             AlarmKind.BLADDER -> CHANNEL_BLADDER
+            AlarmKind.CHANGE -> CHANNEL_CHANGE
         }
 
         /** Where tapping a reminder goes in the app. */
@@ -209,7 +214,7 @@ class Reminders(
             AlarmKind.DOSE, AlarmKind.DOSE_AGAIN, AlarmKind.REFILL -> "meds"
             AlarmKind.HABIT -> "today"
             AlarmKind.APPOINTMENT -> "appointments"
-            AlarmKind.BLADDER -> "continence"
+            AlarmKind.BLADDER, AlarmKind.CHANGE -> "continence"
         }
 
         fun notificationId(dose: PlannedDose): Int = (dose.medicationId + dose.at).hashCode()

@@ -16,6 +16,7 @@ import com.health.app.net.ServerApi
 import com.health.app.net.SignIn
 import com.health.app.net.appointments
 import com.health.app.net.continenceSettings
+import com.health.app.net.continenceWearing
 import com.health.app.net.fields
 import com.health.app.net.layout
 import com.health.app.net.saveScreenLayout
@@ -265,9 +266,25 @@ class Container(val context: Context) {
         // Bladder training (bladder and bowel detail): its settings, kept for the phone's own reminders.
         if (Module.CONTINENCE in modules) {
             runCatching { api.continenceSettings() }.getOrNull()?.let { reminderCache.saveBladder(it.bladderTraining.takeIf { t -> t.enabled }) }
+            saveChangeDue()
         } else {
             reminderCache.saveBladder(null)
+            reminderCache.saveChangeDue(null, null)
         }
+        reminders.reschedule()
+    }
+
+    /** Keeps when a check or change of what's being worn is due, for the phone's own reminder. */
+    private suspend fun saveChangeDue() {
+        runCatching { api.continenceWearing() }.onSuccess { w ->
+            reminderCache.saveChangeDue(w.changeDueAt.takeIf { !w.nothingOn }, w.since)
+        }
+    }
+
+    /** After a change is logged: the next check moves, so the phone's reminder does too. */
+    suspend fun continenceChanged() {
+        if (com.health.api.Module.CONTINENCE !in modules()) return
+        saveChangeDue()
         reminders.reschedule()
     }
 

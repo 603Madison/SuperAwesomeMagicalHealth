@@ -36,6 +36,14 @@ class ReminderCache(context: Context) {
     /** Bladder training's settings (the bladder and bowel diary), or null when it isn't on. */
     fun bladder(): com.health.api.BladderTraining? = read(BLADDER) { ApiJson.decodeFromString(com.health.api.BladderTraining.serializer(), it) }?.takeIf { it.enabled }
 
+    /** When a check or change of what's being worn is due, and when it went on (null when none is). */
+    fun changeDue(): Pair<Long, Long?>? = prefs.getLong(CHANGE_DUE, 0L).takeIf { it > 0 }?.let { it to prefs.getLong(WORN_SINCE, 0L).takeIf { s -> s > 0 } }
+
+    fun saveChangeDue(at: Long?, since: Long?) = prefs.edit {
+        if (at == null) remove(CHANGE_DUE) else putLong(CHANGE_DUE, at)
+        if (since == null) remove(WORN_SINCE) else putLong(WORN_SINCE, since)
+    }
+
     fun saveBladder(training: com.health.api.BladderTraining?) = prefs.edit {
         if (training == null) remove(BLADDER) else putString(BLADDER, ApiJson.encodeToString(com.health.api.BladderTraining.serializer(), training))
     }
@@ -77,5 +85,7 @@ class ReminderCache(context: Context) {
         const val HABITS = "habits"
         const val APPOINTMENTS = "appointments"
         const val BLADDER = "bladder"
+        const val CHANGE_DUE = "changeDue"
+        const val WORN_SINCE = "wornSince"
     }
 }

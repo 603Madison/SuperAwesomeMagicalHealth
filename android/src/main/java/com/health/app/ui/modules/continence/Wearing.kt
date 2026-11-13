@@ -314,7 +314,7 @@ fun ChangeSheet(onDismiss: () -> Unit) {
             onSave = { entry ->
                 c.scope.launch {
                     runCatching { c.ui.addContinence(entry) }
-                        .onSuccess { c.tell("Change logged"); c.dataChanged() }
+                        .onSuccess { c.tell("Change logged"); c.dataChanged(); c.continenceChanged() }
                         .onFailure { c.tell(it.message ?: "Couldn't save that") }
                 }
                 onDismiss()
