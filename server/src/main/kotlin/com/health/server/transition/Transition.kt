@@ -220,7 +220,11 @@ class TransitionService(
         }
         val insights = mutableListOf<Pair<Int, Insight>>()
         if (week.size >= 3) {
-            insights += 55 to Insight("good", "Moments of euphoria", "${week.size} moments of gender euphoria this week. Worth remembering.", "sparkles", Module.TRANSITION)
+            // Transition's own card on Today says this too, so the apps leave it out while that card shows.
+            insights += 55 to Insight(
+                "good", "Moments of euphoria", "${week.size} moments of gender euphoria this week. Worth remembering.", "sparkles", Module.TRANSITION,
+                shownBy = com.health.api.TodaySection.TRANSITION,
+            )
         }
         due.firstOrNull { LocalDate.parse(it.date).let { d -> !d.isAfter(date.plusDays(3)) } }?.let { m ->
             val d = LocalDate.parse(m.date)
