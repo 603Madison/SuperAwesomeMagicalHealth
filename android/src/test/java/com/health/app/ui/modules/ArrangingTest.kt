@@ -223,7 +223,7 @@ class ArrangingTest {
         assertEquals(listOf("latest"), ids(measurementSections(readOnly = true)))
         assertEquals(listOf("since", "lately"), ids(transitionSections(emptySet(), emptySet())))
         assertEquals(
-            listOf("since", "lately", "milestones", "moments", "changes", "voice", "hair", "measurements", "photos"),
+            listOf("since", "lately", "milestones", "moments", "changes", "voice", "voiceTraining", "hair", "measurements", "photos"),
             ids(transitionSections(everyField, all)),
         )
     }

@@ -7,6 +7,9 @@
         <exclude domain="database" />
         <exclude domain="sharedpref" />
         <exclude domain="external" />
+        <!-- Voice trainer: recordings and its copies stay on this phone only. -->
+        <exclude domain="root" path="no_backup/voice-recordings/" />
+        <exclude domain="root" path="no_backup/voice/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="root" />
@@ -14,5 +17,8 @@
         <exclude domain="database" />
         <exclude domain="sharedpref" />
         <exclude domain="external" />
+        <!-- Voice trainer: recordings and its copies stay on this phone only. -->
+        <exclude domain="root" path="no_backup/voice-recordings/" />
+        <exclude domain="root" path="no_backup/voice/" />
     </device-transfer>
 </data-extraction-rules>

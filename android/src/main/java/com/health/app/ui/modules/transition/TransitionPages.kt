@@ -33,10 +33,16 @@ import java.time.LocalDate
 
 /**
  * The pages under Transition, by [page]: "profile", "templates", "milestone" ([id] a milestone's,
- * or "template:N"), "change", "hair", "moment" ([id] EUPHORIA or DYSPHORIA), "voice", "pitch".
+ * or "template:N"), "change", "hair", "moment" ([id] EUPHORIA or DYSPHORIA), "voice", "pitch", and
+ * the voice trainer's "voice-…" pages.
  */
 @Composable
 fun TransitionPage(page: String, id: String?, onBack: () -> Unit, open: (String) -> Unit) {
+    // The voice trainer's pages ("voice-training", "voice-lesson"…: voice/VoicePages.kt).
+    if (com.health.app.ui.modules.transition.voice.isVoicePage(page)) {
+        com.health.app.ui.modules.transition.voice.VoicePage(page, id, onBack, open)
+        return
+    }
     val c = appContainer()
     val vm = viewModel { TransitionViewModel(c) }
     val state by vm.state.collectAsState()

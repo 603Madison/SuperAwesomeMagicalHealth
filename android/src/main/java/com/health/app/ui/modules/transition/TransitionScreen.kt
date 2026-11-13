@@ -96,6 +96,7 @@ fun transitionSections(fields: Set<String>, modules: Set<Module>): List<ArrangeI
     if (Fields.TRANSITION_MOMENTS in fields) add(ArrangeItem("moments", "Euphoria and dysphoria"))
     if (Fields.TRANSITION_CHANGES in fields) add(ArrangeItem("changes", "Changes you notice"))
     if (Fields.TRANSITION_VOICE in fields) add(ArrangeItem("voice", "Voice"))
+    if (Fields.TRANSITION_VOICE in fields) add(ArrangeItem("voiceTraining", "Voice training"))
     if (Fields.TRANSITION_HAIR in fields) add(ArrangeItem("hair", "Hair removal"))
     if (Fields.TRANSITION_MEASUREMENTS in fields) add(ArrangeItem("measurements", "Body measurements"))
     if (Module.PHOTOS in modules) add(ArrangeItem("photos", "Progress photos"))
@@ -138,6 +139,9 @@ fun TransitionHome(state: TransitionState, fields: Set<String>, modules: Set<Mod
                         "moments" -> MomentsCard(state, zone, readOnly, actions.open)
                         "changes" -> ChangesCard(state, readOnly, actions.open)
                         "voice" -> VoiceCard(state, zone, readOnly, actions.open)
+                        "voiceTraining" -> com.health.app.ui.modules.transition.voice.VoiceTrainingCard(state.voiceProgress, readOnly) {
+                            actions.open(com.health.app.ui.modules.transition.voice.HOME)
+                        }
                         "hair" -> HairCard(state, zone, readOnly, actions.open)
                         "measurements" -> MeasurementsCard(state, units, actions.open)
                         "photos" -> InfoCard(null) { NavRow(Icons.Rounded.PhotoLibrary, "Progress photos", "Private, and compared side by side", onClick = { actions.open("photos") }) }

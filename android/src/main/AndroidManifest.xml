@@ -145,6 +145,18 @@
             android:name=".reminders.FocusReceiver"
             android:exported="false" />
 
+        <!-- Voice trainer: the practice reminder's alarm, set again after a restart. -->
+        <receiver
+            android:name=".ui.modules.transition.voice.VoiceReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+        </receiver>
+
         <!-- Reports and exports handed to the share sheet. -->
         <provider
             android:name="androidx.core.content.FileProvider"

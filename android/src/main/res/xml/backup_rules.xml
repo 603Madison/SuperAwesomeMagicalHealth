@@ -5,4 +5,7 @@
     <exclude domain="database" path="." />
     <exclude domain="sharedpref" path="." />
     <exclude domain="external" path="." />
+    <!-- Voice trainer: recordings and its copies stay on this phone only (no_backup/ is never backed up either). -->
+    <exclude domain="root" path="no_backup/voice-recordings/" />
+    <exclude domain="root" path="no_backup/voice/" />
 </full-backup-content>
