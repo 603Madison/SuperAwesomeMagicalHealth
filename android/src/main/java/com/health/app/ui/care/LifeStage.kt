@@ -29,6 +29,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.health.app.ui.components.ArrangeItem
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -192,35 +193,63 @@ class LifeStageActions(
     val hotFlash: (Int) -> Unit = {},
 )
 
-/** The life stage's part of the Cycle screen: which stage, and the tools for it. */
+/**
+ * The life stage's cards for [stage], in the default order: sections of the Cycle screen
+ * ([com.health.app.ui.modules.FeatureScreens.CYCLE]), so they're arranged with it. None before it's loaded.
+ */
+fun lifeStageSections(stage: LifeStage?): List<ArrangeItem> = if (stage == null) emptyList() else buildList {
+    add(ArrangeItem("stage", "Life stage"))
+    when (stage) {
+        LifeStage.PREGNANT -> {
+            add(ArrangeItem("stage.pregnancy", "Pregnancy"))
+            add(ArrangeItem("stage.movements", "Movements"))
+            add(ArrangeItem("stage.contractions", "Contractions"))
+        }
+        LifeStage.POSTPARTUM -> add(ArrangeItem("stage.feeds", "Feeds"))
+        LifeStage.PERIMENOPAUSE, LifeStage.MENOPAUSE -> add(ArrangeItem("stage.hotflashes", "Hot flashes"))
+        else -> Unit
+    }
+    add(ArrangeItem("stage.tips", "Tips for this stage"))
+}
+
+/** The life stage's part of the Cycle screen, all its cards in the default order. */
 @Composable
 fun LifeStageSection(state: LifeStageState, zone: ZoneId, actions: LifeStageActions, now: () -> Long = System::currentTimeMillis) {
     val overview = state.overview ?: return
-    val readOnly = LocalReadOnly.current
-    var choosing by remember { mutableStateOf(false) }
-    val info = overview.info
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AppCard(padding = 16.dp) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Hint("Life stage")
-                    Text(info.stage.label, style = MaterialTheme.typography.titleMedium)
-                    stageNote(info.stage)?.let { Hint(it) }
-                }
-                if (!readOnly) TextButton(onClick = { choosing = true }) { Text("Change") }
+        lifeStageSections(overview.info.stage).forEach { LifeStagePart(it.id, state, zone, actions, now) }
+    }
+}
+
+/** One of the life stage's cards, by its section id ([lifeStageSections]). */
+@Composable
+fun LifeStagePart(id: String, state: LifeStageState, zone: ZoneId, actions: LifeStageActions, now: () -> Long = System::currentTimeMillis) {
+    val overview = state.overview ?: return
+    val readOnly = LocalReadOnly.current
+    when (id) {
+        "stage" -> StageCard(state, overview.info, readOnly, actions)
+        "stage.pregnancy" -> PregnancyCard(overview)
+        "stage.movements" -> KickCard(state, zone, readOnly, actions, now)
+        "stage.contractions" -> ContractionCard(state, overview, zone, readOnly, actions, now)
+        "stage.feeds" -> FeedsCard(state, overview, zone, readOnly, actions, now)
+        "stage.hotflashes" -> HotFlashCard(overview, zone, readOnly, actions)
+        "stage.tips" -> overview.tips.forEach { InsightCard(it) }
+    }
+}
+
+/** Which stage, what it changes, and a way to change it. */
+@Composable
+private fun StageCard(state: LifeStageState, info: LifeStageInfo, readOnly: Boolean, actions: LifeStageActions) {
+    var choosing by remember { mutableStateOf(false) }
+    AppCard(padding = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Hint("Life stage")
+                Text(info.stage.label, style = MaterialTheme.typography.titleMedium)
+                stageNote(info.stage)?.let { Hint(it) }
             }
+            if (!readOnly) TextButton(onClick = { choosing = true }) { Text("Change") }
         }
-        when (info.stage) {
-            LifeStage.PREGNANT -> {
-                PregnancyCard(overview)
-                KickCard(state, zone, readOnly, actions, now)
-                ContractionCard(state, overview, zone, readOnly, actions, now)
-            }
-            LifeStage.POSTPARTUM -> FeedsCard(state, overview, zone, readOnly, actions, now)
-            LifeStage.PERIMENOPAUSE, LifeStage.MENOPAUSE -> HotFlashCard(overview, zone, readOnly, actions)
-            else -> Unit
-        }
-        overview.tips.forEach { InsightCard(it) }
     }
     if (choosing) StageDialog(info, state.today, onDismiss = { choosing = false }) { actions.saveInfo(it); choosing = false }
 }

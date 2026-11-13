@@ -44,6 +44,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.Sections
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -187,9 +192,9 @@ fun CycleRoute(logDate: LocalDate? = null, onOpen: (String) -> Unit = {}) {
     CycleScreen(
         state, settings.units, CycleActions(vm::month, { vm.save(it) }, { vm.clear(it) }, { vm.load() }, onOpen), openDay = logDate,
         fields = shownFields(),
-        lifeStage = {
-            com.health.app.ui.care.LifeStageSection(
-                stage, c.zone(),
+        lifeStage = LifeStageSlot(com.health.app.ui.care.lifeStageSections(stage.overview?.info?.stage)) { id ->
+            com.health.app.ui.care.LifeStagePart(
+                id, stage, c.zone(),
                 com.health.app.ui.care.LifeStageActions(
                     saveInfo = { stages.saveInfo(it) }, startKicks = stages::startKicks, kick = stages::kick, finishKicks = stages::finishKicks,
                     cancelKicks = stages::cancelKicks, toggleContraction = stages::toggleContraction, startFeed = { stages.startFeed(it) },
@@ -200,13 +205,31 @@ fun CycleRoute(logDate: LocalDate? = null, onOpen: (String) -> Unit = {}) {
     )
 }
 
+/** The life stage's cards on the Cycle screen: those that apply now, and how to draw each by its id. */
+class LifeStageSlot(val sections: List<ArrangeItem>, val part: @Composable (String) -> Unit)
+
+/**
+ * Cycle's sections in the default order (the sections of [FeatureScreens.CYCLE]), with the life
+ * stage's cards after today's, and period products and temperature when their fields are on.
+ */
+fun cycleSections(fields: Set<String> = Fields.DEFAULTS, lifeStage: List<ArrangeItem> = emptyList()): List<ArrangeItem> = buildList {
+    add(ArrangeItem("today", "Today"))
+    addAll(lifeStage)
+    add(ArrangeItem("calendar", "Calendar"))
+    if (Fields.CYCLE_PRODUCTS in fields) add(ArrangeItem("lowsupplies", "Products running low"))
+    add(ArrangeItem("averages", "Your averages"))
+    if (Fields.CYCLE_BBT in fields) add(ArrangeItem("temperature", "Temperature"))
+    add(ArrangeItem("cycles", "Past cycles"))
+    if (Fields.CYCLE_PRODUCTS in fields) add(ArrangeItem("products", "Period products"))
+}
+
 @Composable
 fun CycleScreen(
     state: CycleState,
     units: Units,
     actions: CycleActions,
     openDay: LocalDate? = null,
-    lifeStage: @Composable () -> Unit = {},
+    lifeStage: LifeStageSlot? = null,
     fields: Set<String> = Fields.DEFAULTS,
 ) {
     var editing by remember { mutableStateOf<LocalDate?>(null) }
@@ -214,11 +237,13 @@ fun CycleScreen(
     val plain = CycleText.plain(state.settings, fields)
     LaunchedEffect(openDay, state.overview != null) { if (openDay != null && state.overview != null) editing = openDay }
     val overview = state.overview
+    val sections = cycleSections(fields, lifeStage?.sections.orEmpty())
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Cycle", "Periods, symptoms and what's likely next") {
             if (!com.health.app.ui.care.LocalReadOnly.current) {
                 IconButton(onClick = { actions.open("cycle/settings") }) { Icon(Icons.Rounded.Settings, "Cycle settings") }
             }
+            ArrangeAction(FeatureScreens.CYCLE, "Cycle", sections)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
@@ -227,22 +252,24 @@ fun CycleScreen(
                 overview != null -> {
                     // Someone viewing a share looks at the calendar but doesn't open days to change them.
                     val readOnly = com.health.app.ui.care.LocalReadOnly.current
-                    TodayCard(overview, plain, onLog = { if (!readOnly) editing = state.today })
-                    lifeStage()
-                    CalendarCard(state, overview, plain, actions.month) { if (!readOnly) editing = it }
-                    if (Fields.CYCLE_PRODUCTS in fields) {
-                        val low = state.supplies.filter { it.low && it.supply.kind.category == com.health.api.SupplyCategory.PERIOD }
-                        if (low.isNotEmpty()) com.health.app.ui.modules.continence.LowSuppliesCard(low) { actions.open("supplies/cycle") }
-                    }
-                    AveragesCard(overview)
-                    if (overview.temperatures.size >= 3 && Fields.CYCLE_BBT in fields) TemperatureCard(overview, units, plain)
-                    if (overview.cycles.isNotEmpty()) CyclesCard(overview)
-                    if (Fields.CYCLE_PRODUCTS in fields) {
-                        InfoCard(null) {
-                            com.health.app.ui.modules.NavRow(
-                                Icons.Rounded.Inventory2, "Period products", "What's on hand, and when to restock",
-                                onClick = { actions.open("supplies/cycle") },
-                            )
+                    Sections(arrangedIn(FeatureScreens.CYCLE, sections)) { id ->
+                        when (id) {
+                            "today" -> TodayCard(overview, plain, onLog = { if (!readOnly) editing = state.today })
+                            "calendar" -> CalendarCard(state, overview, plain, actions.month) { if (!readOnly) editing = it }
+                            "lowsupplies" -> {
+                                val low = state.supplies.filter { it.low && it.supply.kind.category == com.health.api.SupplyCategory.PERIOD }
+                                if (low.isNotEmpty()) com.health.app.ui.modules.continence.LowSuppliesCard(low) { actions.open("supplies/cycle") }
+                            }
+                            "averages" -> AveragesCard(overview)
+                            "temperature" -> if (overview.temperatures.size >= 3) TemperatureCard(overview, units, plain)
+                            "cycles" -> if (overview.cycles.isNotEmpty()) CyclesCard(overview)
+                            "products" -> InfoCard(null) {
+                                com.health.app.ui.modules.NavRow(
+                                    Icons.Rounded.Inventory2, "Period products", "What's on hand, and when to restock",
+                                    onClick = { actions.open("supplies/cycle") },
+                                )
+                            }
+                            else -> lifeStage?.part?.invoke(id)
                         }
                     }
                     Hint(overview.caveat, Modifier.padding(horizontal = 4.dp))

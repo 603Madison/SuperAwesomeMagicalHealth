@@ -70,6 +70,11 @@ import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.components.Stat
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.today.InsightCard
@@ -165,13 +170,21 @@ fun VitalsRoute() {
 
 private enum class VitalsDialog { BP, GLUCOSE, TARGETS }
 
+/** The sections of blood pressure and glucose (the sections of [FeatureScreens.VITALS]), in the default order. */
+val VITALS_SECTIONS = listOf(
+    ArrangeItem("insights", "What we've noticed"),
+    ArrangeItem("bp", "Blood pressure"),
+    ArrangeItem("glucose", "Glucose"),
+)
+
 @Composable
 fun VitalsScreen(state: VitalsState, targets: VitalsTargets, zone: ZoneId, actions: VitalsActions, now: Long = System.currentTimeMillis()) {
     var dialog by remember { mutableStateOf<VitalsDialog?>(null) }
     var removing by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("BP & glucose", "Blood pressure and glucose, against your own targets") {
+        ScreenTitle("BP & glucose", "Against your own targets") {
             IconButton(onClick = { dialog = VitalsDialog.TARGETS }) { Icon(Icons.Rounded.Tune, "Your targets") }
+            ArrangeAction(FeatureScreens.VITALS, "Blood pressure & glucose", VITALS_SECTIONS)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -191,14 +204,17 @@ fun VitalsScreen(state: VitalsState, targets: VitalsTargets, zone: ZoneId, actio
             when {
                 state.loading && summary == null -> Loading()
                 state.error != null && summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                summary != null -> {
-                    summary.patterns.forEach { InsightCard(it) }
-                    BloodPressureCard(summary, zone, now) { bp -> removing = "the reading ${bp.systolic}/${bp.diastolic}" to { bp.id?.let(actions.deleteBloodPressure) } }
-                    GlucoseCard(summary, targets.glucoseUnit, zone, now) { g -> removing = "the reading ${Glucose.text(g.mmolL, targets.glucoseUnit)}" to { g.id?.let(actions.deleteGlucose) } }
+                summary != null -> Sections(arrangedIn(FeatureScreens.VITALS, VITALS_SECTIONS)) { id ->
+                    when (id) {
+                        "insights" -> summary.patterns.forEach { InsightCard(it) }
+                        "bp" -> BloodPressureCard(summary, zone, now) { bp -> removing = "the reading ${bp.systolic}/${bp.diastolic}" to { bp.id?.let(actions.deleteBloodPressure) } }
+                        "glucose" -> GlucoseCard(summary, targets.glucoseUnit, zone, now) { g -> removing = "the reading ${Glucose.text(g.mmolL, targets.glucoseUnit)}" to { g.id?.let(actions.deleteGlucose) } }
+                    }
                 }
             }
             Hint(
-                "These help you see how you're doing; they aren't a diagnosis. If a reading worries you, or you feel unwell, talk to your doctor or pharmacist.",
+                "Readings also come from monitors paired in Devices, and from Health Connect. They help you see how you're doing; " +
+                    "they aren't a diagnosis. If one worries you, or you feel unwell, talk to your doctor or pharmacist.",
                 Modifier.padding(horizontal = 4.dp),
             )
         }
@@ -233,7 +249,7 @@ private fun BloodPressureCard(summary: VitalsSummary, zone: ZoneId, now: Long, o
     InfoCard("Blood pressure", icon = Icons.Rounded.MonitorHeart, iconTint = AppTheme.data.heart) {
         val readings = summary.bloodPressure.sortedBy { it.at }
         if (readings.isEmpty()) {
-            Hint("No readings yet. Log one, pair a monitor in Devices, or bring them in from Health Connect.")
+            Hint("No readings in these days.")
             return@InfoCard
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -277,7 +293,7 @@ private fun GlucoseCard(summary: VitalsSummary, unit: GlucoseUnit, zone: ZoneId,
     InfoCard("Glucose", icon = Icons.Rounded.Bloodtype, iconTint = MaterialTheme.colorScheme.tertiary) {
         val readings = summary.glucose.sortedBy { it.at }
         if (readings.isEmpty()) {
-            Hint("No readings yet. Log one, pair a meter in Devices, or bring a sensor's readings in from Health Connect.")
+            Hint("No readings in these days.")
             return@InfoCard
         }
         Row(Modifier.fillMaxWidth()) {

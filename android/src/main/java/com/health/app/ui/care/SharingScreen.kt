@@ -58,6 +58,13 @@ import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.modules.TitleAction
+import androidx.compose.material.icons.rounded.PersonAdd
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -129,6 +136,9 @@ fun SharingRoute(onBack: () -> Unit, onViewing: () -> Unit) {
     )
 }
 
+/** Sharing's sections, in the default order (the sections of [FeatureScreens.SHARING]). */
+val SHARING_SECTIONS = listOf(ArrangeItem("given", "Who sees yours"), ArrangeItem("received", "Shared with you"))
+
 @Composable
 fun SharingScreen(state: SharingState, myModules: Set<Module>, onBack: () -> Unit, actions: SharingActions) {
     var editing by remember { mutableStateOf<Share?>(null) }
@@ -136,42 +146,44 @@ fun SharingScreen(state: SharingState, myModules: Set<Module>, onBack: () -> Uni
     var stopping by remember { mutableStateOf<Pair<Share, Boolean>?>(null) }
     val shares = state.shares
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        BackBar(onBack, "Sharing")
+        BackBar(onBack, "Sharing") { ArrangeAction(FeatureScreens.SHARING, "Sharing", SHARING_SECTIONS) }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Hint(
-                "Let someone with an account on this server, like a partner, parent or carer, see the features you pick. " +
-                    "They can only look; they can never change anything. Change or stop it any time.",
+                "Let someone with an account here, like a partner, parent or carer, see the features you pick. " +
+                    "They can only look, and you can change or stop it any time.",
                 Modifier.padding(horizontal = 4.dp),
             )
             when {
                 state.loading && shares == null -> Loading()
                 state.error != null && shares == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                shares != null -> {
-                    InfoCard("Who sees yours", icon = Icons.Rounded.Group, trailing = { TextButton(onClick = { adding = true }) { Text("Share") } }) {
-                        if (shares.given.isEmpty()) Hint("No one yet.")
-                        shares.given.forEachIndexed { i, s ->
-                            if (i > 0) Spacer(Modifier.height(10.dp))
-                            Text(s.viewerName, style = MaterialTheme.typography.titleMedium)
-                            Hint(featureList(s.modules))
-                            Hint(s.lastViewedAt?.let { "Last looked ${Format.ago(it, state.now)}" } ?: "Hasn't looked yet")
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { editing = s }) { Text("Change") }
-                                TextButton(onClick = { stopping = s to true }) { Text("Stop sharing", color = MaterialTheme.colorScheme.error) }
+                shares != null -> Sections(arrangedIn(FeatureScreens.SHARING, SHARING_SECTIONS)) { id ->
+                    when (id) {
+                        "given" -> InfoCard("Who sees yours", icon = Icons.Rounded.Group, trailing = { TitleAction(Icons.Rounded.PersonAdd, "Share with someone") { adding = true } }) {
+                            if (shares.given.isEmpty()) Hint("No one yet.")
+                            shares.given.forEachIndexed { i, s ->
+                                if (i > 0) Spacer(Modifier.height(10.dp))
+                                Text(s.viewerName, style = MaterialTheme.typography.titleMedium)
+                                Hint(featureList(s.modules))
+                                Hint(s.lastViewedAt?.let { "Last looked ${Format.ago(it, state.now)}" } ?: "Hasn't looked yet")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(onClick = { editing = s }) { Text("Change") }
+                                    TextButton(onClick = { stopping = s to true }) { Text("Stop sharing", color = MaterialTheme.colorScheme.error) }
+                                }
                             }
                         }
-                    }
-                    InfoCard("Shared with you", icon = Icons.Rounded.Visibility) {
-                        if (shares.received.isEmpty()) Hint("When someone shares with you, it shows here.")
-                        shares.received.forEachIndexed { i, s ->
-                            if (i > 0) Spacer(Modifier.height(10.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(s.ownerName, style = MaterialTheme.typography.titleMedium)
-                                    Hint(featureList(s.modules))
+                        "received" -> InfoCard("Shared with you", icon = Icons.Rounded.Visibility) {
+                            if (shares.received.isEmpty()) Hint("When someone shares with you, it shows here.")
+                            shares.received.forEachIndexed { i, s ->
+                                if (i > 0) Spacer(Modifier.height(10.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(s.ownerName, style = MaterialTheme.typography.titleMedium)
+                                        Hint(featureList(s.modules))
+                                    }
+                                    FilledTonalButton(onClick = { actions.view(s) }) { Text("View") }
                                 }
-                                FilledTonalButton(onClick = { actions.view(s) }) { Text("View") }
+                                TextButton(onClick = { stopping = s to false }) { Text("Stop seeing theirs") }
                             }
-                            TextButton(onClick = { stopping = s to false }) { Text("Stop seeing theirs") }
                         }
                     }
                 }

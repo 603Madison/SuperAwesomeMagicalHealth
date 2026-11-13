@@ -22,12 +22,12 @@ import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.MonitorWeight
 import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -66,7 +66,17 @@ import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.modules.Moods
 import com.health.app.ui.log.WeightDialog
 import com.health.app.ui.theme.AppTheme
-import com.health.app.ui.tracking.TrackingTrends
+import com.health.app.ui.tracking.TrackingTrend
+import com.health.app.ui.tracking.trackingTrendSections
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.components.showsField
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.TitleAction
+import androidx.compose.material.icons.rounded.Add
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.Sections
+import com.health.api.Fields
 import com.health.api.VitalsTargets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -147,17 +157,49 @@ fun TrendsRoute() {
         TrendsActions(vm::range, { vm.load() }, { vm.logWeight(it) }, { vm.deleteWeight(it) }),
         modules = com.health.app.ui.care.shownModules(),
         vitalsTargets = profile?.vitalsTargets ?: VitalsTargets(),
+        water = showsField(Fields.NUTRITION_WATER),
     )
+}
+
+/**
+ * Trends' charts for the features that are on, in the default order: the sections of
+ * [FeatureScreens.TRENDS]. Water only while it's tracked. A chart with nothing in the range says so.
+ */
+fun trendsSections(modules: Set<Module>, water: Boolean = true): List<ArrangeItem> = buildList {
+    val tracking = Module.ACTIVITY in modules || Module.SLEEP in modules
+    if (tracking) add(ArrangeItem("scores", "Scores"))
+    if (Module.MIND in modules) add(ArrangeItem("mood", "Mood"))
+    if (Module.MEDICATIONS in modules) add(ArrangeItem("doses", "Doses taken"))
+    if (Module.CYCLE in modules) add(ArrangeItem("period", "Period days"))
+    if (Module.CONTINENCE in modules) {
+        add(ArrangeItem("trips", "Toilet trips"))
+        add(ArrangeItem("leaks", "Leaks"))
+    }
+    if (Module.SLEEP in modules) add(ArrangeItem("sleep", "Sleep"))
+    if (Module.ACTIVITY in modules) add(ArrangeItem("steps", "Steps"))
+    if (tracking) {
+        add(ArrangeItem("heart", "Resting heart rate"))
+        add(ArrangeItem("hrv", "Heart rate variability"))
+    }
+    if (Module.NUTRITION in modules) add(ArrangeItem("calories", "Calories eaten"))
+    if (Module.NUTRITION in modules && water) add(ArrangeItem("water", "Water"))
+    addAll(trackingTrendSections(modules))
+    if (Module.BODY in modules) add(ArrangeItem("weight", "Weight"))
+    if (Module.ACTIVITY in modules) add(ArrangeItem("workouts", "Workouts"))
 }
 
 @Composable
 fun TrendsScreen(
     state: TrendsState, units: Units, goals: Goals, zone: ZoneId, actions: TrendsActions, modules: Set<Module> = Module.DEFAULT,
     vitalsTargets: VitalsTargets = VitalsTargets(),
+    water: Boolean = true,
 ) {
     var weighing by remember { mutableStateOf(false) }
+    val sections = trendsSections(modules, water)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Trends", "How things are going over time")
+        ScreenTitle("Trends", "How things are going over time") {
+            ArrangeAction(FeatureScreens.TRENDS, "Trends", sections)
+        }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SegmentedChoice(listOf(7, 30, 90), state.days, { "$it days" }, actions.range)
             val trends = state.trends
@@ -167,77 +209,90 @@ fun TrendsScreen(
                 trends != null -> {
                     val days = trends.days
                     val labels = axis(days)
-                    val tracking = Module.ACTIVITY in modules || Module.SLEEP in modules
-                    if (tracking) ScoresCard(days, labels)
-                    if (Module.MIND in modules) {
-                        ChartCard(
-                            "Mood", ModuleInfo.icon(Module.MIND), MaterialTheme.colorScheme.primary,
-                            average(days.map { it.mood })?.let { Moods.label(Moods.nearest(it)) }, "on average", labels,
-                            footer = days.sumOf { it.mindfulMinutes ?: 0.0 }.takeIf { it > 0 }?.let { "${Format.minutes(it.roundToInt())} of calm tools" },
-                        ) { LineChart(days.map { it.mood }, color = MaterialTheme.colorScheme.primary, min = 1.0, max = 5.0) }
-                    }
-                    if (Module.MEDICATIONS in modules && days.any { (it.dosesDue ?: 0) > 0 }) {
-                        val due = days.sumOf { it.dosesDue ?: 0 }
-                        val taken = days.sumOf { minOf(it.dosesTaken ?: 0, it.dosesDue ?: 0) }
-                        ChartCard(
-                            "Doses taken", ModuleInfo.icon(Module.MEDICATIONS), MaterialTheme.colorScheme.tertiary,
-                            if (due > 0) "${(taken * 100.0 / due).roundToInt()}%" else null, "of $due scheduled", labels,
-                        ) {
-                            BarChart(
-                                days.map { d -> d.dosesDue?.takeIf { it > 0 }?.let { (d.dosesTaken ?: 0).coerceAtMost(it) * 100.0 / it } },
-                                color = MaterialTheme.colorScheme.tertiary, goal = 100.0,
-                            )
+                    Sections(arrangedIn(FeatureScreens.TRENDS, sections)) { id ->
+                        when (id) {
+                            "scores" -> ScoresCard(days, labels)
+                            "weight" -> WeightCard(state.weights, units, goals, zone, onAdd = { weighing = true }, onDelete = actions.deleteWeight)
+                            "workouts" -> WorkoutsSummary(days)
+                            in TREND_CHARTS -> TrendChart(id, days, labels, goals, units)
+                            else -> TrackingTrend(id, days, labels, vitalsTargets)
                         }
                     }
-                    if (Module.CYCLE in modules) {
-                        ChartCard(
-                            "Period days", ModuleInfo.icon(Module.CYCLE), AppTheme.data.protein,
-                            days.count { it.flow != null }.takeIf { it > 0 }?.toString(), "in these ${days.size} days", labels,
-                        ) { BarChart(days.map { d -> d.flow?.let { it.ordinal + 1.0 } }, color = AppTheme.data.protein) }
-                    }
-                    if (Module.CONTINENCE in modules) {
-                        ChartCard(
-                            "Toilet trips", ModuleInfo.icon(Module.CONTINENCE), AppTheme.data.water,
-                            average(days.map { it.voids?.toDouble() })?.let { Format.compact(it) }, "a day", labels,
-                            footer = average(days.map { it.leaks?.toDouble() })?.let { "${Format.compact(it)} leaks a day" + (average(days.map { d -> d.nightVoids?.toDouble() })?.let { n -> " · ${Format.compact(n)} trips at night" } ?: "") },
-                        ) { BarChart(days.map { it.voids?.toDouble() }, color = AppTheme.data.water) }
-                        if (days.any { (it.leaks ?: 0) > 0 }) {
-                            ChartCard(
-                                "Leaks", ModuleInfo.icon(Module.CONTINENCE), AppTheme.status.warn,
-                                days.sumOf { it.leaks ?: 0 }.toString(), "in these ${days.size} days", labels,
-                            ) { BarChart(days.map { it.leaks?.toDouble() }, color = AppTheme.status.warn) }
-                        }
-                    }
-                    if (Module.SLEEP in modules) ChartCard(
-                        "Sleep", Icons.Rounded.Bedtime, AppTheme.data.rem,
-                        average(days.map { it.sleepMinutes?.toDouble() })?.let { Format.minutes(it.roundToInt()) },
-                        "a night", labels,
-                    ) { BarChart(days.map { d -> d.sleepMinutes?.let { it / 60.0 } }, color = AppTheme.data.rem, goal = goals.sleepMinutes / 60.0) }
-                    if (Module.ACTIVITY in modules) ChartCard(
-                        "Steps", Icons.AutoMirrored.Rounded.DirectionsWalk, MaterialTheme.colorScheme.tertiary,
-                        average(days.map { it.steps?.toDouble() })?.let { Format.number(it) }, "a day", labels,
-                    ) { BarChart(days.map { it.steps?.toDouble() }, color = MaterialTheme.colorScheme.tertiary, goal = goals.steps.toDouble()) }
-                    if (tracking) ChartCard(
-                        "Resting heart rate", Icons.Rounded.Favorite, AppTheme.data.heart,
-                        average(days.map { it.restingHeartRate })?.let { "${it.roundToInt()} bpm" }, "on average", labels,
-                    ) { LineChart(days.map { it.restingHeartRate }, color = AppTheme.data.heart) }
-                    if (tracking) ChartCard(
-                        "Heart rate variability", Icons.Rounded.MonitorHeart, MaterialTheme.colorScheme.primary,
-                        average(days.map { it.hrv })?.let { "${it.roundToInt()} ms" }, "on average", labels,
-                    ) { LineChart(days.map { it.hrv }, color = MaterialTheme.colorScheme.primary) }
-                    if (Module.NUTRITION in modules) ChartCard(
-                        "Calories eaten", Icons.Rounded.Restaurant, AppTheme.data.carbs,
-                        average(days.map { it.calories })?.let { "${Format.number(it)} kcal" }, "a day you logged", labels,
-                        footer = average(days.map { it.protein })?.let { "${Format.number(it)} g protein a day" },
-                    ) { BarChart(days.map { it.calories }, color = AppTheme.data.carbs, goal = goals.calories?.toDouble()) }
-                    TrackingTrends(days, labels, modules, vitalsTargets)
-                    if (Module.BODY in modules) WeightCard(state.weights, units, goals, zone, onAdd = { weighing = true }, onDelete = actions.deleteWeight)
-                    if (Module.ACTIVITY in modules) WorkoutsSummary(days)
                 }
             }
         }
     }
     if (weighing) WeightDialog(units, state.weights.lastOrNull()?.value, { weighing = false }) { actions.logWeight(it); weighing = false }
+}
+
+/** Trends' own charts' ids; the rest are [TrackingTrend]'s. */
+private val TREND_CHARTS = setOf("mood", "doses", "period", "trips", "leaks", "sleep", "steps", "heart", "hrv", "calories", "water")
+
+/** One of Trends' own charts ([TREND_CHARTS]), by its section id. */
+@Composable
+private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, String?, String>, goals: Goals, units: Units) {
+    when (id) {
+        "mood" -> ChartCard(
+            "Mood", ModuleInfo.icon(Module.MIND), MaterialTheme.colorScheme.primary,
+            average(days.map { it.mood })?.let { Moods.label(Moods.nearest(it)) }, "on average", labels,
+            footer = days.sumOf { it.mindfulMinutes ?: 0.0 }.takeIf { it > 0 }?.let { "${Format.minutes(it.roundToInt())} of calm tools" },
+        ) { LineChart(days.map { it.mood }, color = MaterialTheme.colorScheme.primary, min = 1.0, max = 5.0) }
+        "doses" -> {
+            val due = days.sumOf { it.dosesDue ?: 0 }
+            val taken = days.sumOf { minOf(it.dosesTaken ?: 0, it.dosesDue ?: 0) }
+            ChartCard(
+                "Doses taken", ModuleInfo.icon(Module.MEDICATIONS), MaterialTheme.colorScheme.tertiary,
+                if (due > 0) "${(taken * 100.0 / due).roundToInt()}%" else null, "of $due scheduled", labels,
+            ) {
+                BarChart(
+                    days.map { d -> d.dosesDue?.takeIf { it > 0 }?.let { (d.dosesTaken ?: 0).coerceAtMost(it) * 100.0 / it } },
+                    color = MaterialTheme.colorScheme.tertiary, goal = 100.0,
+                )
+            }
+        }
+        "period" -> ChartCard(
+            "Period days", ModuleInfo.icon(Module.CYCLE), AppTheme.data.protein,
+            days.count { it.flow != null }.takeIf { it > 0 }?.toString(), "in these ${days.size} days", labels,
+        ) { BarChart(days.map { d -> d.flow?.let { it.ordinal + 1.0 } }, color = AppTheme.data.protein) }
+        "trips" -> ChartCard(
+            "Toilet trips", ModuleInfo.icon(Module.CONTINENCE), AppTheme.data.water,
+            average(days.map { it.voids?.toDouble() })?.let { Format.compact(it) }, "a day", labels,
+            footer = average(days.map { it.leaks?.toDouble() })?.let { "${Format.compact(it)} leaks a day" + (average(days.map { d -> d.nightVoids?.toDouble() })?.let { n -> " · ${Format.compact(n)} trips at night" } ?: "") },
+        ) { BarChart(days.map { it.voids?.toDouble() }, color = AppTheme.data.water) }
+        // Only once there's been a leak in the range.
+        "leaks" -> if (days.any { (it.leaks ?: 0) > 0 }) {
+            ChartCard(
+                "Leaks", ModuleInfo.icon(Module.CONTINENCE), AppTheme.status.warn,
+                days.sumOf { it.leaks ?: 0 }.toString(), "in these ${days.size} days", labels,
+            ) { BarChart(days.map { it.leaks?.toDouble() }, color = AppTheme.status.warn) }
+        }
+        "sleep" -> ChartCard(
+            "Sleep", Icons.Rounded.Bedtime, AppTheme.data.rem,
+            average(days.map { it.sleepMinutes?.toDouble() })?.let { Format.minutes(it.roundToInt()) },
+            "a night", labels,
+        ) { BarChart(days.map { d -> d.sleepMinutes?.let { it / 60.0 } }, color = AppTheme.data.rem, goal = goals.sleepMinutes / 60.0) }
+        "steps" -> ChartCard(
+            "Steps", Icons.AutoMirrored.Rounded.DirectionsWalk, MaterialTheme.colorScheme.tertiary,
+            average(days.map { it.steps?.toDouble() })?.let { Format.number(it) }, "a day", labels,
+        ) { BarChart(days.map { it.steps?.toDouble() }, color = MaterialTheme.colorScheme.tertiary, goal = goals.steps.toDouble()) }
+        "heart" -> ChartCard(
+            "Resting heart rate", Icons.Rounded.Favorite, AppTheme.data.heart,
+            average(days.map { it.restingHeartRate })?.let { "${it.roundToInt()} bpm" }, "on average", labels,
+        ) { LineChart(days.map { it.restingHeartRate }, color = AppTheme.data.heart) }
+        "hrv" -> ChartCard(
+            "Heart rate variability", Icons.Rounded.MonitorHeart, MaterialTheme.colorScheme.primary,
+            average(days.map { it.hrv })?.let { "${it.roundToInt()} ms" }, "on average", labels,
+        ) { LineChart(days.map { it.hrv }, color = MaterialTheme.colorScheme.primary) }
+        "calories" -> ChartCard(
+            "Calories eaten", Icons.Rounded.Restaurant, AppTheme.data.carbs,
+            average(days.map { it.calories })?.let { "${Format.number(it)} kcal" }, "a day you logged", labels,
+            footer = average(days.map { it.protein })?.let { "${Format.number(it)} g protein a day" },
+        ) { BarChart(days.map { it.calories }, color = AppTheme.data.carbs, goal = goals.calories?.toDouble()) }
+        "water" -> ChartCard(
+            "Water", Icons.Rounded.WaterDrop, AppTheme.data.water,
+            average(days.map { d -> d.waterMl?.takeIf { it > 0 }?.toDouble() })?.let { Format.water(it.roundToInt(), units) }, "a day you logged", labels,
+        ) { BarChart(days.map { d -> d.waterMl?.takeIf { it > 0 }?.toDouble() }, color = AppTheme.data.water, goal = goals.waterMl.toDouble()) }
+    }
 }
 
 private fun average(values: List<Double?>): Double? = values.filterNotNull().takeIf { it.isNotEmpty() }?.average()
@@ -296,9 +351,10 @@ private fun ScoresCard(days: List<TrendDay>, labels: Triple<String, String?, Str
 
 @Composable
 private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: ZoneId, onAdd: () -> Unit, onDelete: (Long) -> Unit) {
-    InfoCard("Weight", icon = Icons.Rounded.MonitorWeight, trailing = { TextButton(onClick = onAdd) { Text("Weigh in") } }) {
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    InfoCard("Weight", icon = Icons.Rounded.MonitorWeight, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Weigh in", onAdd) })) {
         if (weights.isEmpty()) {
-            Hint("Weigh in now and then (or connect a smart scale through Health Connect) to see your trend.")
+            Hint(if (readOnly) "No weigh-ins yet." else "Weigh in now and then (or connect a smart scale through Health Connect) to see your trend.")
             return@InfoCard
         }
         val latest = weights.last()
@@ -326,7 +382,7 @@ private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: 
                 Text(Format.weight(w.value, units), style = MaterialTheme.typography.bodyMedium)
                 val id = w.id
                 val source = w.source
-                if (id != null && (source == null || source.contains("hand", ignoreCase = true))) {
+                if (!readOnly && id != null && (source == null || source.contains("hand", ignoreCase = true))) {
                     IconButton(onClick = { onDelete(id) }) { Icon(Icons.Rounded.Close, "Delete", Modifier.size(18.dp)) }
                 } else Spacer(Modifier.width(48.dp))
             }

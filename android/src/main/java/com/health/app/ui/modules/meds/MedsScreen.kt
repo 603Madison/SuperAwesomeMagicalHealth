@@ -68,7 +68,6 @@ import com.health.api.MedsDay
 import com.health.app.reminders.ReminderPlanner
 import com.health.app.ui.Format
 import com.health.app.ui.components.AppCard
-import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
@@ -78,6 +77,14 @@ import com.health.app.ui.components.Pill
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.EmptyLine
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.sectionId
+import androidx.compose.material3.IconButton
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.IconTile
 import com.health.app.ui.theme.AppTheme
@@ -149,14 +156,27 @@ fun MedsRoute(onEdit: (String?) -> Unit) {
     )
 }
 
+/** The Today tab's sections, in the default order (the sections of [FeatureScreens.MEDS_TODAY]). */
+val MEDS_TODAY_SECTIONS = listOf(
+    ArrangeItem("scheduled", "Scheduled"),
+    ArrangeItem("summary", "Taken this week, and running low"),
+    ArrangeItem("asneeded", "As needed"),
+)
+
+/** The Labs tab's sections: one for each test, newest first (the sections of [FeatureScreens.MEDS_LABS]). */
+fun labSections(labs: List<LabResult>): List<ArrangeItem> =
+    labs.sortedByDescending { it.at }.map { it.name }.distinctBy { it.lowercase() }.map { ArrangeItem(sectionId("lab", it), it) }.distinctBy { it.id }
+
 @Composable
 fun MedsScreen(state: MedsState, zone: ZoneId, actions: MedsActions, canNotify: Boolean = true, canBeExact: Boolean = true) {
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Medications", "Doses, reminders and results") {
-            if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = { actions.edit(null) }) {
-                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Add")
+            if (!readOnly) IconButton(onClick = { actions.edit(null) }) { Icon(Icons.Rounded.Add, "Add a medication") }
+            when (state.tab) {
+                MedsTab.TODAY -> ArrangeAction(FeatureScreens.MEDS_TODAY, "Today's medications", MEDS_TODAY_SECTIONS)
+                MedsTab.LABS -> ArrangeAction(FeatureScreens.MEDS_LABS, "Lab results", labSections(state.labs))
+                MedsTab.ALL -> Unit
             }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -164,10 +184,10 @@ fun MedsScreen(state: MedsState, zone: ZoneId, actions: MedsActions, canNotify: 
             when {
                 state.loading && state.day == null -> Loading()
                 state.error != null && state.day == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                state.meds.isEmpty() && state.tab != MedsTab.LABS -> EmptyState(
-                    Icons.Rounded.Medication, "No medications yet",
-                    "Add what you take, prescriptions and supplements alike, for reminders and a record of every dose.",
-                ) { Button(onClick = { actions.edit(null) }) { Text("Add a medication") } }
+                state.meds.isEmpty() && state.tab != MedsTab.LABS -> EmptyLine(
+                    "No medications yet. Add what you take for reminders and a record of each dose.",
+                    action = "Add".takeIf { !readOnly }, onAction = { actions.edit(null) },
+                )
                 else -> when (state.tab) {
                     MedsTab.TODAY -> TodayTab(state, zone, actions, canNotify, canBeExact)
                     MedsTab.ALL -> AllTab(state.meds, actions)
@@ -201,13 +221,22 @@ private fun TodayTab(state: MedsState, zone: ZoneId, actions: MedsActions, canNo
             }
         }
     }
-    DoseList(day, zone, actions, sitesFor = { id -> state.meds.firstOrNull { it.id == id }?.sites.orEmpty() })
-    if (day.adherence7d != null || day.lowStock.isNotEmpty()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            day.adherence7d?.let { Pill("$it% taken this week", if (it >= 80) AppTheme.status.good else AppTheme.status.warn) }
-            day.lowStock.forEach { Pill("${it.name}: ${it.stock ?: 0} left", AppTheme.status.warn) }
+    Sections(arrangedIn(FeatureScreens.MEDS_TODAY, MEDS_TODAY_SECTIONS)) { id ->
+        when (id) {
+            "scheduled" -> DoseList(day, zone, actions, sitesFor = { medId -> state.meds.firstOrNull { it.id == medId }?.sites.orEmpty() })
+            "summary" -> if (day.adherence7d != null || day.lowStock.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    day.adherence7d?.let { Pill("$it% taken this week", if (it >= 80) AppTheme.status.good else AppTheme.status.warn) }
+                    day.lowStock.forEach { Pill("${it.name}: ${it.stock ?: 0} left", AppTheme.status.warn) }
+                }
+            }
+            "asneeded" -> AsNeeded(day, zone, actions)
         }
     }
+}
+
+@Composable
+private fun AsNeeded(day: MedsDay, zone: ZoneId, actions: MedsActions) {
     if (day.asNeeded.isNotEmpty()) {
         InfoCard("As needed") {
             day.asNeeded.forEachIndexed { i, med ->
@@ -327,11 +356,15 @@ private fun AllTab(meds: List<Medication>, actions: MedsActions) {
 @Composable
 private fun LabsTab(labs: List<LabResult>, zone: ZoneId, actions: MedsActions) {
     var adding by remember { mutableStateOf(false) }
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
     if (labs.isEmpty()) {
-        EmptyState(Icons.Rounded.Science, "No results yet", "Keep your blood test results here to see how they change over time.")
+        EmptyLine("No results yet. Keep blood tests here to see how they change.", action = "Add".takeIf { !readOnly }, onAction = { adding = true })
     }
-    labs.groupBy { it.name }.forEach { (name, results) ->
+    val byName = labs.groupBy { sectionId("lab", it.name) }
+    Sections(arrangedIn(FeatureScreens.MEDS_LABS, labSections(labs))) { id ->
+        val results = byName[id] ?: return@Sections
         val sorted = results.sortedBy { it.at }
+        val name = sorted.last().name
         val latest = sorted.last()
         val inRange = (latest.low == null || latest.value >= latest.low!!) && (latest.high == null || latest.value <= latest.high!!)
         InfoCard(name, icon = Icons.Rounded.Science, trailing = {
@@ -360,7 +393,7 @@ private fun LabsTab(labs: List<LabResult>, zone: ZoneId, actions: MedsActions) {
             }
         }
     }
-    Button(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) { Text("Add a result") }
+    if (labs.isNotEmpty() && !readOnly) Button(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) { Text("Add a result") }
     if (adding) LabDialog(zone, onDismiss = { adding = false }) { actions.addLab(it); adding = false }
 }
 

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -28,7 +27,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +54,18 @@ import com.health.app.ui.components.Stat
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.components.shownFields
 import com.health.app.ui.modules.NavRow
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.TitleAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.OpenChevron
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import com.health.app.ui.modules.body.MeasurementFormat
 import com.health.app.ui.theme.AppTheme
 import java.time.ZoneId
@@ -75,43 +85,62 @@ fun TransitionRoute(open: (String) -> Unit) {
     TransitionHome(state, shownFields(), com.health.app.ui.care.shownModules(), profile?.units ?: Units.METRIC, c.zone(), TransitionActions(open) { vm.load() })
 }
 
+/**
+ * Transition's sections in the default order (the sections of [FeatureScreens.TRANSITION]), for the
+ * parts the person has on: never assuming which, or in what order they matter.
+ */
+fun transitionSections(fields: Set<String>, modules: Set<Module>): List<ArrangeItem> = buildList {
+    add(ArrangeItem("since", "Since you began, and your goals"))
+    add(ArrangeItem("lately", "Lately"))
+    if (Fields.TRANSITION_MILESTONES in fields) add(ArrangeItem("milestones", "Milestones"))
+    if (Fields.TRANSITION_MOMENTS in fields) add(ArrangeItem("moments", "Euphoria and dysphoria"))
+    if (Fields.TRANSITION_CHANGES in fields) add(ArrangeItem("changes", "Changes you notice"))
+    if (Fields.TRANSITION_VOICE in fields) add(ArrangeItem("voice", "Voice"))
+    if (Fields.TRANSITION_HAIR in fields) add(ArrangeItem("hair", "Hair removal"))
+    if (Fields.TRANSITION_MEASUREMENTS in fields) add(ArrangeItem("measurements", "Body measurements"))
+    if (Module.PHOTOS in modules) add(ArrangeItem("photos", "Progress photos"))
+}
+
 @Composable
 fun TransitionHome(state: TransitionState, fields: Set<String>, modules: Set<Module>, units: Units, zone: ZoneId, actions: TransitionActions) {
     val readOnly = LocalReadOnly.current
     val o = state.overview
+    val sections = transitionSections(fields, modules)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Transition", o?.profile?.pronouns?.let { "Pronouns: $it" } ?: "Whatever it means to you, at your pace") {
-            if (!readOnly) TextButton(onClick = { actions.open("transition/profile") }) { Text("Profile") }
+            if (!readOnly) IconButton(onClick = { actions.open("transition/profile") }) { Icon(Icons.Rounded.Person, "Your profile") }
+            ArrangeAction(FeatureScreens.TRANSITION, "Transition", sections)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && o == null -> Loading()
                 state.error != null && o == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                o != null -> {
-                    AppCard(padding = 18.dp) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Since(o.sinceStart ?: "—", "since you began", Modifier.weight(1f))
-                            o.onHormones?.let { Since(it, "on hormones", Modifier.weight(1f)) }
+                o != null -> Sections(arrangedIn(FeatureScreens.TRANSITION, sections)) { id ->
+                    when (id) {
+                        "since" -> AppCard(padding = 18.dp) {
+                            // Side by side when they fit; otherwise one under the other, never split.
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Since(o.sinceStart ?: "—", "since you began")
+                                o.onHormones?.let { Since(it, "on hormones") }
+                            }
+                            if (o.sinceStart == null && !readOnly) Hint("Add when you began, in whatever sense matters to you, in your profile.", Modifier.padding(top = 6.dp))
+                            if (o.profile.goals.isNotEmpty()) {
+                                Text("Your goals", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
+                                o.profile.goals.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
+                            }
                         }
-                        if (o.sinceStart == null && !readOnly) Hint("Add when you began, in whatever sense matters to you, in your profile.", Modifier.padding(top = 6.dp))
-                        if (o.profile.goals.isNotEmpty()) {
-                            Text("Your goals", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
-                            o.profile.goals.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
+                        "lately" -> if (o.highlights.isNotEmpty()) {
+                            InfoCard("Lately", icon = Icons.Rounded.AutoAwesome) {
+                                o.highlights.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }
+                            }
                         }
-                    }
-                    if (o.highlights.isNotEmpty()) {
-                        InfoCard("Lately", icon = Icons.Rounded.AutoAwesome) {
-                            o.highlights.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp)) }
-                        }
-                    }
-                    if (Fields.TRANSITION_MILESTONES in fields) MilestonesCard(o.milestones, readOnly, actions.open)
-                    if (Fields.TRANSITION_MOMENTS in fields) MomentsCard(state, zone, readOnly, actions.open)
-                    if (Fields.TRANSITION_CHANGES in fields) ChangesCard(state, readOnly, actions.open)
-                    if (Fields.TRANSITION_VOICE in fields) VoiceCard(state, zone, readOnly, actions.open)
-                    if (Fields.TRANSITION_HAIR in fields) HairCard(state, zone, readOnly, actions.open)
-                    if (Fields.TRANSITION_MEASUREMENTS in fields) MeasurementsCard(state, units, actions.open)
-                    if (Module.PHOTOS in modules) {
-                        InfoCard(null) { NavRow(Icons.Rounded.PhotoLibrary, "Progress photos", "Private, and compared side by side", onClick = { actions.open("photos") }) }
+                        "milestones" -> MilestonesCard(o.milestones, readOnly, actions.open)
+                        "moments" -> MomentsCard(state, zone, readOnly, actions.open)
+                        "changes" -> ChangesCard(state, readOnly, actions.open)
+                        "voice" -> VoiceCard(state, zone, readOnly, actions.open)
+                        "hair" -> HairCard(state, zone, readOnly, actions.open)
+                        "measurements" -> MeasurementsCard(state, units, actions.open)
+                        "photos" -> InfoCard(null) { NavRow(Icons.Rounded.PhotoLibrary, "Progress photos", "Private, and compared side by side", onClick = { actions.open("photos") }) }
                     }
                 }
             }
@@ -123,7 +152,7 @@ fun TransitionHome(state: TransitionState, fields: Set<String>, modules: Set<Mod
     }
 }
 
-/** A length of time, large, wrapping onto two lines when it needs to. */
+/** A length of time, large, with what it's since under it. */
 @Composable
 private fun Since(value: String, caption: String, modifier: Modifier = Modifier) {
     Column(modifier) {
@@ -134,11 +163,8 @@ private fun Since(value: String, caption: String, modifier: Modifier = Modifier)
 
 @Composable
 private fun MilestonesCard(milestones: List<Milestone>, readOnly: Boolean, open: (String) -> Unit) {
-    InfoCard("Milestones", icon = Icons.Rounded.Flag, trailing = { if (!readOnly) TextButton(onClick = { open("transition/templates") }) { Text("Add") } }) {
-        if (milestones.isEmpty()) {
-            Hint("Steps that matter to you: telling someone, a new name on your documents, starting something new. Start from a suggestion or write your own.")
-            if (!readOnly) FilledTonalButton(onClick = { open("transition/templates") }, modifier = Modifier.padding(top = 8.dp)) { Text("Add a milestone") }
-        }
+    InfoCard("Milestones", icon = Icons.Rounded.Flag, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Add a milestone") { open("transition/templates") } })) {
+        if (milestones.isEmpty()) Hint("Steps that matter to you, in your own words or from a suggestion.")
         TransitionWords.STATUS_ORDER.forEach { status ->
             val list = milestones.filter { it.status == status }
             if (list.isEmpty()) return@forEach
@@ -187,7 +213,7 @@ private fun MomentsCard(state: TransitionState, zone: ZoneId, readOnly: Boolean,
 
 @Composable
 private fun ChangesCard(state: TransitionState, readOnly: Boolean, open: (String) -> Unit) {
-    InfoCard("Changes you notice", icon = Icons.Rounded.Timeline, trailing = { if (!readOnly) TextButton(onClick = { open("transition/change") }) { Text("Add") } }) {
+    InfoCard("Changes you notice", icon = Icons.Rounded.Timeline, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Note a change") { open("transition/change") } })) {
         if (state.changes.isEmpty()) Hint("Skin, hair, voice, how you feel: notice what changes, and how you feel about it.")
         state.changes.take(5).forEach { c ->
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -237,7 +263,7 @@ private fun VoiceCard(state: TransitionState, zone: ZoneId, readOnly: Boolean, o
 
 @Composable
 private fun HairCard(state: TransitionState, zone: ZoneId, readOnly: Boolean, open: (String) -> Unit) {
-    InfoCard("Hair removal", trailing = { if (!readOnly) TextButton(onClick = { open("transition/hair") }) { Text("Add") } }) {
+    InfoCard("Hair removal", icon = Icons.Rounded.ContentCut, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Log a session") { open("transition/hair") } })) {
         val areas = state.overview?.hairByArea.orEmpty()
         if (areas.isEmpty()) Hint("Sessions by area, with pain, time and cost if you like.")
         else FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { areas.forEach { Text("${it.name}: ${it.count}", style = MaterialTheme.typography.bodyMedium) } }
@@ -253,7 +279,7 @@ private fun HairCard(state: TransitionState, zone: ZoneId, readOnly: Boolean, op
 @Composable
 private fun MeasurementsCard(state: TransitionState, units: Units, open: (String) -> Unit) {
     val sets = state.overview?.measurements.orEmpty()
-    InfoCard("Body measurements", icon = Icons.Rounded.Straighten, trailing = { TextButton(onClick = { open("measurements") }) { Text("Open") } }) {
+    InfoCard("Body measurements", icon = Icons.Rounded.Straighten, onClick = { open("measurements") }, trailing = { OpenChevron("Body measurements") { open("measurements") } }) {
         if (sets.isEmpty()) {
             Hint("Waist, hips, chest and more, over time.")
             return@InfoCard
@@ -262,6 +288,5 @@ private fun MeasurementsCard(state: TransitionState, units: Units, open: (String
         FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             latest.forEach { (m, cm) -> Text("${m.label} ${MeasurementFormat.length(cm, units)}", style = MaterialTheme.typography.bodyMedium) }
         }
-        Spacer(Modifier.width(1.dp))
     }
 }
