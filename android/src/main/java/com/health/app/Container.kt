@@ -331,6 +331,8 @@ class Container(val context: Context) {
         _viewProfile.value = null
         _profile.value = null
         _fields.value = null
+        // The person's own cycle wording, cached for Today's card.
+        com.health.app.ui.modules.cycle.CycleWording.neutral.value = null
     }
 
     companion object {
