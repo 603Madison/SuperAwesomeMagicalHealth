@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Check, FlaskConical, MoreHorizontal, Pencil, Pill, Plus, Trash2, X } from "lucide-react";
+import { Check, ClipboardList, FlaskConical, MoreHorizontal, Pencil, Pill, Plus, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, dayLabel, isoDate, num, shortDate, today } from "../lib/format";
 import type { DueDose, LabResult, MedForm, Medication, ScheduleKind } from "../lib/types";
 import { LineChart } from "../components/charts";
-import { Button, Card, DateNav, Empty, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { useModules } from "../App";
 import { useReadOnly } from "../lib/viewing";
 
@@ -32,44 +34,34 @@ export function Meds() {
   const reload = () => { day.reload(); meds.reload(); };
   const d = day.data;
 
-  return (
-    <div className="page">
-      <PageHeader title="Medications" subtitle="What you take, when, and how it's going" actions={<>
-        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
-        {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> Add</Button>}
-      </>} />
-      {day.error && <ErrorNotice message={day.error} onRetry={day.reload} />}
-      {!d && day.loading && <Spinner />}
-      {d && (
-        <div className="grid grid-2">
-          <Card title="Doses" icon={<Pill size={18} />} className="span-2" action={d.adherence7d != null && <span className="muted small">taken <strong>{d.adherence7d}%</strong> this week</span>}>
-            {d.due.length === 0 && d.asNeeded.length === 0 && <Empty icon={<Pill size={36} />} title="Nothing scheduled">Add a medication or supplement, and its doses show here with a reminder on your phone.</Empty>}
-            <ul className="rows">
-              {d.due.map((dose) => <DoseRow key={`${dose.medicationId}-${dose.scheduledFor}`} dose={dose} onChanged={reload} />)}
-              {d.asNeeded.map((m) => (
-                <li key={m.id} className="row">
-                  <div className="row-icon"><Pill size={18} /></div>
-                  <div className="row-main"><div className="row-title">{m.name}{m.dose ? ` · ${m.dose}` : ""}</div><div className="row-sub">As needed{d.extra.filter((e) => e.medicationId === m.id).map((e) => ` · took one at ${clock(e.at)}`).join("")}</div></div>
-                  <Button className="write-only" onClick={async () => { try { await api.logDose({ medicationId: m.id!, at: Date.now(), status: "TAKEN" }); toast(`${m.name} logged`); reload(); } catch (e) { errorToast(e); } }}>Took one</Button>
-                </li>
-              ))}
-            </ul>
-            {d.lowStock.map((m) => <div key={m.id} className="notice">{m.stock === 0 ? `Out of ${m.name}: time to order more.` : `Running low on ${m.name}: ${m.stock} left.`}</div>)}
-          </Card>
-        </div>
-      )}
-
-      <h2 className="section-title">Your medications</h2>
-      {meds.data && meds.data.length > 0 && (
-        <Card>
-          <ul className="rows">
-            {meds.data.map((m) => (
-              <li key={m.id} className={`row ${m.active ? "" : "is-off"}`}>
-                <div className="row-icon"><Pill size={18} /></div>
-                <div className="row-main">
-                  <div className="row-title">{m.name}{m.dose ? ` · ${m.dose}` : ""}{!m.active && <span className="badge">Stopped</span>}</div>
-                  <div className="row-sub">{FORMS.find((f) => f.id === m.form)?.label} · {scheduleText(m)}{m.purpose ? ` · ${m.purpose}` : ""}{m.stock != null ? ` · ${m.stock} left` : ""}</div>
-                </div>
+  const sections: Section[] = [
+    { id: "doses", label: "Doses", node: d && (
+      <Card title="Doses" icon={<Pill size={18} />} className="span-2" action={d.adherence7d != null && <span className="muted small">taken <strong>{d.adherence7d}%</strong> this week</span>}>
+        {d.due.length === 0 && d.asNeeded.length === 0 && <p className="muted">Nothing scheduled. Add a medication or supplement, and its doses show here with a reminder.</p>}
+        <ul className="rows">
+          {d.due.map((dose) => <DoseRow key={`${dose.medicationId}-${dose.scheduledFor}`} dose={dose} onChanged={reload} />)}
+          {d.asNeeded.map((m) => (
+            <li key={m.id} className="row">
+              <div className="row-icon"><Pill size={18} /></div>
+              <div className="row-main"><div className="row-title">{m.name}{m.dose ? ` · ${m.dose}` : ""}</div><div className="row-sub">As needed{d.extra.filter((e) => e.medicationId === m.id).map((e) => ` · took one at ${clock(e.at)}`).join("")}</div></div>
+              <Button className="write-only" onClick={async () => { try { await api.logDose({ medicationId: m.id!, at: Date.now(), status: "TAKEN" }); toast(`${m.name} logged`); reload(); } catch (e) { errorToast(e); } }}>Took one</Button>
+            </li>
+          ))}
+        </ul>
+        {d.lowStock.map((m) => <div key={m.id} className="notice">{m.stock === 0 ? `Out of ${m.name}: time to order more.` : `Running low on ${m.name}: ${m.stock} left.`}</div>)}
+      </Card>
+    ) },
+    { id: "medications", label: "Your medications", node: meds.data && meds.data.length > 0 && (
+      <Card title="Your medications" icon={<ClipboardList size={18} />} className="span-2">
+        <ul className="rows">
+          {meds.data.map((m) => (
+            <li key={m.id} className={`row ${m.active ? "" : "is-off"}`}>
+              <div className="row-icon"><Pill size={18} /></div>
+              <div className="row-main">
+                <div className="row-title">{m.name}{m.dose ? ` · ${m.dose}` : ""}{!m.active && <span className="badge">Stopped</span>}</div>
+                <div className="row-sub">{FORMS.find((f) => f.id === m.form)?.label} · {scheduleText(m)}{m.purpose ? ` · ${m.purpose}` : ""}{m.stock != null ? ` · ${m.stock} left` : ""}</div>
+              </div>
+              {!readOnly && (
                 <div className="row-actions">
                   <Menu label={`More for ${m.name}`} trigger={<MoreHorizontal size={18} />} items={[
                     { label: "Edit", icon: <Pencil size={18} />, onSelect: () => setEditing(m) },
@@ -77,22 +69,41 @@ export function Meds() {
                     { label: "Delete", icon: <Trash2 size={18} />, danger: true, onSelect: async () => { try { await api.deleteMed(m.id!); reload(); } catch (e) { errorToast(e); } } },
                   ]} />
                 </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    ) },
+    { id: "labs", label: "Lab results", node: labs.data && (
+      labs.data.length === 0 ? (
+        <Card title="Lab results" icon={<FlaskConical size={18} />} className="span-2"
+          action={!readOnly && <CardAction label="Add a lab result" onClick={() => setAddingLab(true)}><Plus size={18} /></CardAction>} />
+      ) : (
+        <section className="block span-2" aria-label="Lab results">
+          <div className="section-head">
+            <h2 className="section-title">Lab results</h2>
+            {!readOnly && <Button onClick={() => setAddingLab(true)}><Plus size={18} /> Add a result</Button>}
+          </div>
+          <div className="grid grid-2">
+            {Object.entries(groupBy(labs.data, (l) => l.name)).map(([name, results]) => <LabCard key={name} name={name} results={results} readOnly={readOnly} onChanged={labs.reload} />)}
+          </div>
+        </section>
+      )
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("meds"), "Medications", sections);
 
-      <div className="section-head">
-        <h2 className="section-title">Lab results</h2>
-        {!readOnly && <Button onClick={() => setAddingLab(true)}><Plus size={18} /> Add a result</Button>}
-      </div>
-      {labs.data && labs.data.length === 0 && <Card><Empty icon={<FlaskConical size={36} />} title="No results yet">Keep blood test results here (hormone levels, iron, thyroid, cholesterol…) to see how they change over time.</Empty></Card>}
-      {labs.data && labs.data.length > 0 && (
-        <div className="grid grid-2">
-          {Object.entries(groupBy(labs.data, (l) => l.name)).map(([name, results]) => <LabCard key={name} name={name} results={results} onChanged={labs.reload} />)}
-        </div>
-      )}
+  return (
+    <div className="page">
+      <PageHeader title="Medications" subtitle="What you take, when, and how it's going" actions={<>
+        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
+        {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> Add</Button>}
+        {arranged.button}
+      </>} />
+      {day.error && <ErrorNotice message={day.error} onRetry={day.reload} />}
+      {!d && day.loading && <Spinner />}
+      {arranged.render()}
 
       {editing && <MedDialog med={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={reload} />}
       {addingLab && <LabDialog onClose={() => setAddingLab(false)} onSaved={labs.reload} />}
@@ -225,7 +236,7 @@ export function MedDialog({ med, onClose, onSaved, hormone }: { med?: Medication
   );
 }
 
-function LabCard({ name, results, onChanged }: { name: string; results: LabResult[]; onChanged: () => void }) {
+function LabCard({ name, results, readOnly, onChanged }: { name: string; results: LabResult[]; readOnly: boolean; onChanged: () => void }) {
   const latest = results[0];
   const outside = (latest.low != null && latest.value < latest.low) || (latest.high != null && latest.value > latest.high);
   return (
@@ -242,7 +253,7 @@ function LabCard({ name, results, onChanged }: { name: string; results: LabResul
         {results.slice(0, 4).map((r) => (
           <li key={r.id} className="row">
             <div className="row-main"><div className="row-title">{num(r.value, 2)} {r.unit}</div><div className="row-sub">{new Date(r.at).toLocaleDateString()}{r.note ? ` · ${r.note}` : ""}</div></div>
-            <div className="row-actions"><Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteLab(r.id!); onChanged(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button></div>
+            {!readOnly && <div className="row-actions"><Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteLab(r.id!); onChanged(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button></div>}
           </li>
         ))}
       </ul>

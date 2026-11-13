@@ -11,7 +11,7 @@ import type {
   Supply, SupplyStatus, SupplyAdjustment, CycleSettings, NeuroProfile, OverloadEvent, EnergyDay, NeuroCheckIn, FocusSession,
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
-  AiChatReply, AiBreakdownReply, AiAuditEntry,
+  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -310,6 +310,12 @@ export const api = {
   saveConditions: (c: MyConditions) => put<MyConditions>("/api/conditions", c),
   fields: () => get<FieldLayout>("/api/fields"),
   saveFields: (c: FieldChoices) => put<FieldLayout>("/api/fields", c),
+
+  // How the person has arranged each screen (always their own: never sent with X-SAMH-View)
+  layout: () => get<LayoutPrefs>("/api/layout"),
+  saveLayout: (key: string, layout: ScreenLayout) => put<LayoutPrefs>(`/api/layout/${q(key)}`, layout),
+  resetLayout: (key: string) => del<LayoutPrefs>(`/api/layout/${q(key)}`),
+  saveAllLayouts: (prefs: LayoutPrefs) => put<LayoutPrefs>("/api/layout", prefs),
 
   // Bladder and bowel, in detail; supplies
   continenceSettings: () => get<ContinenceSettings>("/api/continence/settings"),

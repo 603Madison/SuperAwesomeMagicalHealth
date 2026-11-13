@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ArrowRightLeft, Barcode, Copy, GlassWater, MoreHorizontal, Pencil, Plus, Search, Trash2, Undo2, Zap } from "lucide-react";
+import { ArrowRightLeft, Barcode, Copy, GlassWater, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { dayLabel, num, shiftDate, today } from "../lib/format";
 import type { Food as FoodItem, FoodDay, FoodEntry, Meal, Nutrients } from "../lib/types";
 import { Meter } from "../components/charts";
-import { Button, Card, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, useHashScroll, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
+import { useWater } from "../lib/fields";
+import { useModules } from "../App";
 import { Macros } from "./Today";
 import { DrinksCard } from "./Drinks";
 import { useReadOnly } from "../lib/viewing";
@@ -24,8 +28,26 @@ export function Food() {
   const { data, error, loading, reload, setData } = useLoad(() => api.foodDay(date), [date]);
   const drinks = useLoad(() => api.drinksDay(date).catch(() => undefined), [date]);
   const readOnly = useReadOnly();
+  const water = useWater(useModules());
   const [adding, setAdding] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<FoodEntry | null>(null);
+  useHashScroll(!!data);
+
+  const sections: Section[] = [
+    { id: "totals", label: "Totals", node: data && <Totals day={data} /> },
+    { id: "water", label: "Water", when: water, node: data && <WaterCard day={data} readOnly={readOnly} onChanged={reload} /> },
+    { id: "drinks", label: "Drinks", node: data && <DrinksCard day={drinks.data} date={date} readOnly={readOnly} onChanged={() => { drinks.reload(); reload(); }} /> },
+    ...MEALS.map((m) => ({
+      id: m.id.toLowerCase(), label: m.label, node: data && (
+        <MealCard
+          meal={m} day={data} readOnly={readOnly}
+          onAdd={() => setAdding(m.id)} onEdit={setEditing} onChanged={reload}
+          onRemoved={(id) => setData({ ...data, entries: data.entries.filter((e) => e.id !== id) })}
+        />
+      ),
+    })),
+  ];
+  const arranged = useArrange(layoutKey("food"), "Food", sections);
 
   return (
     <div className="page">
@@ -34,32 +56,47 @@ export function Food() {
           <h1>Food</h1>
           <p className="page-subtitle">What you eat, against what you burn</p>
         </div>
-        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(today(), 1)} />
+        <div className="page-actions">
+          <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(today(), 1)} />
+          {arranged.button}
+        </div>
       </header>
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {data && (
-        <div className="grid grid-2" style={{ opacity: loading ? 0.6 : 1 }}>
-          <Summary day={data} onChanged={reload} />
-          <DrinksCard className="span-2" day={drinks.data} date={date} readOnly={readOnly} onChanged={() => { drinks.reload(); reload(); }} />
-          {MEALS.map((m) => (
-            <MealCard
-              key={m.id} meal={m} day={data}
-              onAdd={() => setAdding(m.id)} onEdit={setEditing} onChanged={reload}
-              onRemoved={(id) => setData({ ...data, entries: data.entries.filter((e) => e.id !== id) })}
-            />
-          ))}
-        </div>
-      )}
+      <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
       {adding && <AddFood date={date} meal={adding} onClose={() => setAdding(null)} onAdded={reload} />}
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
   );
 }
 
-function Summary({ day, onChanged }: { day: FoodDay; onChanged: () => void }) {
+function Totals({ day }: { day: FoodDay }) {
   const t = day.target;
   const left = t.calories - day.totals.calories;
+  return (
+    <Card title="Totals" icon={<Salad size={18} />} className="span-2">
+      <div className="grid grid-2">
+        <div className="form-stack" style={{ gap: 12 }}>
+          <div className="big-number">{num(day.totals.calories)}<small>of {num(t.calories)} kcal</small></div>
+          <Meter value={day.totals.calories} max={t.calories} color="var(--c1)" label="Calories against your target" over />
+          <p className="muted small">
+            {left >= 0 ? `${num(left)} kcal left` : `${num(-left)} kcal over`}
+            {day.burned != null ? ` · ${num(day.burned)} burned so far` : ""}
+          </p>
+          <p className="muted small">{t.basis}</p>
+        </div>
+        <Macros eaten={day.totals} target={t} />
+      </div>
+      {day.totals.fiber != null && (
+        <p className="muted small">Fibre {num(day.totals.fiber)} g{day.totals.sugar != null ? ` · sugar ${num(day.totals.sugar)} g` : ""}{day.totals.sodiumMg != null ? ` · sodium ${num(day.totals.sodiumMg)} mg` : ""}</p>
+      )}
+    </Card>
+  );
+}
+
+/** Water against its goal, a glass at a time. Only while water shows (Settings › Features › Food). */
+function WaterCard({ day, readOnly, onChanged }: { day: FoodDay; readOnly: boolean; onChanged: () => void }) {
+  const t = day.target;
   const glasses = Math.max(8, Math.ceil(t.waterMl / 250));
   const full = Math.floor(day.waterMl / 250);
   const water = async (ml: number) => {
@@ -71,41 +108,23 @@ function Summary({ day, onChanged }: { day: FoodDay; onChanged: () => void }) {
     try { await api.deleteWater(last.id); onChanged(); } catch (e) { errorToast(e); }
   };
   return (
-    <Card title="Today's totals" className="span-2">
-      <div className="grid grid-2">
-        <div className="form-stack" style={{ gap: 12 }}>
-          <div className="big-number">{num(day.totals.calories)}<small>of {num(t.calories)} kcal</small></div>
-          <Meter value={day.totals.calories} max={t.calories} color="var(--c1)" label="Calories against your target" over />
-          <p className="muted small">
-            {left >= 0 ? `${num(left)} kcal left` : `${num(-left)} kcal over`}
-            {day.burned != null ? ` · ${num(day.burned)} burned so far` : ""}
-          </p>
-          <p className="muted small">{t.basis}</p>
-        </div>
-        <div className="form-stack" style={{ gap: 14 }}>
-          <Macros eaten={day.totals} target={t} />
-          <div>
-            <div className="meal-head"><h3>Water</h3><span className="muted">{num(day.waterMl)} / {num(t.waterMl)} ml</span></div>
-            <div className="water-glasses" style={{ margin: "8px 0" }} aria-hidden>
-              {Array.from({ length: glasses }, (_, i) => <span key={i} className={`glass ${i < full ? "is-full" : ""}`} />)}
-            </div>
-            <div className="button-row">
-              <Button onClick={() => water(250)}><GlassWater size={16} /> +250 ml</Button>
-              <Button onClick={() => water(500)}>+500 ml</Button>
-              {day.water.length > 0 && <Button variant="ghost" onClick={undoWater}><Undo2 size={16} /> Undo</Button>}
-            </div>
-          </div>
-        </div>
+    <Card title="Water" icon={<GlassWater size={18} />} action={<span className="muted small"><strong>{num(day.waterMl)}</strong> / {num(t.waterMl)} ml</span>}>
+      <div className="water-glasses" aria-hidden>
+        {Array.from({ length: glasses }, (_, i) => <span key={i} className={`glass ${i < full ? "is-full" : ""}`} />)}
       </div>
-      {day.totals.fiber != null && (
-        <p className="muted small">Fibre {num(day.totals.fiber)} g{day.totals.sugar != null ? ` · sugar ${num(day.totals.sugar)} g` : ""}{day.totals.sodiumMg != null ? ` · sodium ${num(day.totals.sodiumMg)} mg` : ""}</p>
+      {!readOnly && (
+        <div className="button-row">
+          <Button onClick={() => water(250)}><GlassWater size={16} /> +250 ml</Button>
+          <Button onClick={() => water(500)}>+500 ml</Button>
+          {day.water.length > 0 && <Button variant="ghost" onClick={undoWater}><Undo2 size={16} /> Undo</Button>}
+        </div>
       )}
     </Card>
   );
 }
 
-function MealCard({ meal, day, onAdd, onEdit, onChanged, onRemoved }: {
-  meal: { id: Meal; label: string }; day: FoodDay; onAdd: () => void; onEdit: (e: FoodEntry) => void; onChanged: () => void; onRemoved: (id: string) => void;
+function MealCard({ meal, day, readOnly, onAdd, onEdit, onChanged, onRemoved }: {
+  meal: { id: Meal; label: string }; day: FoodDay; readOnly: boolean; onAdd: () => void; onEdit: (e: FoodEntry) => void; onChanged: () => void; onRemoved: (id: string) => void;
 }) {
   const entries = day.entries.filter((e) => e.meal === meal.id);
   const kcal = entries.reduce((s, e) => s + e.nutrients.calories, 0);
@@ -119,12 +138,12 @@ function MealCard({ meal, day, onAdd, onEdit, onChanged, onRemoved }: {
   return (
     <Card
       title={<>{meal.label}<span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>{entries.length ? `${num(kcal)} kcal` : ""}</span></>}
-      action={<>
+      action={!readOnly && <>
         <Menu label={`More for ${meal.label}`} trigger={<MoreHorizontal size={20} />} items={[{ label: `Copy yesterday's ${meal.label.toLowerCase()}`, icon: <Copy size={18} />, onSelect: copyYesterday }]} />
-        <Button variant="tonal" onClick={onAdd}><Plus size={16} /> Add</Button>
+        <CardAction label={`Add to ${meal.label.toLowerCase()}`} onClick={onAdd}><Plus size={18} /></CardAction>
       </>}
     >
-      {entries.length === 0 ? <p className="muted small">Nothing yet.</p> : (
+      {entries.length > 0 && (
         <ul className="rows">
           {entries.map((e) => (
             <li key={e.id} className="row">

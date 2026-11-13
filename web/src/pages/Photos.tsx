@@ -6,6 +6,8 @@ import type { Photo, Pose } from "../lib/types";
 import { POSES } from "../lib/types";
 import { useReadOnly, useViewing } from "../lib/viewing";
 import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { ChipPicker, OneOf } from "../components/FieldKit";
 
 /*
@@ -94,12 +96,8 @@ export function Photos() {
   };
   const caption = (p: Photo) => [shortDate(p.date ?? new Date(p.at).toISOString().slice(0, 10)), p.weightKg != null ? weight(p.weightKg, units) : null, p.onHormones ? `${p.onHormones} on hormones` : null].filter(Boolean).join(" · ");
   const pair = picked.map((id) => list.find((p) => p.id === id)).filter(Boolean) as Photo[];
-  return (
-    <div className="page">
-      <PageHeader title="Progress photos" subtitle="Yours alone: encrypted, never shown to AI, and shared only if you choose" actions={<>
-        <Button variant={comparing ? "primary" : "tonal"} onClick={() => { setComparing(!comparing); setPicked([]); }}><Columns2 size={18} /> {comparing ? "Done comparing" : "Compare"}</Button>
-        {!readOnly && <Button variant="primary" onClick={() => setUploading(true)}><Upload size={18} /> Add photos</Button>}
-      </>} />
+  const sections: Section[] = [
+    { id: "filters", label: "Albums and filters", node: (
       <div className="photo-bar">
         <div className="tabs" role="tablist" aria-label="Albums">
           <button role="tab" aria-selected={album === null} className={album === null ? "is-active" : ""} onClick={() => setAlbum(null)}>All</button>
@@ -111,28 +109,44 @@ export function Photos() {
         </select>
         <Toggle label="Discreet" help="Blurred until tapped, in this browser" checked={discreet} onChange={(d) => { setDiscreet(d); setRevealed(new Set()); }} />
       </div>
+    ) },
+    { id: "privacy", label: "How they're kept", node: (
       <p className="privacy-line"><Lock size={14} /> Photos are re-encoded on the server to remove location and camera details, then kept encrypted. They're never shown to the assistant or AI connectors, and only someone you share with who you've given Photos can see them.</p>
+    ) },
+    { id: "photos", label: "Photos", node: photos.data && (list.length === 0 ? (
+      <Card><Empty icon={<Camera size={28} />} title="No photos yet">Same spot, same light, same pose, every few weeks: the changes you can't see day to day show up side by side.</Empty></Card>
+    ) : (
+      <div>
+        {byMonth.map(([month, items]) => (
+          <section key={month}>
+            <h3 className="section-title">{month}</h3>
+            <div className="photo-grid">
+              {items.map((p) => (
+                <button key={p.id} className={`photo-tile ${picked.includes(p.id!) ? "is-picked" : ""}`} onClick={() => pick(p)}
+                  aria-label={`${POSES.find((x) => x.id === p.pose)?.label} photo, ${caption(p)}${hidden(p) ? ", blurred: tap to show" : ""}`}>
+                  <PhotoImg id={p.id!} thumb alt="" loading="lazy" className={hidden(p) ? "is-blurred" : ""} />
+                  {hidden(p) && <span className="photo-veil"><EyeOff size={20} /> Tap to show</span>}
+                  <span className="photo-caption">{POSES.find((x) => x.id === p.pose)?.label} · {caption(p)}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    )) },
+  ];
+  const arranged = useArrange(layoutKey("photos"), "Progress photos", sections);
+  return (
+    <div className="page">
+      <PageHeader title="Progress photos" subtitle="Yours alone: encrypted, never shown to AI, and shared only if you choose" actions={<>
+        <Button variant={comparing ? "primary" : "tonal"} onClick={() => { setComparing(!comparing); setPicked([]); }}><Columns2 size={18} /> {comparing ? "Done comparing" : "Compare"}</Button>
+        {!readOnly && <Button variant="primary" onClick={() => setUploading(true)}><Upload size={18} /> Add photos</Button>}
+        {arranged.button}
+      </>} />
       {comparing && <p className="notice notice-info">Pick two photos to compare. {picked.length === 1 ? "One more." : ""}</p>}
       {photos.error && <ErrorNotice message={photos.error} onRetry={photos.reload} />}
       {photos.loading && !photos.data && <Spinner />}
-      {photos.data && list.length === 0 && (
-        <Card><Empty icon={<Camera size={36} />} title="No photos yet">Same spot, same light, same pose, every few weeks: the changes you can't see day to day show up side by side.</Empty></Card>
-      )}
-      {byMonth.map(([month, items]) => (
-        <section key={month}>
-          <h3 className="section-title">{month}</h3>
-          <div className="photo-grid">
-            {items.map((p) => (
-              <button key={p.id} className={`photo-tile ${picked.includes(p.id!) ? "is-picked" : ""}`} onClick={() => pick(p)}
-                aria-label={`${POSES.find((x) => x.id === p.pose)?.label} photo, ${caption(p)}${hidden(p) ? ", blurred: tap to show" : ""}`}>
-                <PhotoImg id={p.id!} thumb alt="" loading="lazy" className={hidden(p) ? "is-blurred" : ""} />
-                {hidden(p) && <span className="photo-veil"><EyeOff size={20} /> Tap to show</span>}
-                <span className="photo-caption">{POSES.find((x) => x.id === p.pose)?.label} · {caption(p)}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
+      {arranged.render("arranged-stack")}
       {uploading && <UploadDialog albums={(albums.data ?? []).map((a) => a.name)} defaultAlbum={album ?? undefined} onClose={() => setUploading(false)} onSaved={reload} />}
       {open && <PhotoDialog photo={open} caption={caption(open)} readOnly={readOnly} albums={(albums.data ?? []).map((a) => a.name)} onClose={() => setOpen(null)} onSaved={reload} />}
       {pair.length === 2 && <Compare a={pair[1].at < pair[0].at ? pair[1] : pair[0]} b={pair[1].at < pair[0].at ? pair[0] : pair[1]} caption={caption} onClose={() => setPicked([])} />}

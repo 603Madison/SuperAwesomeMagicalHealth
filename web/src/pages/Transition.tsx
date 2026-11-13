@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Check, Flag, Heart, Mic, Pencil, Plus, Scissors, Sparkles, Trash2 } from "lucide-react";
+import { Camera, Check, Flag, Heart, Mic, Pencil, Plus, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { isoDate, localInput, num, shortDate, today, useUnits, when } from "../lib/format";
 import type {
@@ -12,8 +11,10 @@ import { useReadOnly } from "../lib/viewing";
 import { LineChart } from "../components/charts";
 import { MeasurementsCard } from "../components/Measurements";
 import { PitchMeter, type PitchResult } from "../components/PitchMeter";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
 import { ChipPicker, OneOf, ScaleRow } from "../components/FieldKit";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 
 /*
  * Transition, whatever it means to you and at your pace: milestones, the changes you notice, voice
@@ -32,34 +33,44 @@ export function Transition() {
   const overview = useLoad(() => api.transition(), []);
   const o = overview.data;
   const [profileOpen, setProfileOpen] = useState(false);
+  const sections: Section[] = [
+    { id: "where", label: "Where you are", node: o && (
+      <Card title="Where you are" icon={<Sparkles size={18} />} className="span-2 transition-hero">
+        <div className="stats">
+          {o.sinceStart && <Stat label="Since you began" value={o.sinceStart} sub={o.profile.startedOn ? new Date(`${o.profile.startedOn}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined} />}
+          {o.onHormones && <Stat label="On hormones" value={o.onHormones} />}
+          {has(F.TRANSITION_MOMENTS) && <Stat label="Euphoria" value={o.euphoria} sub="moments, last 90 days" />}
+          {o.profile.pronouns && <Stat label="Pronouns" value={o.profile.pronouns} />}
+        </div>
+        {o.highlights.length > 0 && <ul className="plain-list highlights">{o.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul>}
+        {o.profile.goals.length > 0 && <div className="tag-list">{o.profile.goals.map((g) => <span key={g} className="chip is-static">{g}</span>)}</div>}
+        {!o.sinceStart && !o.onHormones && <p className="muted">Transition looks different for everyone. Track only what matters to you: everything here is private and encrypted.</p>}
+      </Card>
+    ) },
+    { id: "milestones", label: "Milestones", when: has(F.TRANSITION_MILESTONES), node: o && <Milestones readOnly={readOnly} /> },
+    { id: "moments", label: "Moments", when: has(F.TRANSITION_MOMENTS), node: o && <Moments readOnly={readOnly} /> },
+    { id: "changes", label: "Changes you notice", when: has(F.TRANSITION_CHANGES), node: o && <Changes readOnly={readOnly} /> },
+    { id: "voice", label: "Voice", when: has(F.TRANSITION_VOICE), node: o && <Voice readOnly={readOnly} target={o.profile.voiceTargetHz} /> },
+    { id: "hair", label: "Hair removal", when: has(F.TRANSITION_HAIR), node: o && <HairRemoval readOnly={readOnly} /> },
+    { id: "measurements", label: "Measurements", when: has(F.TRANSITION_MEASUREMENTS), node: o && (
+      <MeasurementsCard imperial={units === "IMPERIAL"} readOnly={readOnly} metrics={["CHEST", "BUST", "UNDERBUST", "WAIST", "HIPS", "SHOULDERS"]} sets={o.measurements} onSaved={overview.reload} />
+    ) },
+    { id: "photos", label: "Photos", node: o && (
+      <Card title="Photos" icon={<Camera size={18} />} link={{ to: "/photos", label: "Open Progress photos" }} className="span-2">
+        <p className="muted small">Encrypted, never shown to AI, and shared only if you choose.</p>
+      </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("transition"), "Transition", sections);
   return (
     <div className="page">
-      <PageHeader title="Transition" subtitle="Your milestones, changes and moments, at your pace" actions={!readOnly && <Button variant="ghost" onClick={() => setProfileOpen(true)}><Pencil size={16} /> About you</Button>} />
+      <PageHeader title="Transition" subtitle="Your milestones, changes and moments, at your pace" actions={<>
+        {!readOnly && <Button variant="ghost" onClick={() => setProfileOpen(true)}><Pencil size={16} /> About you</Button>}
+        {arranged.button}
+      </>} />
       {overview.error && <ErrorNotice message={overview.error} onRetry={overview.reload} />}
       {!o && overview.loading && <Spinner />}
-      {o && (
-        <div className="grid grid-2">
-          <Card title="Where you are" icon={<Sparkles size={18} />} className="span-2 transition-hero">
-            <div className="stats">
-              {o.sinceStart && <Stat label="Since you began" value={o.sinceStart} sub={o.profile.startedOn ? new Date(`${o.profile.startedOn}T12:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : undefined} />}
-              {o.onHormones && <Stat label="On hormones" value={o.onHormones} />}
-              {has(F.TRANSITION_MOMENTS) && <Stat label="Euphoria" value={o.euphoria} sub="moments, last 90 days" />}
-              {o.profile.pronouns && <Stat label="Pronouns" value={o.profile.pronouns} />}
-            </div>
-            {o.highlights.length > 0 && <ul className="plain-list highlights">{o.highlights.map((h, i) => <li key={i}>{h}</li>)}</ul>}
-            {o.profile.goals.length > 0 && <div className="tag-list">{o.profile.goals.map((g) => <span key={g} className="chip is-static">{g}</span>)}</div>}
-            {!o.sinceStart && !o.onHormones && <p className="muted">Transition looks different for everyone. Track only what matters to you: everything here is private and encrypted.</p>}
-          </Card>
-          {has(F.TRANSITION_MILESTONES) && <Milestones readOnly={readOnly} />}
-          {has(F.TRANSITION_MOMENTS) && <Moments readOnly={readOnly} />}
-          {has(F.TRANSITION_CHANGES) && <Changes readOnly={readOnly} />}
-          {has(F.TRANSITION_VOICE) && <Voice readOnly={readOnly} target={o.profile.voiceTargetHz} />}
-          {has(F.TRANSITION_HAIR) && <HairRemoval readOnly={readOnly} />}
-          {has(F.TRANSITION_MEASUREMENTS) && <MeasurementsCard imperial={units === "IMPERIAL"} readOnly={readOnly} metrics={["CHEST", "BUST", "UNDERBUST", "WAIST", "HIPS", "SHOULDERS"]}
-            sets={o.measurements} onSaved={overview.reload} />}
-          <Card title="Photos" className="span-2"><p className="muted">Progress photos live on the <Link to="/photos">Photos</Link> page: encrypted, never shown to AI, and shared only if you choose.</p></Card>
-        </div>
-      )}
+      {arranged.render()}
       {profileOpen && o && <ProfileDialog profile={o.profile} onClose={() => setProfileOpen(false)} onSaved={overview.reload} />}
     </div>
   );
@@ -87,10 +98,8 @@ function Milestones({ readOnly }: { readOnly: boolean }) {
   const [picking, setPicking] = useState(false);
   const items = list.data ?? [];
   return (
-    <Card title="Milestones" icon={<Flag size={18} />} className="span-2" action={!readOnly && <div className="button-row">
-      <Button variant="ghost" onClick={() => setPicking(true)}>From a template</Button>
-      <Button variant="tonal" onClick={() => setEditing({ title: "", area: "SOCIAL", status: "PLANNED", checklist: [] })}><Plus size={16} /> Add</Button>
-    </div>}>
+    <Card title="Milestones" icon={<Flag size={18} />} className="span-2"
+      action={!readOnly && <CardAction label="Add a milestone" onClick={() => setEditing({ title: "", area: "SOCIAL", status: "PLANNED", checklist: [] })}><Plus size={18} /></CardAction>}>
       {items.length === 0 ? <p className="muted">Steps you've taken or want to: telling people, a new name, documents, hormones, a procedure, your voice. Each at your own pace.</p> : (
         <div className="milestone-board">
           {MILESTONE_AREAS.map((a) => {
@@ -113,6 +122,7 @@ function Milestones({ readOnly }: { readOnly: boolean }) {
           })}
         </div>
       )}
+      {!readOnly && <div><Button variant="ghost" className="btn-small" onClick={() => setPicking(true)}>Start from a template</Button></div>}
       {editing && <MilestoneDialog milestone={editing} onClose={() => setEditing(null)} onSaved={list.reload} />}
       {picking && (
         <Modal wide title="Start from a template" onClose={() => setPicking(false)}>
@@ -173,10 +183,8 @@ function Moments({ readOnly }: { readOnly: boolean }) {
   const [adding, setAdding] = useState<MomentKind | null>(null);
   const items = [...(list.data ?? [])].sort((a, b) => b.at - a.at);
   return (
-    <Card title="Moments" icon={<Heart size={18} />} action={!readOnly && <div className="button-row">
-      <Button variant="tonal" onClick={() => setAdding("EUPHORIA")}><Sparkles size={16} /> Euphoria</Button>
-      <Button variant="ghost" onClick={() => setAdding("DYSPHORIA")}>A hard one</Button>
-    </div>}>
+    <Card title="Moments" icon={<Heart size={18} />}
+      action={!readOnly && <CardAction label="A moment that felt right" onClick={() => setAdding("EUPHORIA")}><Sparkles size={18} /></CardAction>}>
       {items.length === 0 ? <p className="muted">Keep the moments that feel right, to come back to. The hard ones are worth noting too: they show what to look after.</p> : (
         <ul className="rows">
           {items.slice(0, 8).map((m) => (
@@ -190,12 +198,13 @@ function Moments({ readOnly }: { readOnly: boolean }) {
           ))}
         </ul>
       )}
+      {!readOnly && <div><Button variant="ghost" className="btn-small" onClick={() => setAdding("DYSPHORIA")}>Note a hard one</Button></div>}
       {adding && <MomentDialog kind={adding} onClose={() => setAdding(null)} onSaved={list.reload} />}
     </Card>
   );
 }
 
-function MomentDialog({ kind, onClose, onSaved }: { kind: MomentKind; onClose: () => void; onSaved: () => void }) {
+export function MomentDialog({ kind, onClose, onSaved }: { kind: MomentKind; onClose: () => void; onSaved: () => void }) {
   const [m, setM] = useState<GenderMoment>({ at: Date.now(), kind, intensity: 3, context: [] });
   const save = async () => {
     try { await api.addMoment(m); toast(kind === "EUPHORIA" ? "Kept. Here's to more of those." : "Noted. Be kind to yourself today."); onSaved(); onClose(); } catch (e) { errorToast(e); }
@@ -215,7 +224,7 @@ function Changes({ readOnly }: { readOnly: boolean }) {
   const [editing, setEditing] = useState<BodyChange | null>(null);
   const items = [...(list.data ?? [])].sort((a, b) => b.date.localeCompare(a.date));
   return (
-    <Card title="Changes you notice" icon={<Sparkles size={18} />} action={!readOnly && <Button variant="tonal" onClick={() => setEditing({ date: today(), area: "", note: "" })}><Plus size={16} /> Add</Button>}>
+    <Card title="Changes you notice" icon={<Sparkles size={18} />} action={!readOnly && <CardAction label="Add a change you noticed" onClick={() => setEditing({ date: today(), area: "", note: "" })}><Plus size={18} /></CardAction>}>
       {items.length === 0 ? <p className="muted">The changes you notice, as you notice them: it's lovely to look back on.</p> : (
         <ol className="timeline">
           {items.slice(0, 10).map((c) => (
@@ -260,7 +269,7 @@ function Voice({ readOnly, target }: { readOnly: boolean; target?: number }) {
   const withPitch = items.filter((v) => v.pitchAvgHz != null);
   const week = items.filter((v) => v.at > Date.now() - 7 * 86_400_000).reduce((t, v) => t + v.minutes, 0);
   return (
-    <Card title="Voice" icon={<Mic size={18} />} action={!readOnly && <Button variant="tonal" onClick={() => setAdding(true)}><Plus size={16} /> Practice</Button>}>
+    <Card title="Voice" icon={<Mic size={18} />} action={!readOnly && <CardAction label="Log voice practice" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
       <div className="stats">
         <Stat label="This week" value={`${week} min`} />
         {withPitch.length > 0 && <Stat label="Latest average" value={`${Math.round(withPitch[withPitch.length - 1].pitchAvgHz!)} Hz`} sub={target ? `aiming around ${target}` : undefined} />}
@@ -308,7 +317,7 @@ function HairRemoval({ readOnly }: { readOnly: boolean }) {
   const byArea = HAIR_AREAS.map((a) => ({ a, n: items.filter((h) => h.area === a).length })).filter((x) => x.n > 0);
   const others = [...new Set(items.map((h) => h.area))].filter((a) => !HAIR_AREAS.includes(a)).map((a) => ({ a, n: items.filter((h) => h.area === a).length }));
   return (
-    <Card title="Hair removal" icon={<Scissors size={18} />} action={!readOnly && <Button variant="tonal" onClick={() => setAdding(true)}><Plus size={16} /> A session</Button>}>
+    <Card title="Hair removal" icon={<Scissors size={18} />} action={!readOnly && <CardAction label="Log a hair removal session" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
       {items.length === 0 ? <p className="muted">Laser, electrolysis and the rest: sessions by area, with how many hours or pulses, so you can see how far along you are.</p> : (
         <>
           <div className="tag-list">{[...byArea, ...others].map((x) => <span key={x.a} className="chip is-static">{x.a} <span className="muted">{x.n}</span></span>)}</div>
@@ -353,7 +362,7 @@ function HairDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 export function TransitionTodayCard({ headline, milestonesDue, euphoriaThisWeek }: { headline?: string; milestonesDue: string[]; euphoriaThisWeek: number }) {
   if (!headline && milestonesDue.length === 0 && euphoriaThisWeek === 0) return null;
   return (
-    <Card title="Transition" icon={<Sparkles size={18} />} action={<Link className="card-action" to="/transition">Open</Link>}>
+    <Card title="Transition" icon={<Sparkles size={18} />} link={{ to: "/transition", label: "Open Transition" }}>
       {headline && <p>{headline}</p>}
       {euphoriaThisWeek > 0 && <p className="muted small">{euphoriaThisWeek} {euphoriaThisWeek === 1 ? "moment" : "moments"} of euphoria this week.</p>}
       {milestonesDue.length > 0 && <p className="muted small">Coming up: {milestonesDue.join(", ")}</p>}

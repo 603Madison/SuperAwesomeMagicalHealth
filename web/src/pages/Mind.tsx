@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Brain, ClipboardList, Heart, LifeBuoy, Phone, Plus, Sparkles, Trash2, Wind } from "lucide-react";
+import { BookOpen, Brain, ClipboardList, Heart, LifeBuoy, LineChart as LineChartIcon, Phone, Plus, Sparkles, Trash2, Wind } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, isoDate, num, shortDate, when } from "../lib/format";
 import type { CrisisResource, JournalEntry, JournalKind, MoodEntry, ScreenerDefinition, ScreenerResult } from "../lib/types";
 import { LineChart } from "../components/charts";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, useHashScroll, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
 import { useModules } from "../App";
 import { useReadOnly } from "../lib/viewing";
@@ -46,19 +48,9 @@ export function Mind() {
   const reload = () => { summary.reload(); moods.reload(); };
   const s = summary.data;
 
-  return (
-    <div className="page">
-      <PageHeader title="Mind" subtitle="How you feel, and what helps" actions={
-        <Button variant="tonal" onClick={() => setSupport(true)}><LifeBuoy size={18} /> I need support</Button>
-      } />
-      {neuroOn && (
-        <nav className="tabs" aria-label="Mind sections">
-          <NavLink to="/mind" end className={({ isActive }) => (isActive ? "is-active" : "")}>Mind</NavLink>
-          <NavLink to="/neuro" className={({ isActive }) => (isActive ? "is-active" : "")}>Autism &amp; ADHD</NavLink>
-        </nav>
-      )}
-
-      {!readOnly && <Card title="How are you feeling?" icon={<Heart size={18} />}>
+  const sections: Section[] = [
+    { id: "feeling", label: "How are you feeling?", when: !readOnly, node: (
+      <Card title="How are you feeling?" icon={<Heart size={18} />} className="span-2">
         <div className="scale scale-large" role="group" aria-label="Log your mood">
           {FACES.map((f, i) => (
             <button key={i} type="button" onClick={() => setLogging(i + 1)} aria-label={`${FACE_LABELS[i]}: log it`}>
@@ -66,12 +58,11 @@ export function Mind() {
             </button>
           ))}
         </div>
-      </Card>}
-
-      {has(F.MIND_ENERGY_BUDGET) && <div className="grid grid-2 section-gap"><EnergyBudgetCard readOnly={readOnly} /></div>}
-
-      {!readOnly && <>
-        <h2 className="section-title">Calm tools</h2>
+      </Card>
+    ) },
+    { id: "energy", label: "Energy today", when: has(F.MIND_ENERGY_BUDGET), node: <EnergyBudgetCard readOnly={readOnly} /> },
+    { id: "calm", label: "Calm tools", when: !readOnly, node: (
+      <Card id="calm" title="Calm tools" icon={<Wind size={18} />} className="span-2">
         <div className="tool-grid">
           {TOOLS.map((t) => (
             <button key={t.id} className="tool-card" onClick={() => setTool(t)}>
@@ -81,84 +72,76 @@ export function Mind() {
             </button>
           ))}
         </div>
-      </>}
-
-      <div className="section-head">
-        <h2 className="section-title">Your mood</h2>
-        <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 14, label: "2 weeks" }, { value: 30, label: "Month" }, { value: 90, label: "3 months" }]} />
-      </div>
-      {summary.error && <ErrorNotice message={summary.error} onRetry={summary.reload} />}
-      {!s && summary.loading && <Spinner />}
-      {s && (
-        <div className="grid grid-2">
-          <Card title="Mood each day" className="span-2" action={s.averageMood != null && <span className="muted small">average <strong>{num(s.averageMood, 1)}</strong> of 5</span>}>
-            {s.days.some((d) => d.mood != null) ? (
-              <LineChart
-                label="Average mood each day" color="var(--c2)" yMin={1} yMax={5} area={false} dots={days <= 31}
-                points={s.days.map((d) => ({ x: new Date(`${d.date}T12:00`).getTime(), y: d.mood ?? null }))}
-                formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${y.toFixed(1)} · ${FACE_LABELS[Math.round(y) - 1] ?? ""}`}
-              />
-            ) : <p className="muted">Log your mood once or twice a day and patterns start to show.</p>}
-            {s.mindfulMinutes > 0 && <p className="muted small">{num(s.mindfulMinutes)} minutes of calm practice.</p>}
-          </Card>
-          {s.patterns.length > 0 && (
-            <Card title="What seems to help" className="span-2">
-              <div className="insights" style={{ margin: 0 }}>
-                {s.patterns.map((p, i) => {
-                  const Icon = INSIGHT_ICONS[p.icon] ?? Sparkles;
-                  return <article key={i} className={`insight tone-${p.tone}`}><div className="insight-icon"><Icon size={20} /></div><div><h4>{p.title}</h4><p>{p.body}</p></div></article>;
-                })}
-              </div>
-            </Card>
-          )}
-          {(s.feelings.length > 0 || s.context.length > 0) && (
-            <Card title="What you named most">
-              <div className="tag-list">{s.feelings.map((f) => <span key={f.name} className="chip is-static">{f.name} <span className="muted">{f.count}</span></span>)}</div>
-              {s.context.length > 0 && <div className="tag-list">{s.context.map((f) => <span key={f.name} className="chip is-static">{f.name} <span className="muted">{f.count}</span></span>)}</div>}
-            </Card>
-          )}
-          {moods.data && moods.data.length > 0 && (
-            <Card title="Recent">
-              <ul className="rows">
-                {moods.data.slice(0, 8).map((m) => (
-                  <li key={m.id} className="row">
-                    <div className="row-icon mood-face">{FACES[m.mood - 1]}</div>
-                    <div className="row-main">
-                      <div className="row-title">{[...m.feelings, ...m.context].join(", ") || FACE_LABELS[m.mood - 1]}</div>
-                      <div className="row-sub">{when(m.at)} · {clock(m.at)}{m.note ? ` · ${m.note}` : ""}</div>
-                    </div>
-                    <div className="row-actions">
-                      <Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteMood(m.id!); reload(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
+      </Card>
+    ) },
+    { id: "trend", label: "Your mood", node: s && (
+      <Card title="Your mood" icon={<LineChartIcon size={18} />} className="span-2"
+        action={<Segmented label="Range" value={days} onChange={setDays} options={[{ value: 14, label: "2 weeks" }, { value: 30, label: "Month" }, { value: 90, label: "3 months" }]} />}>
+        {s.days.some((d) => d.mood != null) ? (
+          <LineChart
+            label="Average mood each day" color="var(--c2)" yMin={1} yMax={5} area={false} dots={days <= 31}
+            points={s.days.map((d) => ({ x: new Date(`${d.date}T12:00`).getTime(), y: d.mood ?? null }))}
+            formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${y.toFixed(1)} · ${FACE_LABELS[Math.round(y) - 1] ?? ""}`}
+          />
+        ) : <p className="muted">Log your mood once or twice a day and patterns start to show.</p>}
+        {(s.averageMood != null || s.mindfulMinutes > 0) && (
+          <p className="muted small">{[s.averageMood != null ? `Average ${num(s.averageMood, 1)} of 5` : null, s.mindfulMinutes > 0 ? `${num(s.mindfulMinutes)} minutes of calm practice` : null].filter(Boolean).join(" · ")}</p>
+        )}
+      </Card>
+    ) },
+    { id: "helps", label: "What seems to help", node: s && s.patterns.length > 0 && (
+      <Card title="What seems to help" icon={<Sparkles size={18} />} className="span-2">
+        <div className="insights" style={{ margin: 0 }}>
+          {s.patterns.map((p, i) => {
+            const Icon = INSIGHT_ICONS[p.icon] ?? Sparkles;
+            return <article key={i} className={`insight tone-${p.tone}`}><div className="insight-icon"><Icon size={20} /></div><div><h4>{p.title}</h4><p>{p.body}</p></div></article>;
+          })}
         </div>
-      )}
-
-      <h2 className="section-title">Check-ins</h2>
-      <div className="grid grid-2">
-        {(screeners.data ?? []).filter((d) => d.id !== "EPDS" || perinatal).map((d) => {
+      </Card>
+    ) },
+    { id: "named", label: "What you named most", node: s && (s.feelings.length > 0 || s.context.length > 0) && (
+      <Card title="What you named most">
+        <div className="tag-list">{s.feelings.map((f) => <span key={f.name} className="chip is-static">{f.name} <span className="muted">{f.count}</span></span>)}</div>
+        {s.context.length > 0 && <div className="tag-list">{s.context.map((f) => <span key={f.name} className="chip is-static">{f.name} <span className="muted">{f.count}</span></span>)}</div>}
+      </Card>
+    ) },
+    { id: "recent", label: "Recent moods", node: moods.data && moods.data.length > 0 && (
+      <Card title="Recent">
+        <ul className="rows">
+          {moods.data.slice(0, 8).map((m) => (
+            <li key={m.id} className="row">
+              <div className="row-icon mood-face">{FACES[m.mood - 1]}</div>
+              <div className="row-main">
+                <div className="row-title">{[...m.feelings, ...m.context].join(", ") || FACE_LABELS[m.mood - 1]}</div>
+                <div className="row-sub">{when(m.at)} · {clock(m.at)}{m.note ? ` · ${m.note}` : ""}</div>
+              </div>
+              {!readOnly && (
+                <div className="row-actions">
+                  <Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteMood(m.id!); reload(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    ) },
+    { id: "checkins", label: "Check-ins", node: screeners.data && (
+      <>
+        {screeners.data.filter((d) => d.id !== "EPDS" || perinatal).map((d) => {
           const latest = s?.latest.find((r) => r.screener === d.id);
           return (
-            <Card key={d.id} title={d.title} icon={<ClipboardList size={18} />} action={!readOnly && <Button onClick={() => setScreener(d)}>Take it</Button>}>
+            <Card key={d.id} title={d.title} icon={<ClipboardList size={18} />} action={!readOnly && <Button variant="tonal" className="btn-small" onClick={() => setScreener(d)}>Take it</Button>}>
               <p className="muted small">{d.about}</p>
               {latest ? <p><strong>{latest.score}</strong> · {latest.severity} <span className="muted small">{shortDate(latest.date!)}</span></p> : <p className="muted small">Not taken yet. It takes about two minutes.</p>}
             </Card>
           );
         })}
-      </div>
-
-      <div className="section-head">
-        <h2 className="section-title">Journal</h2>
-        {!readOnly && <Button onClick={() => setWriting("new")}><Plus size={18} /> Write</Button>}
-      </div>
-      <p className="muted small" style={{ marginTop: -6 }}>Private and encrypted on the server.</p>
-      {journal.data && journal.data.length === 0 && <Card><Empty icon={<BookOpen size={36} />} title="Nothing written yet">A few lines a day is plenty. Try a prompt, a gratitude list or a thought record.</Empty></Card>}
-      {journal.data && journal.data.length > 0 && (
-        <Card>
+      </>
+    ) },
+    { id: "journal", label: "Journal", node: journal.data && (
+      <Card title="Journal" icon={<BookOpen size={18} />} className="span-2"
+        action={!readOnly && <CardAction label="Write in your journal" onClick={() => setWriting("new")}><Plus size={18} /></CardAction>}>
+        {journal.data.length === 0 ? <p className="muted">A few lines a day is plenty. Private and encrypted on the server.</p> : (
           <ul className="rows">
             {journal.data.map((j) => (
               <li key={j.id}>
@@ -172,8 +155,28 @@ export function Mind() {
               </li>
             ))}
           </ul>
-        </Card>
+        )}
+      </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("mind"), "Mind", sections);
+  useHashScroll(true);
+
+  return (
+    <div className="page">
+      <PageHeader title="Mind" subtitle="How you feel, and what helps" actions={<>
+        <Button variant="tonal" onClick={() => setSupport(true)}><LifeBuoy size={18} /> I need support</Button>
+        {arranged.button}
+      </>} />
+      {neuroOn && (
+        <nav className="tabs" aria-label="Mind sections">
+          <NavLink to="/mind" end className={({ isActive }) => (isActive ? "is-active" : "")}>Mind</NavLink>
+          <NavLink to="/neuro" className={({ isActive }) => (isActive ? "is-active" : "")}>Autism &amp; ADHD</NavLink>
+        </nav>
       )}
+      {summary.error && <ErrorNotice message={summary.error} onRetry={summary.reload} />}
+      {!s && summary.loading && <Spinner />}
+      {arranged.render()}
 
       {logging != null && <MoodDialog initial={logging} onClose={() => setLogging(null)} onSaved={reload} />}
       {support && <SupportDialog onClose={() => setSupport(false)} />}

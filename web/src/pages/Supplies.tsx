@@ -6,7 +6,10 @@ import { num, shortDate, when } from "../lib/format";
 import type { Supply, SupplyAdjustment, SupplyCategory, SupplyKind, SupplyStatus } from "../lib/types";
 import { SUPPLY_KINDS, supplyKindLabel } from "../lib/types";
 import { useReadOnly } from "../lib/viewing";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
+import { useModules } from "../App";
 
 const CATEGORY_LABEL: Record<SupplyCategory, string> = { CONTINENCE: "Bladder and bowel", PERIOD: "Periods", OTHER: "Other" };
 
@@ -20,27 +23,20 @@ export function Supplies() {
   const [restock, setRestock] = useState<SupplyStatus | null>(null);
   const [history, setHistory] = useState<Supply | null>(null);
   const list = status.data ?? [];
-  const byCategory = (["CONTINENCE", "PERIOD", "OTHER"] as SupplyCategory[])
-    .map((c) => [c, list.filter((s) => SUPPLY_KINDS.find((k) => k.id === s.supply.kind)?.category === c)] as const)
-    .filter(([, items]) => items.length > 0);
-  return (
-    <div className="page">
-      <PageHeader title="Supplies" subtitle="What you have on hand, how fast it goes, and when to buy more"
-        actions={!readOnly && <Button variant="primary" onClick={() => setEditing(blank())}><Plus size={18} /> Add a product</Button>} />
-      {status.error && <ErrorNotice message={status.error} onRetry={status.reload} />}
-      {status.loading && !status.data && <Spinner />}
-      {status.data && list.length === 0 && (
-        <Card><Empty icon={<Package size={36} />} title="Nothing here yet">
-          Add the pads, briefs, pull-ups, liners or period products you use. Changes logged in the diary count them down, and you'll get a nudge before you run out.
-        </Empty></Card>
-      )}
-      {byCategory.map(([category, items]) => (
-        <section key={category}>
-          <h3 className="section-title">{CATEGORY_LABEL[category]}</h3>
+  const on = useModules();
+  const inCategory = (c: SupplyCategory) => list.filter((s) => SUPPLY_KINDS.find((k) => k.id === s.supply.kind)?.category === c);
+  const sections: Section[] = (["CONTINENCE", "PERIOD", "OTHER"] as SupplyCategory[]).map((category) => {
+    const items = inCategory(category);
+    return {
+      id: category.toLowerCase(), label: CATEGORY_LABEL[category],
+      when: category === "PERIOD" ? on.includes("CYCLE") || items.length > 0 : category === "CONTINENCE" ? on.includes("CONTINENCE") || items.length > 0 : true,
+      node: items.length > 0 && (
+        <section className="block span-2" aria-label={CATEGORY_LABEL[category]}>
+          <h2 className="section-title">{CATEGORY_LABEL[category]}</h2>
           <div className="grid grid-2">
             {items.map((s) => (
-              <Card key={s.supply.id} className={`supply-card ${s.low ? "is-low" : ""}`} title={s.supply.name} icon={<Package size={18} />}
-                action={s.low ? <span className="badge badge-warn">Running low</span> : undefined}>
+              <Card key={s.supply.id} className={`supply-card ${s.low ? "is-low" : ""}`} title={<>{s.supply.name}{s.low && <span className="badge badge-warn">Running low</span>}</>} icon={<Package size={18} />}
+                action={!readOnly && !s.supply.reusable && <CardAction label={`Restock ${s.supply.name}`} onClick={() => setRestock(s)}><ShoppingBag size={18} /></CardAction>}>
                 <p className="muted small">{[supplyKindLabel(s.supply.kind), s.supply.brand, s.supply.size, s.supply.absorbency].filter(Boolean).join(" · ")}</p>
                 <div className="stats">
                   <Stat label="On hand" value={s.supply.reusable ? "Reusable" : num(s.supply.onHand)} />
@@ -49,19 +45,36 @@ export function Supplies() {
                 </div>
                 {!readOnly && (
                   <div className="button-row">
-                    {!s.supply.reusable && <Button variant="tonal" onClick={() => setRestock(s)}><ShoppingBag size={16} /> Restock</Button>}
                     {!s.supply.reusable && <Button variant="ghost" onClick={async () => {
                       try { await api.adjustSupply(s.supply.id!, { at: Date.now(), delta: -1, reason: "USED" }); status.reload(); } catch (e) { errorToast(e); }
                     }}><Minus size={16} /> Used one</Button>}
-                    <Button variant="ghost" aria-label={`History of ${s.supply.name}`} onClick={() => setHistory(s.supply)}><History size={16} /></Button>
-                    <Button variant="ghost" aria-label={`Edit ${s.supply.name}`} onClick={() => setEditing(s.supply)}><Pencil size={16} /></Button>
+                    <Button variant="ghost" onClick={() => setHistory(s.supply)}><History size={16} /> History</Button>
+                    <Button variant="ghost" onClick={() => setEditing(s.supply)}><Pencil size={16} /> Edit</Button>
                   </div>
                 )}
               </Card>
             ))}
           </div>
         </section>
-      ))}
+      ),
+    };
+  });
+  const arranged = useArrange(layoutKey("supplies"), "Supplies", sections);
+  return (
+    <div className="page">
+      <PageHeader title="Supplies" subtitle="What you have on hand, how fast it goes, and when to buy more"
+        actions={<>
+          {!readOnly && <Button variant="primary" onClick={() => setEditing(blank())}><Plus size={18} /> Add a product</Button>}
+          {arranged.button}
+        </>} />
+      {status.error && <ErrorNotice message={status.error} onRetry={status.reload} />}
+      {status.loading && !status.data && <Spinner />}
+      {status.data && list.length === 0 && (
+        <Card><Empty icon={<Package size={32} />} title="Nothing here yet">
+          Add the pads, briefs, liners or period products you use: the diary counts them down, with a nudge before you run out.
+        </Empty></Card>
+      )}
+      {arranged.render()}
       <p className="muted small">Pad and brief changes in the <Link to="/bladder">Bladder &amp; bowel</Link> diary, and period products on <Link to="/cycle">Cycle</Link> days, are taken off the count as you log them.</p>
       {editing && <SupplyDialog supply={editing} onClose={() => setEditing(null)} onSaved={status.reload} />}
       {restock && <RestockDialog status={restock} onClose={() => setRestock(null)} onSaved={status.reload} />}
@@ -184,7 +197,7 @@ function HistoryDialog({ supply, onClose }: { supply: Supply; onClose: () => voi
 export function LowSuppliesCard({ items }: { items: SupplyStatus[] }) {
   if (items.length === 0) return null;
   return (
-    <Card title="Running low" icon={<Package size={18} />} action={<Link className="card-action" to="/supplies">Supplies</Link>}>
+    <Card title="Running low" icon={<Package size={18} />} link={{ to: "/supplies", label: "Open Supplies" }}>
       <ul className="rows">
         {items.map((s) => (
           <li key={s.supply.id} className="row">

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Children, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { create } from "zustand";
 
@@ -35,7 +36,7 @@ export function Field({ label, help, children }: { label: string; help?: ReactNo
   );
 }
 
-export function Toggle({ checked, onChange, label, help, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; help?: ReactNode; disabled?: boolean }) {
+export function Toggle({ checked, onChange, label, help, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; help?: ReactNode; disabled?: boolean }) {
   return (
     <label className={`toggle ${disabled ? "is-disabled" : ""}`}>
       <span className="toggle-text">
@@ -50,17 +51,34 @@ export function Toggle({ checked, onChange, label, help, disabled }: { checked: 
 
 // ---- Dialogs ----
 
-export function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+export function Modal({ title, onClose, children, footer, wide, sheet, subtitle }: {
+  title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
+  /** On phones, a sheet from the bottom of the screen. */
+  sheet?: boolean;
+  subtitle?: ReactNode;
+}) {
+  const dialog = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close.current();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
+  // Focus goes into the dialog (unless something in it asked for it), and back where it was after.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    if (!dialog.current?.contains(document.activeElement)) dialog.current?.focus();
+    return () => { if (before && document.contains(before)) before.focus(); };
+  }, []);
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal ${wide ? "modal-wide" : ""}`} role="dialog" aria-modal aria-label={title}>
+    <div className={`modal-backdrop ${sheet ? "has-sheet" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={dialog} tabIndex={-1} className={`modal ${wide ? "modal-wide" : ""} ${sheet ? "modal-sheet" : ""}`} role="dialog" aria-modal aria-label={title}>
         <div className="modal-head">
-          <h2>{title}</h2>
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p className="modal-subtitle">{subtitle}</p>}
+          </div>
           <IconButton label="Close" onClick={onClose}><X size={20} /></IconButton>
         </div>
         <div className="modal-body">{children}</div>
@@ -236,22 +254,40 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data: T |
 
 // ---- Health pieces ----
 
-/** A rounded card on the surface, with an optional heading row. */
-export function Card({ title, icon, action, children, className = "", onClick }: { title?: ReactNode; icon?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; onClick?: () => void }) {
-  const head = (title || action) && (
+/**
+ * A rounded card on the surface. Its heading row is always the same: the title (with its icon) on
+ * the left; on the right, at most one action (a primary icon button), then a chevron that opens
+ * the feature's page ([link], "Open Mind" for screen readers). A card with nothing in it is a slim
+ * row: the title and its action.
+ */
+export function Card({ title, icon, action, link, children, className = "", onClick, id }: {
+  title?: ReactNode; icon?: ReactNode; action?: ReactNode; link?: { to: string; label: string }; children?: ReactNode; className?: string; onClick?: () => void; id?: string;
+}) {
+  const slim = Children.toArray(children).length === 0;
+  const head = (title || action || link) && (
     <div className="card-head">
       {title && <h3 className="card-heading">{icon}{title}</h3>}
-      {action && <div className="card-action">{action}</div>}
+      {(action || link) && (
+        <div className="card-action">
+          {action}
+          {link && <Link className="icon-btn card-open" to={link.to} aria-label={link.label} title={link.label}><ChevronRight size={20} /></Link>}
+        </div>
+      )}
     </div>
   );
   if (onClick) {
     return (
-      <section className={`panel-card is-clickable ${className}`} onClick={onClick} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onClick())} role="button" tabIndex={0}>
+      <section id={id} className={`panel-card is-clickable ${className}`} onClick={onClick} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onClick())} role="button" tabIndex={0}>
         {head}{children}
       </section>
     );
   }
-  return <section className={`panel-card ${className}`}>{head}{children}</section>;
+  return <section id={id} className={`panel-card ${slim ? "is-slim" : ""} ${className}`}>{head}{children}</section>;
+}
+
+/** The one primary action in a card's heading row: a round icon button with its name for screen readers. */
+export function CardAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return <button type="button" className="icon-btn card-primary" aria-label={label} title={label} onClick={onClick}>{children}</button>;
 }
 
 /** Choose one of a few: a row of pills. */

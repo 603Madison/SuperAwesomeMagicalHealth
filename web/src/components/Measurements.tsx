@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Ruler } from "lucide-react";
+import { Plus, Ruler } from "lucide-react";
 import { api } from "../lib/api";
 import { isoDate, localInput, num, shortDate } from "../lib/format";
 import type { MeasurementSet, Metric, Sample } from "../lib/types";
 import { BODY_MEASUREMENTS } from "../lib/types";
 import { LineChart } from "./charts";
-import { Button, Card, Field, Modal, Segmented, errorToast, toast, useLoad } from "./ui";
+import { Button, Card, CardAction, Field, Modal, Segmented, errorToast, toast, useLoad } from "./ui";
 
 const CM_PER_IN = 2.54;
 
@@ -26,7 +26,7 @@ export function MeasurementsCard({ imperial, readOnly, metrics = BODY_MEASUREMEN
   const show = (cm: number) => (imperial ? `${num(cm / CM_PER_IN, 1)} in` : `${num(cm, 1)} cm`);
   const latest = metrics.map((m) => ({ m, s: [...(byMetric.get(m) ?? [])].sort((a, b) => b.start - a.start)[0] })).filter((x) => x.s);
   return (
-    <Card title="Measurements" icon={<Ruler size={18} />} className="span-2" action={!readOnly && <Button variant="tonal" onClick={() => setAdding(true)}>Measure</Button>}>
+    <Card title="Measurements" icon={<Ruler size={18} />} className="span-2" action={!readOnly && <CardAction label="Add measurements" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
       {latest.length === 0 ? <p className="muted">Measure with a soft tape, in the same place and at the same time of day, every week or two. Changes in shape often show here before they show on the scale.</p> : (
         <>
           <div className="stats">
@@ -48,7 +48,7 @@ export function MeasurementsCard({ imperial, readOnly, metrics = BODY_MEASUREMEN
   );
 }
 
-function MeasureDialog({ imperial, metrics, onClose, onSaved }: { imperial: boolean; metrics: Metric[]; onClose: () => void; onSaved: () => void }) {
+export function MeasureDialog({ imperial, metrics, onClose, onSaved }: { imperial: boolean; metrics: Metric[]; onClose: () => void; onSaved: () => void }) {
   const [unit, setUnit] = useState<"cm" | "in">(imperial ? "in" : "cm");
   const [values, setValues] = useState<Record<string, string>>({});
   const [at, setAt] = useState(localInput(Date.now()));

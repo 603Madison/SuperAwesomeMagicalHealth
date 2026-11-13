@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CloudSun, Pencil, Plus, Sparkles, Square, Stethoscope, Trash2, Zap } from "lucide-react";
+import { BarChart3, CloudSun, History, Pencil, Plus, Sparkles, Square, Stethoscope, Trash2, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, dayLabel, hm, isoDate, localInput, shortDate } from "../lib/format";
 import { useSession } from "../lib/session";
@@ -7,7 +7,9 @@ import { useReadOnly } from "../lib/viewing";
 import type { Migraine, SymptomEntry } from "../lib/types";
 import { BarChart } from "../components/charts";
 import { PlacePicker } from "../components/PlacePicker";
-import { Button, Card, Empty, ErrorNotice, Field, Menu, Modal, PageHeader, Segmented, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, ErrorNotice, Field, Menu, Modal, PageHeader, Segmented, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 
 export const SYMPTOMS = ["headache", "back pain", "joint pain", "stomach ache", "fatigue", "nausea", "dizziness", "brain fog", "muscle pain", "pelvic pain", "bloating", "heartburn", "cough", "sore throat", "anxiety", "trouble sleeping"];
 const AREAS = ["head", "neck", "shoulders", "upper back", "lower back", "chest", "stomach", "pelvis", "arms", "hands", "hips", "legs", "knees", "feet", "joints", "all over"];
@@ -42,84 +44,66 @@ export function Symptoms() {
     ...(migraines.data ?? []).filter((m) => m.end != null).map((m) => ({ at: m.start, m })),
   ].sort((a, b) => b.at - a.at);
 
-  return (
-    <div className="page">
-      <PageHeader title="Symptoms & pain" subtitle="What you feel, and what seems to go with it" actions={!readOnly && <>
-        <Button variant="primary" onClick={() => setLogging({ symptom: "" })}><Plus size={18} /> Log a symptom</Button>
-        {!open && <Button onClick={startMigraine}><Zap size={18} /> Migraine started</Button>}
-      </>} />
-
-      {open && <OpenMigraine migraine={open} readOnly={readOnly} onStop={() => setMigraine({ ...open, end: Date.now() })} />}
-
-      {!readOnly && (
-        <Card title="Quick log" icon={<Stethoscope size={18} />}>
-          <div className="tag-list">
-            {SYMPTOMS.slice(0, 10).map((x) => <button key={x} type="button" className="chip" onClick={() => setLogging({ symptom: x })}>{x}</button>)}
-          </div>
-        </Card>
-      )}
-
-      <div className="section-head">
-        <h2 className="section-title">Patterns</h2>
-        <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 30, label: "Month" }, { value: 90, label: "3 months" }, { value: 365, label: "Year" }]} />
-      </div>
-      {summary.error && <ErrorNotice message={summary.error} onRetry={summary.reload} />}
-      {!s && summary.loading && <Spinner />}
-      {s && (
-        <div className="grid grid-2">
-          <Card title="At a glance" className="span-2">
-            <div className="stats">
-              <Stat label="Days with symptoms" value={s.days.filter((d) => d.worst != null || d.entries.length > 0 || d.migraines.length > 0).length} sub={`in the last ${days} days`} />
-              <Stat label="Migraine days" value={s.migraineDays} />
-              {s.counts[0] && <Stat label="Most often" value={s.counts[0].name} sub={`${s.counts[0].count} times`} />}
-            </div>
-            {s.days.some((d) => d.worst != null) && (
-              <BarChart
-                label="The worst symptom each day" color="var(--c3)" height={130} labelEvery={Math.ceil(s.days.length / 8)}
-                formatY={(v) => `${v} of 10 · ${severityWord(v)}`} formatTick={(v) => String(v)}
-                bars={s.days.map((d) => ({ key: d.date, label: shortDate(d.date), value: d.worst ?? null, detail: `${shortDate(d.date)}${d.migraines.length ? " · migraine" : ""}` }))}
-              />
-            )}
-          </Card>
-          {s.correlations.length > 0 ? (
-            <Card title="What seems to go with them" icon={<Sparkles size={18} />} className="span-2">
-              <ul className="correlations">
-                {s.correlations.map((c) => (
-                  <li key={c.factor}>
-                    <p>{c.text}</p>
-                    <div className="correlation-bars" aria-hidden>
-                      <span className="small muted">With</span><span className="cbar"><i style={{ width: `${Math.round(c.withRate * 100)}%`, background: "var(--c3)" }} /></span><span className="small">{Math.round(c.withRate * 100)}%</span>
-                      <span className="small muted">Without</span><span className="cbar"><i style={{ width: `${Math.round(c.withoutRate * 100)}%`, background: "var(--c2)" }} /></span><span className="small">{Math.round(c.withoutRate * 100)}%</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <p className="muted small">From your own days. Things that go together don't always cause each other, but they're worth noticing, and worth mentioning to your doctor.</p>
-            </Card>
-          ) : (
-            <Card title="What seems to go with them" icon={<Sparkles size={18} />} className="span-2">
-              <p className="muted">After a few weeks of logging, this compares days with symptoms against your sleep, cycle, caffeine, alcohol, stress{s.weather ? " and air pressure" : ""}.</p>
-            </Card>
-          )}
-          {(s.triggers.length > 0 || s.counts.length > 0) && (
-            <Card title="What you noted">
-              {s.counts.length > 0 && <div className="tag-list">{s.counts.slice(0, 10).map((c) => <span key={c.name} className="chip is-static">{c.name} <span className="muted">{c.count}</span></span>)}</div>}
-              {s.triggers.length > 0 && <><p className="muted small">Triggers</p><div className="tag-list">{s.triggers.slice(0, 10).map((c) => <span key={c.name} className="chip is-static">{c.name} <span className="muted">{c.count}</span></span>)}</div></>}
-            </Card>
-          )}
-          {!readOnly && (
-            <Card title="Weather" icon={<CloudSun size={18} />}>
-              <p className="muted small">{profile?.place ? "Air pressure is compared with your migraines and headaches." : "For some people, migraines follow drops in air pressure. Add your area to compare."}</p>
-              <PlacePicker />
-            </Card>
-          )}
+  const range = <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 30, label: "Month" }, { value: 90, label: "3 months" }, { value: 365, label: "Year" }]} />;
+  const sections: Section[] = [
+    { id: "quick", label: "Quick log", when: !readOnly, node: (
+      <Card title="Quick log" icon={<Stethoscope size={18} />} className="span-2">
+        <div className="tag-list">
+          {SYMPTOMS.slice(0, 10).map((x) => <button key={x} type="button" className="chip" onClick={() => setLogging({ symptom: x })}>{x}</button>)}
         </div>
-      )}
-
-      <h2 className="section-title">Recent</h2>
-      {(entries.error || migraines.error) && <ErrorNotice message={(entries.error ?? migraines.error)!} onRetry={reload} />}
-      <Card>
-        {rows.length === 0 ? <Empty icon={<Stethoscope size={32} />} title="Nothing logged in the last month">Log symptoms as they come, with how bad they were and what helped.</Empty> : (
+      </Card>
+    ) },
+    { id: "glance", label: "At a glance", node: s && (
+      <Card title="At a glance" icon={<BarChart3 size={18} />} className="span-2" action={range}>
+        <div className="stats">
+          <Stat label="Days with symptoms" value={s.days.filter((d) => d.worst != null || d.entries.length > 0 || d.migraines.length > 0).length} sub={`in the last ${days} days`} />
+          <Stat label="Migraine days" value={s.migraineDays} />
+          {s.counts[0] && <Stat label="Most often" value={s.counts[0].name} sub={`${s.counts[0].count} times`} />}
+        </div>
+        {s.days.some((d) => d.worst != null) && (
+          <BarChart
+            label="The worst symptom each day" color="var(--c3)" height={130} labelEvery={Math.ceil(s.days.length / 8)}
+            formatY={(v) => `${v} of 10 · ${severityWord(v)}`} formatTick={(v) => String(v)}
+            bars={s.days.map((d) => ({ key: d.date, label: shortDate(d.date), value: d.worst ?? null, detail: `${shortDate(d.date)}${d.migraines.length ? " · migraine" : ""}` }))}
+          />
+        )}
+      </Card>
+    ) },
+    { id: "together", label: "What seems to go with them", node: s && (
+      <Card title="What seems to go with them" icon={<Sparkles size={18} />} className="span-2">
+        {s.correlations.length > 0 ? (
+          <>
+            <ul className="correlations">
+              {s.correlations.map((c) => (
+                <li key={c.factor}>
+                  <p>{c.text}</p>
+                  <div className="correlation-bars" aria-hidden>
+                    <span className="small muted">With</span><span className="cbar"><i style={{ width: `${Math.round(c.withRate * 100)}%`, background: "var(--c3)" }} /></span><span className="small">{Math.round(c.withRate * 100)}%</span>
+                    <span className="small muted">Without</span><span className="cbar"><i style={{ width: `${Math.round(c.withoutRate * 100)}%`, background: "var(--c2)" }} /></span><span className="small">{Math.round(c.withoutRate * 100)}%</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="muted small">From your own days. Things that go together don't always cause each other, but they're worth noticing, and worth mentioning to your doctor.</p>
+          </>
+        ) : <p className="muted">After a few weeks of logging, this compares days with symptoms against your sleep, cycle, caffeine, alcohol, stress{s.weather ? " and air pressure" : ""}.</p>}
+      </Card>
+    ) },
+    { id: "noted", label: "What you noted", node: s && (s.triggers.length > 0 || s.counts.length > 0) && (
+      <Card title="What you noted">
+        {s.counts.length > 0 && <div className="tag-list">{s.counts.slice(0, 10).map((c) => <span key={c.name} className="chip is-static">{c.name} <span className="muted">{c.count}</span></span>)}</div>}
+        {s.triggers.length > 0 && <><p className="muted small">Triggers</p><div className="tag-list">{s.triggers.slice(0, 10).map((c) => <span key={c.name} className="chip is-static">{c.name} <span className="muted">{c.count}</span></span>)}</div></>}
+      </Card>
+    ) },
+    { id: "weather", label: "Weather", when: !readOnly, node: (
+      <Card title="Weather" icon={<CloudSun size={18} />}>
+        <p className="muted small">{profile?.place ? "Air pressure is compared with your migraines and headaches." : "For some people, migraines follow drops in air pressure. Add your area to compare."}</p>
+        <PlacePicker />
+      </Card>
+    ) },
+    { id: "recent", label: "Recent", node: (
+      <Card title="Recent" icon={<History size={18} />} className="span-2">
+        {rows.length === 0 ? <p className="muted">Nothing logged in the last month.</p> : (
           <ul className="rows">
             {rows.slice(0, 40).map((r) => "e" in r ? (
               <li key={`e${r.e.id}`} className="row">
@@ -153,6 +137,23 @@ export function Symptoms() {
           </ul>
         )}
       </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("symptoms"), "Symptoms & pain", sections);
+
+  return (
+    <div className="page">
+      <PageHeader title="Symptoms & pain" subtitle="What you feel, and what seems to go with it" actions={<>
+        {!readOnly && <Button variant="primary" onClick={() => setLogging({ symptom: "" })}><Plus size={18} /> Log a symptom</Button>}
+        {!readOnly && !open && <Button onClick={startMigraine}><Zap size={18} /> Migraine started</Button>}
+        {arranged.button}
+      </>} />
+
+      {open && <OpenMigraine migraine={open} readOnly={readOnly} onStop={() => setMigraine({ ...open, end: Date.now() })} />}
+      {summary.error && <ErrorNotice message={summary.error} onRetry={summary.reload} />}
+      {(entries.error || migraines.error) && <ErrorNotice message={(entries.error ?? migraines.error)!} onRetry={reload} />}
+      {!s && summary.loading && <Spinner />}
+      {arranged.render()}
 
       {logging && <SymptomDialog initial={logging} onClose={() => setLogging(null)} onSaved={reload} />}
       {migraine && <MigraineDialog migraine={migraine} onClose={() => setMigraine(null)} onSaved={reload} />}

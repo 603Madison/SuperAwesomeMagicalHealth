@@ -193,3 +193,24 @@ export function useFields(): { has: (key: string) => boolean; layout: FieldLayou
   const effective = layout?.effective ?? DEFAULT_FIELDS;
   return { has: (key: string) => effective.includes(key), layout };
 }
+
+/** Shows or hides one field by hand, keeping the person's other choices (PUT /api/fields). */
+export async function setField(key: string, on: boolean): Promise<void> {
+  const layout = useFieldStore.getState().layout ?? (await loadFields(), useFieldStore.getState().layout);
+  const show = new Set(layout?.show ?? []);
+  const hide = new Set(layout?.hide ?? []);
+  show.delete(key);
+  hide.delete(key);
+  if (on) show.add(key); else hide.add(key);
+  setFieldLayout(await api.saveFields({ show: [...show], hide: [...hide] }));
+}
+
+/**
+ * Whether water shows (Food's `nutrition.water` field, on by default): the quick button, the goal,
+ * the water card and chart, the water drink and habit, and the watch's water. Off, drinks still
+ * count caffeine and alcohol.
+ */
+export function useWater(modules: Module[]): boolean {
+  const { has } = useFields();
+  return modules.includes("NUTRITION") && has(F.NUTRITION_WATER);
+}

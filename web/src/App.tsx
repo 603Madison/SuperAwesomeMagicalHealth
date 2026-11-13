@@ -1,7 +1,11 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { loadFields } from "./lib/fields";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Bot, Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ArrowUpDown, Bot, ClipboardList, Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
+import { LAYOUT_NAV, arrange } from "./lib/types";
+import { useScreenLayout } from "./lib/layout";
+import { ArrangePanel } from "./components/Arrange";
 import { Conditions } from "./pages/Conditions";
 import { ContinenceSettingsPage } from "./pages/Continence";
 import { CycleSettingsPage } from "./pages/Cycle";
@@ -79,17 +83,63 @@ export function useModules(): Module[] {
 
 const DEFAULT_MODULES: Module[] = ["ACTIVITY", "SLEEP", "NUTRITION", "BODY"];
 
-/** Shown on phones as tabs (the rest are a tap away in Settings). */
-const PHONE_TABS: Module[] = ["NUTRITION", "MIND"];
+/** The sidebar's groups, top to bottom; Settings and Admin sit at the very bottom. */
+const NAV_GROUPS = ["Today & Trends", "Your health", "Records"] as const;
+
+/** One link in the sidebar: its shared id (a Module or NavPage name), where it goes, and its group. */
+export interface NavItem {
+  id: string;
+  group: (typeof NAV_GROUPS)[number];
+  to: string;
+  /** In the sidebar (short); [label] in Arrange and on phones' Settings. */
+  short: string;
+  label: string;
+  icon: LucideIcon;
+  /** One of the phone's tabs along the bottom. */
+  tab?: boolean;
+}
+
+/**
+ * The links the sidebar can have (Today aside, always first), in the default order: Trends and
+ * the assistant; the features that are on, Food first; then Reports, Devices and What you're
+ * tracking. Ids are shared with the phone app's Health tab (Layouts.NAV).
+ */
+export function useNavItems(): NavItem[] {
+  const viewing = useViewing((s) => s.share);
+  const on = useModules();
+  const ai = useAiStatus();
+  // Autism & ADHD lives inside Mind when both are on (a tab there), and on its own otherwise.
+  const features = FEATURES.filter((f) => on.includes(f.id) && f.route && !(f.id === "NEURO" && on.includes("MIND")));
+  return [
+    { id: "TRENDS", group: "Today & Trends", to: "/trends", short: "Trends", label: "Trends", icon: TrendingUp, tab: true },
+    ...(!viewing && ai?.available ? [{ id: "ASSISTANT", group: "Today & Trends" as const, to: "/assistant", short: "Assistant", label: "Assistant", icon: Bot }] : []),
+    ...features.map((f) => ({
+      id: f.id === "NUTRITION" ? "FOOD" : f.id, group: "Your health" as const, to: f.route!, icon: f.icon, label: f.name, tab: f.id === "NUTRITION" || f.id === "MIND",
+      short: f.id === "VITALS" ? "BP & glucose" : f.id === "SYMPTOMS" ? "Symptoms" : f.id === "PHOTOS" ? "Photos" : f.name,
+    })),
+    ...(!viewing ? [
+      { id: "REPORTS", group: "Records" as const, to: "/reports", short: "Reports", label: "Reports", icon: FileText },
+      { id: "DEVICES", group: "Records" as const, to: "/devices", short: "Devices", label: "Devices", icon: Watch },
+      { id: "CONDITIONS", group: "Records" as const, to: "/conditions", short: "What you're tracking", label: "What you're tracking", icon: ClipboardList },
+    ] : []),
+  ];
+}
+
+/** The sidebar's links in the person's order, without the ones they've hidden. */
+export function useNavShown(items: NavItem[]): NavItem[] {
+  const layout = useScreenLayout(LAYOUT_NAV);
+  const hidden = new Set(layout?.hidden ?? []);
+  return arrange(items, (i) => i.id, layout).filter((i) => !hidden.has(i.id));
+}
 
 function Shell() {
   const user = useSession((s) => s.user)!;
   const viewing = useViewing((s) => s.share);
   const on = useModules();
-  // Autism & ADHD lives inside Mind when both are on (a tab there), and on its own otherwise.
-  const features = FEATURES.filter((f) => on.includes(f.id) && f.route && !(f.id === "NEURO" && on.includes("MIND")));
-  const ai = useAiStatus();
   const pronouns = usePronouns(on.includes("TRANSITION") && !viewing);
+  const items = useNavItems();
+  const shown = useNavShown(items);
+  const [arranging, setArranging] = useState(false);
   // Which fields show is the shown person's: reload it when that changes.
   const owner = viewing?.ownerId;
   const firstOwner = useRef(owner);
@@ -98,6 +148,11 @@ function Shell() {
     firstOwner.current = owner;
     void loadFields(true);
   }, [owner]);
+  const link = (i: NavItem) => (
+    <NavLink key={i.id} to={i.to} className={`nav-link ${i.tab ? `nav-tab nav-${i.id.toLowerCase()}` : "nav-optional"}`} title={i.short === i.label ? undefined : i.label}>
+      <i.icon size={20} /> <span>{i.short}</span>
+    </NavLink>
+  );
   return (
     <div className={`shell ${viewing ? "is-viewing" : ""}`}>
       <nav className="sidebar" aria-label="Main">
@@ -105,26 +160,44 @@ function Shell() {
           <img src="/icon.svg" alt="" width={32} height={32} />
           <span>SuperAwesome<wbr />MagicalHealth</span>
         </div>
-        <NavLink to="/" end className="nav-link"><Sun size={20} /> <span>Today</span></NavLink>
-        {features.map((f) => (
-          <NavLink key={f.id} to={f.route!} className={`nav-link ${PHONE_TABS.includes(f.id) ? "" : "nav-optional"}`}>
-            <f.icon size={20} /> <span>{f.id === "CONTINENCE" ? <>Bladder &amp; bowel</> : f.id === "VITALS" ? "BP & glucose" : f.name}</span>
-          </NavLink>
-        ))}
-        <NavLink to="/trends" className="nav-link"><TrendingUp size={20} /> <span>Trends</span></NavLink>
-        {!viewing && ai?.available && <NavLink to="/assistant" className="nav-link nav-optional"><Bot size={20} /> <span>Assistant</span></NavLink>}
-        {!viewing && <NavLink to="/reports" className="nav-link nav-optional"><FileText size={20} /> <span>Reports</span></NavLink>}
-        {!viewing && <NavLink to="/devices" className="nav-link nav-optional"><Watch size={20} /> <span>Devices</span></NavLink>}
-        {!viewing && <NavLink to="/settings" className="nav-link"><SettingsIcon size={20} /> <span>Settings</span></NavLink>}
-        {!viewing && user.role === "ADMIN" && <NavLink to="/admin" className="nav-link nav-optional"><Shield size={20} /> <span>Admin</span></NavLink>}
-        {viewing && <NavLink to="/back" className="nav-link phone-tab-only" onClick={(e) => { e.preventDefault(); startViewing(null); }}><Users size={20} /> <span>Mine</span></NavLink>}
+        {NAV_GROUPS.map((g) => {
+          const list = shown.filter((i) => i.group === g);
+          if (g !== "Today & Trends" && list.length === 0 && !(g === "Your health" && !viewing)) return null;
+          return (
+            <div key={g} className="nav-group" role="group" aria-label={g}>
+              <div className="nav-heading">
+                <span>{g}</span>
+                {g === "Your health" && !viewing && (
+                  <button type="button" className="icon-btn nav-arrange" aria-label="Arrange the sidebar" title="Arrange the sidebar" aria-haspopup="dialog" onClick={() => setArranging(true)}>
+                    <ArrowUpDown size={16} />
+                  </button>
+                )}
+              </div>
+              {g === "Today & Trends" && <NavLink to="/" end className="nav-link nav-tab nav-today"><Sun size={20} /> <span>Today</span></NavLink>}
+              {list.map(link)}
+            </div>
+          );
+        })}
         <div className="nav-spacer" />
+        <div className="nav-group nav-bottom">
+          {!viewing && <NavLink to="/settings" className="nav-link nav-tab nav-settings"><SettingsIcon size={20} /> <span>Settings</span></NavLink>}
+          {!viewing && user.role === "ADMIN" && <NavLink to="/admin" className="nav-link nav-optional"><Shield size={20} /> <span>Admin</span></NavLink>}
+          {viewing && <NavLink to="/back" className="nav-link phone-tab-only nav-tab nav-settings" onClick={(e) => { e.preventDefault(); startViewing(null); }}><Users size={20} /> <span>Mine</span></NavLink>}
+        </div>
         <ViewSwitcher />
         <div className="sidebar-user">
-          <span>{user.displayName}{pronouns && <span className="pronouns"> ({pronouns})</span>}</span>
+          <div className="sidebar-who">
+            <span className="sidebar-name">{user.displayName}</span>
+            {pronouns && <span className="pronouns">{pronouns}</span>}
+          </div>
           <IconButton label="Sign out" onClick={() => { startViewing(null); void session.signOut(); }}><LogOut size={18} /></IconButton>
         </div>
       </nav>
+      {arranging && (
+        <ArrangePanel screen={LAYOUT_NAV} title="the sidebar" items={items.map((i) => ({ id: i.id, label: i.label, group: i.group }))} groups={[...NAV_GROUPS]}
+          intro="Move your features into the order you use them, and hide what you don't need here. Hidden pages are still in Settings › Features."
+          onClose={() => setArranging(false)} />
+      )}
 
       <main className="content">
         {viewing && <ViewingBanner />}

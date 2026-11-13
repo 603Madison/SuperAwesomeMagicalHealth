@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, CalendarPlus, Check, FileText, MapPin, MessageCircleQuestion, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { CalendarClock, CalendarPlus, Check, FileText, History, MapPin, MessageCircleQuestion, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, isoDate, localInput, shiftDate, today } from "../lib/format";
 import { useReadOnly } from "../lib/viewing";
 import type { Appointment, AppointmentQuestion, SuggestedQuestion } from "../lib/types";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { useArrange, type Section } from "../components/Arrange";
+import { layoutKey } from "../lib/types";
 
 const REMINDERS: { minutes: number; label: string }[] = [
   { minutes: 2880, label: "2 days before" }, { minutes: 1440, label: "A day before" }, { minutes: 180, label: "3 hours before" },
@@ -33,57 +35,60 @@ export function Appointments() {
   const upcoming = (data ?? []).filter((a) => a.at + (a.durationMinutes ?? 60) * 60_000 >= now).sort((a, b) => a.at - b.at);
   const past = (data ?? []).filter((a) => a.at + (a.durationMinutes ?? 60) * 60_000 < now).sort((a, b) => b.at - a.at);
 
+  const sections: Section[] = [
+    { id: "upcoming", label: "Coming up", node: data && (upcoming.length === 0 ? (
+      <Card title="Coming up" icon={<CalendarClock size={18} />} className="span-2"
+        action={!readOnly && <CardAction label="Add an appointment" onClick={() => setEditing("new")}><Plus size={18} /></CardAction>}>
+        <p className="muted">Nothing coming up. Add one for a reminder and questions to take with you, with suggestions from what you've logged.</p>
+      </Card>
+    ) : (
+      <>
+        {upcoming.map((a) => {
+          const done = a.questions.filter((q) => q.done).length;
+          return (
+            <Card key={a.id} className="appointment-card" onClick={() => setEditing(a)}>
+              <div className="appointment-when">
+                <span className="tone-chip tone-info">{inDays(a.at)}</span>
+                <span className="muted small">{appointmentWhen(a.at)}{a.durationMinutes ? ` · ${a.durationMinutes} min` : ""}</span>
+              </div>
+              <h3>{a.title}</h3>
+              <div className="muted small appointment-meta">
+                {a.with && <span><UserRound size={14} /> {a.with}</span>}
+                {a.place && <span><MapPin size={14} /> {a.place}</span>}
+              </div>
+              <p className="small"><MessageCircleQuestion size={14} style={{ verticalAlign: -2 }} /> {a.questions.length === 0 ? "No questions yet" : `${a.questions.length} ${a.questions.length === 1 ? "question" : "questions"}${done ? `, ${done} asked` : ""}`}</p>
+            </Card>
+          );
+        })}
+      </>
+    )) },
+    { id: "past", label: "Before", node: past.length > 0 && (
+      <Card title="Before" icon={<History size={18} />} className="span-2">
+        <ul className="rows">
+          {past.map((a) => (
+            <li key={a.id} className="row">
+              <div className="row-icon"><CalendarClock size={18} /></div>
+              <button type="button" className="row-main link-row" onClick={() => setEditing(a)}>
+                <div className="row-title">{a.title}{a.with ? ` · ${a.with}` : ""}</div>
+                <div className="row-sub">{appointmentWhen(a.at)}{a.notes ? ` · ${a.notes.slice(0, 90)}${a.notes.length > 90 ? "…" : ""}` : readOnly ? "" : " · add notes"}</div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    ) },
+  ];
+  const arranged = useArrange(layoutKey("appointments"), "Appointments", sections);
+
   return (
     <div className="page">
-      <PageHeader title="Appointments" subtitle="Questions ready before, notes after" actions={!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><CalendarPlus size={18} /> Add an appointment</Button>} />
+      <PageHeader title="Appointments" subtitle="Questions ready before, notes after" actions={<>
+        {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><CalendarPlus size={18} /> Add an appointment</Button>}
+        {arranged.button}
+      </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {data && upcoming.length === 0 && (
-        <Card>
-          <Empty icon={<CalendarClock size={36} />} title="Nothing coming up">
-            Add an appointment to get a reminder, and a list of questions to take with you, with suggestions from what you've logged.
-          </Empty>
-        </Card>
-      )}
-      {upcoming.length > 0 && (
-        <div className="grid grid-2">
-          {upcoming.map((a) => {
-            const done = a.questions.filter((q) => q.done).length;
-            return (
-              <Card key={a.id} className="appointment-card" onClick={() => setEditing(a)}>
-                <div className="appointment-when">
-                  <span className="tone-chip tone-info">{inDays(a.at)}</span>
-                  <span className="muted small">{appointmentWhen(a.at)}{a.durationMinutes ? ` · ${a.durationMinutes} min` : ""}</span>
-                </div>
-                <h3>{a.title}</h3>
-                <div className="muted small appointment-meta">
-                  {a.with && <span><UserRound size={14} /> {a.with}</span>}
-                  {a.place && <span><MapPin size={14} /> {a.place}</span>}
-                </div>
-                <p className="small"><MessageCircleQuestion size={14} style={{ verticalAlign: -2 }} /> {a.questions.length === 0 ? "No questions yet" : `${a.questions.length} ${a.questions.length === 1 ? "question" : "questions"}${done ? `, ${done} asked` : ""}`}</p>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-      {past.length > 0 && (
-        <>
-          <h2 className="section-title">Before</h2>
-          <Card>
-            <ul className="rows">
-              {past.map((a) => (
-                <li key={a.id} className="row">
-                  <div className="row-icon"><CalendarClock size={18} /></div>
-                  <button type="button" className="row-main link-row" onClick={() => setEditing(a)}>
-                    <div className="row-title">{a.title}{a.with ? ` · ${a.with}` : ""}</div>
-                    <div className="row-sub">{appointmentWhen(a.at)}{a.notes ? ` · ${a.notes.slice(0, 90)}${a.notes.length > 90 ? "…" : ""}` : readOnly ? "" : " · add notes"}</div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </>
-      )}
+      {arranged.render()}
       {editing && <AppointmentDialog appointment={editing === "new" ? undefined : editing} past={past} readOnly={readOnly} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
   );
