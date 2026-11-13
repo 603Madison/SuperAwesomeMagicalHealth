@@ -179,15 +179,21 @@ interface Toast {
   id: number;
   message: string;
   kind: "info" | "error";
+  /** One thing to do about it ("Undo"); the toast stays a little longer. */
+  action?: { label: string; run: () => void };
 }
 
 const useToasts = create<{ toasts: Toast[] }>(() => ({ toasts: [] }));
 let toastId = 0;
 
-export function toast(message: string, kind: "info" | "error" = "info") {
+export function toast(message: string, kind: "info" | "error" = "info", action?: Toast["action"]) {
   const id = ++toastId;
-  useToasts.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, message, kind }] }));
-  setTimeout(() => useToasts.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), kind === "error" ? 6000 : 3500);
+  useToasts.setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, message, kind, action }] }));
+  setTimeout(() => useToasts.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), kind === "error" || action ? 6000 : 3500);
+}
+
+function dismissToast(id: number) {
+  useToasts.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
 }
 
 export function errorToast(e: unknown) {
@@ -199,7 +205,10 @@ export function Toasts() {
   return (
     <div className="toasts" role="status" aria-live="polite">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.kind}`}>{t.message}</div>
+        <div key={t.id} className={`toast toast-${t.kind} ${t.action ? "has-action" : ""}`}>
+          <span>{t.message}</span>
+          {t.action && <button type="button" className="toast-action" onClick={() => { dismissToast(t.id); t.action!.run(); }}>{t.action.label}</button>}
+        </div>
       ))}
     </div>
   );

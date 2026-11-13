@@ -123,3 +123,46 @@ data class FoodDay(
 
 @Serializable
 data class FoodSearch(val mine: List<Food>, val online: List<Food>, val onlineError: String? = null)
+
+/**
+ * Something the person has eaten before, offered for [meal]: one food, or a whole meal they've had
+ * (then [items] holds each part). [items] are ready to log, one `POST /api/food/entries` each
+ * ([FoodEntry.toInput]); [nutrients] are their total. [why] is in plain words and never names an
+ * amount ("You often have this at dinner"). [lastEaten] is a date.
+ */
+@Serializable
+data class FoodSuggestion(
+    val name: String,
+    val brand: String? = null,
+    val serving: String,
+    val servings: Double,
+    val nutrients: Nutrients,
+    val meal: Meal,
+    val items: List<FoodEntry>,
+    val why: String,
+    val timesEaten: Int,
+    val lastEaten: String? = null,
+)
+
+/**
+ * Ideas for [meal] from what the person has eaten before (`GET /api/food/suggestions`), best
+ * first; [gap] is what's still to eat towards the day's targets (protein, calories), when that
+ * counts. With [showNumbers] false (eating disorder recovery), the apps show no amounts at all.
+ */
+@Serializable
+data class FoodSuggestions(
+    val meal: Meal,
+    val gap: Nutrients? = null,
+    val items: List<FoodSuggestion>,
+    val showNumbers: Boolean = true,
+)
+
+/** Logging this entry again, on [date] at [meal]: the person's food when it was one, else its name and nutrients. */
+fun FoodEntry.toInput(date: String, meal: Meal): FoodEntryInput {
+    val each = if (servings > 0) nutrients * (1.0 / servings) else nutrients
+    return if (foodId != null) {
+        FoodEntryInput(date, meal, servings, food = Food(name = name, nutrients = each, serving = serving, brand = brand, id = foodId))
+    } else {
+        FoodEntryInput(date, meal, servings, name = name, nutrients = each)
+    }
+}

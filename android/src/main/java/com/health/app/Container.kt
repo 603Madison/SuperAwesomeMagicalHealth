@@ -19,6 +19,7 @@ import com.health.app.net.continenceSettings
 import com.health.app.net.fields
 import com.health.app.net.layout
 import com.health.app.net.saveScreenLayout
+import com.health.app.net.serverHealth
 import com.health.app.net.habitsForReminders
 import com.health.app.reminders.DigestWorker
 import com.health.app.reminders.DoseOutbox
@@ -182,13 +183,31 @@ class Container(val context: Context) {
     /** Goes up whenever data changes (logged here, or synced): screens reload when it does. */
     val revision: StateFlow<Int> = _revision.asStateFlow()
 
-    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    private val _messages = MutableSharedFlow<Message>(extraBufferCapacity = 8)
 
-    /** Short messages for the snackbar. */
-    val messages: SharedFlow<String> = _messages.asSharedFlow()
+    /** Short messages for the snackbar, some with one thing to do about them ("Undo"). */
+    val messages: SharedFlow<Message> = _messages.asSharedFlow()
+
+    /** A snackbar's words, and its action. */
+    class Message(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
 
     fun tell(message: String) {
-        _messages.tryEmit(message)
+        _messages.tryEmit(Message(message))
+    }
+
+    /** A message with an action ([action] names it: "Undo"). */
+    fun tell(message: String, action: String, onAction: () -> Unit) {
+        _messages.tryEmit(Message(message, action, onAction))
+    }
+
+    private val _serverVersion = MutableStateFlow<String?>(null)
+
+    /** The server's version (`GET /api/health`), once known: Today and Settings say when it's older than the app. */
+    val serverVersion: StateFlow<String?> = _serverVersion.asStateFlow()
+
+    /** Asks the server its version: after signing in, and each time the app starts. */
+    suspend fun refreshServerVersion() {
+        runCatching { api.serverHealth().version }.onSuccess { _serverVersion.value = it }.onFailure { Log.w(TAG, "Couldn't ask the server its version", it) }
     }
 
     fun dataChanged() {
@@ -268,6 +287,7 @@ class Container(val context: Context) {
             settings.map { Triple(it.signedIn, it.backgroundSync, it.syncOnWifiOnly) }.distinctUntilChanged().collect { (signedIn, on, wifi) ->
                 SyncWorker.schedule(context, signedIn && on, wifi)
                 if (signedIn) {
+                    runCatching { refreshServerVersion() }
                     loadProfile()
                     runCatching { refreshReminders() }
                     runCatching { flushDoses() }
@@ -275,6 +295,7 @@ class Container(val context: Context) {
                     _profile.value = null
                     _fields.value = null
                     _layout.value = com.health.api.LayoutPrefs()
+                    _serverVersion.value = null
                 }
             }
         }

@@ -246,6 +246,47 @@ export interface FoodSearch {
   onlineError?: string;
 }
 
+/**
+ * Something the person has eaten before, offered for a meal: one food, or a whole meal they've had
+ * (then `items` holds each part). `items` are ready to log, one POST /api/food/entries each
+ * (`entryInput`); `why` never names an amount.
+ */
+export interface FoodSuggestion {
+  name: string;
+  brand?: string;
+  serving: string;
+  servings: number;
+  nutrients: Nutrients;
+  meal: Meal;
+  items: FoodEntry[];
+  why: string;
+  timesEaten: number;
+  lastEaten?: string;
+}
+
+/** GET /api/food/suggestions: ideas for `meal`, best first. With `showNumbers` false, no amounts show at all. */
+export interface FoodSuggestions {
+  meal: Meal;
+  gap?: Nutrients;
+  items: FoodSuggestion[];
+  showNumbers: boolean;
+}
+
+/** Logging a past entry again on `date` at `meal`: the person's food when it was one, else its name and nutrients (as Food.kt's toInput). */
+export function entryInput(e: FoodEntry, date: string, meal: Meal): { date: string; meal: Meal; servings: number; food?: Food; name?: string; nutrients?: Nutrients } {
+  const f = e.servings > 0 ? 1 / e.servings : 1;
+  const each: Nutrients = {
+    calories: e.nutrients.calories * f, protein: e.nutrients.protein * f, carbs: e.nutrients.carbs * f, fat: e.nutrients.fat * f,
+    ...(e.nutrients.fiber != null ? { fiber: e.nutrients.fiber * f } : {}),
+    ...(e.nutrients.sugar != null ? { sugar: e.nutrients.sugar * f } : {}),
+    ...(e.nutrients.saturatedFat != null ? { saturatedFat: e.nutrients.saturatedFat * f } : {}),
+    ...(e.nutrients.sodiumMg != null ? { sodiumMg: e.nutrients.sodiumMg * f } : {}),
+  };
+  return e.foodId
+    ? { date, meal, servings: e.servings, food: { name: e.name, nutrients: each, serving: e.serving, brand: e.brand, id: e.foodId, source: "CUSTOM", uses: 0 } }
+    : { date, meal, servings: e.servings, name: e.name, nutrients: each };
+}
+
 export type EnergyProfile = "FEMALE" | "MALE" | "AVERAGE";
 export type Units = "METRIC" | "IMPERIAL";
 
@@ -319,6 +360,29 @@ export interface Insight {
   body: string;
   icon: string;
   module?: Module;
+  /** The page a tap opens; without one, the module's page (`insightPage`). */
+  link?: AppPage;
+  /** Food ideas (the protein insight, today only), each logged with one tap. */
+  suggestions?: FoodSuggestion[];
+  /** The Today card that already shows the same thing: left out while it shows. */
+  shownBy?: TodaySection;
+}
+
+/** The apps' pages, for an insight to open (Summary.kt's AppPage). */
+export type AppPage =
+  | "TODAY" | "FOOD" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "VITALS" | "HABITS" | "SYMPTOMS" | "HORMONES"
+  | "APPOINTMENTS" | "NEURO" | "TRANSITION" | "PHOTOS" | "BODY" | "SLEEP" | "ACTIVITY" | "TRENDS" | "DEVICES";
+
+/** A feature's own page (AppPage.of). */
+export const MODULE_PAGE: Record<Module, AppPage> = {
+  ACTIVITY: "ACTIVITY", SLEEP: "SLEEP", NUTRITION: "FOOD", BODY: "BODY", MIND: "MIND", CYCLE: "CYCLE", CONTINENCE: "CONTINENCE",
+  MEDICATIONS: "MEDS", VITALS: "VITALS", HABITS: "HABITS", SYMPTOMS: "SYMPTOMS", HORMONES: "HORMONES", APPOINTMENTS: "APPOINTMENTS",
+  NEURO: "NEURO", TRANSITION: "TRANSITION", PHOTOS: "PHOTOS",
+};
+
+/** The page an insight opens: its link, else its feature's page; undefined when it's about nothing in particular. */
+export function insightPage(i: Insight): AppPage | undefined {
+  return i.link ?? (i.module ? MODULE_PAGE[i.module] : undefined);
 }
 
 export interface DaySummary {

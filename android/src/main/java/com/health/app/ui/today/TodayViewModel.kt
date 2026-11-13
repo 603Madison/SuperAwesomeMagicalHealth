@@ -11,6 +11,9 @@ import com.health.api.DueDose
 import com.health.api.MedForm
 import com.health.api.MoodEntry
 import com.health.api.DaySummary
+import com.health.api.FoodEntry
+import com.health.api.FoodSuggestion
+import com.health.api.toInput
 import com.health.api.MeasurementInput
 import com.health.api.Metric
 import com.health.api.SleepSession
@@ -107,6 +110,33 @@ class TodayViewModel(private val c: Container) : ViewModel() {
 
     fun logContinence(kind: ContinenceKind) = act("${kind.label} noted") {
         c.ui.addContinence(ContinenceEntry(System.currentTimeMillis(), kind))
+    }
+
+    /**
+     * Logs a food idea from the protein insight: each of its items today, at its meal (as the Food
+     * tab logs a past entry again), then offers Undo. Half-logged, it takes back what it added.
+     */
+    fun addIdea(idea: FoodSuggestion) {
+        viewModelScope.launch {
+            val date = _state.value.today.toString()
+            val added = mutableListOf<FoodEntry>()
+            try {
+                idea.items.forEach { added += c.ui.addFood(it.toInput(date, idea.meal)) }
+            } catch (e: Exception) {
+                added.forEach { a -> a.id?.let { id -> runCatching { c.ui.deleteFood(id) } } }
+                c.tell(e.message ?: "Couldn't add that")
+                return@launch
+            }
+            c.dataChanged()
+            c.tell("Added to ${InsightLinks.mealWord(idea.meal)}: ${idea.name}", "Undo") {
+                c.scope.launch {
+                    runCatching { added.forEach { a -> a.id?.let { id -> c.ui.deleteFood(id) } } }
+                        .onSuccess { c.tell("Taken back off") }
+                        .onFailure { c.tell(it.message ?: "Couldn't undo that") }
+                    c.dataChanged()
+                }
+            }
+        }
     }
 
     /** Takes a scheduled dose; an injection or patch goes to the chosen site, or the one next in rotation. */

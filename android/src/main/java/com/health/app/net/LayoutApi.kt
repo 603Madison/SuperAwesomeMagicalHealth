@@ -9,7 +9,9 @@ import com.health.api.ScreenLayout
  * own (Container.api, never the view-aware one): someone viewing a share keeps their own layout.
  */
 
-suspend fun ServerApi.layout(): LayoutPrefs = get("${base()}/api/layout", LayoutPrefs.serializer())
+/** The person's arrangements; an older server without them (before 0.3) says it needs updating. */
+suspend fun ServerApi.layout(): LayoutPrefs = ServerVersion.plain("to arrange screens") { get("${base()}/api/layout", LayoutPrefs.serializer()) }
 
-suspend fun ServerApi.saveScreenLayout(key: String, layout: ScreenLayout): LayoutPrefs =
+suspend fun ServerApi.saveScreenLayout(key: String, layout: ScreenLayout): LayoutPrefs = ServerVersion.plain("to arrange screens") {
     send("PUT", "${base()}/api/layout/${enc(key)}", ApiJson.encodeToString(ScreenLayout.serializer(), layout), LayoutPrefs.serializer())
+}

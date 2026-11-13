@@ -236,6 +236,9 @@ class ModulesTest {
         val todo = summary.insights.firstOrNull { it.title.endsWith("still to take") }
         assertNotNull(todo)
         assertEquals(Module.MEDICATIONS, todo!!.module)
+        // It opens Medications, and is left out while Today's Medications card shows the doses.
+        assertEquals(com.health.api.AppPage.MEDS, todo.link)
+        assertEquals(com.health.api.TodaySection.MEDS, todo.shownBy)
     }
 
     // ---- Profile, today and the AI connector ----

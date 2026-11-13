@@ -37,6 +37,8 @@ data class Settings(
     val syncOnWifiOnly: Boolean = false,
     /** Metric or imperial, as the profile on the server says (kept here so it's known offline). */
     val units: Units = Units.METRIC,
+    /** The "update your server" notice put away, for this pair of versions (ServerVersion.key). */
+    val versionNoticeDismissed: String = "",
 ) {
     val signedIn: Boolean get() = server.isNotEmpty() && token != null
 }
@@ -69,6 +71,9 @@ class Prefs(private val context: Context) {
         it.remove(USER)
     }
 
+    /** Puts the "update your server" notice away for this pair of versions. */
+    suspend fun dismissVersionNotice(key: String) = context.store.edit { it[VERSION_NOTICE] = key }
+
     suspend fun update(transform: (Settings) -> Settings) = context.store.edit { prefs ->
         val next = transform(read(prefs))
         prefs[THEME_MODE] = next.themeMode.name
@@ -93,6 +98,7 @@ class Prefs(private val context: Context) {
         backgroundSync = prefs[BACKGROUND_SYNC] ?: true,
         syncOnWifiOnly = prefs[SYNC_WIFI_ONLY] ?: false,
         units = Units.entries.firstOrNull { it.name == prefs[UNITS] } ?: Units.METRIC,
+        versionNoticeDismissed = prefs[VERSION_NOTICE].orEmpty(),
     )
 
     private companion object {
@@ -107,5 +113,6 @@ class Prefs(private val context: Context) {
         val BACKGROUND_SYNC = booleanPreferencesKey("background_sync")
         val SYNC_WIFI_ONLY = booleanPreferencesKey("sync_wifi_only")
         val UNITS = stringPreferencesKey("units")
+        val VERSION_NOTICE = stringPreferencesKey("version_notice_dismissed")
     }
 }

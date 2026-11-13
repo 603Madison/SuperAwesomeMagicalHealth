@@ -106,14 +106,14 @@ class DrinksService(
         val atBedtime = today.caffeineAtBedtimeMg
         if (isToday && hourNow >= 12 && atBedtime != null && atBedtime >= 50) {
             val bed = usualBedtime(userId, date, zone)
-            add(46 to Insight("info", "Caffeine at bedtime", "About ${atBedtime.roundToInt()} mg of today's caffeine will still be around at your usual bedtime (${clock(bed)}). It can make sleep lighter.", "moon"))
+            add(46 to Insight("info", "Caffeine at bedtime", "About ${atBedtime.roundToInt()} mg of today's caffeine will still be around at your usual bedtime (${clock(bed)}). It can make sleep lighter.", "moon", link = com.health.api.AppPage.FOOD))
         }
         val yesterday = daysOf(userId, date.minusDays(1), date.minusDays(1))[date.minusDays(1)]
         val night = history.lastOrNull { it.date == date.toString() }
         if (yesterday != null && yesterday.standardDrinks >= 2 && night?.hrv != null) {
             val usual = Scoring.median(history.filter { it.date != date.toString() }.takeLast(28).mapNotNull { it.hrv })
             if (usual != null && night.hrv < usual * 0.9) {
-                add(66 to Insight("info", "Alcohol last night", "After ${drinksText(yesterday.standardDrinks)}, your HRV was ${night.hrv.roundToInt()} ms against your usual ${usual.roundToInt()} ms. Your body works to clear alcohol while you sleep.", "moon"))
+                add(66 to Insight("info", "Alcohol last night", "After ${drinksText(yesterday.standardDrinks)}, your HRV was ${night.hrv.roundToInt()} ms against your usual ${usual.roundToInt()} ms. Your body works to clear alcohol while you sleep.", "moon", link = com.health.api.AppPage.FOOD))
             }
         }
     }

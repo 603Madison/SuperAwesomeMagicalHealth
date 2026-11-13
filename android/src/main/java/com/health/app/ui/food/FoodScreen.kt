@@ -49,6 +49,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.FoodDay
+import com.health.api.FoodSuggestion
+import com.health.api.FoodSuggestions
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.health.app.ui.components.CardAction
+import com.health.app.ui.components.InfoCard
 import com.health.api.FoodEntry
 import com.health.api.FoodEntryChange
 import com.health.api.Meal
@@ -91,6 +98,9 @@ class FoodActions(
     val quickDrink: (DrinkKind) -> Unit = {},
     val saveDrink: (Drink) -> Unit = {},
     val deleteDrink: (String) -> Unit = {},
+    /** Ideas: one logged with a tap, or ideas for another meal. */
+    val addIdea: (FoodSuggestion) -> Unit = {},
+    val ideasFor: (Meal) -> Unit = {},
 )
 
 @Composable
@@ -105,6 +115,7 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
             go = vm::go, retry = { vm.load() }, add = onAdd, delete = vm::delete, change = vm::change,
             addWater = vm::addWater, deleteWater = vm::deleteWater, copyYesterday = vm::copyYesterday,
             quickDrink = { vm.quickDrink(it) }, saveDrink = { vm.saveDrink(it) }, deleteDrink = { vm.deleteDrink(it) },
+            addIdea = vm::addIdea, ideasFor = vm::ideasFor,
         ),
         zone = c.zone(),
         water = showsField(Fields.NUTRITION_WATER),
@@ -114,6 +125,7 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
 /** The Food tab's sections, arranged under `android.food`: their ids are saved, so they stay as they are. */
 object FoodSections {
     val KEY = Layouts.screen(Layouts.ANDROID, "food")
+    const val IDEAS = "ideas"
     const val TOTALS = "totals"
     const val WATER = "water"
     const val DRINKS = "drinks"
@@ -121,8 +133,9 @@ object FoodSections {
     /** A meal's section: "breakfast", "lunch", "dinner", "snack". */
     fun meal(meal: Meal): String = meal.name.lowercase()
 
-    /** The sections, in the default order; water only while it's shown. */
-    fun items(water: Boolean): List<ArrangeItem> = buildList {
+    /** The sections, in the default order; ideas only for today, water only while it's shown. */
+    fun items(water: Boolean, ideas: Boolean = true): List<ArrangeItem> = buildList {
+        if (ideas) add(ArrangeItem(IDEAS, "Ideas"))
         add(ArrangeItem(TOTALS, "Calories and nutrients"))
         Meal.entries.forEach { add(ArrangeItem(meal(it), it.label)) }
         if (water) add(ArrangeItem(WATER, "Water"))
@@ -136,7 +149,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     var arranging by remember { mutableStateOf(false) }
     val day = state.day
-    val items = FoodSections.items(water)
+    val items = FoodSections.items(water, ideas = state.date == state.today)
     val shown = arranged(FoodSections.KEY, items)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Food", Format.day(state.date, state.today)) {
@@ -154,6 +167,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
                     key(id) {
                         val meal = Meal.entries.firstOrNull { FoodSections.meal(it) == id }
                         when {
+                            id == FoodSections.IDEAS -> IdeasCard(state.ideas, state.ideasMeal, state.ideasError, actions)
                             id == FoodSections.TOTALS -> Totals(day)
                             meal != null -> MealCard(
                                 meal, day.entries.filter { it.meal == meal },
@@ -176,6 +190,49 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
             onSave = { change -> entry.id?.let { actions.change(it, change) }; editing = null },
             onDelete = { entry.id?.let(actions.delete); editing = null },
         )
+    }
+}
+
+/**
+ * "Ideas for dinner": foods and meals eaten before, best first, each added with one tap (not while
+ * viewing a share); the menu asks for another meal. Without numbers (eating disorder recovery), no amounts.
+ */
+@Composable
+private fun IdeasCard(ideas: FoodSuggestions?, meal: Meal?, error: String?, actions: FoodActions) {
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    val shown = ideas?.meal ?: meal
+    val word = shown?.let { com.health.app.ui.today.InsightLinks.mealWord(it) } ?: "now"
+    InfoCard(
+        "Ideas for $word", icon = Icons.Rounded.Lightbulb,
+        action = CardAction(Icons.Rounded.MoreVert, "Ideas for another meal", menu = Meal.entries.map { m -> "Ideas for ${com.health.app.ui.today.InsightLinks.mealWord(m)}" to { actions.ideasFor(m) } }),
+    ) {
+        when {
+            ideas == null && error != null -> Hint(error)
+            ideas == null -> Hint("Finding ideas…")
+            ideas.items.isEmpty() -> Hint("Ideas show up here once you've logged a few meals.")
+            else -> ideas.items.forEachIndexed { i, idea ->
+                if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(idea.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        // Amounts stay together on a line ("38 g protein · 650 kcal").
+                        val amounts = if (ideas.showNumbers) " · ${Format.number(idea.nutrients.protein)}\u00a0g\u00a0protein\u00a0·\u00a0${Format.number(idea.nutrients.calories)}\u00a0kcal" else ""
+                        Text(idea.why + amounts, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!readOnly) {
+                        Spacer(Modifier.width(8.dp))
+                        FilledTonalButton(
+                            onClick = { actions.addIdea(idea) }, contentPadding = PaddingValues(start = 10.dp, end = 14.dp),
+                            modifier = Modifier.semantics { contentDescription = "Add ${idea.name} to $word" },
+                        ) {
+                            Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Add")
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

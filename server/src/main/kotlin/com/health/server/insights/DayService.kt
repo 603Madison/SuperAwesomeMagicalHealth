@@ -158,6 +158,10 @@ class DayService(
 
     private suspend fun deviceContext(userId: String) = DeviceContext(records.deviceRefs(userId), choices(userId))
 
+    /** Whether food numbers show, and ideas for the protein insight (food/Suggestions.kt): set at start-up. */
+    var foodForInsights: suspend (userId: String, date: LocalDate, isToday: Boolean, today: DayStats, target: com.health.api.NutritionTarget) -> InsightRules.Food =
+        { _, _, _, _, _ -> InsightRules.Food() }
+
     private fun allExtras(): List<DayExtras> = listOfNotNull(extras) + parts
 
     private suspend fun extrasToday(userId: String, profile: Profile, date: LocalDate): DayExtrasResult? {
@@ -403,6 +407,7 @@ class DayService(
                 today = today, history = before, profile = profile, target = target, readiness = readiness, sleep = sleep,
                 isToday = date == days.today(clock()), hourNow = days.hourOf(clock()), restingCalories = resting,
                 cyclePhase = more?.cyclePhase, extra = more?.insights.orEmpty() + stressInsights, water = showsWater(userId),
+                food = foodForInsights(userId, date, isToday, today, target),
             ),
         )
         // Resting energy counts up through the day: all of it for a day that's over, the part so far for today.
@@ -544,11 +549,11 @@ class DayService(
 
     private fun stressInsights(day: com.health.api.StressDay?, resilience: com.health.api.Resilience?, isToday: Boolean): List<Pair<Int, Insight>> = buildList {
         when (day?.summary) {
-            "Stressful" -> add(54 to Insight("info", "A stressful day", "${Scoring.hm(day.stressedMinutes)} stressed${if (isToday) " so far" else ""}. A short walk, time outside or a few minutes of slow breathing can help you reset.", "activity"))
-            "Restored" -> add(32 to Insight("good", "A restful day", "${Scoring.hm(day.restoredMinutes)} of calm, restoring time.", "sparkles"))
+            "Stressful" -> add(54 to Insight("info", "A stressful day", "${Scoring.hm(day.stressedMinutes)} stressed${if (isToday) " so far" else ""}. A short walk, time outside or a few minutes of slow breathing can help you reset.", "activity", link = com.health.api.AppPage.TRENDS))
+            "Restored" -> add(32 to Insight("good", "A restful day", "${Scoring.hm(day.restoredMinutes)} of calm, restoring time.", "sparkles", link = com.health.api.AppPage.TRENDS))
         }
         if (resilience != null && resilience.trend == "down" && resilience.level <= com.health.api.ResilienceLevel.ADEQUATE) {
-            add(44 to Insight("info", "Resilience is ${resilience.level.label.lowercase()}", "Stress has outweighed recovery lately. Extra sleep and calm time during the day help it build back up.", "battery-low"))
+            add(44 to Insight("info", "Resilience is ${resilience.level.label.lowercase()}", "Stress has outweighed recovery lately. Extra sleep and calm time during the day help it build back up.", "battery-low", link = com.health.api.AppPage.TRENDS))
         }
     }
 

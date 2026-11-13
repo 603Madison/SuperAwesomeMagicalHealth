@@ -22,5 +22,7 @@ suspend fun ServerApi.saveConditions(conditions: MyConditions): MyConditions =
 
 suspend fun ServerApi.fields(): FieldLayout = get("${base()}/api/fields", FieldLayout.serializer())
 
-suspend fun ServerApi.saveFieldChoices(choices: FieldChoices): FieldLayout =
+/** Saves which fields show; an older server that doesn't know one (water, before 0.3) says it needs updating. */
+suspend fun ServerApi.saveFieldChoices(choices: FieldChoices): FieldLayout = ServerVersion.plain("for this setting") {
     send("PUT", "${base()}/api/fields", ApiJson.encodeToString(FieldChoices.serializer(), choices), FieldLayout.serializer())
+}

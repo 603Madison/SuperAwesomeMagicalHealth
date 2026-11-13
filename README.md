@@ -242,6 +242,28 @@ cd deploy && podman compose up -d
 (`docker compose up -d` works the same.) Set `SAMH_ADMIN_PASSWORD` in `compose.yaml` to choose the
 break-glass admin's first password instead of reading it from the log.
 
+### Updating
+
+The phone app and the server go together: keep the server as new as the app (the app says so on
+Today and in Settings when the server is older). With the Quadlet above:
+
+```bash
+podman auto-update
+```
+
+Otherwise, pull the image and start the container again:
+
+```bash
+podman pull ghcr.io/603madison/superawesomemagicalhealth:latest
+```
+
+```bash
+systemctl --user restart superawesomemagicalhealth
+```
+
+(With Compose: `podman compose pull && podman compose up -d` in `deploy/`.) Your data in `/data`
+stays as it is; the server brings its database up to date when it starts.
+
 ### Lost the admin password?
 
 ```bash

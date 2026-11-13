@@ -146,6 +146,8 @@ class TodayActions(
     val takeDose: (DueDose, String?) -> Unit = { _, _ -> },
     /** Blood pressure and glucose, habits, symptoms, drinks (ui/tracking). */
     val tracking: TrackingTodayActions = TrackingTodayActions(),
+    /** Logs a food idea from the protein insight (its items, at its meal), with Undo. */
+    val addIdea: (com.health.api.FoodSuggestion) -> Unit = {},
 )
 
 @Composable
@@ -178,7 +180,9 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
             logContinence = vm::logContinence,
             takeDose = vm::takeDose,
             tracking = remember(profile?.vitalsTargets?.glucoseUnit) { TrackingTodayActions.of(c, profile?.vitalsTargets?.glucoseUnit ?: GlucoseUnit.MMOL_L) },
+            addIdea = vm::addIdea,
         ),
+        serverNotice = com.health.app.ui.components.serverNotice(),
     )
 }
 
@@ -200,6 +204,7 @@ fun TodayScreen(
     modules: Set<Module> = Module.DEFAULT,
     water: Boolean = true,
     measurements: Boolean = false,
+    serverNotice: com.health.app.ui.components.ServerNoticeState? = null,
 ) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
@@ -260,6 +265,7 @@ fun TodayScreen(
                 }
             }
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                serverNotice?.let { com.health.app.ui.components.ServerUpdateNotice(it) }
                 when {
                     state.loading && summary == null -> Loading()
                     state.error != null && summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
@@ -277,7 +283,14 @@ fun TodayScreen(
                                         onConnect = actions.openDevices,
                                         onCheckIn = { dialog = Dialog.CHECK_IN },
                                     )
-                                    TodaySection.INSIGHTS -> summary.insights.forEach { InsightCard(it) }
+                                    TodaySection.INSIGHTS -> ForYouCard(
+                                        // The day's doses aren't repeated while Medications shows them.
+                                        InsightLinks.shown(summary.insights, modules, if (TodaySection.MEDS in visible && m.meds?.due?.isNotEmpty() == true) setOf(TodaySection.MEDS) else emptySet()),
+                                        targetOf = { InsightLinks.of(it, modules, readOnly, measurements) },
+                                        onOpen = { t -> t.route?.let(open) ?: summary.readiness?.let { score = "Readiness" to it } },
+                                        readOnly = readOnly,
+                                        onAdd = actions.addIdea,
+                                    )
                                     TodaySection.QUICK -> if (!readOnly) QuickActionsRow(quick, units, ::doQuick, onMore = { sheet = Sheet.MORE })
                                     TodaySection.MEDS -> if (isToday || m.meds?.due?.isNotEmpty() == true) MedsTodayCard(m.meds, zone, actions.takeDose) { open("meds") }
                                     TodaySection.MIND -> MindTodayCard(m.mind, actions.quickMood) { open("mind") }

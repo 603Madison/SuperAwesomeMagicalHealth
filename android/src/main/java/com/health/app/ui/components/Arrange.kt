@@ -185,7 +185,8 @@ fun ArrangeContent(
         scope.launch {
             error = null
             runCatching { checkNotNull(store) { "Nowhere to save" }.saveLayout(key, layout) }
-                .onFailure { error = "Couldn't save that. Check the connection and try again." }
+                // An older server without arranging says so plainly; anything else is likely the connection.
+                .onFailure { e -> error = e.message?.takeIf { com.health.app.net.ServerVersion.missing(e) } ?: "Couldn't save that. Check the connection and try again." }
         }
     }
 

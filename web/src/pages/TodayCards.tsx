@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Baby, CalendarClock, CalendarHeart, Check, Droplet, FlaskConical, Gauge, Heart, HeartPulse, Inbox, ListChecks, Pill, Plus, Stethoscope, Syringe,
@@ -18,6 +19,7 @@ import { HabitCard } from "./Habits";
 import { severityWord } from "./Symptoms";
 import { appointmentWhen } from "./Appointments";
 import { weekText } from "./Digest";
+import { InsightRow } from "../components/Insights";
 import { VERDICT_LABEL } from "../lib/types";
 
 /*
@@ -258,24 +260,18 @@ export function StressCard({ stress, resilience, className = "", sources }: { st
 }
 
 /** On the digest's day and the day after: the week's headline, a tap from the whole thing. */
-export function DigestCard() {
+/** The weekly digest, on its day and the next, while it's new: a row in Today's "For you" ([enabled]: the person's own Today). */
+export function useDigestRow(enabled: boolean): ReactNode {
   const prefs = useSession((s) => s.profile?.digest);
-  const navigate = useNavigate();
   const now = new Date();
   const iso = ((now.getDay() + 6) % 7) + 1; // 1 Monday … 7 Sunday
   const day = prefs?.day ?? 7;
-  const show = !!prefs?.enabled && (iso === day || iso === (day % 7) + 1);
+  const show = enabled && !!prefs?.enabled && (iso === day || iso === (day % 7) + 1);
   const { data } = useLoad<Digest | null>(() => (show ? api.latestDigest().catch((e) => (e instanceof ApiError ? null : Promise.reject(e))) : Promise.resolve(null)), [show]);
   if (!show || !data) return null;
   // Only a digest made in the last two days counts as new.
   if (Date.now() - data.generatedAt > 2 * 86_400_000) return null;
   return (
-    <button type="button" className="insight digest-card" onClick={() => navigate("/digest")}>
-      <div className="insight-icon"><Inbox size={20} /></div>
-      <div>
-        <h4>Your week, {weekText(data)}</h4>
-        <p>{data.headline}</p>
-      </div>
-    </button>
+    <InsightRow key="digest" insight={{ tone: "info", title: `Your week, ${weekText(data)}`, body: data.headline, icon: "inbox" }} icon={Inbox} to="/digest" openName="your week" />
   );
 }

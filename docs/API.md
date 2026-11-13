@@ -42,6 +42,14 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 | `GET /api/trends?days=30` (or `from=&to=`) | `Trends`: a `TrendDay` per day |
 | `GET /api/series?metric=HEART_RATE&from=&to=` | `[Point]`, thinned to a few hundred points |
 
+Each `Insight` may name the page it's about in `link` (an `AppPage`: `TODAY` for the scores,
+`FOOD`, `MEDS`, `SLEEP`, `ACTIVITY`, `TRENDS`, `BODY`, `DEVICES` and each feature's page); a tap
+opens it. Without a link, the apps open the page of its `module` (`AppPage.of`); with neither, it
+isn't a link. Viewing a share, pages that aren't shared (and Devices) aren't offered. `shownBy`
+names the Today card that already shows the same thing (the day's doses: `MEDS`): the apps leave
+the insight out while that card shows. The protein insight (today only) carries up to three
+`suggestions` (`FoodSuggestion`, as below) and names the top one or two in its body.
+
 ## Food
 
 | | |
@@ -50,11 +58,24 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 | `POST /api/food/entries` | `FoodEntryInput` → `FoodEntry` |
 | `PATCH /api/food/entries/{id}` · `DELETE …` | `FoodEntryChange` → `FoodEntry` |
 | `POST /api/food/copy` | `{from, to, meal?}`: copies a day's meal (or whole day) to another day |
+| `GET /api/food/suggestions?date=&meal=` | `FoodSuggestions`: ideas from the last 120 days for `meal` (without one, the meal it is now in the person's time zone: breakfast until 10:30, lunch until 15:00, a snack until 17:00, dinner until 21:30, then a snack) |
 | `GET /api/foods/search?q=` | `FoodSearch`: the person's foods, then Open Food Facts |
 | `GET /api/foods/barcode/{code}` | `Food`, or 404 |
 | `GET /api/foods/recent` | `[Food]`: the person's foods, most used first |
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
 | `POST /api/water` · `DELETE /api/water/{id}` | `WaterEntry` |
+
+Suggestions are single foods and whole meals the person has had (one day's meal of 2–5 things),
+ranked by how often they have them at that meal and overall, how lately, how much of the day's
+protein gap they'd close (and protein for their calories), less when they'd go well over the
+calories left; at most five, with a whole meal among the first three when there is one. No history,
+no suggestions. Each `FoodSuggestion`'s `items` are `FoodEntry`s ready to log, one
+`POST /api/food/entries` each (`FoodEntry.toInput`: the person's food when it was one, else its
+name and nutrients); `why` is plain words and never an amount ("You often have this at dinner",
+"You had this on Tuesday"). For someone in eating disorder recovery (the `eating-disorder`
+condition), `showNumbers` is false and `gap` absent: the ranking goes by habit alone, the apps show
+no amounts, and Today has no food insights with amounts or targets (protein, calories; water
+without its numbers).
 
 ## Body, workouts, sleep, check-ins
 
