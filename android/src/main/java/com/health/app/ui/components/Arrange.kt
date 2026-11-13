@@ -126,8 +126,12 @@ fun <T : Any> arrangedBy(key: String, items: List<T>, id: (T) -> String): List<T
 fun mergeOrder(saved: List<String>, newOrder: List<String>): List<String> {
     if (saved.isEmpty()) return newOrder
     val offered = newOrder.toSet()
+    // Sections for things the person has (a habit, a supply, a lab test) are named "<kind>.<id>": one of a kind
+    // that isn't offered any more was deleted, so it's dropped rather than kept for ever.
+    val itemKinds = newOrder.filter { '.' in it }.map { it.substringBefore('.') }.toSet()
+    val gone = { id: String -> '.' in id && id.substringBefore('.') in itemKinds }
     val next = newOrder.iterator()
-    val merged = saved.mapNotNull { id -> if (id !in offered) id else if (next.hasNext()) next.next() else null }.toMutableList()
+    val merged = saved.mapNotNull { id -> if (id !in offered) id.takeUnless(gone) else if (next.hasNext()) next.next() else null }.toMutableList()
     next.forEachRemaining { merged += it }
     return merged.distinct()
 }

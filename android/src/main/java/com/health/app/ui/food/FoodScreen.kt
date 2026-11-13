@@ -160,7 +160,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
                                 onAdd = { actions.add(state.date, meal) }, onEdit = { editing = it }, onCopy = { actions.copyYesterday(meal) },
                             )
                             id == FoodSections.WATER -> WaterCard(day, units, actions)
-                            id == FoodSections.DRINKS -> DrinksCard(state.drinks, units, zone, actions.quickDrink, actions.saveDrink, actions.deleteDrink)
+                            id == FoodSections.DRINKS -> DrinksCard(state.drinks, units, zone, actions.quickDrink, actions.saveDrink, actions.deleteDrink, water = water)
                             else -> Unit
                         }
                     }

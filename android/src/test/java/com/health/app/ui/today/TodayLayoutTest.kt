@@ -163,6 +163,12 @@ class TodayLayoutTest {
         assertEquals(listOf("WATER", "MOOD", "FOOD"), mergeOrder(listOf("FOOD", "MOOD", "WATER"), listOf("WATER", "FOOD")))
         // Nothing saved yet: just the new order.
         assertEquals(listOf("B", "A"), mergeOrder(emptyList(), listOf("B", "A")))
+        // A deleted habit's section is dropped, not kept for ever; other kinds of section keep their place.
+        assertEquals(
+            listOf("habit.b", "summary", "habit.a"),
+            mergeOrder(listOf("habit.a", "habit.gone", "summary", "habit.b"), listOf("habit.b", "summary", "habit.a")),
+        )
+        assertEquals(listOf("lab.x", "level.old", "today"), mergeOrder(listOf("lab.x", "level.old", "today"), listOf("lab.x", "today")))
     }
 
     @Test
