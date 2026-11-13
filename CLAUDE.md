@@ -37,6 +37,10 @@
 - Fields: optional inputs within a feature have a key in `Fields` (`shared/…/Conditions.kt`) and
   show only when `GET /api/fields` says so (web `lib/fields.ts`, Android `showsField`). A new
   optional input gets a key there, and the catalog entries that should bring it.
+- Arranging (`Layouts` in `shared/…/Layouts.kt`, `GET/PUT /api/layout`): every screen's sections
+  can be reordered and hidden. Today, quick actions and the features list use shared ids (both
+  apps); other screens use `web.<screen>`/`android.<screen>` keys with ids each app keeps stable
+  (they're saved: never rename one). A new card or section needs an id in its screen's list.
 - The AI assistant (`ai/`) only offers the connector's tools listed in `AiTools.MODULES`, each with
   the feature it reads: add a new tool there, or it stays out. Photos are never offered. Its
   warnings link Anthropic's terms and privacy policy and don't claim anything about retention.

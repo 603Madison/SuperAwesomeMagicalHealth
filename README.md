@@ -71,6 +71,17 @@ pregnancy, losing weight, sleeping better… or your own), and the apps turn on 
 the fields within them that fit, so you see what helps you and nothing else. Every field can
 still be shown or hidden by hand, with a note of which condition brought it.
 
+## Make it yours
+
+- **Arrange any screen**: the Arrange button at the top of each screen moves its sections up and
+  down and hides the ones you don't use, and "Put back as it was" undoes it. Saved on your server,
+  so Today, its quick actions and your list of features look the same on the phone and the web.
+- **Quick actions**: Today shows a few for the features you use; the rest are under More, and
+  you choose which.
+- **Leave out what you don't track**: every detail field can be hidden, and so can water
+  (Settings › Features, under Food), which takes it off Today, Food, insights, the digest, the
+  watch and the rest. What you've logged stays, and comes back if you turn it on again.
+
 ## Features you turn on
 
 Settings › **Features**: each person picks what they use. Activity, sleep, food and body are on
