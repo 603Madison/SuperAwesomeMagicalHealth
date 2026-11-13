@@ -426,6 +426,21 @@ class Container(val context: Context) {
         startWaveThree()
     }
 
+    // ---- Voice trainer (ui/modules/transition/voice): its practice reminder follows the plan and
+    // Transition being on; signing out cancels it and deletes what the trainer kept here, recordings included ----
+    init {
+        scope.launch {
+            settings.map { it.signedIn }.distinctUntilChanged().drop(1).collect { signedIn ->
+                if (!signedIn) com.health.app.ui.modules.transition.voice.VoiceReminders.forget(context)
+            }
+        }
+        scope.launch {
+            profile.map { it?.modules?.contains(Module.TRANSITION) }.distinctUntilChanged().collect { on ->
+                if (on != null && _viewing.value == null) runCatching { com.health.app.ui.modules.transition.voice.VoiceReminders.refresh(context, api, on, zone()) }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "Health"
     }

@@ -16,6 +16,7 @@ import com.health.app.net.genderMoments
 import com.health.app.net.hairRemoval
 import com.health.app.net.milestoneTemplates
 import com.health.app.net.transitionOverview
+import com.health.app.net.voiceProgress
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,8 @@ data class TransitionState(
     val moments: List<GenderMoment> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
+    /** The voice trainer's progress (voice/), for its card; null until loaded or if it can't be. */
+    val voiceProgress: com.health.api.VoiceProgress? = null,
 ) {
     val voice: List<VoiceSession> get() = overview?.voice.orEmpty()
 }
@@ -60,10 +63,11 @@ class TransitionViewModel(private val c: Container) : ViewModel() {
                 val changes = async { api.bodyChanges() }
                 val hair = async { api.hairRemoval(730) }
                 val moments = async { api.genderMoments(90) }
+                val voice = async { runCatching { api.voiceProgress() }.getOrDefault(_state.value.voiceProgress) }
                 _state.update {
                     it.copy(
                         overview = overview.await(), templates = templates.await(), changes = changes.await(), hair = hair.await(),
-                        moments = moments.await(), loading = false,
+                        moments = moments.await(), loading = false, voiceProgress = voice.await(),
                     )
                 }
             } catch (e: Exception) {
