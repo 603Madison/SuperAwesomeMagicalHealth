@@ -122,12 +122,15 @@ class ContinenceLogicTest {
     }
 
     @Test
-    fun `a quick change uses the usual product`() {
+    fun `a quick change puts the usual product on`() {
         val settings = ContinenceSettings(defaultSupplyId = "s1")
         val statuses = supplies.map { SupplyStatus(it) }
-        assertEquals("s1", quickEntry(ContinenceKind.PAD_CHANGE, settings, statuses, 5).supplyId)
+        // What goes on is what's counted; what came off was counted when it went on.
+        assertEquals("s1", quickEntry(ContinenceKind.PAD_CHANGE, settings, statuses, 5).putOnSupplyId)
+        assertNull(quickEntry(ContinenceKind.PAD_CHANGE, settings, statuses, 5).supplyId)
         assertNull(quickEntry(ContinenceKind.URINATION, settings, statuses, 5).supplyId)
-        assertNull(quickEntry(ContinenceKind.PAD_CHANGE, ContinenceSettings(defaultSupplyId = "gone"), statuses, 5).supplyId)
+        assertNull(quickEntry(ContinenceKind.URINATION, settings, statuses, 5).putOnSupplyId)
+        assertNull(quickEntry(ContinenceKind.PAD_CHANGE, ContinenceSettings(defaultSupplyId = "gone"), statuses, 5).putOnSupplyId)
     }
 
     @Test

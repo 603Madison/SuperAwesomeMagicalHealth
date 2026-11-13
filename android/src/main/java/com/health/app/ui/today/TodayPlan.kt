@@ -12,6 +12,7 @@ import com.health.app.reminders.CarePlanner
 import com.health.app.ui.Format
 import com.health.app.ui.modules.continence.ContinenceText
 import com.health.app.ui.modules.continence.SupplyArea
+import com.health.app.ui.modules.continence.WearText
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -33,7 +34,7 @@ object TodayPlan {
     /** A dose this late reads as overdue. */
     const val LATE_MS = 30 * 60_000L
 
-    enum class Kind { DOSE, APPOINTMENT, ROUTINE, BLADDER, RESTOCK }
+    enum class Kind { DOSE, APPOINTMENT, ROUTINE, BLADDER, CHANGE, RESTOCK }
 
     /**
      * One thing to do: [title] and [detail] as its row says them; [at] when it's for (null: any time
@@ -53,7 +54,8 @@ object TodayPlan {
     /**
      * Up next, on today only: doses not marked yet that are overdue or due within [DOSE_AHEAD_MS],
      * today's appointments still to come, the next bladder-training trip ([bladder], the
-     * person's own settings: never while viewing a share), then a routine still to do and
+     * person's own settings: never while viewing a share), a change once its reminder time has
+     * passed (what's on comes with the day), then a routine still to do and
      * supplies to restock. Timed things go by time (so overdue doses come first); the rest after.
      * [showing] are Today's visible sections: a hidden one's things stay out.
      */
@@ -106,6 +108,15 @@ object TodayPlan {
                 timed += Item(
                     Kind.BLADDER, "bladder:$at", "Toilet trip at ${Format.timeOfDay(at, zone)}",
                     "Bladder training: every ${BladderTrainingPlan.say(interval)} today", at = at,
+                )
+            }
+        }
+
+        if (Module.CONTINENCE in modules && TodaySection.CONTINENCE in showing) {
+            m.continence?.wearing?.takeIf { WearText.changeDue(it, now) }?.let { w ->
+                timed += Item(
+                    Kind.CHANGE, "change:${w.since}", WearText.dueTitle(w, now),
+                    "On since ${Format.timeOfDay(w.since!!, zone)}", at = w.changeDueAt,
                 )
             }
         }
@@ -190,7 +201,8 @@ object TodayPlan {
             TodaySection.SUPPLIES -> Place.NONE
             TodaySection.MIND -> card(m.mind?.let { it.mood != null || it.entries > 0 || it.mindfulMinutes > 0 || it.journal > 0 } == true)
             TodaySection.CYCLE -> card(m.cycle?.let { it.logged != null || it.cycleDay != null } == true)
-            TodaySection.CONTINENCE -> card(m.continence?.let { c -> c.voids + c.nightVoids + c.leaks + c.bowel + c.pads + c.pelvicFloor + c.products + c.catheters + c.bowelLeaks + c.wetNights > 0 } == true)
+            // What's being worn counts as something to show, even before anything's logged today.
+            TodaySection.CONTINENCE -> card(m.continence?.let { c -> c.voids + c.nightVoids + c.leaks + c.bowel + c.pads + c.pelvicFloor + c.products + c.catheters + c.bowelLeaks + c.wetNights > 0 || c.wearing?.since != null } == true)
             // With Mind alone, its energy budget: Mind's own row stands for it when there's nothing.
             TodaySection.NEURO -> card(
                 m.neuro?.let { it.energyLeft != null || it.socialBattery != null || it.focusMinutes > 0 || it.overloadsToday > 0 } == true,

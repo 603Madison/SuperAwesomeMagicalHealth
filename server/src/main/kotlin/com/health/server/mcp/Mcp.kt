@@ -45,6 +45,7 @@ import com.health.server.food.foodDay
 import com.health.server.insights.DayService
 import com.health.server.insights.Energy
 import com.health.server.insights.Scoring
+import com.health.server.modules.Wear
 import com.health.server.util.Days
 import com.health.server.util.RecentLog
 import io.ktor.http.ContentType
@@ -448,8 +449,9 @@ class McpServer(private val services: Services) {
         ) { caller, args -> cycleText(caller.user, args.int("months")?.coerceIn(1, 36) ?: 6) },
         Tool(
             "continence", "Bladder and bowel",
-            "The bladder and bowel diary: each toilet trip, leak, bowel movement, pad change and pelvic floor session, " +
-                "with daily counts, night-time trips, fluid logged, triggers for leaks and patterns.",
+            "The bladder and bowel diary: each toilet trip, leak, bowel movement, change of pad or brief (what came off, what went on, " +
+                "how long it was worn) and pelvic floor session, with daily counts, night-time trips, fluid logged, triggers for leaks and " +
+                "patterns, what's being worn now, and how each product goes (usual wear time, how full, leaks through).",
             schema(daysProperty(7, 90)),
             module = Module.CONTINENCE,
         ) { caller, args -> continenceText(caller.user, args.int("days")?.coerceIn(1, 90) ?: 7) },
@@ -1133,7 +1135,15 @@ class McpServer(private val services: Services) {
         if (Module.CYCLE in scope) m.cycle?.let { c ->
             appendLine("Cycle: ${c.cycleDay?.let { "day $it" } ?: "no recent period logged"}, ${c.phase.label.lowercase()}${c.daysUntilPeriod?.let { u -> if (u >= 0) ", period in about $u days" else ", period ${-u} days later than expected" } ?: ""}${c.logged?.let { l -> "; logged: " + cycleDayText(l) } ?: ""}")
         }
-        if (Module.CONTINENCE in scope) m.continence?.let { appendLine("Bladder and bowel: ${it.voids} toilet trips (${it.nightVoids} at night), ${it.leaks} leaks, ${it.bowel} bowel movements, ${it.pelvicFloor} pelvic floor sessions") }
+        if (Module.CONTINENCE in scope) m.continence?.let {
+            val w = it.wearing
+            val wearing = when {
+                w?.supplyId != null -> "; wearing ${w.name ?: "a product"} for ${Wear.say(w.minutes ?: 0)}"
+                w?.nothingOn == true -> "; nothing on for now"
+                else -> ""
+            }
+            appendLine("Bladder and bowel: ${it.voids} toilet trips (${it.nightVoids} at night), ${it.leaks} leaks, ${it.bowel} bowel movements, ${it.pelvicFloor} pelvic floor sessions$wearing")
+        }
         m.lowSupplies?.filter { if (it.supply.kind.category == com.health.api.SupplyCategory.PERIOD) Module.CYCLE in scope else Module.CONTINENCE in scope }
             ?.takeIf { it.isNotEmpty() }
             ?.let { low -> appendLine("Supplies running low: " + low.joinToString { "${it.supply.name} (${it.supply.onHand} left)" }) }
@@ -1488,14 +1498,30 @@ class McpServer(private val services: Services) {
         val c = services.modules.continence
         val s = c.summary(user.id, count)
         appendLine("Over $count days: ${s.averageVoids?.let { "%.1f toilet trips a day".format(it) } ?: "no trips logged"}, ${s.averageNightVoids?.let { "%.1f at night".format(it) } ?: "-"}, ${s.averageLeaks?.let { "%.1f leaks a day".format(it) } ?: "-"}${s.averageInterval?.let { "; longest daytime gap averages ${Scoring.hm(it)}" } ?: ""}.")
+        val days = services.profiles.days(user.id)
+        val w = c.wearing(user.id)
+        when {
+            w.supplyId != null -> appendLine(
+                "Wearing now: ${w.name ?: "a product"}${w.kind?.let { " (${Wear.kindWord(it)})" } ?: ""}, on since ${formatTime(days, w.since!!)} " +
+                    "(${Wear.say(w.minutes ?: 0)})" + (w.typicalMinutes?.let { "; usually changed after about ${Wear.say(Wear.rough(it))}" } ?: "") + ".",
+            )
+            w.nothingOn -> appendLine("Wearing now: nothing, since ${formatTime(days, w.since!!)} (${Wear.say(w.minutes ?: 0)}).")
+        }
+        val products = c.products(user.id, 90)
+        if (products.isNotEmpty()) {
+            appendLine("Products over 90 days:")
+            products.forEach { p ->
+                appendLine("  ${Wear.describe(p)} (${p.changes} ${if (p.changes == 1) "change" else "changes"}${p.avgWornMinutes?.let { ", worn ${Wear.say(it)} on average" } ?: ""}, ${(p.nightShare * 100).roundToInt()}% at night)")
+            }
+        }
         if (s.triggers.isNotEmpty()) appendLine("Leak triggers: ${s.triggers.joinToString { "${it.name} (${it.count})" }}")
         s.patterns.forEach { appendLine("Pattern: ${it.title}. ${it.body}") }
         // What was drunk comes from water tracking: no column while it's turned off.
         val water = services.days.showsWater(user.id)
         appendLine("date\ttrips\tnight\tleaks\tbowel\tpads\tpelvic_floor\tvoided_ml\t${if (water) "fluid_ml\t" else ""}urgent\tbowel_leaks\twet_nights\tproducts\tleaked_through\tcatheters\tloss_g")
         s.days.forEach { d -> appendLine("${d.date}\t${d.voids}\t${d.nightVoids}\t${d.leaks}\t${d.bowel}\t${d.pads}\t${d.pelvicFloor}\t${d.voidedMl ?: ""}\t${if (water) "${d.fluidMl}\t" else ""}${d.urgentTrips}\t${d.bowelLeaks}\t${d.wetNights}\t${d.products}\t${d.leakedThrough}\t${d.catheters}\t${d.lossG ?: ""}") }
-        val days = services.profiles.days(user.id)
         val entries = c.list(user.id, count).reversed()
+        val names = if (entries.any { it.supplyId != null || it.putOnSupplyId != null }) services.supplies.list(user.id, all = true).associate { it.id to it.name } else emptyMap()
         if (entries.isNotEmpty()) {
             appendLine("Diary:")
             entries.forEach { e ->
@@ -1505,7 +1531,11 @@ class McpServer(private val services: Services) {
                     "pain".takeIf { e.pain }, "blood".takeIf { e.blood }, e.reps?.let { "$it reps" }, e.holdSeconds?.let { "${it}s holds" },
                     e.contents?.label?.lowercase(), e.activity.takeIf { it.isNotEmpty() }?.let { "while ${it.joinToString(", ")}" },
                     e.awareness?.label?.lowercase(), e.reachedToilet?.label?.lowercase(), e.warningSeconds?.let { "${it}s warning" },
-                    e.location?.let { "at $it" }, e.fullness?.label?.lowercase()?.let { "product $it" }, e.lossG?.let { "lost ${it} g" },
+                    e.location?.let { "at $it" },
+                    e.supplyId?.takeIf { e.kind == ContinenceKind.PAD_CHANGE }?.let { "took off ${names[it] ?: "a product"}" },
+                    e.putOnSupplyId?.let { "put on ${names[it] ?: "a product"}" }, "nothing on for now".takeIf { e.nothingOn },
+                    e.wornMinutes?.let { "worn ${Wear.say(it)}" },
+                    e.fullness?.label?.lowercase()?.let { "product $it" }, e.lossG?.let { "lost ${it} g" },
                     e.count?.let { "$it used" }, "leaked through".takeIf { e.leakedThrough }, "changed clothes".takeIf { e.changedClothes },
                     "changed bedding".takeIf { e.changedBedding }, e.skin?.takeIf { it > 0 }?.let { "skin soreness $it/3" },
                     e.utiSigns.takeIf { it.isNotEmpty() }?.let { "infection signs: ${it.joinToString(", ")}" },

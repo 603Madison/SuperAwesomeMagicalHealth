@@ -1,7 +1,7 @@
 import type {
   AdminSettings, AuthConfig, CheckIn, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
-  ContinenceEntry, ContinenceSummary, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
+  ContinenceEntry, ContinenceSummary, ContinenceWearing, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
@@ -209,6 +209,8 @@ export const api = {
   saveContinence: (e: ContinenceEntry) => (e.id ? put<ContinenceEntry>(`/api/continence/entries/${q(e.id)}`, e) : post<ContinenceEntry>("/api/continence/entries", e)),
   deleteContinence: (id: string) => del<unknown>(`/api/continence/entries/${q(id)}`),
   continenceSummary: (days = 14) => get<ContinenceSummary>(`/api/continence/summary?days=${days}`),
+  continenceWearing: () => get<ContinenceWearing>("/api/continence/wearing"),
+  continenceProducts: (days = 90) => get<ProductStats[]>(`/api/continence/products?days=${days}`),
 
   meds: (all = false) => get<Medication[]>(`/api/meds${all ? "?all=true" : ""}`),
   saveMed: (m: Medication) => (m.id ? put<Medication>(`/api/meds/${q(m.id)}`, m) : post<Medication>("/api/meds", m)),

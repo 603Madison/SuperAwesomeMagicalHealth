@@ -124,6 +124,9 @@ database), and shown to an AI connector only if the person says so when making i
   nudge to see someone), wet nights, catheters, your own tags and fields. **Is it getting better
   or worse?** The last four weeks against the four before, week by week. **Bladder training**
   with reminders that space out over time, and weekly check-ins on how much it bothers you.
+  **What you're wearing**: "Wearing now" says what's on and for how long, and a **change** is one
+  step (what came off and how it was, what went on); each product's usual wear time, how full it
+  tends to be and how often it leaks through; and an optional discreet "Time for a check".
 - **Supplies**: the pads, briefs, diapers, bed pads, reusable underwear, catheters, wipes and
   period products you have on hand, counted down as you log changes, with how long they'll last
   and a reminder before you run out.

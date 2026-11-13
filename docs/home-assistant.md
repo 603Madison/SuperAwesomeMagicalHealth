@@ -81,7 +81,7 @@ Each call is a `POST` with a JSON body:
 Names (of medications, symptoms, appointments) are only included when the hook's **Include
 names** is on. The events: `morning`, `readiness.low`, `dose.due`, `dose.missed`, `dose.taken`,
 `refill`, `bp.high`, `glucose.low`, `glucose.high`, `migraine`, `habit.due`,
-`appointment.soon`, `bladder.training`, `supplies.low`, `cycle.reminder`, `voice.practice`,
+`appointment.soon`, `bladder.training`, `continence.change`, `supplies.low`, `cycle.reminder`, `voice.practice`,
 `device.battery_low`, `device.quiet`, `digest` and `test`.
 
 An automation that flashes a lamp when a dose is due, and turns it back when it's taken:

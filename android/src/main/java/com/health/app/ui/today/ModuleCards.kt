@@ -17,6 +17,7 @@ import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.modules.Moods
 import com.health.app.ui.modules.cycle.periodColor
 import com.health.app.ui.modules.cycle.periodText
+import com.health.app.ui.modules.continence.WearText
 
 /*
  * Today's cards for the health modules: each the same title row (InfoCard) with at most one
@@ -63,24 +64,29 @@ fun CycleTodayCard(cycle: CycleToday, plain: Boolean, onLog: () -> Unit, onOpen:
     }
 }
 
-/** Toilet trips today, with leaks and night trips under them; "+" logs one. */
+/** What's being worn and for how long (or toilet trips today), with leaks and night trips under; "+" logs one. */
 @Composable
-fun ContinenceTodayCard(day: ContinenceDay, onLog: () -> Unit, onOpen: () -> Unit) {
+fun ContinenceTodayCard(day: ContinenceDay, onLog: () -> Unit, now: Long = System.currentTimeMillis(), onOpen: () -> Unit) {
     val readOnly = LocalReadOnly.current
     InfoCard(
         "Bladder & bowel", icon = ModuleInfo.icon(Module.CONTINENCE), onClick = onOpen, onOpen = onOpen,
         action = if (readOnly) null else CardAction(Icons.Rounded.Add, "Log bladder and bowel", onClick = onLog),
     ) {
         val trips = day.voids
-        Figure(
-            "$trips", if (trips == 1) "toilet trip" else "toilet trips",
-            listOfNotNull(
-                day.leaks.takeIf { it > 0 }?.let { if (it == 1) "1 leak" else "$it leaks" },
-                day.nightVoids.takeIf { it > 0 }?.let { "$it at night" },
-                day.bowel.takeIf { it > 0 }?.let { if (it == 1) "1 bowel movement" else "$it bowel movements" },
-                day.pelvicFloor.takeIf { it > 0 }?.let { "pelvic floor ${if (it == 1) "once" else "$it times"}" },
-            ).joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null },
+        val rest = listOfNotNull(
+            day.leaks.takeIf { it > 0 }?.let { if (it == 1) "1 leak" else "$it leaks" },
+            day.nightVoids.takeIf { it > 0 }?.let { "$it at night" },
+            day.bowel.takeIf { it > 0 }?.let { if (it == 1) "1 bowel movement" else "$it bowel movements" },
+            day.pelvicFloor.takeIf { it > 0 }?.let { "pelvic floor ${if (it == 1) "once" else "$it times"}" },
         )
+        val w = day.wearing
+        val counts = (listOfNotNull(trips.takeIf { it > 0 }?.let { if (it == 1) "1 trip" else "$it trips" }) + rest).take(3).joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null }
+        when {
+            // What's on, and for how long, leads; the day's counts follow.
+            w?.supplyId != null -> Figure(w.name ?: "A product", "for ${WearText.wornFor(WearText.onFor(w, now))}", counts)
+            w?.nothingOn == true -> Headline("Nothing on for now", supporting = counts)
+            else -> Figure("$trips", if (trips == 1) "toilet trip" else "toilet trips", rest.joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null })
+        }
     }
 }
 

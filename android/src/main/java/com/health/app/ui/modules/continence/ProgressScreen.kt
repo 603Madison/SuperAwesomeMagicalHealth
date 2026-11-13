@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.ContinenceProgress
 import com.health.api.ProgressWeek
 import com.health.app.Container
+import com.health.app.net.continenceProducts
 import com.health.app.net.continenceProgress
 import com.health.app.ui.Format
 import com.health.app.ui.components.AppCard
@@ -64,7 +65,14 @@ import com.health.app.ui.modules.FeatureScreens
 import com.health.app.ui.modules.Sections
 import com.health.app.ui.modules.arrangedIn
 
-data class ProgressState(val weeks: Int = 12, val progress: ContinenceProgress? = null, val loading: Boolean = true, val error: String? = null)
+data class ProgressState(
+    val weeks: Int = 12,
+    val progress: ContinenceProgress? = null,
+    val loading: Boolean = true,
+    val error: String? = null,
+    /** How each product goes (from the diary's changes). */
+    val products: List<com.health.api.ProductStats> = emptyList(),
+)
 
 class ProgressViewModel(private val c: Container) : ViewModel() {
     private val _state = MutableStateFlow(ProgressState())
@@ -79,7 +87,8 @@ class ProgressViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 val p = c.ui.continenceProgress(weeks)
-                _state.update { it.copy(progress = p, loading = false) }
+                val products = runCatching { c.ui.continenceProducts(90) }.getOrNull()
+                _state.update { it.copy(progress = p, products = products ?: it.products, loading = false) }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't work out how things are going") }
             }
@@ -129,6 +138,7 @@ val PROGRESS_SECTIONS = listOf(
     ArrangeItem("verdict", "Getting better or worse"),
     ArrangeItem("compare", "Lately against before"),
     ArrangeItem("weeks", "Week by week"),
+    ArrangeItem("products", "How your products go"),
     ArrangeItem("notes", "What went along with it"),
 )
 
@@ -212,6 +222,7 @@ fun ProgressScreen(state: ProgressState, onBack: () -> Unit, onWeeks: (Int) -> U
                                     }
                                 }
                             }
+                            "products" -> ProductsCard(state.products)
                             "notes" -> {
                                 if (p.notes.isNotEmpty()) {
                                     InfoCard("What went along with it", icon = Icons.Rounded.Lightbulb) {

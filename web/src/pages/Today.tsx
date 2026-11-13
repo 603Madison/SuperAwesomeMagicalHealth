@@ -36,6 +36,7 @@ import {
   mindLine, neuroLine, sleepLine, stressLine, symptomsLine, transitionLine, useDigestRow, vitalsLine, waterLine, workoutsLine, type Headline,
 } from "./TodayCards";
 import { UpNextCard, useUpNext } from "./UpNext";
+import { QuickChange } from "./Wearing";
 import { LogSheet, QuickRow, type LogAction, type LogGroup } from "./LogSheet";
 
 /*
@@ -77,6 +78,7 @@ export function Today() {
   const [score, setScore] = useState<{ title: string; score: Score } | null>(null);
   const [mood, setMood] = useState<number | null>(null);
   const [logging, setLogging] = useState(false);
+  const [changing, setChanging] = useState(false);
   const [arranging, setArranging] = useState<"cards" | "quick" | null>(null);
   const on = useModules();
   const { has } = useFields();
@@ -118,7 +120,9 @@ export function Today() {
     { id: "WATER", label: "Water, 250 ml", short: "Water", name: "Water: add 250 ml", icon: GlassWater, run: addWater, when: water },
     { id: "MOOD", label: "Mood", short: "Mood", name: "Log mood", icon: Heart, run: () => setMood(3) },
     { id: "PERIOD", label: lifeStageShown ? "Cycle" : "Period", short: lifeStageShown ? "Cycle" : "Period", icon: CalendarHeart, run: () => navigate("/cycle") },
-    { id: "BLADDER", label: "Trip, leak or bowel", short: "Bladder", name: "Bladder: trip, leak or bowel", icon: Droplet, run: () => navigate("/bladder") },
+    // With something on, the quick way in is a change.
+    { id: "BLADDER", label: "Trip, leak or bowel", short: "Bladder", name: "Bladder: trip, leak or bowel", icon: Droplet,
+      run: () => (isToday && m?.continence?.wearing?.supplyId ? setChanging(true) : navigate("/bladder")) },
     { id: "DOSE", label: "A dose", short: "Dose", name: "Log a dose", icon: Pill, run: () => navigate("/meds") },
     { id: "WEIGHT", label: "Weight", short: "Weight", name: "Log weight", icon: Weight, run: () => setOpen("weight") },
     { id: "COFFEE", label: "Coffee", short: "Coffee", name: "Coffee: log a cup", icon: Coffee, run: coffee },
@@ -321,6 +325,7 @@ export function Today() {
         />
       )}
       {score && <ScoreDialog title={score.title} score={score.score} onClose={() => setScore(null)} />}
+      {changing && <QuickChange onClose={() => setChanging(false)} onSaved={changed} />}
       {open === "bp" && <BloodPressureDialog onClose={() => setOpen(null)} onSaved={changed} />}
       {open === "glucose" && <GlucoseDialog unit={glucoseUnit} onClose={() => setOpen(null)} onSaved={changed} />}
       {open === "symptom" && <SymptomDialog initial={{ symptom: "" }} onClose={() => setOpen(null)} onSaved={changed} />}

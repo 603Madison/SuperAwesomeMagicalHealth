@@ -176,8 +176,9 @@ class ArrangingTest {
     @Test
     fun bladderAndBowelFollowsItsFields() {
         assertEquals(listOf("log", "today", "summary", "progress", "insights", "more"), ids(continenceSections(emptySet())))
+        // What's worn, and how each product goes, come with the product fields.
         assertEquals(
-            listOf("log", "today", "lowsupplies", "summary", "progress", "insights", "training", "pelvicfloor", "more"),
+            listOf("wearing", "log", "today", "lowsupplies", "summary", "progress", "products", "insights", "training", "pelvicfloor", "more"),
             ids(continenceSections(everyField)),
         )
         val viewing = ids(continenceSections(everyField, readOnly = true))

@@ -10,6 +10,7 @@ import { Button, Card, CardAction, Empty, ErrorNotice, Field, Modal, PageHeader,
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
 import { useModules } from "../App";
+import { ProductsCard } from "./Wearing";
 
 const CATEGORY_LABEL: Record<SupplyCategory, string> = { CONTINENCE: "Bladder and bowel", PERIOD: "Periods", OTHER: "Other" };
 
@@ -19,13 +20,15 @@ const blank = (kind: SupplyKind = "PAD"): Supply => ({ name: "", kind, onHand: 0
 export function Supplies() {
   const readOnly = useReadOnly();
   const status = useLoad(() => api.supplyStatus(), []);
+  const products = useLoad(() => api.continenceProducts(90).catch(() => []), []);
   const [editing, setEditing] = useState<Supply | null>(null);
   const [restock, setRestock] = useState<SupplyStatus | null>(null);
   const [history, setHistory] = useState<Supply | null>(null);
   const list = status.data ?? [];
   const on = useModules();
   const inCategory = (c: SupplyCategory) => list.filter((s) => SUPPLY_KINDS.find((k) => k.id === s.supply.kind)?.category === c);
-  const sections: Section[] = (["CONTINENCE", "PERIOD", "OTHER"] as SupplyCategory[]).map((category) => {
+  const sections: Section[] = [{ id: "patterns", label: "How your products go", when: on.includes("CONTINENCE"), node: <ProductsCard stats={products.data ?? []} className="span-2" /> }];
+  sections.push(...(["CONTINENCE", "PERIOD", "OTHER"] as SupplyCategory[]).map((category) => {
     const items = inCategory(category);
     return {
       id: category.toLowerCase(), label: CATEGORY_LABEL[category],
@@ -58,7 +61,7 @@ export function Supplies() {
         </section>
       ),
     };
-  });
+  }));
   const arranged = useArrange(layoutKey("supplies"), "Supplies", sections);
   return (
     <div className="page">
@@ -75,7 +78,7 @@ export function Supplies() {
         </Empty></Card>
       )}
       {arranged.render()}
-      <p className="muted small">Pad and brief changes in the <Link to="/bladder">Bladder &amp; bowel</Link> diary, and period products on <Link to="/cycle">Cycle</Link> days, are taken off the count as you log them.</p>
+      <p className="muted small">What you put on in the <Link to="/bladder">Bladder &amp; bowel</Link> diary, and period products on <Link to="/cycle">Cycle</Link> days, come off the count as you log them.</p>
       {editing && <SupplyDialog supply={editing} onClose={() => setEditing(null)} onSaved={status.reload} />}
       {restock && <RestockDialog status={restock} onClose={() => setRestock(null)} onSaved={status.reload} />}
       {history && <HistoryDialog supply={history} onClose={() => setHistory(null)} />}

@@ -21,6 +21,7 @@ export type UpNext =
   | { kind: "appointment"; key: string; at: number; appointment: Appointment }
   | { kind: "routine"; key: string; name: string }
   | { kind: "trip"; key: string; at: number; every: number }
+  | { kind: "change"; key: string; at: number; name: string; since: number }
   | { kind: "restock"; key: string; supply: SupplyStatus };
 
 /** The doses not taken or skipped yet that are due within the hour or overdue, earliest first. */

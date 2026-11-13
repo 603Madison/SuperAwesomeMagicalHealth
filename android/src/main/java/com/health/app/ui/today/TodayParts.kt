@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material.icons.rounded.Wc
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -197,6 +198,8 @@ class UpNextActions(
     val take: (TodayPlan.Item) -> Unit = {},
     val skip: (TodayPlan.Item) -> Unit = {},
     val trip: (TodayPlan.Item) -> Unit = {},
+    /** Opens the Change sheet. */
+    val change: (TodayPlan.Item) -> Unit = {},
     val open: (String) -> Unit = {},
 )
 
@@ -239,6 +242,7 @@ private fun UpNextRow(item: TodayPlan.Item, readOnly: Boolean, actions: UpNextAc
                 FilledTonalButton(onClick = { actions.take(item) }, contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.semantics { contentDescription = "Take ${item.title}" }) { Text("Take") }
             }
             TodayPlan.Kind.BLADDER -> RowButton("Done", "Log a toilet trip") { actions.trip(item) }
+            TodayPlan.Kind.CHANGE -> RowButton("Change", "Log a change") { actions.change(item) }
             TodayPlan.Kind.APPOINTMENT -> RowButton("Open", "Open ${item.title}") { item.route?.let(actions.open) }
             TodayPlan.Kind.ROUTINE -> RowButton("Start", "Start ${item.title}") { item.route?.let(actions.open) }
             TodayPlan.Kind.RESTOCK -> RowButton("Restock", "Restock ${item.title.removeSuffix(" running low")}") { item.route?.let(actions.open) }
@@ -288,6 +292,7 @@ private fun upNextIcon(kind: TodayPlan.Kind): ImageVector = when (kind) {
     TodayPlan.Kind.DOSE -> Icons.Rounded.Medication
     TodayPlan.Kind.APPOINTMENT -> Icons.Rounded.Event
     TodayPlan.Kind.BLADDER -> Icons.Rounded.Wc
+    TodayPlan.Kind.CHANGE -> Icons.Rounded.Layers
     TodayPlan.Kind.ROUTINE -> Icons.Rounded.Checklist
     TodayPlan.Kind.RESTOCK -> Icons.Rounded.Inventory2
 }

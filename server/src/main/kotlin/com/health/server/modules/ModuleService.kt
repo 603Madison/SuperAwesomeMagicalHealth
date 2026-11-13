@@ -1,5 +1,6 @@
 package com.health.server.modules
 
+import com.health.api.ContinenceDay
 import com.health.api.CyclePhase
 import com.health.api.AppPage
 import com.health.api.DoseStatus
@@ -74,7 +75,9 @@ class ModuleService(
         } else null
 
         val continenceDay = if (Module.CONTINENCE in on) {
-            continence.daysOf(userId, date, date)[date]?.also { d ->
+            // What's being worn now, on today only: a card even before anything's logged today.
+            val wearing = if (isToday) runCatching { continence.wearing(userId) }.getOrNull()?.takeIf { it.since != null } else null
+            (continence.daysOf(userId, date, date)[date] ?: wearing?.let { ContinenceDay(date.toString()) })?.copy(wearing = wearing)?.also { d ->
                 if (d.leaks >= 3) insights += 50 to Insight("info", "${d.leaks} leaks today", "Noting what came before each one (a cough, a sudden urge) helps find what helps.", "droplet", Module.CONTINENCE)
                 if (d.nightVoids >= 2) insights += 48 to Insight("info", "Up ${d.nightVoids} times last night", "Less to drink in the two hours before bed often helps.", "moon", Module.CONTINENCE)
             }.also {

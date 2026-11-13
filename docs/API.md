@@ -205,6 +205,8 @@ from `at`, in the person's time zone.
 |---|---|
 | `GET /api/continence/entries?days=7` · `POST` · `PUT /{id}` · `DELETE /{id}` | `ContinenceEntry` |
 | `GET /api/continence/summary?days=14` | `ContinenceSummary`: per-day counts, averages, triggers, patterns |
+| `GET /api/continence/wearing` | `ContinenceWearing`: what's on now, since when, the usual wear time, and when a change reminder is due |
+| `GET /api/continence/products?days=90` | `[ProductStats]`: how each product goes (wear time, how full, leaks through, nights) |
 
 ### Medications
 
@@ -343,15 +345,47 @@ name go where they'd be by default (`Layouts.arrange`). Always the person's own:
 
 | | |
 |---|---|
-| `GET /api/continence/settings` · `PUT` | `ContinenceSettings` (quick buttons, own triggers, activities and places, custom fields, the usual product, night hours, bladder training) |
+| `GET /api/continence/settings` · `PUT` | `ContinenceSettings` (quick buttons, own triggers, activities and places, custom fields, the usual product, night hours, bladder training, the change reminder) |
 | `GET /api/continence/progress?weeks=12` | `ContinenceProgress`: getting better or worse, week by week |
 | `GET /api/continence/check-ins?days=180` · `POST` · `DELETE /{id}` | `ContinenceCheckIn` (weekly bother) |
 
-`ContinenceEntry` carries the detail fields; a `PAD_CHANGE` (or an entry with `count`) takes products
-off its supply's count; `padWeightG` with the supply's dry weight sets `lossG`. `ContinenceDay` counts
-the day: `bowelLeaks`, `wetNights`, `products`, `leakedThrough`, `catheters`, `catheterMl` and `lossG`.
-Bladder training reminds through `FeatureHooks.reminders` (push, the phone, the `bladder.training`
-webhook), with discreet lock-screen words.
+`ContinenceEntry` carries the detail fields; `padWeightG` with the supply's dry weight sets `lossG`.
+`ContinenceDay` counts the day: `bowelLeaks`, `wetNights`, `products`, `leakedThrough`, `catheters`,
+`catheterMl` and `lossG`. Bladder training reminds through `FeatureHooks.reminders` (push, the phone,
+the `bladder.training` webhook), with discreet lock-screen words.
+
+**A change, and what's being worn.** A `PAD_CHANGE` is one step: `supplyId` is what was **taken
+off**, `putOnSupplyId` what was **put on**, and `nothingOn` says it came off with nothing on for now
+(both at once is a 400). A change with only `putOnSupplyId` is "put on". `fullness`, `leakedThrough`,
+`changedClothes`, `changedBedding`, `skin` and `padWeightG` are about the one taken off.
+
+- **Stock:** a change takes one (or `count`) off the **put-on** product's stock; the one taken off
+  was counted when it went on, and nothing is counted with `nothingOn`. A change from before
+  `putOnSupplyId` existed counts its `supplyId`, as it always did, so older diaries stay right. Any
+  other entry with a product and a `count` (a leak, changed afterwards) uses that many. Edits and
+  deletes give back what was counted and count again.
+- **`wornMinutes`** (set by the server, on every entry returned) is how long the product taken off was
+  worn: from the change before it that put that product on, within a day. An older change put on a
+  fresh one of what it took off, so older diaries pair up too.
+- **`GET /api/continence/wearing`** comes from the latest change in the last day that put something
+  on or took everything off (`nothingOn`); every field is null when there's none. `typicalMinutes`
+  is the middle of that product's paired wears over 60 days (three or more); `changeDueAt` is
+  `changeReminderHours` after it went on, moved to the end of the night (`nightFrom`/`nightTo`,
+  11 pm to 6 am by default) unless `changeReminderAtNight`. Today's `ModulesToday.continence.wearing`
+  carries the same, on today only (a card even before anything else is logged).
+- **`GET /api/continence/products`** groups the changes that took each product off: `changes`,
+  `avgWornMinutes`, `typicalFullness` (the most common), `leakedThrough` and `leakedThroughPct`
+  (leaked through, or `LEAKED`), and `nightShare` (wears whose middle was in the night), most-changed
+  first.
+- **The change reminder** goes out once per wear at `changeDueAt` as `continence.change`. Every
+  screen sees only "Time for a check" and a time ("About 6 hours since your last change."), never the
+  product, whatever `ReminderPrefs.showNames` says; only a webhook with `includeDetails` gets
+  `product` in its data.
+- The report's Bladder and bowel section has a line per product and a Products table; the export
+  adds `put_on`, `nothing_on` and `worn_minutes` to `bladder-bowel-details.csv`, and
+  `bladder-bowel-products.csv`. The connector's `continence` tool says what's worn now and how each
+  product goes, and `day` what's on (both only for links that may read Bladder and bowel). Shares
+  that include `CONTINENCE` can read all of it and change nothing.
 
 ### Supplies
 
@@ -521,7 +555,7 @@ reports, exports) is refused with 403. Shares go to existing accounts by usernam
 | `GET /api/admin/smtp` · `PUT` · `POST /api/admin/smtp/test` | Admins: `{settings, passwordSet}` · `{settings, password?}` · `{to}` |
 
 Every minute the server sends what's due: doses (and again, every `remindAgainMinutes` while
-unmarked), refills, appointments, habits, routines, bladder training, low supplies, cycle reminders,
+unmarked), refills, appointments, habits, routines, bladder training, change checks, low supplies, cycle reminders,
 voice practice and the weekly digest, by browser push (names only if
 `ReminderPrefs.showNames`; nothing but doses in quiet hours) and to webhooks subscribed to the
 event. A push is a `PushMessage` (JSON, encrypted per RFC 8291); "taken" and "skip" actions carry

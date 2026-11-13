@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.health.api.ProductStats
 import com.health.api.Supply
 import com.health.api.SupplyAdjustment
 import com.health.api.SupplyCategory
@@ -55,6 +56,7 @@ import com.health.api.SupplyReason
 import com.health.api.SupplyStatus
 import com.health.app.Container
 import com.health.app.net.addSupply
+import com.health.app.net.continenceProducts
 import com.health.app.net.adjustSupply
 import com.health.app.net.deleteSupply
 import com.health.app.net.supplies
@@ -119,6 +121,8 @@ data class SuppliesState(
     /** Ones put away, to bring back. */
     val putAway: List<Supply> = emptyList(),
     val history: Map<String, List<SupplyAdjustment>> = emptyMap(),
+    /** How each bladder and bowel product goes (from the diary's changes). */
+    val products: List<ProductStats> = emptyList(),
     val loading: Boolean = true,
     val error: String? = null,
 )
@@ -138,7 +142,10 @@ class SuppliesViewModel(private val c: Container) : ViewModel() {
             try {
                 val statuses = async { c.ui.supplyStatus() }
                 val all = async { runCatching { c.ui.supplies(all = true) }.getOrDefault(emptyList()) }
-                _state.update { it.copy(statuses = statuses.await(), putAway = all.await().filter { s -> !s.active }, loading = false) }
+                val products = async { runCatching { c.ui.continenceProducts(90) }.getOrNull() }
+                _state.update {
+                    it.copy(statuses = statuses.await(), putAway = all.await().filter { s -> !s.active }, products = products.await() ?: it.products, loading = false)
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your supplies") }
             }
@@ -211,11 +218,12 @@ fun SuppliesScreen(area: SupplyArea, state: SuppliesState, zone: ZoneId, onBack:
                 state.loading && state.statuses.isEmpty() -> Loading()
                 state.error != null && state.statuses.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
                 all.isEmpty() -> EmptyLine(
-                    if (area == SupplyArea.CYCLE) "None yet. Each product you log comes off its count." else "None yet. Each change in the diary comes off its count.",
+                    if (area == SupplyArea.CYCLE) "None yet. Each product you log comes off its count." else "None yet. What you put on in the diary comes off its count.",
                     action = "Add".takeIf { !readOnly }, onAction = { editing = Supply("", area.kinds.first()) },
                 )
                 mine.isEmpty() -> EmptyLine("All of these are hidden. Show them again from Arrange.")
                 else -> {
+                    if (area == SupplyArea.CONTINENCE) ProductsCard(state.products)
                     InfoCard(null) {
                         mine.forEachIndexed { i, s ->
                             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)

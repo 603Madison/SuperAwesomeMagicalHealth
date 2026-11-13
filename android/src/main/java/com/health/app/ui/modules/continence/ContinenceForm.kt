@@ -71,7 +71,19 @@ data class FormContext(
  * shows when its field is on (Settings › Fields, or the person's conditions).
  */
 @Composable
-fun EntryForm(initial: ContinenceEntry, context: FormContext, onSave: (ContinenceEntry) -> Unit, onDelete: (() -> Unit)?) {
+fun EntryForm(
+    initial: ContinenceEntry,
+    context: FormContext,
+    onSave: (ContinenceEntry) -> Unit,
+    onDelete: (() -> Unit)?,
+    /** Picking "Change": a change has its own sheet (what came off, what went on). */
+    onPadChange: (() -> Unit)? = null,
+) {
+    // A change is one step with its own sheet.
+    if (initial.kind == ContinenceKind.PAD_CHANGE) {
+        ChangeForm(initial, context, emptyList(), onSave, onDelete)
+        return
+    }
     val fields = context.fields
     fun shows(key: String) = key in fields
     val settings = context.settings
@@ -93,7 +105,11 @@ fun EntryForm(initial: ContinenceEntry, context: FormContext, onSave: (Continenc
         if (initial.id == null) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ContinenceText.kinds(fields).forEach { k ->
-                    FilterChip(selected = kind == k, onClick = { e = withDefaultSupply(e.copy(kind = k), context) }, label = { Text(k.label) })
+                    FilterChip(
+                        selected = kind == k,
+                        onClick = { if (k == ContinenceKind.PAD_CHANGE && onPadChange != null) onPadChange() else { e = withDefaultSupply(e.copy(kind = k), context) } },
+                        label = { Text(k.label) },
+                    )
                 }
             }
             Section("When") {
