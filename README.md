@@ -48,8 +48,12 @@ restored, from your heart rate and HRV against your own baseline (or your watch'
 readings); resilience is how well recovery (sleep, and calm time awake) has balanced stress over
 two weeks, from limited to exceptional.
 
-**Insights** pick out what matters each day: a resting heart rate up 5 bpm, a short night against
-your usual, sleep debt, low protein by the evening, a weight trend heading the right way.
+**Today** is calm: your scores, **Up next** (doses due, today's appointment, a routine), and
+**For you**, a few insights that pick out what matters (a resting heart rate up 5 bpm, a short
+night against your usual, sleep debt, protein behind for the time of day), each opening the page
+it's about. When protein's behind, it suggests **meals you've actually eaten before** that would
+help, for the meal that's coming up, with one-tap Add. Features with nothing logged yet wait in
+one "Also today" card, and **+ Log** has every way to add something.
 
 **Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
 quick-add calories, make your own foods, copy yesterday's breakfast, and track water and
@@ -59,9 +63,15 @@ targets come from your resting energy (Mifflin–St Jeor, with the female or mal
 average of both, as fits your body), your devices' active calories, and the weight change you're
 aiming for.
 
-**Devices**: data from several devices is combined sensibly (a ring and a phone don't both count
-the same steps; the night with sleep stages wins over one without). Sending the same data again
-is harmless.
+**Two devices, one set of numbers**: when a ring and a watch (say a Colmi ring and a Pebble
+Time 2) both measure something, the server works out its own number from both: steps from
+whichever counted more each quarter hour, so nothing is counted twice; heart rate merged in time;
+HRV, blood oxygen and temperature weighted to the ring at night and each compared with its own
+usual, so a finger and a wrist combine fairly; and sleep timed by what they agree on, with stages
+from the device that knows them (and if the ring's battery runs out at 3 am, the watch carries
+the rest of the night). Anything from two devices says so: tap **From 2 devices** to see each
+one's value and how they were combined, or choose one device for that reading. Sending the same
+data again is harmless.
 
 ## What you're tracking
 
@@ -137,9 +147,16 @@ database), and shown to an AI connector only if the person says so when making i
   really take; **routines** as checklists; **communication cards** for when talking is hard; a
   calm mode; and patterns, with a gentle note if burnout looks to be building.
 - **Transition**, whatever it means to you, at your pace: pronouns, **milestones** (social,
-  legal, medical, voice) with checklists for documents, changes you notice, **voice practice**
-  with a pitch meter on your own device (nothing is recorded), hair removal, and moments of
-  **euphoria** and dysphoria. With hormone therapy, it shows how long you've been on it.
+  legal, medical, voice) with checklists for documents, changes you notice, hair removal, and
+  moments of **euphoria** and dysphoria. With hormone therapy, it shows how long you've been on it.
+- **Voice training**, free, in Transition: choose lighter and brighter, deeper and fuller, or
+  exploring; record a starting point; then a guided programme (8 units, 27 lessons) through
+  vocal health, warm-ups, pitch, resonance, vocal weight, intonation and into everyday speech,
+  with **live feedback while you practise**: your pitch against your target range, resonance
+  (darker to brighter), vocal weight, intonation and loudness, plus tones to match. Everything
+  is listened to on your own device; recordings are optional and never leave it. Streaks,
+  weekly progress against your starting point, gentle reminders, rest days, and vocal-health
+  guidance throughout (a speech therapist is always worth seeing for pain or hoarseness).
 - **Progress photos**, for transition, weight or anything else: albums and poses, a ghost of the
   last photo to line up the next one (in the phone app), and side-by-side comparisons with the
   weight and time on hormones then. Encrypted, stripped of location and camera details, **never
@@ -309,7 +326,9 @@ Settings given here win at every start; the rest are on the Admin page.
 - **The phone app** signs in to the server (through Authentik in a browser tab, or with a
   password) and syncs in the background:
   - **Colmi rings** (R02, R03, R06, R09, R10, R12, the Colmi Ring 2 and other rings that use the
-    QRing app) directly over Bluetooth: heart rate, steps, calories, distance and sleep stages.
+    QRing app) directly over Bluetooth, no Colmi app needed: heart rate, steps, calories,
+    distance, sleep stages, blood oxygen, HRV and stress, and skin temperature on the R09 and
+    R10. The app turns on the ring's own measurements for them.
   - **Health Connect**: anything that writes to it, like Garmin Connect, Fitbit, Samsung Health,
     Oura or Gadgetbridge.
   - **Gadgetbridge's database export**, for the many devices Gadgetbridge supports.
