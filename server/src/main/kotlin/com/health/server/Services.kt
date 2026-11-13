@@ -132,6 +132,11 @@ class Services(
         days.showsWater = { userId -> conditions.shows(userId, com.health.api.Fields.NUTRITION_WATER) }
     }
 
+    /** Food ideas from what each person has eaten before, for the Food page and Today's protein insight. */
+    val suggestions = com.health.server.food.SuggestionService(foods, days, profiles, conditions, clock).also { s ->
+        days.foodForInsights = { userId, date, isToday, today, target -> s.forInsights(userId, date, isToday, today, target) }
+    }
+
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(

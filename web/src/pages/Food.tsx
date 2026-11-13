@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ArrowRightLeft, Barcode, Copy, GlassWater, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
+import { ArrowRightLeft, Barcode, Copy, GlassWater, Lightbulb, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { dayLabel, num, shiftDate, today } from "../lib/format";
 import type { Food as FoodItem, FoodDay, FoodEntry, Meal, Nutrients } from "../lib/types";
@@ -13,6 +13,7 @@ import { useModules } from "../App";
 import { Macros } from "./Today";
 import { DrinksCard } from "./Drinks";
 import { useReadOnly } from "../lib/viewing";
+import { amountText, logSuggestion } from "../components/Insights";
 
 const MEALS: { id: Meal; label: string }[] = [
   { id: "BREAKFAST", label: "Breakfast" },
@@ -34,6 +35,8 @@ export function Food() {
   useHashScroll(!!data);
 
   const sections: Section[] = [
+    // Ideas from what's been eaten before, for the meal it is now: today only.
+    { id: "ideas", label: "Ideas", when: date === today(), node: data && <Ideas date={date} readOnly={readOnly} onChanged={reload} /> },
     { id: "totals", label: "Totals", node: data && <Totals day={data} /> },
     { id: "water", label: "Water", when: water, node: data && <WaterCard day={data} readOnly={readOnly} onChanged={reload} /> },
     { id: "drinks", label: "Drinks", node: data && <DrinksCard day={drinks.data} date={date} readOnly={readOnly} onChanged={() => { drinks.reload(); reload(); }} /> },
@@ -67,6 +70,48 @@ export function Food() {
       {adding && <AddFood date={date} meal={adding} onClose={() => setAdding(null)} onAdded={reload} />}
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
+  );
+}
+
+/**
+ * "Ideas for dinner": foods and meals eaten before, best first, each added with one tap (not while
+ * viewing a share). Another meal from the menu. Without numbers (eating disorder recovery), no amounts.
+ */
+function Ideas({ date, readOnly, onChanged }: { date: string; readOnly: boolean; onChanged: () => void }) {
+  const [meal, setMeal] = useState<Meal | undefined>(undefined);
+  const { data, error, reload } = useLoad(() => api.foodSuggestions(date, meal), [date, meal]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const shown = data?.meal ?? meal;
+  const label = MEALS.find((m) => m.id === shown)?.label.toLowerCase() ?? "now";
+  const changed = () => { onChanged(); reload(); };
+  return (
+    <Card
+      id="ideas" title={`Ideas for ${label}`} icon={<Lightbulb size={18} />} className="span-2 ideas-card"
+      action={<Menu label="Ideas for another meal" trigger={<MoreHorizontal size={20} />} items={MEALS.map((m) => ({ label: `Ideas for ${m.label.toLowerCase()}`, onSelect: () => setMeal(m.id) }))} />}
+    >
+      {error && <p className="muted small">Ideas aren't available just now.</p>}
+      {data && data.items.length === 0 && <p className="muted small">Ideas show up here once you've logged a few meals.</p>}
+      {data && data.items.length > 0 && (
+        <ul className="rows">
+          {data.items.map((s) => (
+            <li key={s.name} className="row">
+              <div className="row-main">
+                <div className="row-title">{s.name}</div>
+                <div className="row-sub">{s.why}{data.showNumbers && <> · <span className="nowrap">{amountText(s, true)}</span></>}</div>
+              </div>
+              {!readOnly && (
+                <Button
+                  variant="tonal" className="btn-small" busy={busy === s.name} aria-label={`Add ${s.name} to ${label}`}
+                  onClick={async () => { setBusy(s.name); await logSuggestion(s, date, changed, data.meal); setBusy(null); }}
+                >
+                  <Plus size={16} aria-hidden="true" /> Add
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

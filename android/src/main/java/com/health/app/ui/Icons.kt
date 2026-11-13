@@ -6,6 +6,9 @@ import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Egg
+import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.DirectionsBike
@@ -57,6 +60,9 @@ object AppIcons {
         "timer", "clock" -> Icons.Rounded.Timer
         "zap", "bolt" -> Icons.Rounded.Bolt
         "wind", "breath", "lungs" -> Icons.Rounded.Air
+        "pill", "syringe" -> Icons.Rounded.Medication
+        "egg" -> Icons.Rounded.Egg
+        "calendar", "calendar-clock" -> Icons.Rounded.CalendarMonth
         else -> Icons.Rounded.AutoAwesome
     }
 

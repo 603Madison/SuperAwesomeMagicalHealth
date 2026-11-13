@@ -96,7 +96,71 @@ data class Insight(
     val icon: String = "sparkles",
     /** The health module it comes from, if any (shown only where that module may be seen). */
     val module: Module? = null,
+    /** The page it's about, which a tap opens; without one, the apps open [module]'s page (see [AppPage.of]). */
+    val link: AppPage? = null,
+    /** Food ideas that would help (the protein insight, today only): each can be logged with one tap. */
+    val suggestions: List<FoodSuggestion> = emptyList(),
+    /** The Today card that already shows the same thing (the day's doses): the apps leave the insight out while it shows. */
+    val shownBy: TodaySection? = null,
 )
+
+/** The apps' pages, for an [Insight] to open. Each app maps them to its own routes. */
+@Serializable
+enum class AppPage {
+    TODAY, FOOD, MEDS, MIND, CYCLE, CONTINENCE, SUPPLIES, VITALS, HABITS, SYMPTOMS, HORMONES, APPOINTMENTS, NEURO, TRANSITION,
+    PHOTOS, BODY, SLEEP, ACTIVITY, TRENDS, DEVICES,
+    ;
+
+    /** The feature a page belongs to (shown to someone viewing a share only if it's shared), or null for the pages everyone has. */
+    val module: Module?
+        get() = when (this) {
+            TODAY, TRENDS, DEVICES, SUPPLIES -> null
+            FOOD -> Module.NUTRITION
+            MEDS -> Module.MEDICATIONS
+            MIND -> Module.MIND
+            CYCLE -> Module.CYCLE
+            CONTINENCE -> Module.CONTINENCE
+            VITALS -> Module.VITALS
+            HABITS -> Module.HABITS
+            SYMPTOMS -> Module.SYMPTOMS
+            HORMONES -> Module.HORMONES
+            APPOINTMENTS -> Module.APPOINTMENTS
+            NEURO -> Module.NEURO
+            TRANSITION -> Module.TRANSITION
+            PHOTOS -> Module.PHOTOS
+            BODY -> Module.BODY
+            SLEEP -> Module.SLEEP
+            ACTIVITY -> Module.ACTIVITY
+        }
+
+    /** Only the person's own (not while viewing someone's share). */
+    val ownOnly: Boolean get() = this == DEVICES
+
+    companion object {
+        /** A feature's own page. */
+        fun of(module: Module): AppPage = when (module) {
+            Module.ACTIVITY -> ACTIVITY
+            Module.SLEEP -> SLEEP
+            Module.NUTRITION -> FOOD
+            Module.BODY -> BODY
+            Module.MIND -> MIND
+            Module.CYCLE -> CYCLE
+            Module.CONTINENCE -> CONTINENCE
+            Module.MEDICATIONS -> MEDS
+            Module.VITALS -> VITALS
+            Module.HABITS -> HABITS
+            Module.SYMPTOMS -> SYMPTOMS
+            Module.HORMONES -> HORMONES
+            Module.APPOINTMENTS -> APPOINTMENTS
+            Module.NEURO -> NEURO
+            Module.TRANSITION -> TRANSITION
+            Module.PHOTOS -> PHOTOS
+        }
+
+        /** The page [insight] opens: its link, else its feature's page; null when it's about nothing in particular. */
+        fun of(insight: Insight): AppPage? = insight.link ?: insight.module?.let(::of)
+    }
+}
 
 /** Everything about one day, for the Today page. */
 @Serializable

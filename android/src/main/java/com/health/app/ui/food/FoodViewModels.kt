@@ -10,6 +10,10 @@ import com.health.api.FoodDay
 import com.health.api.FoodEntryChange
 import com.health.api.FoodEntryInput
 import com.health.api.FoodSearch
+import com.health.api.FoodSuggestion
+import com.health.api.FoodSuggestions
+import com.health.api.toInput
+import com.health.app.net.foodSuggestions
 import com.health.api.Meal
 import com.health.api.Nutrients
 import com.health.api.WaterEntry
@@ -37,6 +41,11 @@ data class FoodState(
     val error: String? = null,
     /** The day's coffee, tea, alcohol and the rest (ui/tracking). */
     val drinks: DrinksDay? = null,
+    /** Ideas from what's been eaten before (today only), for [ideasMeal] or the meal it is now. */
+    val ideas: FoodSuggestions? = null,
+    val ideasMeal: Meal? = null,
+    /** Why there are no ideas: an older server, or no answer. */
+    val ideasError: String? = null,
 )
 
 class FoodViewModel(private val c: Container) : ViewModel() {
@@ -59,6 +68,7 @@ class FoodViewModel(private val c: Container) : ViewModel() {
                 val day = c.ui.foodDay(date.toString())
                 val drinks = runCatching { c.ui.drinksDay(date.toString()) }.getOrNull()
                 _state.update { if (it.date == date) it.copy(day = day, drinks = drinks, loading = false) else it }
+                if (date == today) loadIdeas()
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load the day") }
             }
@@ -66,8 +76,48 @@ class FoodViewModel(private val c: Container) : ViewModel() {
     }
 
     fun go(date: LocalDate) {
-        _state.update { it.copy(date = date, day = null) }
+        _state.update { it.copy(date = date, day = null, ideas = null, ideasError = null) }
         load()
+    }
+
+    private suspend fun loadIdeas() {
+        val s = _state.value
+        val result = runCatching { c.ui.foodSuggestions(s.date.toString(), s.ideasMeal) }
+        _state.update {
+            if (it.date != s.date) it
+            else it.copy(ideas = result.getOrNull(), ideasError = result.exceptionOrNull()?.let { e -> e.message ?: "Ideas aren't available just now" })
+        }
+    }
+
+    /** Ideas for another meal. */
+    fun ideasFor(meal: Meal) {
+        _state.update { it.copy(ideasMeal = meal, ideas = null, ideasError = null) }
+        viewModelScope.launch { loadIdeas() }
+    }
+
+    /** Logs an idea's items on the day shown, at the ideas' meal, then offers Undo. */
+    fun addIdea(idea: FoodSuggestion) {
+        viewModelScope.launch {
+            val date = _state.value.date.toString()
+            val meal = _state.value.ideas?.meal ?: idea.meal
+            val added = mutableListOf<com.health.api.FoodEntry>()
+            try {
+                idea.items.forEach { added += c.ui.addFood(it.toInput(date, meal)) }
+            } catch (e: Exception) {
+                added.forEach { a -> a.id?.let { id -> runCatching { c.ui.deleteFood(id) } } }
+                c.tell(e.message ?: "Couldn't add that")
+                return@launch
+            }
+            c.dataChanged()
+            c.tell("Added to ${com.health.app.ui.today.InsightLinks.mealWord(meal)}: ${idea.name}", "Undo") {
+                c.scope.launch {
+                    runCatching { added.forEach { a -> a.id?.let { id -> c.ui.deleteFood(id) } } }
+                        .onSuccess { c.tell("Taken back off") }
+                        .onFailure { c.tell(it.message ?: "Couldn't undo that") }
+                    c.dataChanged()
+                }
+            }
+        }
     }
 
     private fun act(message: String?, block: suspend () -> Unit) {

@@ -36,6 +36,15 @@ private val log = LoggerFactory.getLogger("samh.food")
 /** The food diary, the person's foods, the food database, and water. */
 fun Route.foodRoutes(services: Services) {
     route("/api/food") {
+        // Ideas from what the person has eaten before, for a meal (the one it is now, without one).
+        get("/suggestions") {
+            val user = call.requireUser(services)
+            val date = services.profiles.days(user.id).parse(call.request.queryParameters["date"]?.ifBlank { null } ?: "today", services.clock())
+            val meal = call.request.queryParameters["meal"]?.ifBlank { null }?.let { text ->
+                Meal.entries.firstOrNull { it.name.equals(text, ignoreCase = true) } ?: throw ApiError.badRequest("A meal is breakfast, lunch, dinner or snack")
+            }
+            call.respond(services.suggestions.suggestions(user.id, date, meal))
+        }
         get("/{date}") {
             val user = call.requireUser(services)
             val date = services.profiles.days(user.id).parse(call.parameters["date"].orEmpty(), services.clock())

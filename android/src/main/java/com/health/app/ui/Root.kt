@@ -15,7 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -118,7 +120,12 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
     val c = appContainer()
     val nav = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(Unit) { c.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(Unit) {
+        c.messages.collect { m ->
+            val result = snackbar.showSnackbar(m.text, m.action, duration = if (m.action != null) SnackbarDuration.Long else SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
+        }
+    }
     val profile by c.profile.collectAsState()
     // Viewing someone's share: their shared features, read-only, with a way back.
     val viewing by c.viewing.collectAsState()

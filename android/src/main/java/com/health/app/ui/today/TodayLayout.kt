@@ -47,9 +47,12 @@ object TodayLayout {
     fun visible(modules: Set<Module>, water: Boolean, layout: ScreenLayout?): List<TodaySection> =
         Layouts.visible(sections(modules, water), { it.name }, layout)
 
-    /** A section's name in the Arrange sheet. */
-    fun label(section: TodaySection, modules: Set<Module>): String =
-        if (section == TodaySection.NEURO && Module.NEURO !in modules) "Energy" else section.label
+    /** A section's name in the Arrange sheet: the insights are the "For you" card. */
+    fun label(section: TodaySection, modules: Set<Module>): String = when {
+        section == TodaySection.NEURO && Module.NEURO !in modules -> "Energy"
+        section == TodaySection.INSIGHTS -> "For you"
+        else -> section.label
+    }
 
     /**
      * The quick actions this app offers with [modules] on, in the default order: Water only while

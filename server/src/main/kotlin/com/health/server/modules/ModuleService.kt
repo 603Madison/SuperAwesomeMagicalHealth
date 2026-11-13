@@ -1,12 +1,14 @@
 package com.health.server.modules
 
 import com.health.api.CyclePhase
+import com.health.api.AppPage
 import com.health.api.DoseStatus
 import com.health.api.Insight
 import com.health.api.Module
 import com.health.api.ModulesToday
 import com.health.api.Profile
 import com.health.api.Screener
+import com.health.api.TodaySection
 import com.health.server.insights.DayExtras
 import com.health.server.insights.DayExtrasResult
 import com.health.server.insights.ModuleTrend
@@ -101,15 +103,21 @@ class ModuleService(
         val medsDay = if (Module.MEDICATIONS in on) {
             meds.day(userId, date).takeIf { it.due.isNotEmpty() || it.asNeeded.isNotEmpty() }?.also { m ->
                 val missed = m.due.count { it.log == null && it.scheduledFor < clock() }
+                // The day's doses are also Today's Medications card: the apps leave these out while it shows (shownBy).
                 if (isToday && missed > 0 && hour >= 12) {
-                    insights += 80 to Insight("info", if (missed == 1) "1 dose still to take" else "$missed doses still to take", m.due.filter { it.log == null && it.scheduledFor < clock() }.joinToString(", ") { it.name }, "pill", Module.MEDICATIONS)
+                    insights += 80 to Insight(
+                        "info", if (missed == 1) "1 dose still to take" else "$missed doses still to take",
+                        m.due.filter { it.log == null && it.scheduledFor < clock() }.joinToString(", ") { it.name }, "pill", Module.MEDICATIONS,
+                        link = AppPage.MEDS, shownBy = TodaySection.MEDS,
+                    )
                 } else if (m.due.isNotEmpty() && m.due.all { it.log?.status == DoseStatus.TAKEN }) {
-                    insights += 35 to Insight("good", "All medications taken", "Nice and steady.", "pill", Module.MEDICATIONS)
+                    insights += 35 to Insight("good", "All medications taken", "Nice and steady.", "pill", Module.MEDICATIONS, link = AppPage.MEDS, shownBy = TodaySection.MEDS)
                 }
                 m.lowStock.firstOrNull()?.let { low ->
                     insights += 65 to Insight(
                         "info", if (low.stock == 0) "Out of ${low.name}" else "Running low on ${low.name}",
                         if (low.stock == 0) "Time to order more." else "${low.stock} ${if (low.stock == 1) "dose" else "doses"} left: time to order more.", "pill", Module.MEDICATIONS,
+                        link = AppPage.MEDS,
                     )
                 }
             }

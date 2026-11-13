@@ -52,6 +52,7 @@ class TodayLayoutTest {
         assertTrue(TodaySection.NEURO in TodayLayout.sections(setOf(Module.MIND)))
         assertEquals("Energy", TodayLayout.label(TodaySection.NEURO, setOf(Module.MIND)))
         assertEquals("Autism & ADHD", TodayLayout.label(TodaySection.NEURO, setOf(Module.MIND, Module.NEURO)))
+        assertEquals("For you", TodayLayout.label(TodaySection.INSIGHTS, Module.DEFAULT))
         // Quick actions and insights are there for everyone; scores only with activity or sleep.
         assertEquals(listOf(TodaySection.INSIGHTS, TodaySection.QUICK, TodaySection.MIND, TodaySection.NEURO), TodayLayout.sections(setOf(Module.MIND)))
     }
@@ -183,7 +184,9 @@ class TodayLayoutTest {
     fun `settings and food keep stable section ids`() {
         assertEquals(listOf("you", "features", "goals", "reminders", "connections", "appearance", "account"), SettingsSections.ITEMS.map { it.id })
         assertEquals("android.settings", SettingsSections.KEY)
-        assertEquals(listOf("totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true).map { it.id })
+        assertEquals(listOf("ideas", "totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true).map { it.id })
+        // Ideas are for today only.
+        assertEquals(listOf("totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true, ideas = false).map { it.id })
         assertEquals("android.food", FoodSections.KEY)
     }
 }

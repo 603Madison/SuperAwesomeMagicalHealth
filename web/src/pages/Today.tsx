@@ -18,7 +18,8 @@ import { BODY_MEASUREMENTS, LAYOUT_QUICK, LAYOUT_TODAY, QUICK_ACTIONS, QUICK_SHO
 import { BarChart, Hypnogram, LineChart, Meter, ScoreRing, StageLegend } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Menu, Modal, Segmented, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
 import { ArrangeButton, ArrangePanel, useArrange, type Section } from "../components/Arrange";
-import { CheckInDialog, INSIGHT_ICONS, SleepDialog, WeightDialog, WorkoutDialog } from "../components/LogDialogs";
+import { CheckInDialog, SleepDialog, WeightDialog, WorkoutDialog } from "../components/LogDialogs";
+import { ForYouCard, InsightRow } from "../components/Insights";
 import { MeasureDialog } from "../components/Measurements";
 import { BloodPressureDialog, GlucoseDialog } from "./Vitals";
 import { SymptomDialog } from "./Symptoms";
@@ -28,7 +29,7 @@ import { LowSuppliesCard } from "./Supplies";
 import { NeuroTodayCard } from "./Neuro";
 import { TransitionTodayCard } from "./Transition";
 import {
-  AppointmentsCard, ContinenceCard, CycleCard, DigestCard, HabitsCard, HormonesCard, LifeStageCard, MedsCard, MoodCard, StressCard, SymptomsCard, VitalsCard,
+  AppointmentsCard, ContinenceCard, CycleCard, HabitsCard, HormonesCard, LifeStageCard, MedsCard, MoodCard, StressCard, SymptomsCard, VitalsCard, useDigestRow,
 } from "./TodayCards";
 
 const RINGS: { key: "readiness" | "sleep" | "activity"; label: string; color: string }[] = [
@@ -80,7 +81,7 @@ export function Today() {
   const sections: (Section & { id: TodaySection })[] = [
     { id: "SCORES", label: "Readiness, sleep and activity scores", when: rings.length > 0,
       node: data && <Scores day={data} rings={rings} readOnly={readOnly} onOpen={(title, s) => setScore({ title, score: s })} /> },
-    { id: "INSIGHTS", label: "Insights", node: data && <Insights day={data} on={on} readOnly={readOnly} date={date} /> },
+    { id: "INSIGHTS", label: "For you", node: null /* filled in below, once the cards are known */ },
     { id: "QUICK", label: "Quick actions", when: !readOnly, node: null /* filled in below, once the cards are known */ },
     { id: "MEDS", label: "Medications", when: is("MEDICATIONS"), node: m?.meds && m.meds.due.length > 0 && <MedsCard meds={m.meds} date={date} readOnly={readOnly} onChanged={reload} /> },
     { id: "MIND", label: "Mood", when: is("MIND"), node: data && <MoodCard mind={m?.mind} readOnly={readOnly} onMood={setMood} /> },
@@ -161,7 +162,15 @@ export function Today() {
       ]} />
     </div>
   );
-  const nodes = cards.shown.map((s) => (s.id === "QUICK" ? { ...s, node: quickNode } : s)).filter((s) => s.node).map((s) => <Fragment key={s.id}>{s.node}</Fragment>);
+  // An insight that repeats a card that's showing (the day's doses and Medications) is left out.
+  const showing = new Set(cards.shown.filter((s) => s.node).map((s) => s.id));
+  const openScores = () => {
+    if (data?.readiness) setScore({ title: "Readiness", score: data.readiness });
+    else window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const insightsNode = data && <Insights day={data} on={on} readOnly={readOnly} date={date} showing={showing} onChanged={reload} onScores={openScores} />;
+  const nodes = cards.shown.map((s) => (s.id === "QUICK" ? { ...s, node: quickNode } : s.id === "INSIGHTS" ? { ...s, node: insightsNode } : s))
+    .filter((s) => s.node).map((s) => <Fragment key={s.id}>{s.node}</Fragment>);
 
   return (
     <div className="page today">
@@ -239,22 +248,27 @@ function Scores({ day, rings, readOnly, onOpen }: { day: DaySummary; rings: type
   );
 }
 
-/** The day's insights, and the weekly digest on its day. Supplies running low show once: in their card. */
-function Insights({ day, on, readOnly, date }: { day: DaySummary; on: Module[]; readOnly: boolean; date: string }) {
-  const list = day.insights.filter((i) => !i.module || on.includes(i.module));
+/**
+ * "For you": the weekly digest on its day, then the day's insights, each a row that opens its page.
+ * Supplies running low show once (in their card); so do the day's doses while Medications shows them.
+ */
+function Insights({ day, on, readOnly, date, showing, onChanged, onScores }: {
+  day: DaySummary; on: Module[]; readOnly: boolean; date: string; showing: Set<string>; onChanged: () => void; onScores: () => void;
+}) {
+  const digest = useDigestRow(!readOnly && date === today());
+  const list = day.insights.filter((i) => (!i.module || on.includes(i.module)) && !(i.shownBy && showing.has(i.shownBy)));
   return (
-    <section className="insights span-2" aria-label="Insights">
-      {!readOnly && date === today() && <DigestCard />}
-      {list.map((i, n) => {
-        const Icon = INSIGHT_ICONS[i.icon] ?? Sparkles;
-        return (
-          <article key={n} className={`insight tone-${i.tone}`}>
-            <div className="insight-icon"><Icon size={20} /></div>
-            <div><h4>{i.title}</h4><p>{i.body}</p></div>
-          </article>
-        );
-      })}
-    </section>
+    <ForYouCard>
+      {[
+        digest,
+        ...list.map((i) => (
+          <InsightRow
+            key={`${i.icon}-${i.title}`} insight={i} date={date} readOnly={readOnly} onChanged={onChanged}
+            onPage={(page) => { if (page !== "TODAY") return false; onScores(); return true; }}
+          />
+        )),
+      ]}
+    </ForYouCard>
   );
 }
 

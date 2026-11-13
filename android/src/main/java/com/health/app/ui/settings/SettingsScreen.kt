@@ -125,6 +125,8 @@ fun SettingsRoute(onOpen: (String) -> Unit = {}) {
         water = showsField(Fields.NUTRITION_WATER),
         ai = ai,
         hiddenFromHealth = screenLayout(Layouts.NAV)?.hidden.orEmpty(),
+        serverNotice = com.health.app.ui.components.serverNotice(),
+        serverVersion = c.serverVersion.collectAsState().value,
     )
 }
 
@@ -168,6 +170,8 @@ fun SettingsScreen(
     water: Boolean = true,
     ai: AiStatus? = null,
     hiddenFromHealth: Set<String> = emptySet(),
+    serverNotice: com.health.app.ui.components.ServerNoticeState? = null,
+    serverVersion: String? = null,
 ) {
     var editing by remember { mutableStateOf<Edit?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
@@ -177,6 +181,7 @@ fun SettingsScreen(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Settings") { ArrangeButton { arranging = true } }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            serverNotice?.let { com.health.app.ui.components.ServerUpdateNotice(it) }
             if (profile == null) Loading()
             shown.forEach { section ->
                 key(section) {
@@ -204,7 +209,7 @@ fun SettingsScreen(
                 }
             }
             Text(
-                "SuperAwesomeMagicalHealth ${BuildConfig.VERSION_NAME}",
+                "SuperAwesomeMagicalHealth ${BuildConfig.VERSION_NAME}" + (serverVersion?.let { " · server $it" } ?: ""),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

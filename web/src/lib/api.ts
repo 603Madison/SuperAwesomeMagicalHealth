@@ -1,5 +1,5 @@
 import type {
-  AdminSettings, AuthConfig, CheckIn, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, Meal, Metric, Nutrients,
+  AdminSettings, AuthConfig, CheckIn, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
   ContinenceEntry, ContinenceSummary, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
@@ -145,6 +145,8 @@ export const api = {
   changeEntry: (id: string, change: { meal?: Meal; servings?: number; date?: string }) => patch<FoodEntry>(`/api/food/entries/${q(id)}`, change),
   deleteEntry: (id: string) => del<unknown>(`/api/food/entries/${q(id)}`),
   copyMeal: (from: string, to: string, meal?: Meal) => post<{ copied: number }>("/api/food/copy", { from, to, meal }),
+  /** Ideas from what's been eaten before, for `meal` (the one it is now, without). */
+  foodSuggestions: (date: string, meal?: Meal) => get<FoodSuggestions>(`/api/food/suggestions?date=${q(date)}${meal ? `&meal=${meal}` : ""}`),
   searchFoods: (query: string) => get<FoodSearch>(`/api/foods/search?q=${q(query)}`),
   barcode: (code: string) => get<Food>(`/api/foods/barcode/${q(code)}`),
   recentFoods: () => get<Food[]>("/api/foods/recent"),
