@@ -82,6 +82,8 @@ fun Route.moduleRoutes(services: Services) {
             delete("/{id}") { m.continence.delete(call.requireUser(services).id, call.id()); call.respond(ok) }
         }
         get("/summary") { call.respond(m.continence.summary(call.requireUser(services).id, call.days(14))) }
+        get("/wearing") { call.respond(m.continence.wearing(call.requireUser(services).id)) }
+        get("/products") { call.respond(m.continence.products(call.requireUser(services).id, call.days(90))) }
     }
 
     route("/api/meds") {

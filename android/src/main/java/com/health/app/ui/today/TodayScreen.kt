@@ -179,7 +179,7 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
 
 private enum class Dialog { WEIGHT, WORKOUT, SLEEP, CHECK_IN, DRINK, BLOOD_PRESSURE, GLUCOSE }
 
-private enum class Sheet { MOOD, BLADDER, SYMPTOM, LOG, ARRANGE_TODAY, ARRANGE_QUICK }
+private enum class Sheet { MOOD, BLADDER, CHANGE, SYMPTOM, LOG, ARRANGE_TODAY, ARRANGE_QUICK }
 
 /**
  * Today, top to bottom by default: the scores, Up next, For you, Quick log, a card for each
@@ -209,6 +209,9 @@ fun TodayScreen(
     var arrangeMenu by remember { mutableStateOf(false) }
     val summary = state.summary
     val readOnly = LocalReadOnly.current
+    // With something on, the quick way into the diary is a change.
+    val wearingNow = state.date == state.today && summary?.modules?.continence?.wearing?.supplyId != null
+    val bladderSheet = { if (wearingNow) Sheet.CHANGE else Sheet.BLADDER }
 
     val sections = TodayLayout.sections(modules, water)
     val visible = arrangedBy(Layouts.TODAY, sections) { it.name }
@@ -225,7 +228,7 @@ fun TodayScreen(
             QuickAction.WATER -> actions.addWater(QUICK_WATER_ML)
             QuickAction.MOOD -> sheet = Sheet.MOOD
             QuickAction.PERIOD -> actions.open("cycle?log=${state.date}")
-            QuickAction.BLADDER -> sheet = Sheet.BLADDER
+            QuickAction.BLADDER -> sheet = bladderSheet()
             QuickAction.DOSE -> actions.open("meds")
             QuickAction.WEIGHT -> dialog = Dialog.WEIGHT
             QuickAction.COFFEE -> actions.tracking.quickDrink(DrinkKind.COFFEE)
@@ -314,6 +317,7 @@ fun TodayScreen(
                                                 take = { item -> item.dose?.let { actions.takeDose(it, null) } },
                                                 skip = { item -> item.dose?.let(actions.skipDose) },
                                                 trip = { actions.logContinence(ContinenceKind.URINATION) },
+                                                change = { sheet = Sheet.CHANGE },
                                                 open = open,
                                             ),
                                         )
@@ -342,7 +346,7 @@ fun TodayScreen(
                                             TodaySection.CYCLE -> m.cycle?.let {
                                                 CycleTodayCard(it, com.health.app.ui.modules.cycle.plainOnToday(), onLog = { open("cycle?log=${state.date}") }) { open("cycle") }
                                             }
-                                            TodaySection.CONTINENCE -> m.continence?.let { ContinenceTodayCard(it, onLog = { sheet = Sheet.BLADDER }) { open("continence") } }
+                                            TodaySection.CONTINENCE -> m.continence?.let { ContinenceTodayCard(it, onLog = { sheet = Sheet.BLADDER }, now = now) { open("continence") } }
                                             TodaySection.NEURO -> m.neuro?.let { n ->
                                                 val energyOnly = Module.NEURO !in modules
                                                 NeuroTodayCard(n, energyOnly, onLog = if (energyOnly) null else ({ open("neuro/energy") })) { open(if (energyOnly) "mind" else "neuro") }
@@ -421,9 +425,10 @@ fun TodayScreen(
             Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
                 Text("Bladder & bowel", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.height(12.dp))
-                QuickButtons({ kind -> actions.logContinence(kind); closeSheet() })
+                QuickButtons({ kind -> if (kind == ContinenceKind.PAD_CHANGE) sheet = Sheet.CHANGE else { actions.logContinence(kind); closeSheet() } })
             }
         }
+        Sheet.CHANGE -> com.health.app.ui.modules.continence.ChangeSheet(onDismiss = closeSheet)
         Sheet.SYMPTOM -> ModalBottomSheet(onDismissRequest = closeSheet) {
             SymptomForm(SymptomEntry(System.currentTimeMillis(), "", 4), onSave = { actions.tracking.logSymptom(it); closeSheet() }, onDelete = null)
         }

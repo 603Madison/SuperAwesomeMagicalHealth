@@ -5,6 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { clock, distance, hm, num, parseDate, today, weightValue, workoutLabel } from "../lib/format";
 import { useSession } from "../lib/session";
 import { mealsLogged } from "../lib/today";
+import { onFor, wornFor } from "../lib/continence";
 import { BP_TEXT, glucoseText } from "../lib/vitals";
 import type {
   CheckIn, ContinenceDay, CycleToday, DaySummary, Digest, FoodEntry, GlucoseUnit, HabitStatus, HormonesToday, LifeStageToday, MindDay, NeuroToday,
@@ -86,10 +87,12 @@ export function cycleLine(cycle?: CycleToday): Headline | null {
   return { value: `Day ${cycle.cycleDay}`, support: join([PHASE[cycle.phase], next]) };
 }
 
-export function continenceLine(c?: ContinenceDay): Headline | null {
+export function continenceLine(c?: ContinenceDay, now = Date.now()): Headline | null {
   if (!c) return null;
   const any = c.voids + c.leaks + c.bowel + c.pads + c.pelvicFloor + (c.products ?? 0) + (c.catheters ?? 0) + (c.bowelLeaks ?? 0) + (c.wetNights ?? 0);
-  if (any === 0) return null;
+  const w = c.wearing;
+  if (any === 0 && w?.since == null) return null;
+  const trips = c.voids > 0 ? count(c.voids, "trip") : null;
   const parts = [
     c.nightVoids > 0 && `${num(c.nightVoids)} at night`,
     c.leaks > 0 && count(c.leaks, "leak"),
@@ -98,6 +101,9 @@ export function continenceLine(c?: ContinenceDay): Headline | null {
     c.pelvicFloor > 0 && count(c.pelvicFloor, "pelvic floor session"),
     (c.catheters ?? 0) > 0 && count(c.catheters, "catheter"),
   ].filter(Boolean) as string[];
+  // What's on, and for how long, leads; the day's counts follow.
+  if (w?.supplyId) return { value: w.name ?? "A product", unit: `for ${wornFor(onFor(w, now))}`, text: true, support: [trips, ...parts].filter(Boolean).slice(0, 3).join(" · ") || undefined };
+  if (w?.nothingOn) return { value: "Nothing on for now", text: true, support: [trips, ...parts].filter(Boolean).slice(0, 3).join(" · ") || undefined };
   return { value: num(c.voids), unit: c.voids === 1 ? "trip" : "trips", support: parts.slice(0, 3).join(" · ") || undefined };
 }
 

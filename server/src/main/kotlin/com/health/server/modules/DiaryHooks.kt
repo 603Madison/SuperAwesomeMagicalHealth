@@ -29,10 +29,12 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
     override val module = Module.CONTINENCE
 
     override suspend fun reminders(userId: String, profile: Profile, from: Long, to: Long): List<Reminder> {
-        val training = continence.settings(userId).bladderTraining
-        if (!training.enabled) return emptyList()
+        val settings = continence.settings(userId)
+        val change = if (settings.changeReminderHours != null) changeReminder(userId, from, to) else null
+        val training = settings.bladderTraining
+        if (!training.enabled) return listOfNotNull(change)
         val days = Days(Days.zoneOf(profile.timezone))
-        return BladderTrainingPlan.times(training, days, from, to).map { (at, interval) ->
+        return listOfNotNull(change) + BladderTrainingPlan.times(training, days, from, to).map { (at, interval) ->
             val local = Days(days.zone).let { LocalTime.ofSecondOfDay((it.minuteOfDay(at) * 60).toLong()) }
             Reminder(
                 key = "bladder:${days.dateOf(at)}:$local",
@@ -46,6 +48,37 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
                 data = buildJsonObject { put("intervalMinutes", interval) },
             )
         }
+    }
+
+    /**
+     * A discreet check once a product has been on for the hours the person chose (once each time
+     * something goes on). It never names the product where a screen might show it: only a webhook
+     * that includes details gets the name.
+     */
+    private suspend fun changeReminder(userId: String, from: Long, to: Long): Reminder? {
+        val w = continence.wearing(userId, typical = false)
+        val since = w.since ?: return null
+        val due = w.changeDueAt ?: return null
+        if (w.supplyId == null || due !in from until to) return null
+        val minutes = ((due - since) / 60_000).toInt()
+        val hours = (minutes / 60.0).roundToInt()
+        val long = when {
+            minutes < 60 -> "$minutes minutes"
+            hours == 1 -> "an hour"
+            else -> "$hours hours"
+        }
+        return Reminder(
+            key = "continence:change:$since",
+            at = due,
+            event = WebhookEvent.CONTINENCE_CHANGE,
+            title = "Time for a check",
+            body = "About $long since your last change.",
+            privateTitle = "Time for a check",
+            privateBody = "A gentle reminder.",
+            url = "/bladder",
+            data = buildJsonObject { put("minutes", minutes) },
+            detailedData = buildJsonObject { put("minutes", minutes); w.name?.let { put("product", it) } },
+        )
     }
 
     override suspend fun digest(userId: String, profile: Profile, from: LocalDate, to: LocalDate): DigestSection? {
@@ -76,6 +109,16 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
         supplies?.status(userId)?.filter { it.supply.kind.category != SupplyCategory.PERIOD && it.perDay != null }?.forEach { s ->
             summary += "${s.supply.name}: about ${say(s.perDay!!)} used a day lately${s.supply.absorbency?.let { " ($it)" } ?: ""}."
         }
+        val products = continence.products(userId, from, to)
+        summary += products.map { Wear.describe(it) }
+        val productTable = ReportTable(
+            "Products",
+            listOf("Product", "Changes", "Usually worn", "Most often", "Leaked through", "At night"),
+            products.map { p ->
+                listOf(p.name, p.changes.toString(), p.avgWornMinutes?.let { Wear.say(Wear.rough(it)) } ?: "–", p.typicalFullness?.label ?: "–",
+                    "${p.leakedThrough} (${p.leakedThroughPct}%)", "${(p.nightShare * 100).roundToInt()}%")
+            },
+        )
         val table = ReportTable(
             "Week by week",
             listOf("Week of", "Days logged", "Trips a day", "Night trips", "Leaks a day", "Bowel accidents a day", "Urgency", "Products a day", "Loss g a day", "Bother"),
@@ -84,7 +127,7 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
                     sayOrDash(w.bowelLeaksPerDay), sayOrDash(w.urgency), sayOrDash(w.productsPerDay), sayOrDash(w.lossGPerDay), sayOrDash(w.bother))
             },
         )
-        return ReportSection(ReportSectionKey.CONTINENCE, summary, listOf(table))
+        return ReportSection(ReportSectionKey.CONTINENCE, summary, listOfNotNull(table, productTable.takeIf { it.rows.isNotEmpty() }))
     }
 
     override suspend fun export(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, List<List<String>>> {
@@ -96,19 +139,28 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
         if (list.isNotEmpty()) {
             out["bladder-bowel-details.csv"] = listOf(
                 listOf("time", "kind", "night", "contents", "leak", "urgency", "warning_s", "awareness", "reached_toilet", "triggers", "activity",
-                    "location", "supply", "fullness", "pad_weight_g", "loss_g", "count", "leaked_through", "changed_clothes", "changed_bedding",
-                    "skin", "infection_signs", "volume_ml", "bristol", "tags", "note"),
+                    "location", "supply", "put_on", "nothing_on", "worn_minutes", "fullness", "pad_weight_g", "loss_g", "count", "leaked_through",
+                    "changed_clothes", "changed_bedding", "skin", "infection_signs", "volume_ml", "bristol", "tags", "note"),
             ) + list.map { e ->
                 listOf(
                     java.time.Instant.ofEpochMilli(e.at).atZone(zone).toLocalDateTime().toString(), e.kind.name, e.night.toString(),
                     e.contents?.name.orEmpty(), e.leak?.name.orEmpty(), e.urgency?.toString().orEmpty(), e.warningSeconds?.toString().orEmpty(),
                     e.awareness?.name.orEmpty(), e.reachedToilet?.name.orEmpty(), e.triggers.joinToString("; "), e.activity.joinToString("; "),
-                    e.location.orEmpty(), e.supplyId.orEmpty(), e.fullness?.name.orEmpty(), e.padWeightG?.toString().orEmpty(), e.lossG?.toString().orEmpty(),
+                    e.location.orEmpty(), e.supplyId.orEmpty(), e.putOnSupplyId.orEmpty(), e.nothingOn.toString(), e.wornMinutes?.toString().orEmpty(),
+                    e.fullness?.name.orEmpty(), e.padWeightG?.toString().orEmpty(), e.lossG?.toString().orEmpty(),
                     e.count?.toString().orEmpty(), e.leakedThrough.toString(), e.changedClothes.toString(), e.changedBedding.toString(),
                     e.skin?.toString().orEmpty(), e.utiSigns.joinToString("; "), e.volumeMl?.toString().orEmpty(), e.bristol?.toString().orEmpty(),
                     e.tags.joinToString("; "), e.note.orEmpty(),
                 )
             }
+        }
+        val products = continence.products(userId, from, to)
+        if (products.isNotEmpty()) {
+            out["bladder-bowel-products.csv"] = listOf(listOf("supply_id", "name", "kind", "changes", "avg_worn_minutes", "typical_fullness", "leaked_through", "leaked_through_pct", "night_share")) +
+                products.map { p ->
+                    listOf(p.supplyId, p.name, p.kind?.name.orEmpty(), p.changes.toString(), p.avgWornMinutes?.toString().orEmpty(), p.typicalFullness?.name.orEmpty(),
+                        p.leakedThrough.toString(), p.leakedThroughPct.toString(), p.nightShare.toString())
+                }
         }
         if (checks.isNotEmpty()) {
             out["bladder-bowel-check-ins.csv"] = listOf(listOf("date", "bother_0_10", "compared", "impact", "note")) +

@@ -173,6 +173,25 @@ fun DiarySettingsScreen(
                             }
                         }
                     }
+                    if (Fields.CONTINENCE_PROTECTION in fields || Fields.CONTINENCE_SUPPLIES in fields || current.changeReminderHours != null) {
+                        SectionCard("Change reminder") {
+                            val hours = current.changeReminderHours
+                            LabeledSwitch(
+                                "Remind me to check", hours != null, { on -> change { it.copy(changeReminderHours = if (on) it.changeReminderHours ?: 4 else null) } },
+                                subtitle = "A quiet nudge that only says \"Time for a check\", never what you're wearing.",
+                            )
+                            if (hours != null) {
+                                if (!canNotify) ErrorCard("Notifications are off for this app, so reminders can't show on this phone. Settings › Reminders can turn them on.")
+                                Text("After", style = MaterialTheme.typography.titleSmall)
+                                Choices(listOf(2, 3, 4, 5, 6, 8, 10, 12), hours, { if (it == 1) "1 hour" else "$it hours" }) { v -> change { it.copy(changeReminderHours = v) } }
+                                Hint("From when something goes on.")
+                                LabeledSwitch(
+                                    "At night too", current.changeReminderAtNight, { on -> change { it.copy(changeReminderAtNight = on) } },
+                                    subtitle = "Otherwise it waits until your night ends.",
+                                )
+                            }
+                        }
+                    }
                     SectionCard("Your own words") {
                         Hint("Offered first when you log, alongside the usual ones.")
                         Text("What sets it off", style = MaterialTheme.typography.titleSmall)

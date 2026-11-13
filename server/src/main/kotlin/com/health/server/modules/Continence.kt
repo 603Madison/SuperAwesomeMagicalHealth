@@ -7,8 +7,10 @@ import com.health.api.ContinenceKind
 import com.health.api.ContinenceProgress
 import com.health.api.ContinenceSettings
 import com.health.api.ContinenceSummary
+import com.health.api.ContinenceWearing
 import com.health.api.Insight
 import com.health.api.LeakSize
+import com.health.api.ProductStats
 import com.health.api.ProgressMetric
 import com.health.api.ProgressWeek
 import com.health.api.Verdict
@@ -46,9 +48,15 @@ class ContinenceService(
         val zone = profiles.days(userId)
         val to = zone.today(clock()).plusDays(1)
         val from = to.minusDays(count.coerceIn(1, 3650).toLong())
-        return withNight(userId, entries.list(userId, EntryKind.CONTINENCE, from, to, ContinenceEntry.serializer()).map { it.value.copy(id = it.id, date = it.date.toString()) })
-            .reversed()
+        return worn(userId, from, to).filter { !LocalDate.parse(it.date!!).isBefore(from) }.reversed()
     }
+
+    /**
+     * The entries from [from] to [to], marked by night and with each change's wear time: the day
+     * before [from] comes too (and is left in), so the first changes pair with what put them on.
+     */
+    private suspend fun worn(userId: String, from: LocalDate, to: LocalDate): List<ContinenceEntry> =
+        Wear.withWorn(withNight(userId, entries.list(userId, EntryKind.CONTINENCE, from.minusDays(1), to, ContinenceEntry.serializer()).map { it.value.copy(id = it.id, date = it.date.toString()) }))
 
     suspend fun save(userId: String, entry: ContinenceEntry, id: String? = null): ContinenceEntry {
         fun check(ok: Boolean, message: String) { if (!ok) throw ApiError.badRequest(message) }
@@ -64,6 +72,11 @@ class ContinenceService(
         check(entry.details.size <= 30, "Up to 30 of your own fields")
         fun words(list: List<String>, max: Int = 10) = list.map { it.trim().lowercase().take(40) }.filter { it.isNotEmpty() }.distinct().take(max)
         val supply = entry.supplyId?.let { supplies?.get(userId, it) ?: throw ApiError.badRequest("No such supply") }
+        val change = entry.kind == ContinenceKind.PAD_CHANGE
+        if (change) {
+            check(!(entry.nothingOn && entry.putOnSupplyId != null), "Something put on, or nothing for now: not both")
+            entry.putOnSupplyId?.let { id -> supplies?.let { check(it.get(userId, id) != null, "No such supply") } }
+        }
         val loss = if (entry.padWeightG != null && supply?.dryWeightG != null) {
             ((entry.padWeightG!! - supply.dryWeightG!!).coerceAtLeast(0.0) * 10).roundToInt() / 10.0
         } else null
@@ -77,13 +90,60 @@ class ContinenceService(
             note = entry.note?.trim()?.take(2000)?.ifBlank { null },
             leak = entry.leak ?: if (entry.kind == ContinenceKind.LEAK) LeakSize.SMALL else null,
             lossG = loss,
-            id = null, date = null, night = false,
+            putOnSupplyId = entry.putOnSupplyId.takeIf { change },
+            nothingOn = entry.nothingOn && change,
+            id = null, date = null, night = false, wornMinutes = null,
         )
         val date = profiles.days(userId).dateOf(clean.at)
         val saved = entries.put(userId, EntryKind.CONTINENCE, id, date, clean.at, clean, ContinenceEntry.serializer())
         supplies?.syncUse(userId, source(saved), usesOf(clean), clean.at)
-        return withNight(userId, listOf(clean.copy(id = saved, date = date.toString()))).first()
+        val worn = if (change) worn(userId, date, date).firstOrNull { it.id == saved }?.wornMinutes else null
+        return withNight(userId, listOf(clean.copy(id = saved, date = date.toString(), wornMinutes = worn))).first()
     }
+
+    // ---- What's being worn, and how each product goes
+
+    /**
+     * What's on now: from the latest change in the last day that put something on or took
+     * everything off; all null when there's none. [typical] also works out the product's usual
+     * wear time from the last [TYPICAL_DAYS] days (the reminders don't need it).
+     */
+    suspend fun wearing(userId: String, typical: Boolean = true): ContinenceWearing {
+        val zone = profiles.days(userId)
+        val now = clock()
+        val today = zone.today(now)
+        val recent = entries.list(userId, EntryKind.CONTINENCE, today.minusDays(1), today.plusDays(1), ContinenceEntry.serializer()).map { it.value }
+        val latest = Wear.latest(recent, now) ?: return ContinenceWearing()
+        val minutes = ((now - latest.at) / 60_000).toInt().coerceAtLeast(0)
+        val id = Wear.putOn(latest) ?: return ContinenceWearing(since = latest.at, minutes = minutes, nothingOn = true)
+        val supply = supplies?.get(userId, id)
+        val own = settings(userId)
+        val due = own.changeReminderHours?.let { hours ->
+            Wear.dueAt(latest.at, hours, zone, minuteOf(own.nightFrom, 23 * 60), minuteOf(own.nightTo, 6 * 60), own.changeReminderAtNight)
+        }
+        val usual = if (typical) Wear.typical(worn(userId, today.minusDays(TYPICAL_DAYS), today), id) else null
+        return ContinenceWearing(id, supply?.name, supply?.kind, latest.at, minutes, usual, due)
+    }
+
+    /** How each product went from [from] to [to]: from the changes that took it off. */
+    suspend fun products(userId: String, from: LocalDate, to: LocalDate): List<ProductStats> {
+        val all = supplies?.list(userId, all = true).orEmpty().filter { it.id != null }.associateBy { it.id!! }
+        if (all.isEmpty()) return emptyList()
+        val zone = profiles.days(userId)
+        val own = settings(userId)
+        val nightFrom = minuteOf(own.nightFrom, 23 * 60)
+        val nightTo = minuteOf(own.nightTo, 6 * 60)
+        return Wear.stats(worn(userId, from, to), all, since = zone.start(from)) { Wear.inNight(zone.minuteOfDay(it), nightFrom, nightTo) }
+    }
+
+    /** The last [count] days' products, up to today. */
+    suspend fun products(userId: String, count: Int): List<ProductStats> {
+        val today = profiles.days(userId).today(clock())
+        return products(userId, today.minusDays((count.coerceIn(1, 365) - 1).toLong()), today)
+    }
+
+    private fun minuteOf(time: String?, default: Int): Int =
+        time?.let { runCatching { LocalTime.parse(it) }.getOrNull() }?.let { it.hour * 60 + it.minute } ?: default
 
     suspend fun delete(userId: String, id: String) {
         entries.delete(userId, EntryKind.CONTINENCE, id)
@@ -109,6 +169,7 @@ class ContinenceService(
         check(bt.goalMinutes in bt.intervalMinutes..600, "The goal is at least the starting interval, up to 10 hours")
         check(bt.stepMinutes in 0..120 && bt.stepEveryDays in 1..60, "Steps of up to 2 hours, every 1 to 60 days")
         bt.startedOn?.let { check(runCatching { LocalDate.parse(it) }.isSuccess, "Started on looks like 2026-01-31") }
+        input.changeReminderHours?.let { check(it in 1..24, "A change reminder comes after 1 to 24 hours") }
         check(input.customFields.size <= 30, "Up to 30 of your own fields")
         input.defaultSupplyId?.let { check(supplies?.get(userId, it) != null, "No such supply") }
         fun words(list: List<String>) = list.map { it.trim().lowercase().take(40) }.filter { it.isNotEmpty() }.distinct().take(50)
@@ -212,13 +273,24 @@ class ContinenceService(
 
     companion object {
         const val SETTINGS_KEY = "continence"
+
+        /** How far back a product's usual wear time looks. */
+        const val TYPICAL_DAYS = 60L
         private val STRESS = setOf("cough", "sneeze", "laugh", "lifting", "exercise", "jumping")
         private val URGE = setOf("urge", "on the way", "key in the door", "running water")
 
         fun source(entryId: String) = "continence:$entryId"
 
-        /** What an entry used: a pad change uses one (or its count); any entry with a product and a count uses that many. */
+        /**
+         * What an entry used: a change uses one (or its count) of what it put on, and nothing with
+         * nothing put on (what it took off was counted when it went on). A change from before what
+         * went on was recorded uses its product, as then; any other entry with a product and a count uses that many.
+         */
         fun usesOf(e: ContinenceEntry): Map<String, Int> {
+            if (e.kind == ContinenceKind.PAD_CHANGE) {
+                e.putOnSupplyId?.let { return mapOf(it to (e.count ?: 1)) }
+                if (e.nothingOn) return emptyMap()
+            }
             val id = e.supplyId ?: return emptyMap()
             val count = when {
                 e.kind == ContinenceKind.PAD_CHANGE -> e.count ?: 1
@@ -226,6 +298,12 @@ class ContinenceService(
                 else -> 0
             }
             return if (count > 0) mapOf(id to count) else emptyMap()
+        }
+
+        /** Products an entry used, counted or not: a change with no product named still used one, unless nothing went on. */
+        fun productsUsed(e: ContinenceEntry): Int = usesOf(e).values.sum().takeIf { it > 0 } ?: when {
+            e.kind != ContinenceKind.PAD_CHANGE || e.nothingOn -> 0
+            else -> e.count ?: 1
         }
 
         /** A leak of urine (a wet night counts); bowel accidents are counted on their own. */
@@ -249,7 +327,7 @@ class ContinenceService(
                 urgentTrips = day.count { (it.urgency ?: 0) >= 2 },
                 bowelLeaks = day.count { it.kind == ContinenceKind.BOWEL_LEAK },
                 wetNights = day.count { it.kind == ContinenceKind.BEDWETTING },
-                products = day.sumOf { usesOf(it).values.sum().takeIf { n -> n > 0 } ?: if (it.kind == ContinenceKind.PAD_CHANGE) (it.count ?: 1) else 0 },
+                products = day.sumOf { productsUsed(it) },
                 leakedThrough = day.count { it.leakedThrough },
                 catheters = catheters.size,
                 catheterMl = catheters.mapNotNull { it.volumeMl }.takeIf { it.isNotEmpty() }?.sum(),
@@ -318,7 +396,7 @@ object Progress {
         Metric("bowelLeaks", "Bowel accidents a day", "", 0.1, 2) { e, d -> e.count { it.kind == ContinenceKind.BOWEL_LEAK }.toDouble() / d },
         Metric("urgency", "Urgency (0–3)", "", 0.3, 1) { e, _ -> e.mapNotNull { it.urgency }.takeIf { it.size >= 3 }?.average() },
         Metric("nightVoids", "Night-time trips", "", 0.3, 1) { e, d -> e.count { it.kind == ContinenceKind.URINATION && it.night }.toDouble() / d },
-        Metric("products", "Products a day", "", 0.3, 1) { e, d -> e.sumOf { ContinenceService.usesOf(it).values.sum().takeIf { n -> n > 0 } ?: if (it.kind == ContinenceKind.PAD_CHANGE) (it.count ?: 1) else 0 }.toDouble() / d },
+        Metric("products", "Products a day", "", 0.3, 1) { e, d -> e.sumOf { ContinenceService.productsUsed(it) }.toDouble() / d },
         Metric("fullness", "How full products were (0–5)", "", 0.4, 1) { e, _ -> e.mapNotNull { it.fullness?.level }.takeIf { it.size >= 3 }?.average() },
         Metric("loss", "Loss a day", "g", 5.0, 1) { e, d -> e.mapNotNull { it.lossG }.takeIf { it.size >= 3 }?.let { it.sum() / d } },
     )

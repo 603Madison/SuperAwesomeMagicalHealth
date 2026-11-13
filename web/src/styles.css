@@ -1659,3 +1659,30 @@ button.score-item:hover { background: var(--surface-2); }
   .overlap-choice { flex: 1 1 100%; }
   .overlap-choice select { width: 100%; }
 }
+
+/* ---------- What's being worn, and a change as one step ---------- */
+.wearing { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.wearing-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wearing > .wearing-text { flex: 1 1 220px; }
+/* Up next's titles may take two lines ("Time to change: Night briefs, 7 h" on a phone). */
+.up-next-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.wearing-name { margin: 0; font-size: 1.3rem; font-weight: var(--w-semibold); line-height: 1.25; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.wearing-kind { font-size: 0.8rem; font-weight: var(--w-medium); color: var(--muted); padding: 2px 10px; border-radius: 999px; background: var(--surface-2); }
+.wearing-since { margin: 0; font-variant-numeric: tabular-nums; color: var(--text); }
+.wearing-usual { margin: 2px 0 0; color: var(--muted); font-size: 0.88rem; }
+.wearing-ask { margin: 4px 0 10px; }
+.wearing-change { flex: none; min-height: 44px; padding-inline: 22px; }
+.chip-tag { font-size: 0.72rem; font-weight: var(--w-medium); padding: 1px 8px; border-radius: 999px; background: color-mix(in srgb, var(--primary) 16%, transparent); color: inherit; }
+.change-step { display: flex; flex-direction: column; gap: 10px; }
+.change-label { margin: 0; font-size: 0.95rem; font-weight: var(--w-semibold); }
+.change-how .fullness { margin-top: 2px; }
+.change-toggles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 16px; }
+.change-when { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.change-when input { min-width: 0; }
+.change-delete { margin-right: auto; color: var(--danger); }
+.products-card .row-sub.wraps { white-space: normal; }
+.products-count { flex: none; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .wearing-change { width: 100%; }
+  .change-toggles, .change-when { grid-template-columns: 1fr; }
+}

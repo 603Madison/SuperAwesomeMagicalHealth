@@ -333,7 +333,7 @@ data class DatedValue(val date: String, val value: Double)
 
 @Serializable
 enum class ContinenceKind(val label: String) {
-    URINATION("Toilet trip"), LEAK("Leak"), BOWEL("Bowel movement"), PAD_CHANGE("Pad change"), PELVIC_FLOOR("Pelvic floor exercise"),
+    URINATION("Toilet trip"), LEAK("Leak"), BOWEL("Bowel movement"), PAD_CHANGE("Change"), PELVIC_FLOOR("Pelvic floor exercise"),
     /** A bowel accident (leak of stool or wind). */
     BOWEL_LEAK("Bowel accident"),
     /** Emptying with a catheter. */
@@ -399,7 +399,10 @@ data class ContinenceEntry(
     val warningSeconds: Int? = null,
     /** "home", "work", "out", "in bed", "travelling"… */
     val location: String? = null,
-    /** The product being worn (a Supply id), and how full it was. */
+    /**
+     * The product (a Supply id) and how full it was. For a PAD_CHANGE it's what was **taken off**
+     * ([putOnSupplyId] is what went on); for a leak, what was being worn.
+     */
     val supplyId: String? = null,
     val fullness: Fullness? = null,
     /** Weighed wet, in grams: with the product's dry weight, the amount lost. */
@@ -413,11 +416,67 @@ data class ContinenceEntry(
     val skin: Int? = null,
     /** "burning", "cloudy", "strong smell", "fever", "more often"… */
     val utiSigns: List<String> = emptyList(),
-    /** For PAD_CHANGE: how many products (default 1); each comes off the supply's count. */
+    /**
+     * For PAD_CHANGE: how many products (default 1); each comes off the supply's count (the one put
+     * on, when [putOnSupplyId] is given; otherwise, for changes from before it was, [supplyId]).
+     */
     val count: Int? = null,
     /** The person's own tags and fields (ContinenceSettings.customFields), key to value. */
     val tags: List<String> = emptyList(),
     val details: Map<String, String> = emptyMap(),
+    /**
+     * For PAD_CHANGE: what was **put on** (a Supply id). One (or [count]) comes off its stock; the
+     * one taken off ([supplyId]) isn't counted again, since it was counted when it went on. A change
+     * with only this is "put on" (nothing taken off).
+     */
+    val putOnSupplyId: String? = null,
+    /** For PAD_CHANGE: taken off, with nothing on for now. */
+    val nothingOn: Boolean = false,
+    /** Set by the server: how long the product taken off was worn, from the change that put it on. */
+    val wornMinutes: Int? = null,
+)
+
+/**
+ * What's being worn now (GET /api/continence/wearing): from the latest change that put something
+ * on, or that took everything off ([nothingOn]). Every field is null when nothing is known (no such
+ * change in the last day).
+ */
+@Serializable
+data class ContinenceWearing(
+    /** The product put on (null with nothing on, or nothing known). */
+    val supplyId: String? = null,
+    val name: String? = null,
+    val kind: SupplyKind? = null,
+    /** When it went on (or, with nothing on, when the last one came off). */
+    val since: Long? = null,
+    /** How long that's been, as of the server's now. */
+    val minutes: Int? = null,
+    /** How long this product is usually worn, from the diary (with three or more wears to go on). */
+    val typicalMinutes: Int? = null,
+    /** When a change reminder is due ([ContinenceSettings.changeReminderHours]), moved to the end of the night when reminders wait for the morning. */
+    val changeDueAt: Long? = null,
+    /** Taken off, with nothing on for now. */
+    val nothingOn: Boolean = false,
+)
+
+/** How one product goes (GET /api/continence/products?days=90): from the changes that took it off. */
+@Serializable
+data class ProductStats(
+    val supplyId: String,
+    val name: String,
+    /** Times it was taken off. */
+    val changes: Int,
+    /** How long it was worn on average, where the change that put it on is in the diary. */
+    val avgWornMinutes: Int? = null,
+    /** How full it most often was. */
+    val typicalFullness: Fullness? = null,
+    /** Of its changes, the share that leaked through, as a percentage. */
+    val leakedThroughPct: Int = 0,
+    /** Of its wears, the share at night (put on or taken off in the night), 0 to 1. */
+    val nightShare: Double = 0.0,
+    /** How many of its changes leaked through. */
+    val leakedThrough: Int = 0,
+    val kind: SupplyKind? = null,
 )
 
 /** How the bladder and bowel diary works for this person (GET/PUT /api/continence/settings). */
@@ -436,6 +495,10 @@ data class ContinenceSettings(
     val nightFrom: String? = null,
     val nightTo: String? = null,
     val bladderTraining: BladderTraining = BladderTraining(),
+    /** A discreet "Time for a check" this many hours after a product goes on (null: no reminder). */
+    val changeReminderHours: Int? = null,
+    /** Let that reminder come in the night hours too; otherwise it waits for the end of the night. */
+    val changeReminderAtNight: Boolean = false,
 )
 
 /** Timed trips to the toilet, stretched a little at a time: reminders every [intervalMinutes] while awake. */
@@ -588,6 +651,8 @@ data class ContinenceDay(
     val catheterMl: Int? = null,
     /** Grams lost, from weighed pads. */
     val lossG: Double? = null,
+    /** On Today only: what's being worn now (ModulesToday.continence). */
+    val wearing: ContinenceWearing? = null,
 )
 
 @Serializable

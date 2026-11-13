@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, ListChecks, ListTodo, Package, Pill, Timer } from "lucide-react";
+import { CalendarClock, Layers, ListChecks, ListTodo, Package, Pill, Timer } from "lucide-react";
 import { api } from "../lib/api";
 import { F, useFields } from "../lib/fields";
 import { clock, hm, isoDate, shiftDate, today } from "../lib/format";
@@ -8,11 +8,13 @@ import { appointmentsToday, dosesDue, nextTrip, orderUpNext, trainingMinutes, ty
 import type { DaySummary, Module, SupplyStatus } from "../lib/types";
 import { Button, Card, errorToast, toast, useLoad } from "../components/ui";
 import { RestockDialog } from "./Supplies";
+import { QuickChange } from "./Wearing";
+import { changeDue, hoursShort } from "../lib/continence";
 
 /*
  * "Up next" on Today: what needs doing now, most urgent first, each a row with one thing to do.
  * Doses due or overdue (Take or Skip), today's appointment, a routine still to do, the next
- * bladder-training trip and a supply to restock. Only on today, and nothing from a section the
+ * bladder-training trip, a change once its reminder time has passed, and a supply to restock. Only on today, and nothing from a section the
  * person hid (Medications, Appointments, Autism & ADHD, Bladder & bowel, Supplies). While viewing
  * someone's share the rows only say what's due.
  */
@@ -39,6 +41,11 @@ export function useUpNext(day: DaySummary | undefined, date: string, on: Module[
   if (on.includes("NEURO") && !hidden.has("NEURO")) {
     for (const name of m.neuro?.routinesDue ?? []) items.push({ kind: "routine", key: `routine-${name}`, name });
   }
+  // Time to change, once the person's reminder time has passed (what's on comes with the day, so a share shows it too).
+  const wearing = m.continence?.wearing;
+  if (on.includes("CONTINENCE") && !hidden.has("CONTINENCE") && wearing && changeDue(wearing, now)) {
+    items.push({ kind: "change", key: "change", at: wearing.changeDueAt!, name: wearing.name ?? "what you have on", since: wearing.since! });
+  }
   if (trips.data) {
     const [settings, entries] = trips.data;
     const times = entries.filter((e) => (e.kind === "URINATION" || e.kind === "CATHETER") && isoDate(new Date(e.at)) === date).map((e) => e.at);
@@ -55,6 +62,7 @@ export function useUpNext(day: DaySummary | undefined, date: string, on: Module[
 export function UpNextCard({ items, readOnly, onChanged }: { items: UpNext[]; readOnly: boolean; onChanged: () => void }) {
   const navigate = useNavigate();
   const [restock, setRestock] = useState<SupplyStatus | null>(null);
+  const [changing, setChanging] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   if (items.length === 0) return null;
   const now = Date.now();
@@ -102,6 +110,13 @@ export function UpNextCard({ items, readOnly, onChanged }: { items: UpNext[]; re
             at: Date.now(), kind: "URINATION", triggers: [], pain: false, blood: false, night: false,
           }), "Trip logged")}>Log trip</Button>,
         };
+      case "change":
+        return {
+          // "pants, 6 h" stays together, so the hours never sit on a line alone.
+          icon: <Layers size={18} />, title: `Time to change: ${item.name},\u00a0${hoursShort((now - item.since) / 60_000).replace(" ", "\u00a0")}`,
+          sub: `On since ${clock(item.since)}`,
+          actions: <Button className="btn-small btn-soft" onClick={() => setChanging(true)} aria-label={`Change ${item.name}`}>Change</Button>,
+        };
       case "restock": {
         const s = item.supply;
         return {
@@ -131,6 +146,7 @@ export function UpNextCard({ items, readOnly, onChanged }: { items: UpNext[]; re
         })}
       </ul>
       {restock && <RestockDialog status={restock} onClose={() => setRestock(null)} onSaved={onChanged} />}
+      {changing && <QuickChange onClose={() => setChanging(false)} onSaved={onChanged} />}
     </Card>
   );
 }

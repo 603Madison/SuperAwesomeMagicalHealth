@@ -730,6 +730,7 @@ export interface ContinenceEntry {
   reachedToilet?: ReachedToilet;
   warningSeconds?: number;
   location?: string;
+  /** The product, and how full it was: for a PAD_CHANGE, what was taken off ([putOnSupplyId] is what went on); for a leak, what was worn. */
   supplyId?: string;
   fullness?: Fullness;
   padWeightG?: number;
@@ -742,6 +743,41 @@ export interface ContinenceEntry {
   count?: number;
   tags?: string[];
   details?: Record<string, string>;
+  /** For PAD_CHANGE: what was put on (one comes off its stock). Only this: a "put on". */
+  putOnSupplyId?: string;
+  /** For PAD_CHANGE: taken off, with nothing on for now. */
+  nothingOn?: boolean;
+  /** Set by the server: how long the product taken off was worn. */
+  wornMinutes?: number;
+}
+
+/** What's on now (GET /api/continence/wearing); every field missing when nothing is known. */
+export interface ContinenceWearing {
+  supplyId?: string;
+  name?: string;
+  kind?: SupplyKind;
+  /** When it went on (or, with nothing on, when the last one came off). */
+  since?: number;
+  minutes?: number;
+  /** How long this product is usually worn. */
+  typicalMinutes?: number;
+  /** When a change reminder is due (ContinenceSettings.changeReminderHours). */
+  changeDueAt?: number;
+  nothingOn?: boolean;
+}
+
+/** How one product goes (GET /api/continence/products?days=90). */
+export interface ProductStats {
+  supplyId: string;
+  name: string;
+  changes: number;
+  avgWornMinutes?: number;
+  typicalFullness?: Fullness;
+  leakedThroughPct: number;
+  /** 0 to 1. */
+  nightShare: number;
+  leakedThrough: number;
+  kind?: SupplyKind;
 }
 
 export interface ContinenceDay {
@@ -764,6 +800,8 @@ export interface ContinenceDay {
   catheterMl?: number;
   /** Grams lost, from weighed pads. */
   lossG?: number;
+  /** On Today only: what's being worn now. */
+  wearing?: ContinenceWearing;
 }
 
 export interface ContinenceSummary {
@@ -1284,7 +1322,7 @@ export interface Digest {
 export type WebhookEvent =
   | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
   | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST"
-  | "BLADDER_TRAINING" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE";
+  | "BLADDER_TRAINING" | "CONTINENCE_CHANGE" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE";
 
 export interface Webhook {
   name: string;
@@ -1472,6 +1510,10 @@ export interface ContinenceSettings {
   nightFrom?: string;
   nightTo?: string;
   bladderTraining: BladderTraining;
+  /** A discreet "Time for a check" this many hours after a product goes on. */
+  changeReminderHours?: number;
+  /** Let it come in the night hours too; otherwise it waits for the morning. */
+  changeReminderAtNight?: boolean;
 }
 
 export interface ContinenceCheckIn {

@@ -4,7 +4,9 @@ import com.health.api.ApiJson
 import com.health.api.ContinenceCheckIn
 import com.health.api.ContinenceProgress
 import com.health.api.ContinenceSettings
+import com.health.api.ContinenceWearing
 import com.health.api.CycleSettings
+import com.health.api.ProductStats
 import com.health.api.Supply
 import com.health.api.SupplyAdjustment
 import com.health.api.SupplyStatus
@@ -36,6 +38,13 @@ suspend fun ServerApi.addContinenceCheckIn(checkIn: ContinenceCheckIn): Continen
     post("/api/continence/check-ins", checkIn, ContinenceCheckIn.serializer())
 
 suspend fun ServerApi.deleteContinenceCheckIn(id: String) = delete("/api/continence/check-ins/${enc(id)}")
+
+/** What's on now: every field null when nothing is known. */
+suspend fun ServerApi.continenceWearing(): ContinenceWearing = get("${base()}/api/continence/wearing", ContinenceWearing.serializer())
+
+/** How each product goes, from the last [days] days of changes. */
+suspend fun ServerApi.continenceProducts(days: Int = 90): List<ProductStats> =
+    get("${base()}/api/continence/products?days=$days", ListSerializer(ProductStats.serializer()))
 
 // ---- Supplies ----
 

@@ -123,6 +123,8 @@ enum class WebhookEvent(val key: String, val label: String, val module: Module? 
     DEVICE_QUIET("device.quiet", "A device hasn't synced for a day"),
     DIGEST("digest", "The weekly digest is ready"),
     BLADDER_TRAINING("bladder.training", "Time for a planned toilet trip", Module.CONTINENCE),
+    /** A product has been on for the hours the person chose (ContinenceSettings.changeReminderHours). */
+    CONTINENCE_CHANGE("continence.change", "Time for a check", Module.CONTINENCE),
     SUPPLIES_LOW("supplies.low", "Supplies are running low"),
     CYCLE_REMINDER("cycle.reminder", "A cycle reminder", Module.CYCLE),
     VOICE_PRACTICE("voice.practice", "Time for voice practice", Module.TRANSITION),

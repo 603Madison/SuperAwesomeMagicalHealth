@@ -66,6 +66,9 @@ test("Up next: due now by time, then routines, then later today, then restocks",
     { kind: "dose", key: "d1", at: at("08:00"), dose: dose("Estradiol", "08:00"), overdue: true },
   ];
   assert.deepEqual(orderUpNext(items, NOW).map((i) => i.key), ["d1", "d2", "t", "m", "a", "r"]);
+  // A change that's come due goes by its time, with the rest of what's due now.
+  const change: UpNext = { kind: "change", key: "c", at: at("08:30"), name: "Night briefs", since: at("02:30") };
+  assert.deepEqual(orderUpNext([...items, change], NOW).map((i) => i.key), ["d1", "c", "d2", "t", "m", "a", "r"]);
 });
 
 test("the quick row: the first five until arranged, then the ones not under More, never more than five", () => {
