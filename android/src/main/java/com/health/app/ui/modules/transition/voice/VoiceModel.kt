@@ -36,8 +36,8 @@ import java.time.LocalDate
 
 /** The programme built into the app, for when there's neither the server nor a copy on the phone. */
 object VoiceOffline {
-    // Switch to `com.health.api.VoiceCatalog.PROGRAM` once shared/…/VoiceCatalog.kt is in.
-    val program: VoiceProgram? = null
+    /** The programme built into the app (shared/…/VoiceCatalog.kt), for when the server can't be reached. */
+    val program: VoiceProgram? = com.health.api.VoiceCatalog.PROGRAM
 }
 
 /**
