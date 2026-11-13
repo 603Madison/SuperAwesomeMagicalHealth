@@ -37,6 +37,8 @@ object TodayLayout {
             TodaySection.ACTIVITY, TodaySection.STRESS, TodaySection.WORKOUTS -> on(Module.ACTIVITY)
             TodaySection.SLEEP -> on(Module.SLEEP)
             TodaySection.BODY -> on(Module.BODY)
+            // Not on the phone yet (the web has them): stopgap until Today's redesign.
+            TodaySection.UP_NEXT, TodaySection.ALSO -> false
         }
     }
 

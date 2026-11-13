@@ -329,6 +329,8 @@ fun TodayScreen(
                                     ) { open("food") }
                                     TodaySection.WORKOUTS -> if (summary.workouts.isNotEmpty()) WorkoutsCard(summary.workouts, units, zone) { open("trends") }
                                     TodaySection.BODY -> BodyCard(summary, units, readOnly, onLog = { dialog = Dialog.WEIGHT }) { open(if (measurements) "measurements" else "trends") }
+                                    // Not on the phone yet (the web has them): stopgap until Today's redesign.
+                                    TodaySection.UP_NEXT, TodaySection.ALSO -> Unit
                                 }
                                 Unit
                             }

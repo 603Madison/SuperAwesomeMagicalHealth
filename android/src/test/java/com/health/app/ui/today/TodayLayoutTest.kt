@@ -44,7 +44,8 @@ class TodayLayoutTest {
         assertTrue(listOf(TodaySection.MEDS, TodaySection.CYCLE, TodaySection.SUPPLIES, TodaySection.LIFE_STAGE, TodaySection.HABITS).all { it in more })
         // Every section knows whether it applies, and the order is always the enum's.
         val all = TodayLayout.sections(Module.entries.toSet())
-        assertEquals(TodaySection.entries.toList(), all)
+        // Up next and Also today aren't on the phone until Today's redesign (stopgap).
+        assertEquals(TodaySection.entries.toList() - setOf(TodaySection.UP_NEXT, TodaySection.ALSO), all)
     }
 
     @Test
