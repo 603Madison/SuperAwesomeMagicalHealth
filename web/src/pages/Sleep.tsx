@@ -1,21 +1,24 @@
 import { useState } from "react";
 import { Moon, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, hm, isoDate, num, shortDate } from "../lib/format";
+import { clock, hm, isoDate, num, shortDate, today } from "../lib/format";
 import { useSession } from "../lib/session";
 import { BarChart, Hypnogram, LineChart, StageLegend, scoreFloor } from "../components/charts";
 import { Button, Card, ErrorNotice, PageHeader, Segmented, Spinner, Stat, errorToast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
 import { SleepDialog } from "../components/LogDialogs";
+import { NIGHT_METRICS, SourcesLink, combinedFor } from "../components/Sources";
 
 export function Sleep() {
   const [days, setDays] = useState(30);
   const goal = useSession((s) => s.profile?.goals.sleepMinutes ?? 480);
   const trends = useLoad(() => api.trends(days), [days]);
   const nights = useLoad(() => api.sleep(Math.min(days, 30)), [days]);
+  // Last night's readings, for where they came from when more than one device measured them.
+  const day = useLoad(() => api.day(today()).catch(() => null), []);
   const [adding, setAdding] = useState(false);
-  const reload = () => { trends.reload(); nights.reload(); };
+  const reload = () => { trends.reload(); nights.reload(); day.reload(); };
   const rows = trends.data?.days ?? [];
   const slept = rows.filter((r) => r.sleepMinutes != null);
   const avg = (f: (r: (typeof rows)[number]) => number | undefined) => {
@@ -55,6 +58,7 @@ export function Sleep() {
     ) },
     { id: "nights", label: "Nights", node: nights.data && (
       <Card title="Nights" icon={<Moon size={18} />} className="span-2">
+        <SourcesLink values={combinedFor(day.data?.combined, NIGHT_METRICS)} onChanged={reload} prefix="Last night's readings:" />
         {nights.data.length === 0 ? <p className="muted">No nights yet. Wear your ring or watch to bed, or add a night by hand.</p> : nights.data.map((n) => (
           <div key={n.sessionId} className="night">
             <div className="night-head">
@@ -68,6 +72,7 @@ export function Sleep() {
             </div>
             {n.stages.length > 0 && <Hypnogram stages={n.stages} start={n.start} end={n.end} height={130} />}
             {n.staged && <StageLegend deep={n.deepMinutes} rem={n.remMinutes} light={n.lightMinutes} awake={n.awakeMinutes} />}
+            {n.combined && <SourcesLink sleep={n.combined} onChanged={reload} />}
           </div>
         ))}
       </Card>

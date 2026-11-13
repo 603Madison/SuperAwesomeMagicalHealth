@@ -12,6 +12,7 @@ import { CycleSettingsPage } from "./pages/Cycle";
 import { Supplies } from "./pages/Supplies";
 import { CalmMode, Neuro } from "./pages/Neuro";
 import { Transition } from "./pages/Transition";
+import { VoicePage } from "./pages/Voice";
 import { Photos } from "./pages/Photos";
 import { Assistant, AssistantSent, useAiStatus } from "./pages/Assistant";
 import type { Module } from "./lib/types";
@@ -222,6 +223,7 @@ function Shell() {
           <Route path="/appointments" element={<Shared id="APPOINTMENTS"><Appointments /></Shared>} />
           <Route path="/neuro" element={<Shared id="NEURO"><Neuro /></Shared>} />
           <Route path="/transition" element={<Shared id="TRANSITION"><Transition /></Shared>} />
+          <Route path="/transition/voice" element={<Shared id="TRANSITION"><VoicePage /></Shared>} />
           <Route path="/photos" element={<Shared id="PHOTOS"><Photos /></Shared>} />
           <Route path="/supplies" element={<SharedAny ids={["CONTINENCE", "CYCLE"]}><Supplies /></SharedAny>} />
           {!viewing && <Route path="/bladder/settings" element={<ContinenceSettingsPage />} />}

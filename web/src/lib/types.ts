@@ -40,6 +40,16 @@ export type Metric =
   | "BLOOD_PRESSURE_SYSTOLIC" | "BLOOD_PRESSURE_DIASTOLIC" | "BLOOD_GLUCOSE"
   | "WAIST" | "HIPS" | "CHEST" | "BUST" | "UNDERBUST" | "SHOULDERS" | "NECK" | "UPPER_ARM" | "THIGH" | "CALF";
 
+/** Each reading's name (Metric.label). */
+export const METRIC_LABELS: Record<Metric, string> = {
+  HEART_RATE: "Heart rate", RESTING_HEART_RATE: "Resting heart rate", HRV: "Heart rate variability", SPO2: "Blood oxygen",
+  RESPIRATORY_RATE: "Respiratory rate", SKIN_TEMPERATURE: "Skin temperature", TEMPERATURE_DEVIATION: "Temperature deviation",
+  STRESS: "Stress", STEPS: "Steps", DISTANCE: "Distance", ACTIVE_CALORIES: "Active calories", FLOORS: "Floors climbed",
+  WEIGHT: "Weight", BODY_FAT: "Body fat", BLOOD_PRESSURE_SYSTOLIC: "Systolic blood pressure", BLOOD_PRESSURE_DIASTOLIC: "Diastolic blood pressure",
+  BLOOD_GLUCOSE: "Blood glucose", WAIST: "Waist", HIPS: "Hips", CHEST: "Chest", BUST: "Bust", UNDERBUST: "Underbust",
+  SHOULDERS: "Shoulders", NECK: "Neck", UPPER_ARM: "Upper arm", THIGH: "Thigh", CALF: "Calf",
+};
+
 export interface Sample {
   metric: Metric;
   start: number;
@@ -92,6 +102,63 @@ export interface Device {
   lastSyncAt?: number;
   createdAt: number;
   samples: number;
+}
+
+// ---------------------------------------------------------------- Devices measuring the same thing (Devices.kt)
+
+/** One device's part in a combined value. */
+export interface SourceValue {
+  deviceId: string;
+  /** "Colmi R02", "Pebble Time 2". */
+  device: string;
+  kind?: DeviceKind;
+  value: number;
+  /** Its share of the result, 0–1 (1 for a device the person chose, 0 for one left out). */
+  weight: number;
+  /** How many readings it had. */
+  readings: number;
+  /** Why it counted for less, or not at all. */
+  note?: string;
+}
+
+/** A number more than one device measured, and the app's own from them. */
+export interface CombinedValue {
+  metric: Metric;
+  value: number;
+  sources: SourceValue[];
+  /** In plain words: "The average of both, weighted to the ring at night." */
+  how: string;
+  /** Set when the person chose one device for this reading. */
+  chosenDeviceId?: string;
+}
+
+/** A night more than one device recorded. */
+export interface CombinedSleep {
+  sources: SleepSource[];
+  how: string;
+  /** The device whose stages are shown. */
+  stagesFrom?: string;
+}
+
+export interface SleepSource {
+  deviceId: string;
+  device: string;
+  start: number;
+  end: number;
+  asleepMinutes: number;
+  staged: boolean;
+}
+
+/** Which device to use for a reading: no [deviceId] (or no entry) combines them all. */
+export interface MetricChoice {
+  metric: Metric;
+  deviceId?: string;
+}
+
+/** The person's choices (GET/PUT /api/devices/choices): one device per reading, and one for sleep. */
+export interface DeviceChoices {
+  choices: MetricChoice[];
+  sleepDeviceId?: string;
 }
 
 export interface CheckIn {
@@ -242,6 +309,8 @@ export interface SleepSummary {
   stages: StageSpan[];
   source?: string;
   sessionId?: string;
+  /** Where more than one device recorded this night: each one's version, and how the night was worked out. */
+  combined?: CombinedSleep;
 }
 
 export interface Insight {
@@ -289,6 +358,8 @@ export interface DaySummary {
   goals: Goals;
   hasData: boolean;
   modules: ModulesToday;
+  /** The day's numbers that more than one device measured: each device's value, and the app's own. */
+  combined: CombinedValue[];
 }
 
 export interface TrendDay {
@@ -1149,7 +1220,7 @@ export interface Digest {
 export type WebhookEvent =
   | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
   | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST"
-  | "BLADDER_TRAINING" | "SUPPLIES_LOW" | "CYCLE_REMINDER";
+  | "BLADDER_TRAINING" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE";
 
 export interface Webhook {
   name: string;
@@ -1695,6 +1766,141 @@ export interface VoiceSession {
   feeling?: number;
   note?: string;
   id?: string;
+  /** From the voice trainer: the lesson, each exercise's result, and the session's averages. */
+  lessonId?: string;
+  results: ExerciseResult[];
+  resonance?: number;
+  weight?: number;
+  /** The person felt strain or discomfort: the trainer suggests rest, and the next session starts gently. */
+  strain: boolean;
+}
+
+// ---------------------------------------------------------------- The voice trainer (Voice.kt)
+
+export type VoiceGoal = "LIGHTER" | "DEEPER" | "EXPLORING";
+export const VOICE_GOALS: { id: VoiceGoal; label: string; about: string }[] = [
+  { id: "LIGHTER", label: "Lighter and brighter", about: "A higher, brighter, lighter-sounding voice" },
+  { id: "DEEPER", label: "Deeper and fuller", about: "A lower, darker, fuller-sounding voice" },
+  { id: "EXPLORING", label: "Exploring", about: "Somewhere in between, or finding out what feels like you" },
+];
+
+export type VoiceSkill = "HEALTH" | "WARM_UP" | "PITCH" | "RESONANCE" | "WEIGHT" | "INTONATION" | "SPEECH";
+export const VOICE_SKILLS: { id: VoiceSkill; label: string }[] = [
+  { id: "HEALTH", label: "Looking after your voice" }, { id: "WARM_UP", label: "Breath and warm-up" }, { id: "PITCH", label: "Pitch" },
+  { id: "RESONANCE", label: "Resonance" }, { id: "WEIGHT", label: "Vocal weight" }, { id: "INTONATION", label: "Intonation" },
+  { id: "SPEECH", label: "Into everyday speech" },
+];
+
+/** What an exercise asks for, which decides how the trainer runs and scores it. */
+export type ExerciseKind = "GUIDED" | "HOLD" | "GLIDE" | "MATCH" | "RESONANCE" | "SAY" | "READ" | "SPEAK";
+
+/** What the trainer shows while the person practises. */
+export type VoiceMeter = "PITCH" | "RESONANCE" | "WEIGHT" | "INTONATION" | "LOUDNESS";
+
+export interface VoiceExercise {
+  id: string;
+  title: string;
+  skill: VoiceSkill;
+  kind: ExerciseKind;
+  /** What to do, step by step. */
+  steps: string[];
+  seconds: number;
+  meters: VoiceMeter[];
+  /** Words, phrases, passages or prompts, for SAY, READ and SPEAK. */
+  texts: string[];
+  /** For MATCH: the notes to play, in semitones from the middle of the person's target range. */
+  notes: number[];
+  /** The goals it suits (empty: all). */
+  goals: VoiceGoal[];
+  tip?: string;
+}
+
+export interface VoiceLesson {
+  id: string;
+  /** Lessons come in units, in order; a unit unlocks when the one before has been done once. */
+  unit: number;
+  title: string;
+  about: string;
+  skill: VoiceSkill;
+  exerciseIds: string[];
+  minutes: number;
+  /** The goals it suits (empty: all). Its exercises can differ by goal too. */
+  goals: VoiceGoal[];
+}
+
+/** A unit's name and what it's about, for headings. */
+export interface VoiceUnit {
+  unit: number;
+  title: string;
+  about: string;
+}
+
+/** The whole programme (GET /api/transition/voice/program). */
+export interface VoiceProgram {
+  lessons: VoiceLesson[];
+  exercises: VoiceExercise[];
+  health: string[];
+  /** The daily routine, in plain lines. */
+  daily: string[];
+  units: VoiceUnit[];
+}
+
+/** The person's plan (GET/PUT /api/transition/voice/plan). Target range in Hz. */
+export interface VoicePlan {
+  goal: VoiceGoal;
+  targetLowHz?: number;
+  targetHighHz?: number;
+  /** Resonance to aim for, 0 darker … 100 brighter. */
+  targetResonance?: number;
+  baselinePitchHz?: number;
+  baselineResonance?: number;
+  baselineAt?: number;
+  dailyMinutes: number;
+  /** "HH:mm": a gentle reminder to practise. */
+  reminder?: string;
+  /** ISO days of the week to rest (1 Monday … 7 Sunday). */
+  restDays: number[];
+}
+
+/** How one exercise went: only what it measured. */
+export interface ExerciseResult {
+  exerciseId: string;
+  seconds: number;
+  pitchAvgHz?: number;
+  pitchMinHz?: number;
+  pitchMaxHz?: number;
+  /** Share of voiced time inside the target range, 0–100. */
+  inRange?: number;
+  resonance?: number;
+  weight?: number;
+  intonation?: number;
+  /** For MATCH: notes matched within a semitone, of how many. */
+  matched?: number;
+  of?: number;
+  /** How it felt, 1–5. */
+  feeling?: number;
+}
+
+export interface VoiceWeek {
+  weekStart: string;
+  minutes: number;
+  sessions: number;
+  pitchAvgHz?: number;
+  inRange?: number;
+  resonance?: number;
+}
+
+/** GET /api/transition/voice/progress. */
+export interface VoiceProgress {
+  plan: VoicePlan;
+  lessonsDone: string[];
+  nextLessonId?: string;
+  streakDays: number;
+  minutesThisWeek: number;
+  weeks: VoiceWeek[];
+  highlights: string[];
+  /** After a session with strain: a gentle note to rest. */
+  restNote?: string;
 }
 
 export type HairRemovalMethod = "LASER" | "ELECTROLYSIS" | "IPL" | "WAXING" | "OTHER";

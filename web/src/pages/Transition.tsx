@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Camera, Check, Flag, Heart, Mic, Pencil, Plus, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { isoDate, localInput, num, shortDate, today, useUnits, when } from "../lib/format";
@@ -15,6 +16,7 @@ import { Button, Card, CardAction, Empty, ErrorNotice, Field, Modal, PageHeader,
 import { ChipPicker, OneOf, ScaleRow } from "../components/FieldKit";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
+import { todaysLesson } from "../lib/voice/program";
 
 /*
  * Transition, whatever it means to you and at your pace: milestones, the changes you notice, voice
@@ -50,7 +52,7 @@ export function Transition() {
     { id: "milestones", label: "Milestones", when: has(F.TRANSITION_MILESTONES), node: o && <Milestones readOnly={readOnly} /> },
     { id: "moments", label: "Moments", when: has(F.TRANSITION_MOMENTS), node: o && <Moments readOnly={readOnly} /> },
     { id: "changes", label: "Changes you notice", when: has(F.TRANSITION_CHANGES), node: o && <Changes readOnly={readOnly} /> },
-    { id: "voice", label: "Voice", when: has(F.TRANSITION_VOICE), node: o && <Voice readOnly={readOnly} target={o.profile.voiceTargetHz} /> },
+    { id: "voice", label: "Voice training", when: has(F.TRANSITION_VOICE), node: o && <Voice readOnly={readOnly} target={o.profile.voiceTargetHz} /> },
     { id: "hair", label: "Hair removal", when: has(F.TRANSITION_HAIR), node: o && <HairRemoval readOnly={readOnly} /> },
     { id: "measurements", label: "Measurements", when: has(F.TRANSITION_MEASUREMENTS), node: o && (
       <MeasurementsCard imperial={units === "IMPERIAL"} readOnly={readOnly} metrics={["CHEST", "BUST", "UNDERBUST", "WAIST", "HIPS", "SHOULDERS"]} sets={o.measurements} onSaved={overview.reload} />
@@ -262,30 +264,51 @@ function ChangeDialog({ change, onClose, onSaved }: { change: BodyChange; onClos
   );
 }
 
+/** Voice training at a glance: today's lesson, the streak and the week, with the way in; and practice logged by hand. */
 function Voice({ readOnly, target }: { readOnly: boolean; target?: number }) {
+  const navigate = useNavigate();
   const list = useLoad(() => api.voiceSessions(180).catch(() => [] as VoiceSession[]), []);
+  const progress = useLoad(() => api.voiceProgress().catch(() => null), []);
+  const program = useLoad(() => api.voiceProgram().catch(() => null), []);
   const [adding, setAdding] = useState(false);
   const items = [...(list.data ?? [])].sort((a, b) => a.at - b.at);
   const withPitch = items.filter((v) => v.pitchAvgHz != null);
   const week = items.filter((v) => v.at > Date.now() - 7 * 86_400_000).reduce((t, v) => t + v.minutes, 0);
+  const g = progress.data;
+  const plan = g?.plan;
+  const lesson = program.data && g ? todaysLesson(program.data, g) : undefined;
+  const firstRun = !!plan && plan.baselineAt == null && plan.targetLowHz == null;
+  const aim = plan?.targetLowHz && plan.targetHighHz ? `${Math.round(plan.targetLowHz)}–${Math.round(plan.targetHighHz)} Hz` : target ? `around ${target} Hz` : undefined;
   return (
-    <Card title="Voice" icon={<Mic size={18} />} action={!readOnly && <CardAction label="Log voice practice" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
+    <Card title="Voice training" icon={<Mic size={18} />} link={{ to: "/transition/voice", label: "Open Voice training" }}
+      action={!readOnly && <CardAction label="Log practice by hand" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
       <div className="stats">
-        <Stat label="This week" value={`${week} min`} />
-        {withPitch.length > 0 && <Stat label="Latest average" value={`${Math.round(withPitch[withPitch.length - 1].pitchAvgHz!)} Hz`} sub={target ? `aiming around ${target}` : undefined} />}
+        {g && <Stat label="Streak" value={g.streakDays} unit={g.streakDays === 1 ? "day" : "days"} />}
+        <Stat label="This week" value={`${g?.minutesThisWeek ?? week} min`} />
+        {withPitch.length > 0 && <Stat label="Latest average" value={`${Math.round(withPitch[withPitch.length - 1].pitchAvgHz!)} Hz`} sub={aim ? `aiming ${aim}` : undefined} />}
       </div>
+      {g?.restNote && <p className="notice rest-note">{g.restNote}</p>}
+      {!readOnly && (program.data || firstRun) && (
+        <div className="voice-next">
+          <div>
+            <span className="muted small">{firstRun ? "A free, guided programme with live feedback" : "Today's lesson"}</span>
+            <strong>{firstRun ? "Set up voice training" : lesson?.title ?? "Free practice"}</strong>
+          </div>
+          <Button variant="primary" className="btn-small" onClick={() => navigate("/transition/voice")}>{firstRun ? "Set up" : "Start"}</Button>
+        </div>
+      )}
       {withPitch.length > 1 && (
         <LineChart label="Average pitch" color="var(--c1)" dots height={140}
           points={withPitch.map((v) => ({ x: v.at, y: v.pitchAvgHz! }))} formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${Math.round(y)} Hz`} />
       )}
-      {items.length === 0 && <p className="muted">Little and often works best: ten minutes a day goes a long way.</p>}
-      {adding && <VoiceDialog target={target} onClose={() => setAdding(false)} onSaved={list.reload} />}
+      {items.length === 0 && !g && <p className="muted">Little and often works best: ten minutes a day goes a long way.</p>}
+      {adding && <VoiceDialog target={target} onClose={() => setAdding(false)} onSaved={() => { list.reload(); progress.reload(); }} />}
     </Card>
   );
 }
 
 function VoiceDialog({ target, onClose, onSaved }: { target?: number; onClose: () => void; onSaved: () => void }) {
-  const [v, setV] = useState<VoiceSession>({ at: Date.now(), minutes: 10, exercises: [] });
+  const [v, setV] = useState<VoiceSession>({ at: Date.now(), minutes: 10, exercises: [], results: [], strain: false });
   const [pitch, setPitch] = useState<PitchResult | null>(null);
   useEffect(() => { if (pitch) setV((x) => ({ ...x, pitchAvgHz: Math.round(pitch.avg), pitchMinHz: Math.round(pitch.min), pitchMaxHz: Math.round(pitch.max) })); }, [pitch]);
   const save = async () => {

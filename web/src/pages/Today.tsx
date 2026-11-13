@@ -18,6 +18,7 @@ import { BODY_MEASUREMENTS, LAYOUT_QUICK, LAYOUT_TODAY, QUICK_ACTIONS, QUICK_SHO
 import { BarChart, Hypnogram, LineChart, Meter, ScoreRing, StageLegend } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Menu, Modal, Segmented, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
 import { ArrangeButton, ArrangePanel, useArrange, type Section } from "../components/Arrange";
+import { ACTIVITY_METRICS, HEART_METRICS, SourcesLink, combinedFor } from "../components/Sources";
 import { CheckInDialog, INSIGHT_ICONS, SleepDialog, WeightDialog, WorkoutDialog } from "../components/LogDialogs";
 import { MeasureDialog } from "../components/Measurements";
 import { BloodPressureDialog, GlucoseDialog } from "./Vitals";
@@ -98,10 +99,10 @@ export function Today() {
       node: m?.hormones && (m.hormones.medications > 0 || m.hormones.nextLabsDue || m.hormones.outOfRange.length > 0) && <HormonesCard hormones={m.hormones} /> },
     { id: "LIFE_STAGE", label: "Life stage", when: is("CYCLE"), node: lifeStage && lifeStageShown && <LifeStageCard stage={lifeStage} /> },
     { id: "APPOINTMENTS", label: "Appointments coming up", when: is("APPOINTMENTS"), node: m?.appointments && m.appointments.length > 0 && <AppointmentsCard appointments={m.appointments} /> },
-    { id: "ACTIVITY", label: "Activity", when: is("ACTIVITY"), node: data && <ActivityCard day={data} readOnly={readOnly} onWorkout={() => setOpen("workout")} /> },
-    { id: "SLEEP", label: "Sleep", when: is("SLEEP"), node: data && <SleepCard day={data} readOnly={readOnly} onAdd={() => setOpen("sleep")} /> },
-    { id: "HEART", label: "Heart", node: data && <HeartCard day={data} /> },
-    { id: "STRESS", label: "Stress and recovery", when: is("ACTIVITY"), node: data && (data.stressDay || data.resilience) && <StressCard stress={data.stressDay} resilience={data.resilience} /> },
+    { id: "ACTIVITY", label: "Activity", when: is("ACTIVITY"), node: data && <ActivityCard day={data} readOnly={readOnly} onWorkout={() => setOpen("workout")} onChanged={reload} /> },
+    { id: "SLEEP", label: "Sleep", when: is("SLEEP"), node: data && <SleepCard day={data} readOnly={readOnly} onAdd={() => setOpen("sleep")} onChanged={reload} /> },
+    { id: "HEART", label: "Heart", node: data && <HeartCard day={data} onChanged={reload} /> },
+    { id: "STRESS", label: "Stress and recovery", when: is("ACTIVITY"), node: data && (data.stressDay || data.resilience) && <StressCard stress={data.stressDay} resilience={data.resilience} sources={<SourcesLink values={combinedFor(data.combined, ["STRESS"])} onChanged={reload} />} /> },
     { id: "FOOD", label: "Food", when: is("NUTRITION"), node: data?.nutritionTarget && <FoodCard day={data} /> },
     { id: "WORKOUTS", label: "Workouts and check-in", node: data && <AlsoToday day={data} /> },
     { id: "BODY", label: "Weight", when: is("BODY"), node: data?.weightKg != null && (
@@ -258,7 +259,7 @@ function Insights({ day, on, readOnly, date }: { day: DaySummary; on: Module[]; 
   );
 }
 
-function ActivityCard({ day, readOnly, onWorkout }: { day: DaySummary; readOnly: boolean; onWorkout: () => void }) {
+function ActivityCard({ day, readOnly, onWorkout, onChanged }: { day: DaySummary; readOnly: boolean; onWorkout: () => void; onChanged: () => void }) {
   const units = useUnits();
   const goalSteps = day.goals.steps;
   const burned = (day.restingCalories ?? 0) + day.activeCalories;
@@ -281,6 +282,7 @@ function ActivityCard({ day, readOnly, onWorkout }: { day: DaySummary; readOnly:
               bars={day.hourlySteps.map((v, h) => ({ key: String(h), label: h === 0 ? "12a" : h === 12 ? "12p" : h < 12 ? `${h}a` : `${h - 12}p`, value: v || null, detail: `${h}:00–${h + 1}:00` }))}
             />
           )}
+          <SourcesLink values={combinedFor(day.combined, ACTIVITY_METRICS)} onChanged={onChanged} />
         </>
       )}
     </Card>
@@ -288,7 +290,7 @@ function ActivityCard({ day, readOnly, onWorkout }: { day: DaySummary; readOnly:
 }
 
 /** Resting heart rate, HRV and the day's heart rate; nothing at all on a day without them. */
-function HeartCard({ day }: { day: DaySummary }) {
+function HeartCard({ day, onChanged }: { day: DaySummary; onChanged: () => void }) {
   if (day.restingHeartRate == null && day.hrv == null && day.heartRate.length < 2 && day.spo2 == null) return null;
   return (
     <Card title="Heart" icon={<HeartPulse size={18} />} link={{ to: "/trends", label: "Open Trends" }}>
@@ -306,11 +308,12 @@ function HeartCard({ day }: { day: DaySummary }) {
           formatX={(x) => clock(x)} formatY={(y) => `${Math.round(y)} bpm`}
         />
       )}
+      <SourcesLink values={combinedFor(day.combined, HEART_METRICS)} onChanged={onChanged} />
     </Card>
   );
 }
 
-function SleepCard({ day, readOnly, onAdd }: { day: DaySummary; readOnly: boolean; onAdd: () => void }) {
+function SleepCard({ day, readOnly, onAdd, onChanged }: { day: DaySummary; readOnly: boolean; onAdd: () => void; onChanged: () => void }) {
   const night = day.sleepSummary;
   return (
     <Card title="Sleep" icon={<Moon size={18} />} link={{ to: "/sleep", label: "Open Sleep" }}
@@ -324,7 +327,7 @@ function SleepCard({ day, readOnly, onAdd }: { day: DaySummary; readOnly: boolea
           </div>
           {night.stages.length > 0 && <Hypnogram stages={night.stages} start={night.start} end={night.end} />}
           {night.staged && <StageLegend deep={night.deepMinutes} rem={night.remMinutes} light={night.lightMinutes} awake={night.awakeMinutes} />}
-          {night.source && <p className="muted small">From {night.source}</p>}
+          {night.combined && night.combined.sources.length > 1 ? <SourcesLink sleep={night.combined} onChanged={onChanged} /> : night.source && <p className="muted small">From {night.source}</p>}
         </>
       )}
     </Card>
