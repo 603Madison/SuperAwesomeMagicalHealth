@@ -16,6 +16,8 @@ import com.health.api.Photo
 import com.health.api.Routine
 import com.health.api.RoutineRun
 import com.health.api.TransitionProfile
+import com.health.api.VoiceCatalog
+import com.health.api.VoicePlan
 import com.health.api.VoiceSession
 import com.health.server.ApiError
 import com.health.server.Services
@@ -112,6 +114,11 @@ fun Route.neuroTransitionRoutes(services: Services) {
         route("/voice") {
             get { call.respond(transition.voice(call.requireUser(services).id, call.days(180))) }
             post { call.respond(transition.saveVoice(call.requireUser(services).id, call.receive<VoiceSession>())) }
+            // The voice trainer: the programme, the person's plan, and how it's going.
+            get("/program") { call.requireUser(services); call.respond(VoiceCatalog.PROGRAM) }
+            get("/plan") { call.respond(transition.trainer.plan(call.requireUser(services).id)) }
+            put("/plan") { call.respond(transition.trainer.savePlan(call.requireUser(services).id, call.receive<VoicePlan>())) }
+            get("/progress") { call.respond(transition.trainer.progress(call.requireUser(services).id)) }
             delete("/{id}") { transition.delete(call.requireUser(services).id, EntryKind.TRANSITION_VOICE, call.id()); call.respond(ok) }
         }
         route("/hair-removal") {

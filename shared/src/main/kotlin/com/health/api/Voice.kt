@@ -101,11 +101,26 @@ data class VoiceLesson(
     val skill: VoiceSkill,
     val exerciseIds: List<String>,
     val minutes: Int,
+    /**
+     * The goals it suits (empty: all). A lesson's exercises can differ by goal too: the person
+     * does those that suit their goal (see VoiceCatalog.exercisesFor).
+     */
+    val goals: Set<VoiceGoal> = emptySet(),
 )
+
+/** A unit's name and what it's about, for headings. */
+@Serializable
+data class VoiceUnit(val unit: Int, val title: String, val about: String)
 
 /** The whole programme (GET /api/transition/voice/program). */
 @Serializable
-data class VoiceProgram(val lessons: List<VoiceLesson>, val exercises: List<VoiceExercise>, val health: List<String>, val daily: List<String>)
+data class VoiceProgram(
+    val lessons: List<VoiceLesson>,
+    val exercises: List<VoiceExercise>,
+    val health: List<String>,
+    val daily: List<String>,
+    val units: List<VoiceUnit> = emptyList(),
+)
 
 /** The person's plan (GET/PUT /api/transition/voice/plan). Target range in Hz; baseline from a first recording. */
 @Serializable

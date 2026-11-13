@@ -852,7 +852,8 @@ class McpServer(private val services: Services) {
         Tool(
             "transition", "Transition",
             "The person's transition, whatever it means to them: pronouns, how long since they began and on hormones, milestones (social, legal, " +
-                "medical, voice) with checklists, changes they've noticed, voice practice and pitch, hair removal, and moments of euphoria and dysphoria.",
+                "medical, voice) with checklists, changes they've noticed, voice practice and pitch, the voice programme (their own goal and range, " +
+                "lessons done, this week's practice, and how it compares with where they started), hair removal, and moments of euphoria and dysphoria.",
             schema(),
             module = Module.TRANSITION,
         ) { caller, _ -> com.health.server.neuro.NeuroText.transition(services, caller.user.id) },

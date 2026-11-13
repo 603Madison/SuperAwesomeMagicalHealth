@@ -125,6 +125,7 @@ enum class WebhookEvent(val key: String, val label: String, val module: Module? 
     BLADDER_TRAINING("bladder.training", "Time for a planned toilet trip", Module.CONTINENCE),
     SUPPLIES_LOW("supplies.low", "Supplies are running low"),
     CYCLE_REMINDER("cycle.reminder", "A cycle reminder", Module.CYCLE),
+    VOICE_PRACTICE("voice.practice", "Time for voice practice", Module.TRANSITION),
     TEST("test", "A test"),
 }
 
