@@ -27,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,12 +64,18 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.CycleDay
 import com.health.api.CycleOverview
+import com.health.api.CycleSettings
+import com.health.api.Fields
+import com.health.api.SupplyStatus
 import com.health.api.CyclePhase
 import com.health.api.Flow
 import com.health.api.Mucus
 import com.health.api.OvulationTest
 import com.health.api.Units
 import com.health.app.Container
+import com.health.app.net.cycleSettings
+import com.health.app.net.supplyStatus
+import com.health.app.ui.components.shownFields
 import com.health.app.ui.Format
 import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.AxisLabels
@@ -85,6 +93,7 @@ import com.health.app.ui.components.appContainer
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -109,6 +118,10 @@ data class CycleState(
     val overview: CycleOverview? = null,
     val loading: Boolean = true,
     val error: String? = null,
+    /** The person's own symptoms, moods, fields, lengths and wording. */
+    val settings: CycleSettings = CycleSettings(),
+    /** Supplies with how long they'll last (period products are picked from these). */
+    val supplies: List<SupplyStatus> = emptyList(),
 )
 
 class CycleViewModel(private val c: Container) : ViewModel() {
@@ -124,8 +137,14 @@ class CycleViewModel(private val c: Container) : ViewModel() {
         _state.update { it.copy(loading = !quiet || it.overview == null, error = null, today = LocalDate.now(c.zone())) }
         viewModelScope.launch {
             try {
-                val overview = c.ui.cycle(12)
-                _state.update { it.copy(overview = overview, loading = false) }
+                val overview = async { c.ui.cycle(12) }
+                // The detail: each can be missing without spoiling the calendar.
+                val settings = async { runCatching { c.ui.cycleSettings() }.getOrNull() }
+                val supplies = async { runCatching { c.ui.supplyStatus() }.getOrNull() }
+                _state.update {
+                    it.copy(overview = overview.await(), loading = false, settings = settings.await() ?: it.settings, supplies = supplies.await() ?: it.supplies)
+                }
+                if (c.viewing.value == null) settings.await()?.let { CycleWording.neutral.value = it.neutralWording }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your cycle") }
             }
@@ -152,10 +171,12 @@ class CycleActions(
     val save: (CycleDay) -> Unit = {},
     val clear: (LocalDate) -> Unit = {},
     val retry: () -> Unit = {},
+    /** Opens "cycle/settings" or "supplies/cycle". */
+    val open: (String) -> Unit = {},
 )
 
 @Composable
-fun CycleRoute(logDate: LocalDate? = null) {
+fun CycleRoute(logDate: LocalDate? = null, onOpen: (String) -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { CycleViewModel(c) }
     val state by vm.state.collectAsState()
@@ -164,7 +185,8 @@ fun CycleRoute(logDate: LocalDate? = null) {
     val stages = viewModel { com.health.app.ui.care.LifeStageViewModel(c) }
     val stage by stages.state.collectAsState()
     CycleScreen(
-        state, settings.units, CycleActions(vm::month, { vm.save(it) }, { vm.clear(it) }, { vm.load() }), openDay = logDate,
+        state, settings.units, CycleActions(vm::month, { vm.save(it) }, { vm.clear(it) }, { vm.load() }, onOpen), openDay = logDate,
+        fields = shownFields(),
         lifeStage = {
             com.health.app.ui.care.LifeStageSection(
                 stage, c.zone(),
@@ -185,12 +207,19 @@ fun CycleScreen(
     actions: CycleActions,
     openDay: LocalDate? = null,
     lifeStage: @Composable () -> Unit = {},
+    fields: Set<String> = Fields.DEFAULTS,
 ) {
     var editing by remember { mutableStateOf<LocalDate?>(null) }
+    // Without fertility words for people who'd rather not see them, as the server does.
+    val plain = CycleText.plain(state.settings, fields)
     LaunchedEffect(openDay, state.overview != null) { if (openDay != null && state.overview != null) editing = openDay }
     val overview = state.overview
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Cycle", "Periods, symptoms and what's likely next")
+        ScreenTitle("Cycle", "Periods, symptoms and what's likely next") {
+            if (!com.health.app.ui.care.LocalReadOnly.current) {
+                IconButton(onClick = { actions.open("cycle/settings") }) { Icon(Icons.Rounded.Settings, "Cycle settings") }
+            }
+        }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && overview == null -> Loading()
@@ -198,12 +227,24 @@ fun CycleScreen(
                 overview != null -> {
                     // Someone viewing a share looks at the calendar but doesn't open days to change them.
                     val readOnly = com.health.app.ui.care.LocalReadOnly.current
-                    TodayCard(overview, onLog = { if (!readOnly) editing = state.today })
+                    TodayCard(overview, plain, onLog = { if (!readOnly) editing = state.today })
                     lifeStage()
-                    CalendarCard(state, overview, actions.month) { if (!readOnly) editing = it }
+                    CalendarCard(state, overview, plain, actions.month) { if (!readOnly) editing = it }
+                    if (Fields.CYCLE_PRODUCTS in fields) {
+                        val low = state.supplies.filter { it.low && it.supply.kind.category == com.health.api.SupplyCategory.PERIOD }
+                        if (low.isNotEmpty()) com.health.app.ui.modules.continence.LowSuppliesCard(low) { actions.open("supplies/cycle") }
+                    }
                     AveragesCard(overview)
-                    if (overview.temperatures.size >= 3) TemperatureCard(overview, units)
+                    if (overview.temperatures.size >= 3 && Fields.CYCLE_BBT in fields) TemperatureCard(overview, units, plain)
                     if (overview.cycles.isNotEmpty()) CyclesCard(overview)
+                    if (Fields.CYCLE_PRODUCTS in fields) {
+                        InfoCard(null) {
+                            com.health.app.ui.modules.NavRow(
+                                Icons.Rounded.Inventory2, "Period products", "What's on hand, and when to restock",
+                                onClick = { actions.open("supplies/cycle") },
+                            )
+                        }
+                    }
                     Hint(overview.caveat, Modifier.padding(horizontal = 4.dp))
                 }
             }
@@ -218,6 +259,9 @@ fun CycleScreen(
                 units = units,
                 onSave = { actions.save(it); editing = null },
                 onClear = { actions.clear(day); editing = null },
+                fields = fields,
+                settings = state.settings,
+                supplies = state.supplies.map { it.supply },
             )
         }
     }
@@ -233,13 +277,13 @@ fun periodText(daysUntil: Int?): String? = when {
 }
 
 @Composable
-private fun TodayCard(overview: CycleOverview, onLog: () -> Unit) {
+private fun TodayCard(overview: CycleOverview, plain: Boolean, onLog: () -> Unit) {
     AppCard(padding = 18.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(overview.cycleDay?.let { "Day $it" } ?: "No cycle yet", style = MaterialTheme.typography.displaySmall)
                 Spacer(Modifier.height(4.dp))
-                if (overview.phase != CyclePhase.UNKNOWN) Pill(overview.phase.label, phaseColor(overview.phase))
+                if (overview.phase != CyclePhase.UNKNOWN) Pill(CycleText.phase(overview.phase, plain), phaseColor(overview.phase))
                 periodText(overview.daysUntilPeriod)?.let {
                     Spacer(Modifier.height(6.dp))
                     Text(it, style = MaterialTheme.typography.bodyLarge)
@@ -278,7 +322,7 @@ private fun dates(from: String?, to: String?): Set<LocalDate> {
 }
 
 @Composable
-private fun CalendarCard(state: CycleState, overview: CycleOverview, onMonth: (YearMonth) -> Unit, onDay: (LocalDate) -> Unit) {
+private fun CalendarCard(state: CycleState, overview: CycleOverview, plain: Boolean, onMonth: (YearMonth) -> Unit, onDay: (LocalDate) -> Unit) {
     val month = state.month
     val logged = overview.days.associateBy { it.date }
     val prediction = overview.prediction
@@ -287,7 +331,7 @@ private fun CalendarCard(state: CycleState, overview: CycleOverview, onMonth: (Y
         val start = LocalDate.parse(it.nextPeriod)
         dates(it.nextPeriod, start.plusDays(length - 1L).toString())
     }.orEmpty()
-    val fertile = dates(prediction?.fertileStart, prediction?.fertileEnd)
+    val fertile = if (plain) emptySet() else dates(prediction?.fertileStart, prediction?.fertileEnd)
     val rose = periodColor()
     val green = MaterialTheme.colorScheme.tertiary
     InfoCard(null) {
@@ -365,7 +409,7 @@ private fun CalendarCard(state: CycleState, overview: CycleOverview, onMonth: (Y
                 Spacer(Modifier.width(6.dp))
                 Text("Predicted", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            LegendItem(green.copy(alpha = 0.4f), "Fertile window (predicted)")
+            if (!plain) LegendItem(green.copy(alpha = 0.4f), "Fertile window (predicted)")
             LegendItem(MaterialTheme.colorScheme.primary, "Symptoms or notes")
         }
         Spacer(Modifier.height(6.dp))
@@ -399,14 +443,14 @@ private fun AveragesCard(overview: CycleOverview) {
 }
 
 @Composable
-private fun TemperatureCard(overview: CycleOverview, units: Units) {
+private fun TemperatureCard(overview: CycleOverview, units: Units, plain: Boolean) {
     val temps = overview.temperatures
     InfoCard("Temperature", icon = Icons.Rounded.Thermostat, iconTint = AppTheme.data.heart) {
         val shown = temps.map { if (units == Units.IMPERIAL) it.value * 9 / 5 + 32 else it.value }
         LineChart(shown, color = AppTheme.data.heart, height = 80.dp)
         AxisLabels(Format.shortDay(LocalDate.parse(temps.first().date)), null, Format.shortDay(LocalDate.parse(temps.last().date)))
         Spacer(Modifier.height(6.dp))
-        Hint("A small rise that lasts (about 0.2–0.5 °C) usually comes after ovulation.")
+        Hint(if (plain) "A small rise that lasts (about 0.2–0.5 °C) usually comes in the second half of a cycle." else "A small rise that lasts (about 0.2–0.5 °C) usually comes after ovulation.")
     }
 }
 
@@ -430,54 +474,5 @@ private fun CyclesCard(overview: CycleOverview) {
                 Text(cycle.length?.let { "$it days" } ?: "now", style = MaterialTheme.typography.titleMedium)
             }
         }
-    }
-}
-
-/** Logging a day: flow, symptoms, pain, signs and a note. */
-@Composable
-fun DayForm(date: LocalDate, existing: CycleDay?, units: Units, onSave: (CycleDay) -> Unit, onClear: () -> Unit) {
-    var flow by remember { mutableStateOf(existing?.flow) }
-    var symptoms by remember { mutableStateOf(existing?.symptoms.orEmpty().toSet()) }
-    var pain by remember { mutableStateOf(existing?.pain) }
-    var mucus by remember { mutableStateOf(existing?.mucus) }
-    var test by remember { mutableStateOf(existing?.ovulationTest) }
-    var temp by remember {
-        mutableStateOf(existing?.temperature?.let { Format.upTo2(if (units == Units.IMPERIAL) it * 9 / 5 + 32 else it) }.orEmpty())
-    }
-    var note by remember { mutableStateOf(existing?.note.orEmpty()) }
-    Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Text(Format.longDay(date), style = MaterialTheme.typography.titleLarge)
-        Text("Bleeding", style = MaterialTheme.typography.titleSmall)
-        SegmentedChoice(listOf<Flow?>(null) + Flow.entries, flow, { it?.label ?: "None" }, { flow = it })
-        Text("Symptoms", style = MaterialTheme.typography.titleSmall)
-        ChipPicker(SYMPTOMS, symptoms, { symptoms = it }, addLabel = "Another symptom")
-        Column {
-            Row {
-                Text("Pain", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                Text(pain?.let { if (it == 0) "None" else "$it of 10" } ?: "Not noted", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            Slider(value = (pain ?: 0).toFloat(), onValueChange = { pain = it.roundToInt() }, valueRange = 0f..10f, steps = 9)
-        }
-        Text("Cervical mucus", style = MaterialTheme.typography.titleSmall)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Mucus.entries.forEach { m -> FilterChip(selected = mucus == m, onClick = { mucus = if (mucus == m) null else m }, label = { Text(m.label) }) }
-        }
-        Text("Ovulation test", style = MaterialTheme.typography.titleSmall)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OvulationTest.entries.forEach { t -> FilterChip(selected = test == t, onClick = { test = if (test == t) null else t }, label = { Text(t.label) }) }
-        }
-        NumberField(temp, { temp = it }, "Temperature on waking", suffix = if (units == Units.IMPERIAL) "°F" else "°C", supporting = "Optional: your ring's nightly temperature is used too")
-        OutlinedTextField(note, { note = it }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp))
-        val celsius = Format.parse(temp)?.let { if (units == Units.IMPERIAL) (it - 32) * 5 / 9 else it }?.takeIf { it in 34.0..40.0 }
-        Button(
-            onClick = {
-                onSave(CycleDay(date.toString(), flow, symptoms.toList(), pain, mucus, test, celsius, note.trim().ifBlank { null }))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Save") }
-        if (existing != null) TextButton(onClick = onClear, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Clear this day") }
     }
 }

@@ -15,6 +15,7 @@ import com.health.api.Share
 import com.health.app.net.ServerApi
 import com.health.app.net.SignIn
 import com.health.app.net.appointments
+import com.health.app.net.continenceSettings
 import com.health.app.net.fields
 import com.health.app.net.habitsForReminders
 import com.health.app.reminders.DigestWorker
@@ -178,7 +179,8 @@ class Container(val context: Context) {
         val modules = modules()
         val today = java.time.LocalDate.now(zone())
         profile.value?.let { reminderCache.savePrefs(it.reminders, modules) }
-        val any = Module.MEDICATIONS in modules || Module.HABITS in modules || Module.APPOINTMENTS in modules
+        val any = Module.MEDICATIONS in modules || Module.HABITS in modules || Module.APPOINTMENTS in modules ||
+            Module.CONTINENCE in modules // Bladder training (bladder and bowel detail)
         if (!any) {
             medsCache.clear()
             reminderCache.clear()
@@ -213,6 +215,12 @@ class Container(val context: Context) {
             runCatching { api.appointments(days = 60, upcoming = true) }.getOrNull()?.let(reminderCache::saveAppointments)
         } else {
             reminderCache.saveAppointments(emptyList())
+        }
+        // Bladder training (bladder and bowel detail): its settings, kept for the phone's own reminders.
+        if (Module.CONTINENCE in modules) {
+            runCatching { api.continenceSettings() }.getOrNull()?.let { reminderCache.saveBladder(it.bladderTraining.takeIf { t -> t.enabled }) }
+        } else {
+            reminderCache.saveBladder(null)
         }
         reminders.reschedule()
     }

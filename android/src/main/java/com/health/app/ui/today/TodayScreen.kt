@@ -211,6 +211,10 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                             ContinenceTodayCard(summary.modules.continence, actions.logContinence) { actions.open("continence") }
                         }
                         TrackingTodayCards(summary, modules, units, zone, actions.tracking, actions.open)
+                        // Supplies running low (bladder and bowel, periods).
+                        summary.modules.lowSupplies?.takeIf { it.isNotEmpty() }?.let { low ->
+                            com.health.app.ui.modules.continence.LowSuppliesCard(low) { actions.open("supplies/" + com.health.app.ui.modules.continence.SupplyArea.forLow(low).route) }
+                        }
                         // Hormone therapy, the life stage and this week's appointments.
                         CareTodayCards(summary.modules, modules, state.date, zone, System.currentTimeMillis(), actions.open)
                         if (Module.ACTIVITY in modules) ActivityCard(summary, units)

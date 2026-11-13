@@ -93,7 +93,7 @@ fun CycleTodayCard(cycle: CycleToday?, onLog: () -> Unit, onOpen: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(cycle?.cycleDay?.let { "Day $it" } ?: "Not started yet", style = MaterialTheme.typography.headlineSmall)
                 val phase = cycle?.phase ?: CyclePhase.UNKNOWN
-                if (phase != CyclePhase.UNKNOWN) Pill(phase.label, phaseColor(phase), Modifier.padding(top = 4.dp))
+                if (phase != CyclePhase.UNKNOWN) Pill(com.health.app.ui.modules.cycle.CycleText.phase(phase, com.health.app.ui.modules.cycle.plainOnToday()), phaseColor(phase), Modifier.padding(top = 4.dp))
                 periodText(cycle?.daysUntilPeriod)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp)) }
                 cycle?.logged?.let { d ->
                     val parts = listOfNotNull(d.flow?.let { "${it.label} flow" }, d.symptoms.takeIf { it.isNotEmpty() }?.joinToString())

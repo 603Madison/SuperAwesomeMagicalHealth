@@ -266,10 +266,10 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             "cycle?log={log}",
             arguments = listOf(navArgument("log") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { back ->
-            CycleRoute(back.arguments?.getString("log")?.let { runCatching { LocalDate.parse(it) }.getOrNull() })
+            CycleRoute(back.arguments?.getString("log")?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, onOpen = ::open)
         }
 
-        composable("continence") { ContinenceRoute(onPelvicFloor = { open("continence/pelvic") }) }
+        composable("continence") { ContinenceRoute(onPelvicFloor = { open("continence/pelvic") }, onOpen = ::open) }
         composable("continence/pelvic") { PelvicFloorRoute(onBack = { nav.popBackStack() }) }
 
         composable("meds") { MedsRoute(onEdit = { id -> nav.navigate("meds/edit" + (id?.let { "?id=$it" } ?: "")) }) }
@@ -299,5 +299,18 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         composable("settings/integrations") { IntegrationsRoute(onBack = { nav.popBackStack() }) }
         composable("digest") { DigestRoute(onBack = { nav.popBackStack() }) }
         composable("reports") { ReportsRoute(onBack = { nav.popBackStack() }) }
+
+        // Conditions and goals, fields, bladder and bowel detail, supplies, cycle settings and the AI assistant.
+        composable("settings/conditions") { com.health.app.ui.conditions.ConditionsRoute(onBack = { nav.popBackStack() }, onFields = { open("settings/fields") }) }
+        composable("settings/fields") { com.health.app.ui.conditions.FieldsRoute(onBack = { nav.popBackStack() }) }
+        composable("continence/progress") { com.health.app.ui.modules.continence.ProgressRoute(onBack = { nav.popBackStack() }) }
+        composable("continence/check-in") { com.health.app.ui.modules.continence.CheckInRoute(onBack = { nav.popBackStack() }) }
+        composable("continence/settings") { com.health.app.ui.modules.continence.DiarySettingsRoute(onBack = { nav.popBackStack() }) }
+        composable("supplies/{area}", arguments = listOf(navArgument("area") { type = NavType.StringType })) { back ->
+            com.health.app.ui.modules.continence.SuppliesRoute(com.health.app.ui.modules.continence.SupplyArea.of(back.arguments?.getString("area")), onBack = { nav.popBackStack() })
+        }
+        composable("cycle/settings") { com.health.app.ui.modules.cycle.CycleSettingsRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/ai") { com.health.app.ui.ai.AiRoute(onBack = { nav.popBackStack() }, onAudit = { open("settings/ai/audit") }) }
+        composable("settings/ai/audit") { com.health.app.ui.ai.AiAuditRoute(onBack = { nav.popBackStack() }) }
     }
 }

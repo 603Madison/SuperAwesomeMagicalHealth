@@ -15,7 +15,11 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** What a reminder is for; each has its own notification channel. */
-enum class AlarmKind { DOSE, DOSE_AGAIN, REFILL, HABIT, APPOINTMENT }
+enum class AlarmKind {
+    DOSE, DOSE_AGAIN, REFILL, HABIT, APPOINTMENT,
+    /** Bladder training (the bladder and bowel diary). */
+    BLADDER,
+}
 
 /** A habit with a reminder time, and whether it's done on [date] (the day its status was loaded). */
 data class HabitReminder(val id: String, val name: String, val time: String, val date: String, val done: Boolean)
@@ -47,6 +51,8 @@ data class ReminderInputs(
     val modules: Set<Module> = emptySet(),
     val habits: List<HabitReminder> = emptyList(),
     val appointments: List<Appointment> = emptyList(),
+    /** Bladder training's settings (the bladder and bowel diary), when it's on. */
+    val bladder: com.health.api.BladderTraining? = null,
 )
 
 /**
@@ -70,6 +76,8 @@ object CarePlanner {
         }
         if (Module.HABITS in inputs.modules && inputs.prefs.habits) out += habits(inputs, from, until, zone)
         if (Module.APPOINTMENTS in inputs.modules && inputs.prefs.appointments) out += appointments(inputs, from, until, zone)
+        // Bladder training (the bladder and bowel diary).
+        if (Module.CONTINENCE in inputs.modules) out += BladderTrainingPlan.alarms(inputs.bladder, from, until, zone) { quiet(inputs.prefs, it, zone) }
         return out.sortedWith(compareBy({ it.at }, { it.kind.ordinal }, { it.key }))
     }
 

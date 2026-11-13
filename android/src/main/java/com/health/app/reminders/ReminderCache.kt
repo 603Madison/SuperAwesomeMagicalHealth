@@ -33,6 +33,13 @@ class ReminderCache(context: Context) {
 
     fun appointments(): List<Appointment> = read(APPOINTMENTS) { ApiJson.decodeFromString(ListSerializer(Appointment.serializer()), it) }.orEmpty()
 
+    /** Bladder training's settings (the bladder and bowel diary), or null when it isn't on. */
+    fun bladder(): com.health.api.BladderTraining? = read(BLADDER) { ApiJson.decodeFromString(com.health.api.BladderTraining.serializer(), it) }?.takeIf { it.enabled }
+
+    fun saveBladder(training: com.health.api.BladderTraining?) = prefs.edit {
+        if (training == null) remove(BLADDER) else putString(BLADDER, ApiJson.encodeToString(com.health.api.BladderTraining.serializer(), training))
+    }
+
     fun savePrefs(value: ReminderPrefs, modules: Set<Module>) = prefs.edit {
         putString(PREFS, ApiJson.encodeToString(ReminderPrefs.serializer(), value))
         putString(MODULES, ApiJson.encodeToString(SetSerializer(Module.serializer()), modules))
@@ -69,5 +76,6 @@ class ReminderCache(context: Context) {
         const val MARKED = "marked"
         const val HABITS = "habits"
         const val APPOINTMENTS = "appointments"
+        const val BLADDER = "bladder"
     }
 }
