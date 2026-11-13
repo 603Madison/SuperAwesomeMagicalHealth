@@ -8,9 +8,8 @@ import { Meter } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
-import { useWater } from "../lib/fields";
+import { useFoodNumbers, useWater } from "../lib/fields";
 import { useModules } from "../App";
-import { Macros } from "./Today";
 import { DrinksCard } from "./Drinks";
 import { useReadOnly } from "../lib/viewing";
 import { amountText, logSuggestion } from "../components/Insights";
@@ -31,20 +30,22 @@ export function Food() {
   const drinks = useLoad(() => api.drinksDay(date).catch(() => undefined), [date]);
   const readOnly = useReadOnly();
   const water = useWater(useModules());
+  // In eating disorder recovery: foods and meals, and no amounts (calories, macros, targets) anywhere.
+  const numbers = useFoodNumbers();
   const [adding, setAdding] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<FoodEntry | null>(null);
   useHashScroll(!!data);
 
   const sections: Section[] = [
     // Ideas from what's been eaten before, for the meal it is now: today only.
-    { id: "ideas", label: "Ideas", when: date === today(), node: data && <Ideas date={date} readOnly={readOnly} onChanged={reload} /> },
-    { id: "totals", label: "Totals", node: data && <Totals day={data} /> },
+    { id: "ideas", label: "Ideas", when: date === today(), node: data && <Ideas date={date} readOnly={readOnly} numbers={numbers} onChanged={reload} /> },
+    { id: "totals", label: "Totals", when: numbers, node: data && <Totals day={data} /> },
     { id: "water", label: "Water", when: water, node: data && <WaterCard day={data} readOnly={readOnly} onChanged={reload} /> },
     { id: "drinks", label: "Drinks", node: data && <DrinksCard day={drinks.data} date={date} readOnly={readOnly} onChanged={() => { drinks.reload(); reload(); }} /> },
     ...MEALS.map((m) => ({
       id: m.id.toLowerCase(), label: m.label, node: data && (
         <MealCard
-          meal={m} day={data} readOnly={readOnly}
+          meal={m} day={data} readOnly={readOnly} numbers={numbers}
           onAdd={() => setAdding(m.id)} onEdit={setEditing} onChanged={reload}
           onRemoved={(id) => setData({ ...data, entries: data.entries.filter((e) => e.id !== id) })}
         />
@@ -58,7 +59,7 @@ export function Food() {
       <header className="page-header">
         <div>
           <h1>Food</h1>
-          <p className="page-subtitle">What you eat, against what you burn</p>
+          <p className="page-subtitle">{numbers ? "What you eat, against what you burn" : "What you eat, meal by meal"}</p>
         </div>
         <div className="page-actions">
           <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(today(), 1)} />
@@ -68,7 +69,7 @@ export function Food() {
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
       <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
-      {adding && <AddFood date={date} meal={adding} onClose={() => setAdding(null)} onAdded={reload} />}
+      {adding && <AddFood date={date} meal={adding} numbers={numbers} onClose={() => setAdding(null)} onAdded={reload} />}
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
   );
@@ -78,7 +79,7 @@ export function Food() {
  * "Ideas for dinner": foods and meals eaten before, best first, each added with one tap (not while
  * viewing a share). Another meal from the menu. Without numbers (eating disorder recovery), no amounts.
  */
-function Ideas({ date, readOnly, onChanged }: { date: string; readOnly: boolean; onChanged: () => void }) {
+function Ideas({ date, readOnly, numbers, onChanged }: { date: string; readOnly: boolean; numbers: boolean; onChanged: () => void }) {
   const [meal, setMeal] = useState<Meal | undefined>(undefined);
   const { data, error, reload } = useLoad(() => api.foodSuggestions(date, meal), [date, meal]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -98,7 +99,7 @@ function Ideas({ date, readOnly, onChanged }: { date: string; readOnly: boolean;
             <li key={s.name} className="row">
               <div className="row-main">
                 <div className="row-title">{s.name}</div>
-                <div className="row-sub">{s.why}{data.showNumbers && <> · <span className="nowrap">{amountText(s, true)}</span></>}</div>
+                <div className="row-sub">{s.why}{data.showNumbers && numbers && <> · <span className="nowrap">{amountText(s, true)}</span></>}</div>
               </div>
               {!readOnly && (
                 <Button
@@ -140,6 +141,25 @@ function Totals({ day }: { day: FoodDay }) {
   );
 }
 
+function Macros({ eaten, target }: { eaten: { protein: number; carbs: number; fat: number }; target: { protein: number; carbs: number; fat: number } }) {
+  const rows = [
+    { name: "Protein", value: eaten.protein, max: target.protein, color: "var(--c1)" },
+    { name: "Carbs", value: eaten.carbs, max: target.carbs, color: "var(--c2)" },
+    { name: "Fat", value: eaten.fat, max: target.fat, color: "var(--c3)" },
+  ];
+  return (
+    <div className="macros">
+      {rows.map((r) => (
+        <div key={r.name} className="macro">
+          <span className="macro-name"><span className="legend-key" style={{ background: r.color }} />{r.name}</span>
+          <Meter value={r.value} max={r.max} color={r.color} label={`${r.name} against target`} over />
+          <span className="macro-amount"><strong>{num(r.value)}</strong> / {num(r.max)} g</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Water against its goal, a glass at a time. Only while water shows (Settings › Features › Food). */
 function WaterCard({ day, readOnly, onChanged }: { day: FoodDay; readOnly: boolean; onChanged: () => void }) {
   const t = day.target;
@@ -169,8 +189,8 @@ function WaterCard({ day, readOnly, onChanged }: { day: FoodDay; readOnly: boole
   );
 }
 
-function MealCard({ meal, day, readOnly, onAdd, onEdit, onChanged, onRemoved }: {
-  meal: { id: Meal; label: string }; day: FoodDay; readOnly: boolean; onAdd: () => void; onEdit: (e: FoodEntry) => void; onChanged: () => void; onRemoved: (id: string) => void;
+function MealCard({ meal, day, readOnly, numbers, onAdd, onEdit, onChanged, onRemoved }: {
+  meal: { id: Meal; label: string }; day: FoodDay; readOnly: boolean; numbers: boolean; onAdd: () => void; onEdit: (e: FoodEntry) => void; onChanged: () => void; onRemoved: (id: string) => void;
 }) {
   const entries = day.entries.filter((e) => e.meal === meal.id);
   const kcal = entries.reduce((s, e) => s + e.nutrients.calories, 0);
@@ -183,7 +203,7 @@ function MealCard({ meal, day, readOnly, onAdd, onEdit, onChanged, onRemoved }: 
   };
   return (
     <Card
-      title={<>{meal.label}<span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>{entries.length ? `${num(kcal)} kcal` : ""}</span></>}
+      title={<>{meal.label}<span className="muted" style={{ fontWeight: 400, marginLeft: 8 }}>{entries.length && numbers ? `${num(kcal)} kcal` : ""}</span></>}
       action={!readOnly && <>
         <Menu label={`More for ${meal.label}`} trigger={<MoreHorizontal size={20} />} items={[{ label: `Copy yesterday's ${meal.label.toLowerCase()}`, icon: <Copy size={18} />, onSelect: copyYesterday }]} />
         <CardAction label={`Add to ${meal.label.toLowerCase()}`} onClick={onAdd}><Plus size={18} /></CardAction>
@@ -195,9 +215,9 @@ function MealCard({ meal, day, readOnly, onAdd, onEdit, onChanged, onRemoved }: 
             <li key={e.id} className="row">
               <div className="row-main">
                 <div className="row-title">{e.name}</div>
-                <div className="row-sub">{e.brand ? `${e.brand} · ` : ""}{num(e.servings, e.servings % 1 ? 2 : 0)} × {e.serving} · P {num(e.nutrients.protein)} · C {num(e.nutrients.carbs)} · F {num(e.nutrients.fat)}</div>
+                <div className="row-sub">{e.brand ? `${e.brand} · ` : ""}{num(e.servings, e.servings % 1 ? 2 : 0)} × {e.serving}{numbers ? ` · P ${num(e.nutrients.protein)} · C ${num(e.nutrients.carbs)} · F ${num(e.nutrients.fat)}` : ""}</div>
               </div>
-              <div className="row-end">{num(e.nutrients.calories)}<div className="muted">kcal</div></div>
+              {numbers && <div className="row-end">{num(e.nutrients.calories)}<div className="muted">kcal</div></div>}
               <div className="row-actions">
                 <Menu label={`More for ${e.name}`} trigger={<MoreHorizontal size={18} />} items={[
                   { label: "Change amount", icon: <Pencil size={18} />, onSelect: () => onEdit(e) },
@@ -222,12 +242,12 @@ function scaled(n: Nutrients, factor: number): Nutrients {
 }
 
 /** Adding something eaten: search (your foods, then Open Food Facts), a barcode, recent foods, a quick add, or a new food. */
-function AddFood({ date, meal, onClose, onAdded }: { date: string; meal: Meal; onClose: () => void; onAdded: () => void }) {
+function AddFood({ date, meal, numbers, onClose, onAdded }: { date: string; meal: Meal; numbers: boolean; onClose: () => void; onAdded: () => void }) {
   const [tab, setTab] = useState<"search" | "recent" | "quick" | "new">("search");
   const [chosen, setChosen] = useState<FoodItem | null>(null);
   const [photo, setPhoto] = useState(false);
   const label = MEALS.find((m) => m.id === meal)!.label;
-  if (chosen) return <Servings food={chosen} date={date} meal={meal} onBack={() => setChosen(null)} onClose={onClose} onAdded={onAdded} />;
+  if (chosen) return <Servings food={chosen} date={date} meal={meal} numbers={numbers} onBack={() => setChosen(null)} onClose={onClose} onAdded={onAdded} />;
   if (photo) return <FoodPhotoFlow date={date} meal={meal} mealLabel={label} onBack={() => setPhoto(false)} onClose={onClose} onAdded={onAdded} />;
   return (
     <Modal title={`Add to ${label.toLowerCase()}`} onClose={onClose} wide>
@@ -235,15 +255,15 @@ function AddFood({ date, meal, onClose, onAdded }: { date: string; meal: Meal; o
       <Segmented label="How to add" value={tab} onChange={setTab} options={[
         { value: "search", label: "Search" }, { value: "recent", label: "Recent" }, { value: "quick", label: "Quick add" }, { value: "new", label: "New food" },
       ]} />
-      {tab === "search" && <SearchFoods onChoose={setChosen} />}
-      {tab === "recent" && <RecentFoods onChoose={setChosen} />}
-      {tab === "quick" && <QuickAdd date={date} meal={meal} onDone={() => { onAdded(); onClose(); }} />}
-      {tab === "new" && <NewFood onSaved={setChosen} />}
+      {tab === "search" && <SearchFoods numbers={numbers} onChoose={setChosen} />}
+      {tab === "recent" && <RecentFoods numbers={numbers} onChoose={setChosen} />}
+      {tab === "quick" && <QuickAdd date={date} meal={meal} numbers={numbers} onDone={() => { onAdded(); onClose(); }} />}
+      {tab === "new" && <NewFood numbers={numbers} onSaved={setChosen} />}
     </Modal>
   );
 }
 
-function SearchFoods({ onChoose }: { onChoose: (f: FoodItem) => void }) {
+function SearchFoods({ numbers, onChoose }: { numbers: boolean; onChoose: (f: FoodItem) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ mine: FoodItem[]; online: FoodItem[]; onlineError?: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -274,9 +294,9 @@ function SearchFoods({ onChoose }: { onChoose: (f: FoodItem) => void }) {
       {results && (
         <div className="search-results">
           {results.mine.length > 0 && <div className="result-group-title">Your foods</div>}
-          {results.mine.map((f) => <FoodRow key={f.id} food={f} onChoose={onChoose} />)}
+          {results.mine.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} onChoose={onChoose} />)}
           {results.online.length > 0 && <div className="result-group-title">Open Food Facts</div>}
-          {results.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} onChoose={onChoose} />)}
+          {results.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} onChoose={onChoose} />)}
           {results.onlineError && <p className="muted small">{results.onlineError}</p>}
           {results.mine.length === 0 && results.online.length === 0 && !results.onlineError && <p className="muted">Nothing found. Try other words, or add it as a new food.</p>}
         </div>
@@ -285,27 +305,27 @@ function SearchFoods({ onChoose }: { onChoose: (f: FoodItem) => void }) {
   );
 }
 
-function RecentFoods({ onChoose }: { onChoose: (f: FoodItem) => void }) {
+function RecentFoods({ numbers, onChoose }: { numbers: boolean; onChoose: (f: FoodItem) => void }) {
   const { data, loading, error } = useLoad(() => api.recentFoods(), []);
   if (loading) return <Spinner />;
   if (error) return <div className="notice notice-error">{error}</div>;
   if (!data?.length) return <p className="muted">Foods you log show up here, most recent first.</p>;
-  return <div className="search-results">{data.map((f) => <FoodRow key={f.id} food={f} onChoose={onChoose} />)}</div>;
+  return <div className="search-results">{data.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} onChoose={onChoose} />)}</div>;
 }
 
-function FoodRow({ food, onChoose }: { food: FoodItem; onChoose: (f: FoodItem) => void }) {
+function FoodRow({ food, numbers, onChoose }: { food: FoodItem; numbers: boolean; onChoose: (f: FoodItem) => void }) {
   return (
     <button className="row" onClick={() => onChoose(food)}>
       <div className="row-main">
         <div className="row-title">{food.name}</div>
-        <div className="row-sub">{food.brand ? `${food.brand} · ` : ""}{food.serving} · P {num(food.nutrients.protein)} · C {num(food.nutrients.carbs)} · F {num(food.nutrients.fat)}</div>
+        <div className="row-sub">{food.brand ? `${food.brand} · ` : ""}{food.serving}{numbers ? ` · P ${num(food.nutrients.protein)} · C ${num(food.nutrients.carbs)} · F ${num(food.nutrients.fat)}` : ""}</div>
       </div>
-      <div className="row-end">{num(food.nutrients.calories)}<div className="muted">kcal</div></div>
+      {numbers && <div className="row-end">{num(food.nutrients.calories)}<div className="muted">kcal</div></div>}
     </button>
   );
 }
 
-function Servings({ food, date, meal, onBack, onClose, onAdded }: { food: FoodItem; date: string; meal: Meal; onBack: () => void; onClose: () => void; onAdded: () => void }) {
+function Servings({ food, date, meal, numbers, onBack, onClose, onAdded }: { food: FoodItem; date: string; meal: Meal; numbers: boolean; onBack: () => void; onClose: () => void; onAdded: () => void }) {
   const [servings, setServings] = useState("1");
   const [grams, setGrams] = useState(food.servingGrams ? String(Math.round(food.servingGrams)) : "");
   const [busy, setBusy] = useState(false);
@@ -343,24 +363,25 @@ function Servings({ food, date, meal, onBack, onClose, onAdded }: { food: FoodIt
         ) : <div />}
         <button type="submit" hidden />
       </form>
-      <div className="amounts">
+      {numbers && <div className="amounts">
         <div className="stat"><div className="stat-label">Calories</div><div className="stat-value">{num(n.calories)}</div></div>
         <div className="stat"><div className="stat-label">Protein</div><div className="stat-value">{num(n.protein, 1)}<span className="stat-unit">g</span></div></div>
         <div className="stat"><div className="stat-label">Carbs</div><div className="stat-value">{num(n.carbs, 1)}<span className="stat-unit">g</span></div></div>
         <div className="stat"><div className="stat-label">Fat</div><div className="stat-value">{num(n.fat, 1)}<span className="stat-unit">g</span></div></div>
-      </div>
+      </div>}
     </Modal>
   );
 }
 
-function QuickAdd({ date, meal, onDone }: { date: string; meal: Meal; onDone: () => void }) {
+/** A quick add: what it was and its amounts; without numbers (eating disorder recovery), just what it was. */
+function QuickAdd({ date, meal, numbers, onDone }: { date: string; meal: Meal; numbers: boolean; onDone: () => void }) {
   const [name, setName] = useState("");
   const [values, setValues] = useState({ calories: "", protein: "", carbs: "", fat: "" });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues({ ...values, [k]: e.target.value });
   const save = async () => {
     const n = (v: string) => Number(v.replace(",", ".")) || 0;
-    if (!n(values.calories)) return;
+    if (numbers ? !n(values.calories) : !name.trim()) return;
     setBusy(true);
     try {
       await api.logFood({ date, meal, servings: 1, name: name.trim() || "Quick add", nutrients: { calories: n(values.calories), protein: n(values.protein), carbs: n(values.carbs), fat: n(values.fat) } });
@@ -370,19 +391,20 @@ function QuickAdd({ date, meal, onDone }: { date: string; meal: Meal; onDone: ()
   };
   return (
     <form className="form-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-      <Field label="What it was" help="Optional"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lunch out" /></Field>
-      <div className="amounts">
+      <Field label="What it was" help={numbers ? "Optional" : undefined}><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lunch out" required={!numbers} /></Field>
+      {numbers && <div className="amounts">
         <Field label="Calories"><input inputMode="decimal" value={values.calories} onChange={set("calories")} required /></Field>
         <Field label="Protein (g)"><input inputMode="decimal" value={values.protein} onChange={set("protein")} /></Field>
         <Field label="Carbs (g)"><input inputMode="decimal" value={values.carbs} onChange={set("carbs")} /></Field>
         <Field label="Fat (g)"><input inputMode="decimal" value={values.fat} onChange={set("fat")} /></Field>
-      </div>
+      </div>}
       <Button variant="primary" busy={busy} type="submit"><Zap size={16} /> Add</Button>
     </form>
   );
 }
 
-function NewFood({ onSaved }: { onSaved: (f: FoodItem) => void }) {
+/** A food of the person's own; without numbers (eating disorder recovery), its name and serving only. */
+function NewFood({ numbers, onSaved }: { numbers: boolean; onSaved: (f: FoodItem) => void }) {
   const [food, setFood] = useState({ name: "", brand: "", serving: "1 serving", grams: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof food) => (e: React.ChangeEvent<HTMLInputElement>) => setFood({ ...food, [k]: e.target.value });
@@ -409,13 +431,15 @@ function NewFood({ onSaved }: { onSaved: (f: FoodItem) => void }) {
         <Field label="Serving" help="e.g. 1 cup, 1 slice, 100 g"><input value={food.serving} onChange={set("serving")} /></Field>
         <Field label="Serving weight (g)" help="Optional: lets you log by grams"><input inputMode="decimal" value={food.grams} onChange={set("grams")} /></Field>
       </div>
-      <p className="muted small">Per serving:</p>
-      <div className="amounts">
-        <Field label="Calories"><input inputMode="decimal" value={food.calories} onChange={set("calories")} required /></Field>
-        <Field label="Protein (g)"><input inputMode="decimal" value={food.protein} onChange={set("protein")} /></Field>
-        <Field label="Carbs (g)"><input inputMode="decimal" value={food.carbs} onChange={set("carbs")} /></Field>
-        <Field label="Fat (g)"><input inputMode="decimal" value={food.fat} onChange={set("fat")} /></Field>
-      </div>
+      {numbers && <>
+        <p className="muted small">Per serving:</p>
+        <div className="amounts">
+          <Field label="Calories"><input inputMode="decimal" value={food.calories} onChange={set("calories")} required /></Field>
+          <Field label="Protein (g)"><input inputMode="decimal" value={food.protein} onChange={set("protein")} /></Field>
+          <Field label="Carbs (g)"><input inputMode="decimal" value={food.carbs} onChange={set("carbs")} /></Field>
+          <Field label="Fat (g)"><input inputMode="decimal" value={food.fat} onChange={set("fat")} /></Field>
+        </div>
+      </>}
       <Button variant="primary" busy={busy} type="submit">Save and choose amount</Button>
     </form>
   );

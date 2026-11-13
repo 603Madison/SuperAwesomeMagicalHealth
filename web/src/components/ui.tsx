@@ -51,6 +51,9 @@ export function Toggle({ checked, onChange, label, help, disabled }: { checked: 
 
 // ---- Dialogs ----
 
+/** What Tab can reach in a dialog. */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Modal({ title, onClose, children, footer, wide, sheet, subtitle }: {
   title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
   /** On phones, a sheet from the bottom of the screen. */
@@ -71,9 +74,20 @@ export function Modal({ title, onClose, children, footer, wide, sheet, subtitle 
     if (!dialog.current?.contains(document.activeElement)) dialog.current?.focus();
     return () => { if (before && document.contains(before)) before.focus(); };
   }, []);
+  // Tab and Shift+Tab go round the dialog's own controls, never out behind it.
+  const trap = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialog.current) return;
+    const all = [...dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+    if (all.length === 0) { e.preventDefault(); return; }
+    const first = all[0];
+    const last = all[all.length - 1];
+    const here = document.activeElement;
+    if (e.shiftKey && (here === first || here === dialog.current)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && here === last) { e.preventDefault(); first.focus(); }
+  };
   return createPortal(
     <div className={`modal-backdrop ${sheet ? "has-sheet" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={dialog} tabIndex={-1} className={`modal ${wide ? "modal-wide" : ""} ${sheet ? "modal-sheet" : ""}`} role="dialog" aria-modal aria-label={title}>
+      <div ref={dialog} tabIndex={-1} className={`modal ${wide ? "modal-wide" : ""} ${sheet ? "modal-sheet" : ""}`} role="dialog" aria-modal aria-label={title} onKeyDown={trap}>
         <div className="modal-head">
           <div>
             <h2>{title}</h2>
@@ -269,13 +283,15 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data: T |
  * the feature's page ([link], "Open Mind" for screen readers). A card with nothing in it is a slim
  * row: the title and its action.
  */
-export function Card({ title, icon, action, link, children, className = "", onClick, id }: {
+export function Card({ title, icon, action, link, children, className = "", onClick, id, heading: Heading = "h3" }: {
   title?: ReactNode; icon?: ReactNode; action?: ReactNode; link?: { to: string; label: string }; children?: ReactNode; className?: string; onClick?: () => void; id?: string;
+  /** The title's heading level: h2 where cards sit straight under the page's h1 (Today). */
+  heading?: "h2" | "h3";
 }) {
   const slim = Children.toArray(children).length === 0;
   const head = (title || action || link) && (
     <div className="card-head">
-      {title && <h3 className="card-heading">{icon}{title}</h3>}
+      {title && <Heading className="card-heading">{icon}{title}</Heading>}
       {(action || link) && (
         <div className="card-action">
           {action}

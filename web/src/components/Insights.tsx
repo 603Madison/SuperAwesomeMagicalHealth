@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, Plus, Sparkles, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
+import { useFoodNumbers } from "../lib/fields";
 import { today } from "../lib/format";
 import { useViewing } from "../lib/viewing";
 import { entryInput, insightPage, type AppPage, type FoodEntry, type FoodSuggestion, type Insight, type Meal, type Module } from "../lib/types";
@@ -128,6 +129,7 @@ export function InsightRow({ insight, date = today(), readOnly = false, onChange
 }) {
   const navigate = useNavigate();
   const opens = usePageOpens();
+  const foodNumbers = useFoodNumbers();
   const bodyId = useId();
   const Icon = icon ?? INSIGHT_ICONS[insight.icon] ?? Sparkles;
   const page = insightPage(insight);
@@ -155,7 +157,7 @@ export function InsightRow({ insight, date = today(), readOnly = false, onChange
       ) : <div className="insight-main">{content}</div>}
       {ideas.length > 0 && (
         <ul className="idea-chips" aria-label="Ideas">
-          {ideas.slice(0, 3).map((s) => <SuggestionChip key={s.name} suggestion={s} date={date} readOnly={readOnly} onChanged={onChanged} />)}
+          {ideas.slice(0, 3).map((s) => <SuggestionChip key={s.name} suggestion={s} date={date} readOnly={readOnly} showNumbers={foodNumbers} onChanged={onChanged} />)}
         </ul>
       )}
     </li>
@@ -169,7 +171,7 @@ export function ForYouCard({ children, count }: { children: ReactNode[]; count?:
   if (rows.length === 0) return null;
   const limit = count ?? 3;
   return (
-    <Card title="For you" icon={<Sparkles size={18} />} className="span-2 for-you">
+    <Card title="For you" icon={<Sparkles size={18} />} className="span-2 for-you" heading="h2">
       <ul className="insight-rows">{all ? rows : rows.slice(0, limit)}</ul>
       {rows.length > limit && (
         <button type="button" className="link-btn for-you-more" aria-expanded={all} onClick={() => setAll(!all)}>

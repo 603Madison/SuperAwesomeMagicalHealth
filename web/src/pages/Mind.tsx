@@ -15,7 +15,7 @@ import { F, useFields } from "../lib/fields";
 import { EnergyBudgetCard } from "./Neuro";
 
 export const FACES = ["😣", "🙁", "😐", "🙂", "😄"];
-const FACE_LABELS = ["Very low", "Low", "Okay", "Good", "Great"];
+export const FACE_LABELS = ["Very low", "Low", "Okay", "Good", "Great"];
 const FEELINGS = ["calm", "happy", "grateful", "content", "hopeful", "proud", "loved", "excited", "tired", "bored", "anxious", "stressed", "overwhelmed", "sad", "lonely", "irritable", "angry", "numb", "ashamed"];
 const CONTEXT = ["work", "school", "family", "partner", "friends", "health", "sleep", "exercise", "money", "weather", "news", "alone time"];
 const PROMPTS = [

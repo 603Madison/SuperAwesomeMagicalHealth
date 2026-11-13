@@ -129,7 +129,7 @@ function SupplyDialog({ supply, onClose, onSaved }: { supply: Supply; onClose: (
 }
 
 /** "Bought 2 packs", or a count correction after checking the cupboard. */
-function RestockDialog({ status, onClose, onSaved }: { status: SupplyStatus; onClose: () => void; onSaved: () => void }) {
+export function RestockDialog({ status, onClose, onSaved }: { status: SupplyStatus; onClose: () => void; onSaved: () => void }) {
   const s = status.supply;
   const [packs, setPacks] = useState(1);
   const [count, setCount] = useState<string>("");
@@ -190,24 +190,5 @@ function HistoryDialog({ supply, onClose }: { supply: Supply; onClose: () => voi
         </ul>
       )}
     </Modal>
-  );
-}
-
-/** On Today: anything running low. */
-export function LowSuppliesCard({ items }: { items: SupplyStatus[] }) {
-  if (items.length === 0) return null;
-  return (
-    <Card title="Running low" icon={<Package size={18} />} link={{ to: "/supplies", label: "Open Supplies" }}>
-      <ul className="rows">
-        {items.map((s) => (
-          <li key={s.supply.id} className="row">
-            <div className="row-main">
-              <div className="row-title">{s.supply.name}</div>
-              <div className="row-sub">{s.supply.onHand} left{s.daysLeft != null ? ` · about ${s.daysLeft} ${s.daysLeft === 1 ? "day" : "days"}` : ""}</div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </Card>
   );
 }
