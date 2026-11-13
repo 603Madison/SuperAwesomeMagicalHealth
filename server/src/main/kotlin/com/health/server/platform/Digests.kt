@@ -48,11 +48,16 @@ class DigestService(private val services: Services) {
         val monday = week.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
         return db.tx { one("SELECT data FROM digests WHERE user_id = ? AND week = ?", userId, monday) { it.string("data") } }
             ?.let { runCatching { ApiJson.decodeFromString(Digest.serializer(), box.open(it, context(userId, monday))) }.getOrNull() }
+            ?.let { asNow(userId, it) }
     }
 
     suspend fun latest(userId: String): Digest? = db.tx {
         one("SELECT week, data FROM digests WHERE user_id = ? ORDER BY week DESC LIMIT 1", userId) { it.string("week") to it.string("data") }
     }?.let { (week, data) -> runCatching { ApiJson.decodeFromString(Digest.serializer(), box.open(data, context(userId, week))) }.getOrNull() }
+        ?.let { asNow(userId, it) }
+
+    /** A kept digest as the person would see it now: without water, if they've turned it off since. */
+    private suspend fun asNow(userId: String, digest: Digest): Digest = if (services.days.showsWater(userId)) digest else withoutWater(digest)
 
     suspend fun store(userId: String, digest: Digest) {
         val sealed = box.seal(ApiJson.encodeToString(Digest.serializer(), digest), context(userId, digest.weekStart))

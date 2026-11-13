@@ -33,6 +33,8 @@ typedef enum {
 #define MODULE_HABITS 16
 #define MODULE_CYCLE 32
 #define MODULE_SYMPTOMS 64
+// Not a feature: set unless the person has turned water off (the water tap and Today's water line).
+#define MODULE_WATER 128
 
 #define MAX_ITEMS 10
 #define NAME_SIZE 64

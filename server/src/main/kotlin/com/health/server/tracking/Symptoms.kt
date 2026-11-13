@@ -110,10 +110,11 @@ class SymptomsService(
     }
 
     /** Today's part: the day's entries, and a few kind words where they help. */
-    suspend fun insights(userId: String, date: LocalDate, day: SymptomsDay?): List<Pair<Int, Insight>> = buildList {
+    suspend fun insights(userId: String, date: LocalDate, day: SymptomsDay?, water: Boolean = true): List<Pair<Int, Insight>> = buildList {
         val open = migraines(userId, date.minusDays(2), date).firstOrNull { it.end == null }
         if (open != null) {
-            add(74 to Insight("info", "Migraine still going", "Rest somewhere dark and quiet if you can, and sip water. Log when it ends, and what helped.", "zap", Module.SYMPTOMS))
+            // Someone who's turned water off may be keeping to a fluid limit: no "sip water", then.
+            add(74 to Insight("info", "Migraine still going", "Rest somewhere dark and quiet if you can${if (water) ", and sip water" else ""}. Log when it ends, and what helped.", "zap", Module.SYMPTOMS))
         } else if (day != null && (day.worst ?: 0) >= 7) {
             add(60 to Insight("info", "A painful day", "Go gently. If the pain is new, severe or comes with other worrying symptoms, contact a doctor.", "heart", Module.SYMPTOMS))
         }

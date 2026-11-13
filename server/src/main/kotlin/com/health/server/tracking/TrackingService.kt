@@ -36,12 +36,15 @@ class TrackingService(
             vitals.today(userId, profile.vitalsTargets, date, zone)
         } else null
 
+        // Whether water shows: habits and symptoms leave it out of what they say if not.
+        val water = if (Module.HABITS in on || Module.SYMPTOMS in on) days.showsWater(userId) else true
+
         val habitStatuses = if (Module.HABITS in on) {
-            habits.statuses(userId, date).also { insights += habits.insights(it, isToday, hour) }
+            habits.statuses(userId, date).also { insights += habits.insights(it, isToday, hour, water) }
         } else null
 
         val symptomsDay = if (Module.SYMPTOMS in on) {
-            symptoms.daysOf(userId, date, date)[date].also { insights += symptoms.insights(userId, date, it) }
+            symptoms.daysOf(userId, date, date)[date].also { insights += symptoms.insights(userId, date, it, water) }
         } else null
 
         val drinksDay = if (Module.NUTRITION in on) {

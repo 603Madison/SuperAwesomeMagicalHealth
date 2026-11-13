@@ -45,6 +45,8 @@ class Platform(private val services: Services) {
         val meds = if (Module.MEDICATIONS in on) services.modules.meds.day(userId, zone.today(services.clock())) else null
         val now = services.clock()
         val open = meds?.due?.filter { it.log == null }.orEmpty()
+        // Water turned off: its keys are left out (a null drops the key).
+        val water = services.days.showsWater(userId)
         return json(
             "date" to day.date,
             "readiness" to day.readiness?.score,
@@ -58,8 +60,8 @@ class Platform(private val services: Services) {
             "resting_hr" to day.restingHeartRate?.let { Math.round(it) },
             "hrv" to day.hrv?.let { Math.round(it) },
             "stress_state" to day.stressDay?.spans?.lastOrNull()?.state?.name?.lowercase(),
-            "water_ml" to day.waterMl,
-            "water_goal" to day.goals.waterMl,
+            "water_ml" to day.waterMl.takeIf { water },
+            "water_goal" to day.goals.waterMl.takeIf { water },
             "weight_kg" to day.weightKg,
             "doses_left_today" to meds?.let { open.size },
             "doses_taken_today" to meds?.let { it.due.count { d -> d.log?.status == DoseStatus.TAKEN } },

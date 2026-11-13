@@ -133,6 +133,12 @@ class DayService(
     /** More parts of each day (blood pressure, habits, symptoms, drinks…), added once they exist. */
     val parts = mutableListOf<DayExtras>()
 
+    /**
+     * Whether water shows for the person ([com.health.api.Fields.NUTRITION_WATER]): set at start-up.
+     * Off, nothing the server says talks about water; what's logged stays stored. Ask once a request.
+     */
+    var showsWater: suspend (userId: String) -> Boolean = { true }
+
     private fun allExtras(): List<DayExtras> = listOfNotNull(extras) + parts
 
     private suspend fun extrasToday(userId: String, profile: Profile, date: LocalDate): DayExtrasResult? {
@@ -327,7 +333,7 @@ class DayService(
             InsightRules.Context(
                 today = today, history = before, profile = profile, target = target, readiness = readiness, sleep = sleep,
                 isToday = date == days.today(clock()), hourNow = days.hourOf(clock()), restingCalories = resting,
-                cyclePhase = more?.cyclePhase, extra = more?.insights.orEmpty() + stressInsights,
+                cyclePhase = more?.cyclePhase, extra = more?.insights.orEmpty() + stressInsights, water = showsWater(userId),
             ),
         )
         // Resting energy counts up through the day: all of it for a day that's over, the part so far for today.

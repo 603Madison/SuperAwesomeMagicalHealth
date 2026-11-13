@@ -91,7 +91,8 @@ test('today becomes one message for the watch, with which row is which dose and 
   const { message, sent } = logic.todayToMessage(today);
   assert.equal(message.Status, logic.STATUS.OK);
   const B = logic.MODULE_BITS;
-  assert.equal(message.Modules, B.NUTRITION | B.MEDICATIONS | B.HABITS | B.CONTINENCE | B.MIND);
+  // Water is on unless the server says it's off (older servers don't say).
+  assert.equal(message.Modules, B.NUTRITION | B.MEDICATIONS | B.HABITS | B.CONTINENCE | B.MIND | B.WATER);
   assert.equal(message.Readiness, 84);
   assert.equal(message.Sleep, -1);
   assert.equal(message.Activity, 91);
@@ -107,6 +108,40 @@ test('today becomes one message for the watch, with which row is which dose and 
   assert.equal(message.Habits, 'Stretch\t0\nWalk\t1');
   assert.deepEqual(sent, { doses: ['m1@1794470400000', 'm2@1794513600000'], habits: ['h1', 'h2'] });
   assert.equal(logic.todayToMessage({ ...today, stress: null }).message.Stress, -1);
+});
+
+test('with water turned off, the watch is told to hide it and gets no water figures', () => {
+  const B = logic.MODULE_BITS;
+  const off = logic.todayToMessage({ ...today, water: false }).message;
+  assert.equal(off.Modules & B.WATER, 0);
+  assert.equal(off.Modules & B.NUTRITION, B.NUTRITION, 'coffee stays');
+  assert.equal(off.Water, 0);
+  assert.equal(off.WaterGoal, 0);
+  // Turned back on, it all returns.
+  const on = logic.todayToMessage({ ...today, water: true }).message;
+  assert.equal(on.Modules & B.WATER, B.WATER);
+  assert.equal(on.Water, 1250);
+  assert.equal(on.WaterGoal, 2000);
+  // A feature called WATER from the server never sets the bit by itself.
+  assert.equal(logic.todayToMessage({ ...today, water: false, modules: ['WATER', 'NUTRITION'] }).message.Modules, B.NUTRITION);
+  // Each bit is its own.
+  const bits = Object.values(B);
+  assert.equal(new Set(bits).size, bits.length);
+});
+
+test('the watch and the phone agree on feature bits and message keys', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '..');
+  const header = fs.readFileSync(path.join(root, 'src/c/app.h'), 'utf8');
+  const defined = {};
+  header.replace(/#define MODULE_([A-Z_]+) (\d+)/g, (_, name, value) => { defined[name] = Number(value); });
+  assert.deepEqual(defined, logic.MODULE_BITS);
+  // Every key the C code reads or the phone sends is declared in package.json.
+  const keys = new Set(require(path.join(root, 'package.json')).pebble.messageKeys);
+  const c = fs.readdirSync(path.join(root, 'src/c')).map((f) => fs.readFileSync(path.join(root, 'src/c', f), 'utf8')).join('\n');
+  for (const [, key] of c.matchAll(/MESSAGE_KEY_(\w+)/g)) assert.ok(keys.has(key), key);
+  for (const key of Object.keys(logic.todayToMessage(today).message)) assert.ok(keys.has(key), key);
 });
 
 test('long lists are cut to what the watch can hold', () => {

@@ -199,6 +199,8 @@ class AiService(private val services: Services) {
             everyone = false,
             canLog = ready.settings.allowLogging && ready.consent.allowLogging,
             scope = modules.filter { it.sensitive }.toSet(),
+            // Water turned off: log_water isn't offered, and the day and trends leave water out.
+            water = services.days.showsWater(user.id),
         )
         val available = AiTools.allowed(mcp.assistantTools(caller), modules)
         val tools = available.map(AiTools::definition)
@@ -307,13 +309,13 @@ class AiService(private val services: Services) {
         when (name) {
             AiTools.DAY -> {
                 val summary = services.days.summary(user.id, (own["date"] as? JsonPrimitive)?.contentOrNull ?: "today")
-                mcp.formatDay(SharedView.limit(summary, modules), services.profiles.get(user.id).units, caller.scope)
+                mcp.formatDay(SharedView.limit(summary, modules), services.profiles.get(user.id).units, caller.scope, caller.water)
             }
             AiTools.TRENDS -> {
                 val zone = services.profiles.days(user.id)
                 val to = (own["to"] as? JsonPrimitive)?.contentOrNull?.let { zone.parse(it, services.clock()) }
                 val days = (own["days"] as? JsonPrimitive)?.intOrNull?.coerceIn(1, 365) ?: 30
-                mcp.trendsTable(services.days.trends(user.id, null, to, days).days.map { SharedView.limit(it, modules) }, caller.scope)
+                mcp.trendsTable(services.days.trends(user.id, null, to, days).days.map { SharedView.limit(it, modules) }, caller.scope, caller.water)
             }
             AiTools.READINGS -> {
                 val metric = (own["metric"] as? JsonPrimitive)?.contentOrNull?.uppercase()?.let { runCatching { Metric.valueOf(it) }.getOrNull() }

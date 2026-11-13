@@ -244,6 +244,11 @@ data class WatchToday(
     val doses: List<WatchDose> = emptyList(),
     val habits: List<WatchHabit> = emptyList(),
     val stress: StressState? = null,
+    /**
+     * Whether the person keeps track of water ([Fields.NUTRITION_WATER]). Off, [waterMl] and
+     * [waterGoal] are 0, and the watch offers no water tap and shows no water progress.
+     */
+    val water: Boolean = true,
 )
 
 @Serializable

@@ -32,7 +32,7 @@ static uint16_t build_items(void) {
   s_items[n++] = ITEM_TODAY;
   if (has(MODULE_MIND)) s_items[n++] = ITEM_MOOD;
   if (has(MODULE_NUTRITION)) {
-    s_items[n++] = ITEM_WATER;
+    if (has(MODULE_WATER)) s_items[n++] = ITEM_WATER;
     s_items[n++] = ITEM_COFFEE;
   }
   if (has(MODULE_CONTINENCE)) s_items[n++] = ITEM_BLADDER;
