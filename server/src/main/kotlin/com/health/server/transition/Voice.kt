@@ -75,7 +75,7 @@ class VoiceTrainer(
                         body = if (gently) "Take it gently today: a short warm-up is plenty."
                         else "About ${plural(plan.dailyMinutes, "minute")}." + (next?.let { " Next up: ${it.title}." } ?: ""),
                         privateTitle = PRIVATE_TITLE, privateBody = PRIVATE_BODY,
-                        url = "/transition", actions = listOf(ReminderAction("open", "Open")),
+                        url = "/transition/voice", actions = listOf(ReminderAction("open", "Open")),
                         data = buildJsonObject { put("minutes", plan.dailyMinutes) },
                         detailedData = buildJsonObject { put("minutes", plan.dailyMinutes); next?.let { put("lesson", it.title) } },
                     )
