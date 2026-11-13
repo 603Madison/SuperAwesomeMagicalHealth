@@ -105,6 +105,9 @@ class Services(
     /** How each person arranges the apps' screens. */
     val layouts = com.health.server.platform.LayoutService(userSettings)
 
+    /** Which device to use for a reading, where the person would rather not combine them. */
+    val deviceChoices = com.health.server.health.DeviceChoicesService(userSettings, records, days).also { c -> days.choices = { userId -> c.get(userId) } }
+
     // Autism & ADHD, transition and progress photos (neuro/, transition/, photos/).
     val neuro = com.health.server.neuro.NeuroService(entries, userSettings, profiles, days, modules.cycle, clock)
     val transition = com.health.server.transition.TransitionService(entries, userSettings, profiles, hormones, records, clock)

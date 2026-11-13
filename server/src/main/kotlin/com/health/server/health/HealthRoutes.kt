@@ -1,6 +1,7 @@
 package com.health.server.health
 
 import com.health.api.CheckIn
+import com.health.api.DeviceChoices
 import com.health.api.FitImportResult
 import com.health.api.IngestBatch
 import com.health.api.MeasurementInput
@@ -171,13 +172,27 @@ fun Route.deviceRoutes(services: Services) {
             val user = call.requireUser(services)
             call.respond(services.devices.list(user.id))
         }
+        // Which device to use for a reading (none: combine them). Never shared (see SharedView).
+        get("/choices") {
+            val user = call.requireUser(services)
+            call.respond(services.deviceChoices.get(user.id))
+        }
+        put("/choices") {
+            val user = call.requireUser(services)
+            call.respond(services.deviceChoices.put(user.id, call.receive<DeviceChoices>()))
+        }
         patch("/{id}") {
             val user = call.requireUser(services)
-            call.respond(services.devices.rename(user.id, call.parameters["id"].orEmpty(), call.receive<DeviceRename>().name))
+            val renamed = services.devices.rename(user.id, call.parameters["id"].orEmpty(), call.receive<DeviceRename>().name)
+            // Days name the devices behind their combined numbers (and a name can say it's a ring): work them out again.
+            services.days.changedAll(user.id)
+            call.respond(renamed)
         }
         delete("/{id}") {
             val user = call.requireUser(services)
-            services.devices.delete(user.id, call.parameters["id"].orEmpty())
+            val id = call.parameters["id"].orEmpty()
+            services.devices.delete(user.id, id)
+            services.deviceChoices.deviceDeleted(user.id, id)
             services.ingest.deviceDeleted(user.id)
             call.respond(mapOf("ok" to true))
         }

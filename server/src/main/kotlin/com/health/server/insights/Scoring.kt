@@ -174,9 +174,14 @@ object Scoring {
         return combine(parts)
     }
 
-    /** Today's temperature against the person's usual: the device's own figure, or skin temperature against the last month. */
+    /**
+     * Today's temperature against the person's usual: the device's own figure; where more than one
+     * device measured skin temperature, each against its own usual (see [Combine]); otherwise skin
+     * temperature against the last month.
+     */
     fun temperatureDeviation(today: DayStats, recent30: List<DayStats>): Double? {
         today.tempDeviation?.let { return it }
+        today.skinDeviation?.let { return it }
         val skin = today.skinTemp ?: return null
         val base = median(recent30.mapNotNull { it.skinTemp })?.takeIf { recent30.count { it.skinTemp != null } >= 5 } ?: return null
         return skin - base

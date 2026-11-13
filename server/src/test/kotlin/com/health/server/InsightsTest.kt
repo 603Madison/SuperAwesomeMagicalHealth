@@ -137,16 +137,22 @@ class InsightsTest {
     }
 
     @Test
-    fun `steps come from one device a day, so a phone and a ring don't both count`() = runBlocking {
+    fun `steps come from the device that counted most each quarter hour, so a phone and a ring don't both count`() = runBlocking {
         val s = services()
         val user = s.users.byUsername("admin")!!
         s.ingest.ingest(user.id, ringBatch())
         val date = LocalDate.of(2026, 3, 9)
-        val phone = IngestBatch(DeviceInfo(DeviceKind.PHONE, "pixel", "Pixel"), listOf(Sample(Metric.STEPS, at(date, 12), at(date, 13), 3000.0)))
+        // The ring counted 1,000 from noon to 1; the phone, carried on the same walk, 500: still 9,000.
+        val phone = IngestBatch(DeviceInfo(DeviceKind.PHONE, "pixel", "Pixel"), listOf(Sample(Metric.STEPS, at(date, 12), at(date, 13), 500.0)))
         s.ingest.ingest(user.id, phone)
         assertEquals(9000, s.days.summary(user.id, "2026-03-09").steps)
-        s.ingest.ingest(user.id, phone.copy(samples = listOf(Sample(Metric.STEPS, at(date, 12), at(date, 13), 12000.0))))
-        assertEquals(12000, s.days.summary(user.id, "2026-03-09").steps)
+        // The phone counted 3,000 in that hour: that hour is the phone's, the rest of the day the ring's.
+        s.ingest.ingest(user.id, phone.copy(samples = listOf(Sample(Metric.STEPS, at(date, 12), at(date, 13), 3000.0))))
+        val day = s.days.summary(user.id, "2026-03-09")
+        assertEquals(9000 - 1000 + 3000, day.steps)
+        assertEquals(3000, day.hourlySteps[12])
+        assertEquals(1000, day.hourlySteps[11])
+        assertEquals(2, day.combined.single { it.metric == Metric.STEPS }.sources.size)
     }
 
     @Test

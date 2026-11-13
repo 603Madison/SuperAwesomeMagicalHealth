@@ -14,6 +14,7 @@ import com.health.server.ApiError
 import com.health.server.db.Database
 import com.health.server.db.Row
 import com.health.server.db.Tx
+import com.health.server.insights.DeviceRef
 import com.health.server.util.Random
 import kotlinx.serialization.builtins.ListSerializer
 
@@ -80,6 +81,13 @@ class DeviceStore(private val db: Database, private val clock: () -> Long = Syst
 
 /** Readings, nights and workouts. */
 class Records(private val db: Database, private val clock: () -> Long = System::currentTimeMillis) {
+    /** Each of the person's devices, by id: its name and kind, for combining their readings. */
+    suspend fun deviceRefs(userId: String): Map<String, DeviceRef> = db.tx {
+        query("SELECT id, name, kind FROM devices WHERE user_id = ?", userId) { row ->
+            DeviceRef(row.string("id"), row.string("name"), runCatching { DeviceKind.valueOf(row.string("kind")) }.getOrNull())
+        }
+    }.associateBy { it.id }
+
     // ---- Samples ----
 
     fun putSamples(tx: Tx, userId: String, deviceId: String, samples: List<Sample>): Int = tx.batch(

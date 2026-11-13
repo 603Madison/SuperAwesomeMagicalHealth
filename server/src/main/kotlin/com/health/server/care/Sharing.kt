@@ -258,6 +258,8 @@ object SharedView {
             insights = d.insights.filter { visible(it, modules) },
             hourlySteps = if (activity) d.hourlySteps else emptyList(),
             heartRate = if (activity) d.heartRate else emptyList(),
+            // Each combined reading with the feature it belongs to (the night's goes with the sleep summary).
+            combined = d.combined.filter { on(moduleOf(it.metric)) },
             modules = ModulesToday(
                 mind = m.mind.takeIf { on(Module.MIND) },
                 cycle = m.cycle.takeIf { on(Module.CYCLE) },
