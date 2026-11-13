@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
 import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.PhoneIphone
 import androidx.compose.material3.FilledTonalButton
@@ -37,7 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
-import com.health.api.Module
+import com.health.api.Fields
 import com.health.app.data.DeviceChoices
 import com.health.app.devices.healthconnect.ExportKind
 import com.health.app.net.fitExport
@@ -47,9 +46,8 @@ import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.LabeledSwitch
-import com.health.app.ui.components.SectionCard
+import com.health.app.ui.components.showsField
 import com.health.app.ui.components.appContainer
-import com.health.app.ui.modules.NavRow
 import com.health.app.ui.modules.photos.PhotoUnlock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,7 +63,12 @@ data class ExportState(
     val allowed: Set<ExportKind> = emptySet(),
     val note: String? = null,
     val busy: String? = null,
-)
+    /** Whether water is shown: hidden, water and drinks aren't offered (or written). */
+    val water: Boolean = true,
+) {
+    /** The kinds offered: all of them, less water and drinks while water is hidden. */
+    val kinds: List<ExportKind> get() = ExportKind.entries.filter { water || it != ExportKind.HYDRATION }
+}
 
 class ExportActions(
     val back: () -> Unit = {},
@@ -131,7 +134,7 @@ fun ExportRoute(onBack: () -> Unit, onOpen: (String) -> Unit) {
     }
     val chosen = chosenNames.mapNotNull { n -> ExportKind.entries.firstOrNull { it.name == n } }.toSet()
     ExportScreen(
-        ExportState(available, chosen, ExportKind.entries.filter { it.permission in granted }.toSet(), note, busy),
+        ExportState(available, chosen, ExportKind.entries.filter { it.permission in granted }.toSet(), note, busy, water = showsField(Fields.NUTRITION_WATER)),
         ExportActions(
             back = onBack,
             toggle = { kind, on ->
@@ -178,7 +181,7 @@ fun ExportScreen(state: ExportState, actions: ExportActions, today: LocalDate) {
                 if (!state.available) {
                     Hint("Health Connect isn't on this phone. It's built into Android 14 and later, and available from the app store before that.", Modifier.padding(top = 8.dp))
                 } else {
-                    ExportKind.entries.forEach { kind ->
+                    state.kinds.forEach { kind ->
                         val on = kind in state.chosen
                         LabeledSwitch(
                             kind.label, on, { actions.toggle(kind, it) },
@@ -192,7 +195,7 @@ fun ExportScreen(state: ExportState, actions: ExportActions, today: LocalDate) {
                         Modifier.padding(top = 8.dp),
                     )
                     state.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
-                    if (state.chosen.isNotEmpty()) {
+                    if (state.chosen.any { it in state.kinds }) {
                         FilledTonalButton(enabled = state.busy == null, onClick = actions.writeNow, modifier = Modifier.padding(top = 8.dp)) {
                             Text(if (state.busy == "write") "Writing…" else "Write now")
                         }
@@ -228,37 +231,38 @@ fun ExportScreen(state: ExportState, actions: ExportActions, today: LocalDate) {
     }
 }
 
-/**
- * Settings' wave-3 rows: export to other apps, calm mode, and the photo lock. Phone-only choices
- * are read straight from [DeviceChoices], so this draws anywhere.
- */
+/** Calm mode, for Settings › Appearance. A phone-only choice, read straight from [DeviceChoices], so this draws anywhere. */
 @Composable
-fun MoreChoices(modules: Set<Module>, onOpen: (String) -> Unit) {
+fun CalmModeSwitch(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val choices = remember { DeviceChoices.of(context) }
     val calm by choices.calm.collectAsState()
+    LabeledSwitch(
+        "Calm mode", calm, choices::setCalm, modifier,
+        subtitle = "Less motion, no glow behind the pages, and softer colours. On this phone only.",
+    )
+}
+
+/** The photo lock, under progress photos in Settings › Features. On this phone only. */
+@Composable
+fun PhotoLockSwitch(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val choices = remember { DeviceChoices.of(context) }
     val lock by choices.photoLock.collectAsState()
     var lockProblem by remember { mutableStateOf<String?>(null) }
-    SectionCard("Export and privacy") {
-        NavRow(Icons.Rounded.FileUpload, "Export to other apps", "Health Connect (Samsung Health, MyFitnessPal…), FIT files, CSV and FHIR", onClick = { onOpen("settings/export") })
+    Column(modifier) {
         LabeledSwitch(
-            "Calm mode", calm, choices::setCalm,
-            subtitle = "Less motion, no glow behind the pages, and softer colours. On this phone only.",
+            "Lock progress photos", lock,
+            { on ->
+                if (on && !PhotoUnlock.available(context)) {
+                    lockProblem = "Set a screen lock (a PIN, pattern, fingerprint or face) on this phone first."
+                } else {
+                    lockProblem = null
+                    choices.setPhotoLock(on)
+                }
+            },
+            subtitle = "Ask for your fingerprint, face or screen lock first. On this phone only.",
         )
-        if (Module.PHOTOS in modules) {
-            LabeledSwitch(
-                "Lock progress photos", lock,
-                { on ->
-                    if (on && !PhotoUnlock.available(context)) {
-                        lockProblem = "Set a screen lock (a PIN, pattern, fingerprint or face) on this phone first."
-                    } else {
-                        lockProblem = null
-                        choices.setPhotoLock(on)
-                    }
-                },
-                subtitle = "Ask for your fingerprint, face or screen lock before photos show. On this phone only.",
-            )
-            lockProblem?.let { Hint(it) }
-        }
+        lockProblem?.let { Hint(it, Modifier.padding(top = 4.dp)) }
     }
 }
