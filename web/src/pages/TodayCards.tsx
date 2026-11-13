@@ -206,7 +206,7 @@ const STATE_COLOR: Record<StressState, string> = {
 const STATE_TEXT: Record<StressState, string> = { STRESSED: "Stressed", ENGAGED: "Engaged", RELAXED: "Relaxed", RESTORED: "Restored" };
 
 /** The day while awake: stressed and restored minutes, the day as a strip, and resilience. */
-export function StressCard({ stress, resilience, className = "" }: { stress?: StressDay; resilience?: Resilience; className?: string }) {
+export function StressCard({ stress, resilience, className = "", sources }: { stress?: StressDay; resilience?: Resilience; className?: string; sources?: React.ReactNode }) {
   if (!stress && !resilience) return null;
   const spans = stress?.spans ?? [];
   const from = spans.length ? Math.min(...spans.map((s) => s.start)) : 0;
@@ -252,6 +252,7 @@ export function StressCard({ stress, resilience, className = "" }: { stress?: St
           </ul>
         </div>
       )}
+      {sources}
     </Card>
   );
 }

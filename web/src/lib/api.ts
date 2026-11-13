@@ -11,7 +11,7 @@ import type {
   Supply, SupplyStatus, SupplyAdjustment, CycleSettings, NeuroProfile, OverloadEvent, EnergyDay, NeuroCheckIn, FocusSession,
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
-  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout,
+  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -37,6 +37,9 @@ const SHARED_PATHS = [
   "/api/fields",
 ];
 
+/** The person's own settings, never someone's share: no X-SAMH-View, and no changes while viewing one. */
+const OWN_PATHS = ["/api/devices/choices"];
+
 /** Where a photo's picture is, for an <img> (the session cookie goes with it). */
 export const photoUrl = (id: string, thumb = false) => `/api/photos/${encodeURIComponent(id)}/${thumb ? "thumb" : "image"}`;
 
@@ -57,6 +60,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (method !== "GET") headers["X-SAMH"] = "1";
   // Viewing someone's shared data: reads of their data say whose, and nothing of theirs can change.
   const owner = viewingOwner();
+  if (owner && method !== "GET" && OWN_PATHS.some((p) => path.startsWith(p))) {
+    throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
+  }
   if (owner && SHARED_PATHS.some((p) => path.startsWith(p))) {
     if (method !== "GET") throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
     headers["X-SAMH-View"] = owner;
@@ -168,6 +174,9 @@ export const api = {
   devices: () => get<Device[]>("/api/devices"),
   renameDevice: (id: string, name: string) => patch<Device>(`/api/devices/${q(id)}`, { name }),
   deleteDevice: (id: string) => del<unknown>(`/api/devices/${q(id)}`),
+  // Devices that measure the same thing: one device for a reading, or all combined (always the person's own)
+  deviceChoices: () => get<DeviceChoices>("/api/devices/choices"),
+  saveDeviceChoices: (c: DeviceChoices) => put<DeviceChoices>("/api/devices/choices", c),
   uploadKey: (name: string) => post<{ id: string; name: string; token: string; url: string }>("/api/devices/upload-keys", { name }),
   importFit: (files: File[]) => {
     const form = new FormData();
@@ -372,6 +381,11 @@ export const api = {
   voiceSessions: (days = 180) => get<VoiceSession[]>(`/api/transition/voice?days=${days}`),
   addVoiceSession: (v: VoiceSession) => post<VoiceSession>("/api/transition/voice", v),
   deleteVoiceSession: (id: string) => del<unknown>(`/api/transition/voice/${q(id)}`),
+  // The voice trainer: the sound stays in the browser; only the numbers are saved
+  voiceProgram: () => get<VoiceProgram>("/api/transition/voice/program"),
+  voicePlan: () => get<VoicePlan>("/api/transition/voice/plan"),
+  saveVoicePlan: (p: VoicePlan) => put<VoicePlan>("/api/transition/voice/plan", p),
+  voiceProgress: () => get<VoiceProgress>("/api/transition/voice/progress"),
   hairRemoval: (days = 365) => get<HairRemovalSession[]>(`/api/transition/hair-removal?days=${days}`),
   addHairRemoval: (h: HairRemovalSession) => post<HairRemovalSession>("/api/transition/hair-removal", h),
   deleteHairRemoval: (id: string) => del<unknown>(`/api/transition/hair-removal/${q(id)}`),
