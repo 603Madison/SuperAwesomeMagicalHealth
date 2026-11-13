@@ -5,6 +5,7 @@ import com.health.api.Insight
 import com.health.api.Metric
 import com.health.api.Module
 import com.health.api.ModulesToday
+import com.health.api.NeuroToday
 import com.health.api.Profile
 import com.health.api.SessionKind
 import com.health.api.Share
@@ -268,7 +269,8 @@ object SharedView {
                 hormones = m.hormones.takeIf { on(Module.HORMONES) },
                 lifeStage = m.lifeStage.takeIf { on(Module.CYCLE) },
                 appointments = m.appointments.takeIf { on(Module.APPOINTMENTS) },
-                neuro = m.neuro.takeIf { on(Module.NEURO) },
+                // Energy days are also Mind's energy budget, so Mind alone shows just the energy.
+                neuro = if (on(Module.NEURO)) m.neuro else m.neuro?.takeIf { on(Module.MIND) }?.let { NeuroToday(energyLeft = it.energyLeft, socialBattery = it.socialBattery) },
                 transition = m.transition.takeIf { on(Module.TRANSITION) },
                 lowSupplies = m.lowSupplies?.filter { s ->
                     if (s.supply.kind.category == com.health.api.SupplyCategory.PERIOD) on(Module.CYCLE) else on(Module.CONTINENCE)

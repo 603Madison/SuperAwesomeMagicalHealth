@@ -130,6 +130,14 @@ class NeuroTransitionPhotosTest {
         // Turned off, it leaves Today.
         s.profiles.put(s.admin(), s.profiles.get(s.admin()).copy(modules = Module.DEFAULT))
         assertNull(s.days.summary(s.admin(), "2026-03-20").modules.neuro)
+
+        // With Mind on but not Autism & ADHD, the energy budget (Mind's too) still shows, and nothing else.
+        s.profiles.put(s.admin(), s.profiles.get(s.admin()).copy(modules = Module.DEFAULT + Module.MIND))
+        val mindOnly = s.days.summary(s.admin(), "2026-03-20").modules.neuro!!
+        assertEquals(5, mindOnly.energyLeft)
+        assertEquals(3, mindOnly.socialBattery)
+        assertEquals(0, mindOnly.overloadsToday)
+        assertTrue(mindOnly.routinesDue.isEmpty())
     }
 
     @Test

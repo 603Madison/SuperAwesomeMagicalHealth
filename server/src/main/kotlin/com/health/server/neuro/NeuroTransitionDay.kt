@@ -3,6 +3,7 @@ package com.health.server.neuro
 import com.health.api.Insight
 import com.health.api.Module
 import com.health.api.ModulesToday
+import com.health.api.NeuroToday
 import com.health.api.Profile
 import com.health.server.insights.DayExtras
 import com.health.server.insights.DayExtrasResult
@@ -20,6 +21,11 @@ class NeuroTransitionDay(private val neuro: NeuroService, private val transition
             val (today, extra) = neuro.today(userId, profile, date)
             modules = modules.copy(neuro = today)
             insights += extra
+        } else if (Module.MIND in on) {
+            // Mind's energy budget (Fields.MIND_ENERGY_BUDGET) keeps the same days: just the energy.
+            neuro.energyOn(userId, date)?.let { e ->
+                modules = modules.copy(neuro = NeuroToday(energyLeft = e.startWith?.let { s -> s - e.spends.sumOf { it.amount } }, socialBattery = e.socialBattery))
+            }
         }
         if (Module.TRANSITION in on) {
             val (today, extra) = transition.today(userId, date)
