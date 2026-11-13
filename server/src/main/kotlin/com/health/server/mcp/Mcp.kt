@@ -108,6 +108,7 @@ fun Route.mcpRoutes(services: Services) {
             canLog = session.kind == SessionKind.MCP_WRITE,
             // An every-account link never reads the sensitive modules.
             scope = if (session.kind == SessionKind.MCP_ALL) emptySet() else session.scope.filter { it.sensitive }.toSet(),
+            water = services.days.showsWater(user.id),
         )
         val body = runCatching { ApiJson.parseToJsonElement(receiveText()) }.getOrNull()
             ?: return respondJson(McpServer.error(JsonNull, -32700, "That isn't JSON"))
@@ -147,8 +148,11 @@ private suspend fun ApplicationCall.respondJson(element: JsonElement) {
 
 /** The protocol: initialize, ping, and the tools. */
 class McpServer(private val services: Services) {
-    /** Who's asking: the link's account, whether it sees every account, and whether it may log entries. */
-    class Caller(val user: User, val everyone: Boolean, val canLog: Boolean, val scope: Set<Module> = emptySet())
+    /**
+     * Who's asking: the link's account, whether it sees every account, whether it may log entries,
+     * and whether the account keeps track of water (off, water isn't offered).
+     */
+    class Caller(val user: User, val everyone: Boolean, val canLog: Boolean, val scope: Set<Module> = emptySet(), val water: Boolean = true)
 
     private class Tool(
         val name: String,
@@ -158,6 +162,8 @@ class McpServer(private val services: Services) {
         val writes: Boolean = false,
         /** A sensitive module the link must have been given. */
         val module: Module? = null,
+        /** Only for someone who keeps track of water ([com.health.api.Fields.NUTRITION_WATER]). */
+        val water: Boolean = false,
         val run: suspend (Caller, JsonObject) -> String,
     )
 
@@ -186,7 +192,10 @@ class McpServer(private val services: Services) {
         }
     }
 
-    private fun toolsFor(caller: Caller) = tools.filter { (!it.writes || caller.canLog) && (it.module == null || it.module in caller.scope) }
+    private fun toolsFor(caller: Caller) = tools.filter { (!it.writes || caller.canLog) && (it.module == null || it.module in caller.scope) && (!it.water || caller.water) }
+
+    /** Whether [user] keeps track of water: the caller's own answer, or asked for another account. */
+    private suspend fun waterOf(caller: Caller, user: User) = if (user.id == caller.user.id) caller.water else services.days.showsWater(user.id)
 
     // ---- The in-app assistant (ai/) uses these tools too, through its own allowlist (ai/AiTools.kt) ----
 
@@ -218,7 +227,7 @@ class McpServer(private val services: Services) {
                 "instructions",
                 "A self-hosted health server (SuperAwesomeMagicalHealth): wearables (Colmi rings, Pebble, Garmin, " +
                     "anything in Health Connect or Gadgetbridge) send heart rate, HRV, sleep, steps and workouts through a phone " +
-                    "app, and people log food, water, weight and check-ins. It works out Oura-style readiness, sleep and activity " +
+                    "app, and people log food, ${if (caller.water) "water, " else ""}weight and check-ins. It works out Oura-style readiness, sleep and activity " +
                     "scores against each person's own baseline. Start with status (what's connected, what's missing), then day " +
                     "for a day in full, trends for weeks and months, and sleep, workouts and food_log for detail. For device " +
                     "troubleshooting use devices and sync_check (gaps, duplicates, stale syncs) and readings for raw data" +
@@ -239,6 +248,8 @@ class McpServer(private val services: Services) {
                 when {
                     tools.any { it.name == name && it.module != null && it.module !in caller.scope } ->
                         "This link wasn't given ${tools.first { it.name == name }.module!!.label}; make one that includes it in Settings"
+                    tools.any { it.name == name && it.water } && !caller.water ->
+                        "This person has turned water off, so there's no water to log. They can turn it back on in Food's settings"
                     tools.any { it.name == name } -> "This link can only read; make one that may log entries in Settings"
                     else -> "No tool named $name"
                 },
@@ -298,19 +309,25 @@ class McpServer(private val services: Services) {
             schema(dateProperty, account),
         ) { caller, args ->
             val user = accountOf(caller, args)
-            formatDay(services.days.summary(user.id, args.string("date") ?: "today"), services.profiles.get(user.id).units, caller.scope.takeIf { user.id == caller.user.id }.orEmpty())
+            formatDay(
+                services.days.summary(user.id, args.string("date") ?: "today"), services.profiles.get(user.id).units,
+                caller.scope.takeIf { user.id == caller.user.id }.orEmpty(), waterOf(caller, user),
+            )
         },
         Tool(
             "trends", "Trends",
             "A row per day (tab-separated): scores, steps, active calories, resting heart rate, HRV, sleep (total, deep, REM), " +
-                "SpO2, temperature deviation, weight, food (calories, protein, carbs, fat), water, workouts. Good for spotting " +
-                "patterns over weeks and months.",
+                "SpO2, temperature deviation, weight, food (calories, protein, carbs, fat), water (where it's tracked), workouts. " +
+                "Good for spotting patterns over weeks and months.",
             schema(daysProperty(30, 365), "to" to stringProperty("The last day (default today)"), account),
         ) { caller, args ->
             val user = accountOf(caller, args)
             val days = services.profiles.days(user.id)
             val to = args.string("to")?.let { days.parse(it, services.clock()) }
-            trendsTable(services.days.trends(user.id, null, to, args.int("days")?.coerceIn(1, 365) ?: 30).days, caller.scope.takeIf { user.id == caller.user.id }.orEmpty())
+            trendsTable(
+                services.days.trends(user.id, null, to, args.int("days")?.coerceIn(1, 365) ?: 30).days,
+                caller.scope.takeIf { user.id == caller.user.id }.orEmpty(), waterOf(caller, user),
+            )
         },
         Tool(
             "sleep", "Sleep",
@@ -325,7 +342,7 @@ class McpServer(private val services: Services) {
         ) { caller, args -> workouts(accountOf(caller, args), args.int("days")?.coerceIn(1, 3650) ?: 30) },
         Tool(
             "food_log", "Food log",
-            "What was eaten each day, by meal, with calories and protein, carbs and fat, totals against the day's target, and water.",
+            "What was eaten each day, by meal, with calories and protein, carbs and fat, totals against the day's target, and water (where it's tracked).",
             schema(dateProperty, "days" to intProperty("Several days ending on date (default 1, at most 31)"), account),
         ) { caller, args -> foodLog(accountOf(caller, args), args.string("date") ?: "today", args.int("days")?.coerceIn(1, 31) ?: 1) },
         Tool(
@@ -453,7 +470,7 @@ class McpServer(private val services: Services) {
         Tool(
             "drinks", "Drinks",
             "Drinks by day: caffeine (mg, and when the last was), alcohol (standard drinks of 14 g), other drinks (which count " +
-                "towards water); averages, and how caffeine and alcohol went with sleep and HRV.",
+                "towards water, where it's tracked); averages, and how caffeine and alcohol went with sleep and HRV.",
             schema(daysProperty(14, 365), account),
         ) { caller, args -> drinksText(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 14) },
         Tool(
@@ -500,6 +517,7 @@ class McpServer(private val services: Services) {
             "Logs water drunk, in millilitres.",
             schema("ml" to intProperty("Millilitres (a glass is about 250)"), dateProperty, required = listOf("ml")),
             writes = true,
+            water = true,
         ) { caller, args ->
             val user = caller.user
             val date = services.profiles.days(user.id).parse(args.string("date") ?: "today", services.clock())
@@ -755,6 +773,7 @@ class McpServer(private val services: Services) {
         ) { caller, args ->
             val user = caller.user
             val kind = args.string("kind")?.uppercase()?.let { runCatching { DrinkKind.valueOf(it) }.getOrNull() } ?: error("Which kind of drink?")
+            if (kind == DrinkKind.WATER && !caller.water) error("This person has turned water off, so water isn't logged. Coffee, tea, alcohol and the rest still are.")
             val ml = args.int("ml") ?: kind.defaultMl
             val saved = services.tracking.drinks.save(
                 user.id,
@@ -1060,7 +1079,8 @@ class McpServer(private val services: Services) {
         appendLine("Nights recorded in the last 7 days: ${sleep.size}. Workouts: ${workouts.size}.")
     }
 
-    internal fun formatDay(d: DaySummary, units: Units, scope: Set<Module>): String = buildString {
+    /** A day as text; without [water], nothing about water or how much was drunk. */
+    internal fun formatDay(d: DaySummary, units: Units, scope: Set<Module>, water: Boolean = true): String = buildString {
         appendLine("${d.date}${if (!d.hasData) " (nothing recorded)" else ""}")
         fun score(name: String, s: Score?) {
             if (s == null) {
@@ -1088,7 +1108,10 @@ class McpServer(private val services: Services) {
         d.workouts.forEach { appendLine("Workout: ${workoutText(it, units)}") }
         val n = d.nutrition
         d.nutritionTarget?.let { t ->
-            appendLine("Food: %d of %d kcal; protein %d/%d g, carbs %d/%d g, fat %d/%d g; water %d/%d ml".format(n.calories.roundToInt(), t.calories, n.protein.roundToInt(), t.protein, n.carbs.roundToInt(), t.carbs, n.fat.roundToInt(), t.fat, d.waterMl, t.waterMl))
+            appendLine(
+                "Food: %d of %d kcal; protein %d/%d g, carbs %d/%d g, fat %d/%d g".format(n.calories.roundToInt(), t.calories, n.protein.roundToInt(), t.protein, n.carbs.roundToInt(), t.carbs, n.fat.roundToInt(), t.fat) +
+                    if (water) "; water %d/%d ml".format(d.waterMl, t.waterMl) else "",
+            )
             appendLine("  Target: ${t.basis}")
         }
         d.weightKg?.let { appendLine("Weight: ${weight(it, units)}${d.bodyFat?.let { f -> ", body fat %.1f%%".format(f) } ?: ""}") }
@@ -1112,7 +1135,7 @@ class McpServer(private val services: Services) {
             )
             if (parts.isNotEmpty()) appendLine("Vitals: ${parts.joinToString(", ")}")
         }
-        d.drinks?.let { dr -> appendLine("Drinks: caffeine ${dr.caffeineMg.roundToInt()} mg${dr.caffeineAtBedtimeMg?.let { b -> " (about ${b.roundToInt()} mg left at bedtime)" } ?: ""}, ${DrinksService.drinksText(dr.standardDrinks)} of alcohol, ${dr.fluidMl} ml other drinks") }
+        d.drinks?.let { dr -> appendLine("Drinks: caffeine ${dr.caffeineMg.roundToInt()} mg${dr.caffeineAtBedtimeMg?.let { b -> " (about ${b.roundToInt()} mg left at bedtime)" } ?: ""}, ${DrinksService.drinksText(dr.standardDrinks)} of alcohol${if (water) ", ${dr.fluidMl} ml other drinks" else ""}") }
         d.stressDay?.let { s -> appendLine("Stress: ${s.summary.lowercase()} (stressed ${Scoring.hm(s.stressedMinutes)}, engaged ${Scoring.hm(s.engagedMinutes)}, relaxed ${Scoring.hm(s.relaxedMinutes)}, restored ${Scoring.hm(s.restoredMinutes)})") }
         d.resilience?.let { r -> appendLine("Resilience: ${r.level.label.lowercase()} (${r.trend}); ${r.contributors.joinToString("; ") { "${it.label} ${it.score} (${it.value})" }}") }
         m.habits?.let { list -> appendLine("Habits: ${list.joinToString("; ") { "${it.habit.name} ${if (it.done) "done" else "not yet"}, ${it.weekDone}/${it.habit.timesPerWeek} this week, ${it.streakWeeks}-week streak" }}") }
@@ -1126,7 +1149,8 @@ class McpServer(private val services: Services) {
         }
     }
 
-    internal fun trendsTable(rows: List<com.health.api.TrendDay>, scope: Set<Module>): String = buildString {
+    /** Trend rows as a table; without [water], no water column. */
+    internal fun trendsTable(rows: List<com.health.api.TrendDay>, scope: Set<Module>, water: Boolean = true): String = buildString {
         val extra = buildList {
             if (Module.MIND in scope) addAll(listOf("mood", "anxiety", "calm_min"))
             if (Module.CYCLE in scope) add("flow")
@@ -1145,7 +1169,7 @@ class McpServer(private val services: Services) {
             "symptom_worst" to { r -> r.symptomWorst?.toString().orEmpty() }, "migraine" to { r -> if (r.migraine == true) "yes" else "" },
         ) else emptyList()
         val trackedHeader = tracked.joinToString("") { "\t${it.first}" }
-        appendLine("date\treadiness\tsleep_score\tactivity_score\tsteps\tactive_kcal\tresting_hr\thrv_ms\tsleep_min\tdeep_min\trem_min\tspo2\ttemp_dev\tweight_kg\tkcal_eaten\tprotein_g\tcarbs_g\tfat_g\twater_ml\tworkouts" + extra.joinToString("") { "\t$it" } + trackedHeader)
+        appendLine("date\treadiness\tsleep_score\tactivity_score\tsteps\tactive_kcal\tresting_hr\thrv_ms\tsleep_min\tdeep_min\trem_min\tspo2\ttemp_dev\tweight_kg\tkcal_eaten\tprotein_g\tcarbs_g\tfat_g\t${if (water) "water_ml\t" else ""}workouts" + extra.joinToString("") { "\t$it" } + trackedHeader)
         rows.forEach { r ->
             fun d(v: Double?, digits: Int = 0) = v?.let { if (digits == 0) it.roundToInt().toString() else String.format(Locale.ROOT, "%.${digits}f", it) } ?: ""
             appendLine(
@@ -1153,8 +1177,8 @@ class McpServer(private val services: Services) {
                     r.date, r.readiness?.toString().orEmpty(), r.sleepScore?.toString().orEmpty(), r.activityScore?.toString().orEmpty(),
                     r.steps?.toString().orEmpty(), d(r.activeCalories), d(r.restingHeartRate, 1), d(r.hrv), r.sleepMinutes?.toString().orEmpty(),
                     r.deepMinutes?.toString().orEmpty(), r.remMinutes?.toString().orEmpty(), d(r.spo2, 1), d(r.temperatureDeviation, 2),
-                    d(r.weightKg, 2), d(r.calories), d(r.protein), d(r.carbs), d(r.fat), r.waterMl?.toString().orEmpty(), r.workouts.toString(),
-                ).plus(
+                    d(r.weightKg, 2), d(r.calories), d(r.protein), d(r.carbs), d(r.fat),
+                ).plus(listOfNotNull(r.waterMl?.toString().orEmpty().takeIf { water })).plus(r.workouts.toString()).plus(
                     buildList {
                         if (Module.MIND in scope) addAll(listOf(d(r.mood, 1), d(r.anxiety, 1), d(r.mindfulMinutes)))
                         if (Module.CYCLE in scope) add(r.flow?.name?.lowercase().orEmpty())
@@ -1192,17 +1216,18 @@ class McpServer(private val services: Services) {
     private suspend fun foodLog(user: User, dateText: String, count: Int): String {
         val days = services.profiles.days(user.id)
         val last = days.parse(dateText, services.clock())
+        val water = services.days.showsWater(user.id)
         val parts = mutableListOf<String>()
-        for (back in count - 1 downTo 0) parts += foodDayText(user, last.minusDays(back.toLong()))
+        for (back in count - 1 downTo 0) parts += foodDayText(user, last.minusDays(back.toLong()), water)
         return parts.joinToString("\n\n")
     }
 
-    private suspend fun foodDayText(user: User, date: LocalDate): String = buildString {
+    private suspend fun foodDayText(user: User, date: LocalDate, water: Boolean): String = buildString {
         val day = foodDay(services, user.id, date)
-        appendLine("$date: %d of %d kcal, protein %d/%d g, carbs %d/%d g, fat %d/%d g, water %d/%d ml".format(
+        appendLine("$date: %d of %d kcal, protein %d/%d g, carbs %d/%d g, fat %d/%d g".format(
             day.totals.calories.roundToInt(), day.target.calories, day.totals.protein.roundToInt(), day.target.protein,
-            day.totals.carbs.roundToInt(), day.target.carbs, day.totals.fat.roundToInt(), day.target.fat, day.waterMl, day.target.waterMl,
-        ))
+            day.totals.carbs.roundToInt(), day.target.carbs, day.totals.fat.roundToInt(), day.target.fat,
+        ) + if (water) ", water %d/%d ml".format(day.waterMl, day.target.waterMl) else "")
         day.burned?.let { appendLine("  Burned so far: ${it.roundToInt()} kcal") }
         if (day.entries.isEmpty()) appendLine("  Nothing logged.")
         Meal.entries.forEach { meal ->
@@ -1310,15 +1335,16 @@ class McpServer(private val services: Services) {
         appendLine("Birth year: ${p.birthYear ?: "not set"}; height: ${p.heightCm?.let { "${num(it)} cm" } ?: "not set"}; calorie formula: ${p.energyProfile.label}; units: ${p.units.name.lowercase()}; time zone: ${p.timezone.ifBlank { "not set (server's: ${days.zone})" }}")
         appendLine("Latest weight: ${weight?.let { "${weight(it.value, p.units)} on ${days.dateOf(it.start)}" } ?: "none"}")
         val g = p.goals
-        appendLine("Goals: %,d steps, %d active kcal, %s sleep, %d workouts a week, water %d ml%s%s".format(
-            g.steps, g.activeCalories, Scoring.hm(g.sleepMinutes), g.workoutsPerWeek, g.waterMl,
+        val water = services.days.showsWater(user.id)
+        appendLine("Goals: %,d steps, %d active kcal, %s sleep, %d workouts a week%s%s%s".format(
+            g.steps, g.activeCalories, Scoring.hm(g.sleepMinutes), g.workoutsPerWeek, if (water) ", water ${g.waterMl} ml" else "",
             g.targetWeightKg?.let { ", target weight ${weight(it, p.units)}" } ?: "",
             if (g.weeklyChangeKg != 0.0) ", aiming to ${if (g.weeklyChangeKg < 0) "lose" else "gain"} ${num(kotlin.math.abs(g.weeklyChangeKg))} kg a week" else "",
         ))
         val resting = Energy.restingCalories(p, weight?.value, today)
         appendLine("Resting energy: ${resting?.let { "${it.roundToInt()} kcal a day (Mifflin–St Jeor, ${p.energyProfile.label.lowercase()})" } ?: "unknown (needs birth year, height and a weight)"}")
         val (target, burned) = services.days.nutritionFor(user.id, today)
-        appendLine("Today's targets: ${target.calories} kcal, protein ${target.protein} g, carbs ${target.carbs} g, fat ${target.fat} g, water ${target.waterMl} ml")
+        appendLine("Today's targets: ${target.calories} kcal, protein ${target.protein} g, carbs ${target.carbs} g, fat ${target.fat} g${if (water) ", water ${target.waterMl} ml" else ""}")
         appendLine("How: ${target.basis}")
         burned?.let { appendLine("Burned so far today: ${it.roundToInt()} kcal") }
     }
@@ -1450,8 +1476,10 @@ class McpServer(private val services: Services) {
         appendLine("Over $count days: ${s.averageVoids?.let { "%.1f toilet trips a day".format(it) } ?: "no trips logged"}, ${s.averageNightVoids?.let { "%.1f at night".format(it) } ?: "-"}, ${s.averageLeaks?.let { "%.1f leaks a day".format(it) } ?: "-"}${s.averageInterval?.let { "; longest daytime gap averages ${Scoring.hm(it)}" } ?: ""}.")
         if (s.triggers.isNotEmpty()) appendLine("Leak triggers: ${s.triggers.joinToString { "${it.name} (${it.count})" }}")
         s.patterns.forEach { appendLine("Pattern: ${it.title}. ${it.body}") }
-        appendLine("date\ttrips\tnight\tleaks\tbowel\tpads\tpelvic_floor\tvoided_ml\tfluid_ml\turgent\tbowel_leaks\twet_nights\tproducts\tleaked_through\tcatheters\tloss_g")
-        s.days.forEach { d -> appendLine("${d.date}\t${d.voids}\t${d.nightVoids}\t${d.leaks}\t${d.bowel}\t${d.pads}\t${d.pelvicFloor}\t${d.voidedMl ?: ""}\t${d.fluidMl}\t${d.urgentTrips}\t${d.bowelLeaks}\t${d.wetNights}\t${d.products}\t${d.leakedThrough}\t${d.catheters}\t${d.lossG ?: ""}") }
+        // What was drunk comes from water tracking: no column while it's turned off.
+        val water = services.days.showsWater(user.id)
+        appendLine("date\ttrips\tnight\tleaks\tbowel\tpads\tpelvic_floor\tvoided_ml\t${if (water) "fluid_ml\t" else ""}urgent\tbowel_leaks\twet_nights\tproducts\tleaked_through\tcatheters\tloss_g")
+        s.days.forEach { d -> appendLine("${d.date}\t${d.voids}\t${d.nightVoids}\t${d.leaks}\t${d.bowel}\t${d.pads}\t${d.pelvicFloor}\t${d.voidedMl ?: ""}\t${if (water) "${d.fluidMl}\t" else ""}${d.urgentTrips}\t${d.bowelLeaks}\t${d.wetNights}\t${d.products}\t${d.leakedThrough}\t${d.catheters}\t${d.lossG ?: ""}") }
         val days = services.profiles.days(user.id)
         val entries = c.list(user.id, count).reversed()
         if (entries.isNotEmpty()) {
@@ -1539,11 +1567,13 @@ class McpServer(private val services: Services) {
     private suspend fun drinksText(user: User, count: Int): String = buildString {
         val s = services.tracking.drinks.summary(user.id, count)
         val days = services.profiles.days(user.id)
-        val logged = s.days.filter { it.drinks.isNotEmpty() }
+        // Water turned off: no glasses of water, and nothing about how much was drunk.
+        val water = services.days.showsWater(user.id)
+        val logged = s.days.map { d -> if (water) d else d.copy(drinks = d.drinks.filter { it.kind != DrinkKind.WATER }) }.filter { it.drinks.isNotEmpty() }
         if (logged.isEmpty()) return "No drinks logged in the last $count days."
         appendLine("Averages on days with drinks logged: caffeine ${s.averageCaffeineMg?.roundToInt() ?: 0} mg, alcohol ${s.averageStandardDrinks ?: 0.0} standard drinks (14 g).")
         logged.reversed().forEach { d ->
-            appendLine("- ${d.date}: caffeine ${d.caffeineMg.roundToInt()} mg${d.lastCaffeineAt?.let { " (last at ${formatTime(days, it).substringAfter(' ')})" } ?: ""}, ${DrinksService.drinksText(d.standardDrinks)} of alcohol, ${d.fluidMl} ml other drinks: " +
+            appendLine("- ${d.date}: caffeine ${d.caffeineMg.roundToInt()} mg${d.lastCaffeineAt?.let { " (last at ${formatTime(days, it).substringAfter(' ')})" } ?: ""}, ${DrinksService.drinksText(d.standardDrinks)} of alcohol${if (water) ", ${d.fluidMl} ml other drinks" else ""}: " +
                 d.drinks.joinToString(", ") { "${it.name ?: it.kind.label.lowercase()} ${it.volumeMl} ml" })
         }
         s.patterns.forEach { appendLine("Pattern: ${it.title}: ${it.body}") }

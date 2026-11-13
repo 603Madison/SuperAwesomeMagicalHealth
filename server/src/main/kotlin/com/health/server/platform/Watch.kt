@@ -38,6 +38,8 @@ class WatchService(private val services: Services) {
         val habits = if (Module.HABITS in modules) {
             day.modules.habits.orEmpty().mapNotNull { h -> h.habit.id?.let { WatchHabit(it, h.habit.name, h.done) } }
         } else emptyList()
+        // Water turned off: no water tap and no water progress.
+        val water = services.days.showsWater(userId)
         return WatchToday(
             date = day.date,
             readiness = day.readiness?.score,
@@ -45,12 +47,13 @@ class WatchService(private val services: Services) {
             activity = day.activity?.score,
             steps = day.steps,
             stepGoal = day.goals.steps,
-            waterMl = day.waterMl,
-            waterGoal = day.goals.waterMl,
+            waterMl = if (water) day.waterMl else 0,
+            waterGoal = if (water) day.goals.waterMl else 0,
             modules = modules,
             doses = doses,
             habits = habits,
             stress = day.stressDay?.spans?.lastOrNull()?.state,
+            water = water,
         )
     }
 
@@ -66,6 +69,8 @@ class WatchService(private val services: Services) {
                 m.mind.saveMood(userId, MoodEntry(at = at, mood = mood))
             }
             WatchLogKind.WATER -> {
+                // An older watch app (or a tap queued before water was turned off) may still send one.
+                if (!services.days.showsWater(userId)) throw ApiError.badRequest("Water is turned off. You can turn it on in Food's settings.")
                 val ml = (log.value ?: 250).takeIf { it in 1..3000 } ?: throw ApiError.badRequest("Water is 1 to 3000 ml")
                 val entry = services.foods.addWater(userId, WaterEntry(zone.dateOf(at).toString(), ml, at = at))
                 services.days.changedDate(userId, java.time.LocalDate.parse(entry.date))

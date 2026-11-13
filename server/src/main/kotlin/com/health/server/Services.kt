@@ -128,6 +128,8 @@ class Services(
         modules.plainCycle = { userId ->
             modules.cycle.settings(userId).neutralWording || !conditions.shows(userId, com.health.api.Fields.CYCLE_FERTILITY)
         }
+        // Water can be turned off: insights, habits, drinks, the digest, the report, the watch and the connector leave it out.
+        days.showsWater = { userId -> conditions.shows(userId, com.health.api.Fields.NUTRITION_WATER) }
     }
 
     /** Each feature's part in digests, reports, exports, reminders and appointment questions. */

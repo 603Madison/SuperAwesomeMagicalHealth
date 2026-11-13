@@ -123,20 +123,20 @@ private class OverviewHooks(private val services: Services) : FeatureHooks {
     override suspend fun export(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, List<List<String>>> {
         val zone = zoneOf(profile)
         val rows = services.trendRows(userId, from, to)
+        // The water column only while water is turned on.
+        val water = services.days.showsWater(userId)
         val daily = listOf(
             listOf(
                 "date", "readiness", "sleep_score", "activity_score", "steps", "active_kcal", "resting_hr", "hrv_ms", "sleep_min", "deep_min",
-                "rem_min", "spo2", "temperature_deviation_c", "weight_kg", "body_fat_pct", "kcal_eaten", "protein_g", "carbs_g", "fat_g", "water_ml",
-                "workouts", "workout_min",
-            ),
+                "rem_min", "spo2", "temperature_deviation_c", "weight_kg", "body_fat_pct", "kcal_eaten", "protein_g", "carbs_g", "fat_g",
+            ) + listOfNotNull("water_ml".takeIf { water }) + listOf("workouts", "workout_min"),
         ) + rows.map { d ->
             listOf(
                 d.date, d.readiness?.toString().orEmpty(), d.sleepScore?.toString().orEmpty(), d.activityScore?.toString().orEmpty(), d.steps?.toString().orEmpty(),
                 Csv.num(d.activeCalories, 0), Csv.num(d.restingHeartRate, 1), Csv.num(d.hrv, 1), d.sleepMinutes?.toString().orEmpty(), d.deepMinutes?.toString().orEmpty(),
                 d.remMinutes?.toString().orEmpty(), Csv.num(d.spo2, 1), Csv.num(d.temperatureDeviation, 2), Csv.num(d.weightKg, 2), Csv.num(d.bodyFat, 1),
-                Csv.num(d.calories, 0), Csv.num(d.protein, 1), Csv.num(d.carbs, 1), Csv.num(d.fat, 1), d.waterMl?.toString().orEmpty(), d.workouts.toString(),
-                d.workoutMinutes.toString(),
-            )
+                Csv.num(d.calories, 0), Csv.num(d.protein, 1), Csv.num(d.carbs, 1), Csv.num(d.fat, 1),
+            ) + listOfNotNull(d.waterMl?.toString().orEmpty().takeIf { water }) + listOf(d.workouts.toString(), d.workoutMinutes.toString())
         }
         val samples = services.records.samples(userId, zone.start(from), zone.end(to))
         val sampleRows = listOf(listOf("metric", "start", "end", "value", "unit", "source")) + samples.map {
@@ -429,47 +429,44 @@ private class NutritionHooks(private val services: Services) : FeatureHooks {
     override suspend fun digest(userId: String, profile: Profile, from: LocalDate, to: LocalDate): DigestSection? {
         val week = services.trendRows(userId, from, to)
         val logged = week.filter { (it.calories ?: 0.0) > 0 }
-        val water = week.avg { it.waterMl?.takeIf { ml -> ml > 0 } }
+        val shown = services.days.showsWater(userId)
+        val water = week.avg { it.waterMl?.takeIf { ml -> ml > 0 } }?.takeIf { shown }
         if (logged.isEmpty() && water == null) return null
         val lines = listOfNotNull(
             logged.takeIf { it.isNotEmpty() }?.let { days ->
                 "Food logged on ${days.size} of 7 days: ${Say.count(days.avg { it.calories })} kcal and ${Say.count(days.avg { it.protein })} g of protein a day."
             },
-            water?.let { "Water ${Say.count(it)} ml a day (the goal is ${Say.count(profile.goals.waterMl)})." },
+            water?.let { "$WATER_LINE${Say.count(it)} ml a day (the goal is ${Say.count(profile.goals.waterMl)})." },
         )
-        return DigestSection("Food and water", Module.NUTRITION, "info", lines)
+        return DigestSection(if (shown) FOOD_AND_WATER else "Food", Module.NUTRITION, "info", lines)
     }
 
     override suspend fun report(userId: String, profile: Profile, from: LocalDate, to: LocalDate): ReportSection {
         val rows = services.trendRows(userId, from, to)
         val logged = rows.filter { (it.calories ?: 0.0) > 0 }
+        val water = services.days.showsWater(userId)
         val summary = if (logged.isEmpty()) listOf("No food was logged in this period.") else listOf(
             "Food was logged on ${logged.size} of ${rows.size} days. On those days: ${Say.count(logged.avg { it.calories })} kcal, " +
                 "${Say.count(logged.avg { it.protein })} g protein, ${Say.count(logged.avg { it.carbs })} g carbohydrate and ${Say.count(logged.avg { it.fat })} g fat on average.",
-        ) + listOfNotNull(rows.avg { it.waterMl?.takeIf { ml -> ml > 0 } }?.let { "Water averaged ${Say.count(it)} ml a day where logged." })
+        ) + listOfNotNull(rows.avg { it.waterMl?.takeIf { ml -> ml > 0 } }?.takeIf { water }?.let { "Water averaged ${Say.count(it)} ml a day where logged." })
+        val waterColumn: (List<TrendDay>) -> String = { w -> Say.count(w.avg { it.waterMl?.takeIf { ml -> ml > 0 } }) }
+        val columns = listOf<(List<TrendDay>) -> String>(
+            { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.calories }) },
+            { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.protein }) },
+            { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.carbs }) },
+            { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.fat }) },
+        ) + listOfNotNull(waterColumn.takeIf { water })
         val table = ReportTable(
-            "By week", listOf("Week of", "kcal", "Protein (g)", "Carbs (g)", "Fat (g)", "Water (ml)"),
-            weekly(
-                rows,
-                { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.calories }) },
-                { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.protein }) },
-                { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.carbs }) },
-                { w -> Say.count(w.filter { (it.calories ?: 0.0) > 0 }.avg { it.fat }) },
-                { w -> Say.count(w.avg { it.waterMl?.takeIf { ml -> ml > 0 } }) },
-            ),
+            "By week", listOf("Week of", "kcal", "Protein (g)", "Carbs (g)", "Fat (g)") + listOfNotNull("Water (ml)".takeIf { water }),
+            weekly(rows, *columns.toTypedArray()),
         )
         return ReportSection(ReportSectionKey.NUTRITION, summary, listOf(table).filter { logged.isNotEmpty() })
     }
 
     override suspend fun export(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, List<List<String>>> {
         val food = services.foods.entries(userId, from, to)
-        val water = services.db.tx {
-            query("SELECT date, ml, at FROM water WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY at", userId, from.toString(), to.toString()) {
-                Triple(it.string("date"), it.int("ml"), it.long("at"))
-            }
-        }
         val zone = zoneOf(profile).zone
-        return mapOf(
+        val files = mapOf(
             "food.csv" to listOf(listOf("date", "meal", "name", "brand", "servings", "serving", "kcal", "protein_g", "carbs_g", "fat_g", "fiber_g", "sugar_g")) +
                 food.map { e ->
                     listOf(
@@ -477,10 +474,29 @@ private class NutritionHooks(private val services: Services) : FeatureHooks {
                         Csv.num(e.nutrients.carbs, 1), Csv.num(e.nutrients.fat, 1), Csv.num(e.nutrients.fiber, 1), Csv.num(e.nutrients.sugar, 1),
                     )
                 },
-            "water.csv" to listOf(listOf("date", "at", "ml")) + water.map { (date, ml, at) -> listOf(date, Csv.iso(at, zone), ml.toString()) },
         )
+        // Water that was logged stays stored, but isn't exported while it's turned off.
+        if (!services.days.showsWater(userId)) return files
+        val water = services.db.tx {
+            query("SELECT date, ml, at FROM water WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY at", userId, from.toString(), to.toString()) {
+                Triple(it.string("date"), it.int("ml"), it.long("at"))
+            }
+        }
+        return files + ("water.csv" to listOf(listOf("date", "at", "ml")) + water.map { (date, ml, at) -> listOf(date, Csv.iso(at, zone), ml.toString()) })
     }
 }
+
+/** Food's digest section title with water, and how its water line starts, so a kept digest can lose them. */
+private const val FOOD_AND_WATER = "Food and water"
+private const val WATER_LINE = "Water "
+
+/** A digest kept from before water was turned off, without its water line (the section is just "Food"). */
+internal fun withoutWater(digest: com.health.api.Digest): com.health.api.Digest = digest.copy(
+    sections = digest.sections.mapNotNull { s ->
+        if (s.module != Module.NUTRITION || s.title != FOOD_AND_WATER) return@mapNotNull s
+        s.copy(title = "Food", lines = s.lines.filterNot { it.startsWith(WATER_LINE) }).takeIf { it.lines.isNotEmpty() }
+    },
+)
 
 // ---------------------------------------------------------------- Mind, cycle, bladder and bowel
 
@@ -632,9 +648,13 @@ private class ContinenceHooks(private val services: Services) : FeatureHooks {
             list.mapNotNull { it.voidedMl }.takeIf { it.isNotEmpty() }?.let { "Measured volume averaged ${it.average().roundToInt()} ml a day where recorded." },
             triggers.takeIf { it.isNotEmpty() }?.let { t -> "Leaks came most with: " + t.take(5).joinToString(", ") { "${it.key} (${it.value})" } + "." },
         )
+        // What was drunk comes from water tracking: left out while it's turned off.
+        val water = services.days.showsWater(userId)
         val table = ReportTable(
-            "By day", listOf("Date", "Trips", "At night", "Leaks", "Bowel", "Fluid (ml)"),
-            days.toSortedMap().entries.toList().takeLast(31).map { (d, c) -> listOf(Say.shortDate(d), c.voids.toString(), c.nightVoids.toString(), c.leaks.toString(), c.bowel.toString(), c.fluidMl.toString()) },
+            "By day", listOf("Date", "Trips", "At night", "Leaks", "Bowel") + listOfNotNull("Fluid (ml)".takeIf { water }),
+            days.toSortedMap().entries.toList().takeLast(31).map { (d, c) ->
+                listOf(Say.shortDate(d), c.voids.toString(), c.nightVoids.toString(), c.leaks.toString(), c.bowel.toString()) + listOfNotNull(c.fluidMl.toString().takeIf { water })
+            },
         )
         val chart = ReportChart(
             "Toilet trips and leaks", "a day",

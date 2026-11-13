@@ -1,6 +1,6 @@
 #include "app.h"
 
-// Today: the three scores, steps and water against their goals, and how the day feels.
+// Today: the three scores, steps and water against their goals (water only while it's on), and how the day feels.
 static Window *s_window;
 static StatusBarLayer *s_status_bar;
 static ScrollLayer *s_scroll;
@@ -45,8 +45,12 @@ static void draw_bar_row(GContext *ctx, GRect box, const char *label, const char
   }
 }
 
+static bool shows_water(void) {
+  return (g_data.modules & MODULE_WATER) != 0;
+}
+
 static int content_height(void) {
-  int h = 6 + SCORES_HEIGHT + 2 * BAR_ROW_HEIGHT;
+  int h = 6 + SCORES_HEIGHT + (shows_water() ? 2 : 1) * BAR_ROW_HEIGHT;
   if (stress_label(g_data.stress)) h += LINE_HEIGHT;
   if (!g_data.loaded) h += LINE_HEIGHT;
   return h + PBL_IF_ROUND_ELSE(40, 10);
@@ -76,15 +80,17 @@ static void draw_content(Layer *layer, GContext *ctx) {
   draw_bar_row(ctx, GRect(x, y, w, BAR_ROW_HEIGHT), "Steps", text, g_data.steps, g_data.step_goal);
   y += BAR_ROW_HEIGHT;
 
-  format_litres(g_data.water, have, sizeof(have));
-  if (g_data.water_goal > 0) {
-    format_litres(g_data.water_goal, goal, sizeof(goal));
-    snprintf(text, sizeof(text), "%s of %s L", have, goal);
-  } else {
-    snprintf(text, sizeof(text), "%s L", have);
+  if (shows_water()) {
+    format_litres(g_data.water, have, sizeof(have));
+    if (g_data.water_goal > 0) {
+      format_litres(g_data.water_goal, goal, sizeof(goal));
+      snprintf(text, sizeof(text), "%s of %s L", have, goal);
+    } else {
+      snprintf(text, sizeof(text), "%s L", have);
+    }
+    draw_bar_row(ctx, GRect(x, y, w, BAR_ROW_HEIGHT), "Water", text, g_data.water, g_data.water_goal);
+    y += BAR_ROW_HEIGHT;
   }
-  draw_bar_row(ctx, GRect(x, y, w, BAR_ROW_HEIGHT), "Water", text, g_data.water, g_data.water_goal);
-  y += BAR_ROW_HEIGHT;
 
   const char *stress = stress_label(g_data.stress);
   if (stress) {

@@ -70,6 +70,9 @@ class DrinksService(
         days.changedDate(userId, LocalDate.parse(date))
     }
 
+    /** Whether water shows for the person: off, what's said about drinks keeps to caffeine and alcohol. */
+    suspend fun showsWater(userId: String): Boolean = days.showsWater(userId)
+
     suspend fun day(userId: String, date: LocalDate): DrinksDay {
         val zone = profiles.days(userId)
         val bedtime = usualBedtime(userId, date, zone)

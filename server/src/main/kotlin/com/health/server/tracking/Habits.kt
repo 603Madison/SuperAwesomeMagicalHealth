@@ -54,9 +54,17 @@ class HabitsService(
         }
     }
 
+    /** Whether water shows for the person: off, a water-goal habit isn't offered and never nags. */
+    suspend fun showsWater(userId: String): Boolean = days.showsWater(userId)
+
     suspend fun save(userId: String, input: Habit, id: String? = null): Habit {
         val habit = validated(input)
         val saved = id ?: Random.id()
+        // With water turned off, a water goal isn't offered; a water-goal habit already kept can still be edited.
+        if (habit.source == HabitSource.WATER_GOAL && !showsWater(userId)) {
+            val before = id?.let { existing -> list(userId, all = true).firstOrNull { it.id == existing } }
+            if (before?.source != HabitSource.WATER_GOAL) throw ApiError.badRequest(WATER_OFF)
+        }
         db.tx {
             if (id != null) {
                 if (update("UPDATE habits SET data = ?, active = ?, updated_at = ? WHERE id = ? AND user_id = ?", ApiJson.encodeToString(Habit.serializer(), habit), habit.active, clock(), id, userId) == 0) {
@@ -180,13 +188,13 @@ class HabitsService(
         return out
     }
 
-    /** Habits' insights for Today: streak milestones, and what's left in the evening. */
-    fun insights(statuses: List<HabitStatus>, isToday: Boolean, hourNow: Int): List<Pair<Int, Insight>> = buildList {
+    /** Habits' insights for Today: streak milestones, and what's left in the evening (never a water goal while water is off). */
+    fun insights(statuses: List<HabitStatus>, isToday: Boolean, hourNow: Int, water: Boolean = true): List<Pair<Int, Insight>> = buildList {
         statuses.firstOrNull { it.streakWeeks in MILESTONES && it.weekDone >= it.habit.timesPerWeek }?.let { s ->
             add(34 to Insight("good", "${s.streakWeeks}-week streak", "${s.habit.name}: ${s.streakWeeks} weeks in a row. Lovely and steady.", "sparkles", Module.HABITS))
         }
         if (isToday && hourNow >= 18) {
-            val left = statuses.filter { !it.done && it.weekDone < it.habit.timesPerWeek }
+            val left = statuses.filter { !it.done && it.weekDone < it.habit.timesPerWeek && (water || it.habit.source != HabitSource.WATER_GOAL) }
             if (left.isNotEmpty()) {
                 add(33 to Insight("info", if (left.size == 1) "1 habit left today" else "${left.size} habits left today", left.joinToString(", ") { it.habit.name }, "sparkles", Module.HABITS))
             }
@@ -196,6 +204,8 @@ class HabitsService(
     companion object {
         /** How far back streaks are counted. */
         const val LOOKBACK_DAYS = 371L
+        /** Why a new water-goal habit isn't taken while water is off. */
+        const val WATER_OFF = "Water is turned off for you, so there's no water goal to follow. You can turn it back on in Food's settings."
         private val MILESTONES = setOf(4, 8, 12, 26, 52)
         private val TIME = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
 

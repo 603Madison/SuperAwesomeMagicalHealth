@@ -8,8 +8,12 @@
 /** The watch's taps, in the order of WatchLogKind on the server (and the C enum). */
 var LOG_KINDS = ['MOOD', 'WATER', 'COFFEE', 'TOILET', 'LEAK', 'BOWEL', 'DOSE_TAKEN', 'HABIT', 'HOT_FLASH', 'SYMPTOM'];
 
-/** Features the watch shows, as bits (kept in step with app.h). */
-var MODULE_BITS = { MIND: 1, NUTRITION: 2, CONTINENCE: 4, MEDICATIONS: 8, HABITS: 16, CYCLE: 32, SYMPTOMS: 64 };
+/**
+ * Features the watch shows, as bits (kept in step with app.h). WATER isn't a feature: it's set
+ * unless the person has turned water off (WatchToday.water is false), and hides the water tap and
+ * Today's water line.
+ */
+var MODULE_BITS = { MIND: 1, NUTRITION: 2, CONTINENCE: 4, MEDICATIONS: 8, HABITS: 16, CYCLE: 32, SYMPTOMS: 64, WATER: 128 };
 
 var STRESS_STATES = ['STRESSED', 'ENGAGED', 'RELAXED', 'RESTORED'];
 
@@ -204,8 +208,11 @@ function score(value) {
 function todayToMessage(today) {
   var modules = 0;
   (today.modules || []).forEach(function (m) {
-    if (MODULE_BITS[m]) modules |= MODULE_BITS[m];
+    if (m !== 'WATER' && MODULE_BITS[m]) modules |= MODULE_BITS[m];
   });
+  // Older servers don't say: water is on unless the server says it's off.
+  var water = today.water !== false;
+  if (water) modules |= MODULE_BITS.WATER;
   var doses = (today.doses || []).slice(0, MAX_ITEMS);
   var habits = (today.habits || []).slice(0, MAX_ITEMS);
   var message = {
@@ -216,8 +223,8 @@ function todayToMessage(today) {
     Activity: score(today.activity),
     Steps: Math.max(0, Math.round(today.steps || 0)),
     StepGoal: Math.max(0, Math.round(today.stepGoal || 0)),
-    Water: Math.max(0, Math.round(today.waterMl || 0)),
-    WaterGoal: Math.max(0, Math.round(today.waterGoal || 0)),
+    Water: water ? Math.max(0, Math.round(today.waterMl || 0)) : 0,
+    WaterGoal: water ? Math.max(0, Math.round(today.waterGoal || 0)) : 0,
     Stress: today.stress ? STRESS_STATES.indexOf(today.stress) : -1,
     Doses: doses.map(function (d) {
       return shortName(d.time).slice(0, 8) + '\t' + shortName(d.name) + '\t' + (d.taken ? '1' : '0');

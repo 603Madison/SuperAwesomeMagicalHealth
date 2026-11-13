@@ -270,9 +270,12 @@ class DrinksHooks(private val drinks: DrinksService) : FeatureHooks {
                 "Drinks: caffeine averaged ${list.filter { it.caffeineMg > 0 }.map { it.caffeineMg }.ifEmpty { listOf(0.0) }.average().roundToInt()} mg a day on days with any; " +
                     "about ${one(list.sumOf { it.standardDrinks } / weeks.coerceAtLeast(1.0))} standard drinks (14 g of alcohol each) a week.",
             ),
-            listOf(ReportTable("Caffeine and alcohol", listOf("Day", "Caffeine (mg)", "Standard drinks", "Other drinks (ml)"), list.map {
-                listOf(it.date, it.caffeineMg.roundToInt().toString(), one(it.standardDrinks), it.fluidMl.toString())
-            })),
+            // How much else was drunk counts towards water: left out while water is off.
+            drinks.showsWater(userId).let { water ->
+                listOf(ReportTable("Caffeine and alcohol", listOf("Day", "Caffeine (mg)", "Standard drinks") + listOfNotNull("Other drinks (ml)".takeIf { water }), list.map {
+                    listOf(it.date, it.caffeineMg.roundToInt().toString(), one(it.standardDrinks)) + listOfNotNull(it.fluidMl.toString().takeIf { water })
+                }))
+            },
         )
     }
 
@@ -453,10 +456,14 @@ class HabitsHooks(private val habits: HabitsService) : FeatureHooks {
         if (kept.isEmpty()) return emptyList()
         val dates = listOf(zone.dateOf(from), zone.dateOf(to)).distinct()
         return dates.flatMap { date ->
-            val due = kept.mapNotNull { k ->
+            var due = kept.mapNotNull { k ->
                 val (h, m) = k.habit.reminderTime!!.split(":").map { it.toInt() }
                 val at = date.atTime(h, m).atZone(zone.zone).toInstant().toEpochMilli()
                 if (at in from until to && !date.isBefore(k.since)) k to at else null
+            }
+            // A water goal doesn't nag while water is off.
+            if (due.any { it.first.habit.source == com.health.api.HabitSource.WATER_GOAL } && !habits.showsWater(userId)) {
+                due = due.filter { it.first.habit.source != com.health.api.HabitSource.WATER_GOAL }
             }
             if (due.isEmpty()) return@flatMap emptyList()
             val statuses = habits.statuses(userId, date).associateBy { it.habit.id }

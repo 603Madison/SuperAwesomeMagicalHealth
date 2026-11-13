@@ -27,6 +27,8 @@ object InsightRules {
         val cyclePhase: com.health.api.CyclePhase? = null,
         /** The health modules' insights, ranked with these. */
         val extra: List<Pair<Int, Insight>> = emptyList(),
+        /** Whether the person keeps track of water ([com.health.api.Fields.NUTRITION_WATER]): off, nothing here mentions it. */
+        val water: Boolean = true,
     )
 
     private class Ranked(val priority: Int, val insight: Insight)
@@ -42,7 +44,7 @@ object InsightRules {
         c.readiness?.let { r ->
             when {
                 r.score >= 85 -> add(60, "good", "zap", "Ready for a challenge", "Your body has recovered well. A good day to push a little harder.")
-                r.score < 60 -> add(90, "warn", "battery-low", "Take it easy today", "Your readiness is low. Gentle movement, water and an early night will help you bounce back.")
+                r.score < 60 -> add(90, "warn", "battery-low", "Take it easy today", "Your readiness is low. Gentle movement${if (c.water) ", water" else ""} and an early night will help you bounce back.")
             }
         }
 
@@ -117,7 +119,7 @@ object InsightRules {
                 add(56, "info", "flame", "%,d kcal over your target".format((eaten.calories - c.target.calories).roundToInt()), "One day doesn't change much; your trend over a week is what counts.")
             }
         }
-        if (c.isToday && c.hourNow >= 16 && today.waterMl < c.target.waterMl * 0.5) {
+        if (c.water && c.isToday && c.hourNow >= 16 && today.waterMl < c.target.waterMl * 0.5) {
             add(48, "info", "droplet", "Time for some water", "${today.waterMl} ml so far of your ${c.target.waterMl} ml.")
         }
 
@@ -131,7 +133,7 @@ object InsightRules {
                 add(
                     if (towards) 47 else 35, if (towards) "good" else "info", "scale",
                     "%s %.1f kg in three weeks".format(if (change < 0) "Down" else "Up", abs(change)),
-                    if (towards) "Right on track for your goal." else "Weight changes day to day with water and food; the trend is what matters.",
+                    if (towards) "Right on track for your goal." else if (c.water) "Weight changes day to day with water and food; the trend is what matters." else "Weight goes up and down from day to day; the trend is what matters.",
                 )
             }
         }

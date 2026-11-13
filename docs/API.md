@@ -229,7 +229,13 @@ apps show only what's useful. Kept encrypted.
 
 Food's water is a field too (`nutrition.water`, on by default): hidden, the apps and the server
 leave out water everywhere (the quick button, the goal, insights, the digest, the watch, habits,
-exports to other apps); drinks still count caffeine and alcohol.
+exports to other apps); drinks still count caffeine and alcohol. What's logged stays stored, and
+`DaySummary.waterMl` is still filled in (the apps decide what to show). On the server that means:
+no water insights or tips; no water line in the digest (kept ones too), the report or the export;
+`WatchToday.water` is false, with no water figures, and a watch `WATER` tap is refused; a new
+`WATER_GOAL` habit is refused (a kept one still counts, but never reminds); Home Assistant's state
+leaves out `water_ml` and `water_goal`; and the AI connector and assistant leave water out of
+what they read, don't offer `log_water`, and refuse `log_drink` with `WATER`.
 
 ### Arranging screens
 
@@ -412,7 +418,7 @@ kept sealed. Digest emails leave out sensitive features not in `DigestPrefs.emai
 |---|---|
 | `GET /pebble/config?return_to=` | The watch app's settings page: `return_to` must start `pebblejs://close`; redirects to the web app's `/watch-setup?return_to=…` |
 | `POST /api/watch/keys` | Signed in: makes a `WATCH` key, as an `IntegrationKey` whose `url` is the server's address. `/watch-setup` then goes to `return_to + "#" + encodeURIComponent(JSON.stringify({server, token}))` |
-| `GET /api/watch/today` | `WatchToday` (with a `WATCH` key, or any app sign-in) |
+| `GET /api/watch/today` | `WatchToday` (with a `WATCH` key, or any app sign-in); `water` is false when the person has turned water off: the watch then hides its water tap and progress |
 | `POST /api/watch/log` | `WatchLog`: one tap from the watch |
 | `POST /api/ingest` | A `WATCH` key may also send data in, like an upload key |
 

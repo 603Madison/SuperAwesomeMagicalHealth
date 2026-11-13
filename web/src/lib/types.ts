@@ -1224,6 +1224,8 @@ export interface WatchToday {
   doses: { medicationId: string; scheduledFor: number; name: string; time: string; taken: boolean }[];
   habits: { id: string; name: string; done: boolean }[];
   stress?: StressState;
+  /** Whether water is tracked (`nutrition.water`); off, waterMl and waterGoal are 0 and the watch offers no water. */
+  water: boolean;
 }
 
 // ---------------------------------------------------------------- Conditions and goals (Conditions.kt)
