@@ -24,7 +24,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -36,6 +38,8 @@ data class TodayState(
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val error: String? = null,
+    /** The meals with food logged, loaded only when amounts of food don't show (the Food card names them instead). */
+    val meals: List<com.health.api.Meal>? = null,
 )
 
 class TodayViewModel(private val c: Container) : ViewModel() {
@@ -47,6 +51,8 @@ class TodayViewModel(private val c: Container) : ViewModel() {
         load()
         viewModelScope.launch { c.revision.drop(1).collect { load(quiet = true) } }
         viewModelScope.launch { c.profile.drop(1).collect { load(quiet = true) } }
+        // Whether amounts of food show decides whether the meals are loaded too.
+        viewModelScope.launch { c.fields.map { it?.foodNumbers }.distinctUntilChanged().drop(1).collect { load(quiet = true) } }
     }
 
     fun load(quiet: Boolean = false) {
@@ -57,7 +63,11 @@ class TodayViewModel(private val c: Container) : ViewModel() {
         job = viewModelScope.launch {
             try {
                 val summary = c.ui.day(date.toString())
-                _state.update { if (it.date == date) it.copy(summary = summary, loading = false, refreshing = false) else it }
+                // Without amounts of food, the Food card says which meals are logged.
+                val meals = if (c.fields.value?.foodNumbers == false) {
+                    runCatching { c.ui.foodDay(date.toString()).entries.map { it.meal }.distinct() }.getOrNull()
+                } else null
+                _state.update { if (it.date == date) it.copy(summary = summary, meals = meals, loading = false, refreshing = false) else it }
             } catch (e: Exception) {
                 _state.update { it.copy(loading = false, refreshing = false, error = e.message ?: "Couldn't load the day") }
             }
@@ -145,5 +155,10 @@ class TodayViewModel(private val c: Container) : ViewModel() {
         c.ui.logDose(
             DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site ?: due.nextSite.takeIf { rotates }),
         )
+    }
+
+    /** Marks a scheduled dose as skipped (from Up next). */
+    fun skipDose(due: DueDose) = act("${due.name} skipped") {
+        c.ui.logDose(DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.SKIPPED, scheduledFor = due.scheduledFor))
     }
 }

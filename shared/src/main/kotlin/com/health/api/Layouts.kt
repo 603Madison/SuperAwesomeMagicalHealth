@@ -126,8 +126,8 @@ enum class QuickAction(val label: String, val module: Module?) {
     ;
 
     companion object {
-        /** How many show before "More", unless the person has arranged them. */
-        const val SHOWN = 6
+        /** How many show in Today's quick row before "More", unless the person has arranged them. */
+        const val SHOWN = 5
     }
 }
 

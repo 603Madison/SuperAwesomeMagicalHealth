@@ -56,8 +56,8 @@ import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.settings.SettingsActions
 import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.theme.HealthTheme
-import com.health.app.ui.today.QuickActionsRow
-import com.health.app.ui.today.QuickMoreContent
+import com.health.app.ui.today.QuickLogRow
+import com.health.app.ui.today.LogSheetContent
 import com.health.app.ui.today.TodayActions
 import com.health.app.ui.today.TodayLayout
 import com.health.app.ui.today.TodayScreen
@@ -229,11 +229,11 @@ class ArrangeScreenshotTest {
         val row = TodayLayout.quickRow(available, null)
         render(dark) {
             Sheet {
-                Column(Modifier.padding(horizontal = 16.dp)) { QuickActionsRow(row, Units.METRIC, {}, {}) }
+                Column(Modifier.padding(horizontal = 16.dp)) { QuickLogRow(row, Units.METRIC, {}, {}) }
                 Spacer(Modifier.height(24.dp))
-                QuickMoreContent(row.more, Units.METRIC, {}, {})
+                LogSheetContent(TodayLayout.logGroups(available, null), Units.METRIC, {}, {})
                 ArrangeContent(
-                    Layouts.QUICK, "quick actions", available.map { ArrangeItem(it.name, it.label) }, {},
+                    Layouts.QUICK, "Quick log", available.map { ArrangeItem(it.name, it.label) }, {},
                     hiddenMeans = "Under More", defaultHidden = TodayLayout.defaultUnderMore(available),
                 )
             }

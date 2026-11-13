@@ -19,3 +19,13 @@ fun shownFields(): Set<String> {
 /** Whether a form shows [field] (a key in [Fields]). */
 @Composable
 fun showsField(field: String): Boolean = field in shownFields()
+
+/**
+ * Whether amounts of food show at all (calories, macros, targets): not for people in eating
+ * disorder recovery (`FieldLayout.foodNumbers`). Before the fields load, they show.
+ */
+@Composable
+fun foodNumbers(): Boolean {
+    val layout by appContainer().fields.collectAsState()
+    return layout?.foodNumbers ?: true
+}

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,14 +16,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -112,7 +114,7 @@ object InsightLinks {
 
     /**
      * Today's insights to show: those for features that are on, less any that repeat a card
-     * that's showing ([Insight.shownBy]: the day's doses while Medications shows them).
+     * that's showing ([Insight.shownBy]: the day's doses and today's appointment while Up next shows them, TodayPlan.showing).
      */
     fun shown(insights: List<Insight>, modules: Set<Module>, showing: Set<com.health.api.TodaySection>): List<Insight> =
         insights.filter { (it.module == null || it.module in modules) && (it.shownBy == null || it.shownBy !in showing) }
@@ -137,6 +139,7 @@ fun InsightRow(
     modifier: Modifier = Modifier,
     readOnly: Boolean = false,
     onAdd: ((FoodSuggestion) -> Unit)? = null,
+    showNumbers: Boolean = true,
 ) {
     val tone = when (insight.tone) {
         "good" -> AppTheme.status.good
@@ -167,9 +170,11 @@ fun InsightRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(insight.title, style = MaterialTheme.typography.titleSmall)
-                if (insight.body.isNotBlank()) {
+                // With food ideas, the chips say what the sentence would (it's still read out): a short line instead.
+                val line = insight.suggestions.firstOrNull()?.let { "Ideas for ${InsightLinks.mealWord(it.meal)}" } ?: insight.body
+                if (line.isNotBlank()) {
                     Text(
-                        insight.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -179,44 +184,50 @@ fun InsightRow(
             }
         }
         if (insight.suggestions.isNotEmpty()) {
-            FlowRow(
-                // Under the whole row (a phone is narrow): the ideas' names fit.
-                Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                insight.suggestions.take(3).forEach { FoodIdeaChip(it, if (readOnly) null else onAdd) }
+            // Under the whole row (a phone is narrow): the ideas' names fit. Each chip's touch target is 48 dp tall.
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp)) {
+                // A long name is cut short rather than pushing the chip's protein and "+" off the line.
+                val nameMax = maxWidth - 60.dp - 34.dp * LocalDensity.current.fontScale
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    insight.suggestions.take(3).forEach { FoodIdeaChip(it, if (readOnly) null else onAdd, showNumbers, nameMax) }
+                }
             }
         }
     }
 }
 
-/** A food idea as a chip: its name and protein, and Add ([onAdd]; null hides it). */
+/**
+ * A food idea as a chip: its name and protein ([showNumbers]), and a "+": the whole chip adds it
+ * ([onAdd]; null makes it a plain label, as while viewing a share). Read out as "Add … to dinner".
+ */
 @Composable
-fun FoodIdeaChip(idea: FoodSuggestion, onAdd: ((FoodSuggestion) -> Unit)?, showNumbers: Boolean = true) {
-    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+fun FoodIdeaChip(idea: FoodSuggestion, onAdd: ((FoodSuggestion) -> Unit)?, showNumbers: Boolean = true, nameMax: Dp = 220.dp) {
+    val inside: @Composable () -> Unit = {
         Row(
-            Modifier.heightIn(min = 40.dp).padding(start = 14.dp, end = if (onAdd != null) 4.dp else 14.dp),
+            Modifier.clearAndSetSemantics {}.height(36.dp).padding(start = 14.dp, end = if (onAdd != null) 10.dp else 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(idea.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            // Capped rather than weighted, so the chip is only as wide as it needs and two can share a line.
+            Text(idea.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = nameMax.coerceAtLeast(48.dp)))
             if (showNumbers) {
                 Spacer(Modifier.width(6.dp))
                 Text("${idea.nutrients.protein.roundToInt()} g", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
             if (onAdd != null) {
                 Spacer(Modifier.width(6.dp))
-                FilledTonalButton(
-                    onClick = { onAdd(idea) },
-                    contentPadding = PaddingValues(start = 10.dp, end = 14.dp),
-                    modifier = Modifier.height(36.dp).semantics { contentDescription = "Add ${idea.name} to ${InsightLinks.mealWord(idea.meal)}" },
-                ) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Add")
-                }
+                Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             }
         }
+    }
+    val shape = RoundedCornerShape(50)
+    val color = MaterialTheme.colorScheme.surfaceContainerHighest
+    if (onAdd != null) {
+        Surface(
+            onClick = { onAdd(idea) }, shape = shape, color = color,
+            modifier = Modifier.semantics { contentDescription = "Add ${idea.name} to ${InsightLinks.mealWord(idea.meal)}" },
+        ) { inside() }
+    } else {
+        Surface(shape = shape, color = color, modifier = Modifier.padding(vertical = 6.dp).semantics(mergeDescendants = true) { contentDescription = idea.name }) { inside() }
     }
 }
 
@@ -232,6 +243,8 @@ fun ForYouCard(
     readOnly: Boolean = false,
     onAdd: ((FoodSuggestion) -> Unit)? = null,
     shown: Int = 3,
+    /** Amounts of food (the ideas' protein): not in eating disorder recovery. */
+    showNumbers: Boolean = true,
 ) {
     if (insights.isEmpty()) return
     var all by rememberSaveable { mutableStateOf(false) }
@@ -239,7 +252,7 @@ fun ForYouCard(
     InfoCard("For you", icon = Icons.Rounded.AutoAwesome) {
         rows.forEachIndexed { i, insight ->
             if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            InsightRow(insight, targetOf(insight), onOpen, readOnly = readOnly, onAdd = onAdd)
+            InsightRow(insight, targetOf(insight), onOpen, readOnly = readOnly, onAdd = onAdd, showNumbers = showNumbers)
         }
         if (insights.size > shown) {
             TextButton(onClick = { all = !all }) { Text(if (all) "Show fewer" else "Show ${insights.size - shown} more") }

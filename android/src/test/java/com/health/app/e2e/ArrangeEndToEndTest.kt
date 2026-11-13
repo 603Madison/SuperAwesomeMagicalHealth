@@ -104,7 +104,9 @@ class ArrangeEndToEndTest {
         api.saveScreenLayout(Layouts.TODAY, saved.copy(order = again))
         val back = api.layout().screens[Layouts.TODAY]!!
         assertEquals(saved.order.indexOf(TodaySection.MIND.name), back.order.indexOf(TodaySection.MIND.name))
-        assertEquals(TodaySection.BODY, TodayLayout.visible(Module.DEFAULT, water = true, back).first())
+        // Reversed: what was last by default (Also today) is first.
+        assertEquals(TodaySection.ALSO, TodayLayout.visible(Module.DEFAULT, water = true, back).first())
+        assertEquals(TodaySection.BODY, TodayLayout.visible(Module.DEFAULT, water = true, back)[1])
 
         // An empty layout puts the screen back as it was.
         api.saveScreenLayout(Layouts.TODAY, ScreenLayout())

@@ -271,15 +271,19 @@ fun FoodPhotoRoute(date: LocalDate, meal: Meal, onBack: () -> Unit, onDone: () -
             back = back, acknowledge = vm::acknowledge, taken = vm::taken, chosen = vm::chosen, note = vm::note, send = vm::send,
             retake = vm::retake, change = vm::change, remove = vm::remove, add = vm::add, log = vm::log,
         ),
+        numbers = com.health.app.ui.components.foodNumbers(),
     )
 }
 
-/** The notice the first time; then taking the photo; then checking what it saw. */
+/**
+ * The notice the first time; then taking the photo; then checking what it saw. Without
+ * [numbers] (the person's fields: eating disorder recovery), the review shows no amounts of food.
+ */
 @Composable
-fun FoodPhotoScreen(meal: Meal, state: FoodPhotoState, actions: FoodPhotoActions, camera: Boolean = true) {
+fun FoodPhotoScreen(meal: Meal, state: FoodPhotoState, actions: FoodPhotoActions, camera: Boolean = true, numbers: Boolean = true) {
     when {
         !state.noticeSeen -> FoodPhotoNotice(state.status, actions.back, actions.acknowledge)
-        state.estimate != null -> FoodPhotoReview(meal, state, actions)
+        state.estimate != null -> FoodPhotoReview(meal, state, actions, numbers)
         else -> FoodPhotoCapture(meal, state, actions, camera)
     }
 }
@@ -445,8 +449,9 @@ private fun FoodCamera(onTaken: (ByteArray, Int) -> Unit) {
  * numbers; they're still logged, as the server worked them out.
  */
 @Composable
-fun FoodPhotoReview(meal: Meal, state: FoodPhotoState, actions: FoodPhotoActions) {
-    val hide = state.estimate?.hideNumbers == true
+fun FoodPhotoReview(meal: Meal, state: FoodPhotoState, actions: FoodPhotoActions, numbers: Boolean = true) {
+    // The estimate says so, and so do the person's fields (FieldLayout.foodNumbers).
+    val hide = state.estimate?.hideNumbers == true || !numbers
     val mealName = meal.label.lowercase()
     Column(Modifier.fillMaxSize().imePadding()) {
         BackBar(actions.retake, "Check what's on the plate")

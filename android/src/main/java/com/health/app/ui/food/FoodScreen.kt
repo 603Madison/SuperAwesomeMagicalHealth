@@ -119,6 +119,7 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
         ),
         zone = c.zone(),
         water = showsField(Fields.NUTRITION_WATER),
+        numbers = com.health.app.ui.components.foodNumbers(),
     )
 }
 
@@ -133,23 +134,30 @@ object FoodSections {
     /** A meal's section: "breakfast", "lunch", "dinner", "snack". */
     fun meal(meal: Meal): String = meal.name.lowercase()
 
-    /** The sections, in the default order; ideas only for today, water only while it's shown. */
-    fun items(water: Boolean, ideas: Boolean = true): List<ArrangeItem> = buildList {
+    /**
+     * The sections, in the default order; ideas only for today, water only while it's shown, and
+     * the totals only while amounts of food show ([numbers]: not in eating disorder recovery).
+     */
+    fun items(water: Boolean, ideas: Boolean = true, numbers: Boolean = true): List<ArrangeItem> = buildList {
         if (ideas) add(ArrangeItem(IDEAS, "Ideas"))
-        add(ArrangeItem(TOTALS, "Calories and nutrients"))
+        if (numbers) add(ArrangeItem(TOTALS, "Calories and nutrients"))
         Meal.entries.forEach { add(ArrangeItem(meal(it), it.label)) }
         if (water) add(ArrangeItem(WATER, "Water"))
         add(ArrangeItem(DRINKS, "Drinks"))
     }
 }
 
-/** The day's food: totals, each meal, water (unless it's hidden) and drinks, in the person's order. */
+/**
+ * The day's food: totals, each meal, water (unless it's hidden) and drinks, in the person's order.
+ * Without [numbers] (eating disorder recovery), no calories, macros or targets anywhere: no
+ * totals, meals by what's in them, water without its goal.
+ */
 @Composable
-fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault(), water: Boolean = true) {
+fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault(), water: Boolean = true, numbers: Boolean = true) {
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     var arranging by remember { mutableStateOf(false) }
     val day = state.day
-    val items = FoodSections.items(water, ideas = state.date == state.today)
+    val items = FoodSections.items(water, ideas = state.date == state.today, numbers = numbers)
     val shown = arranged(FoodSections.KEY, items)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Food", Format.day(state.date, state.today)) {
@@ -167,13 +175,13 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
                     key(id) {
                         val meal = Meal.entries.firstOrNull { FoodSections.meal(it) == id }
                         when {
-                            id == FoodSections.IDEAS -> IdeasCard(state.ideas, state.ideasMeal, state.ideasError, actions)
-                            id == FoodSections.TOTALS -> Totals(day)
+                            id == FoodSections.IDEAS -> IdeasCard(state.ideas, state.ideasMeal, state.ideasError, actions, numbers)
+                            id == FoodSections.TOTALS -> if (numbers) Totals(day)
                             meal != null -> MealCard(
-                                meal, day.entries.filter { it.meal == meal },
+                                meal, day.entries.filter { it.meal == meal }, numbers,
                                 onAdd = { actions.add(state.date, meal) }, onEdit = { editing = it }, onCopy = { actions.copyYesterday(meal) },
                             )
-                            id == FoodSections.WATER -> WaterCard(day, units, actions)
+                            id == FoodSections.WATER -> WaterCard(day, units, actions, numbers)
                             id == FoodSections.DRINKS -> DrinksCard(state.drinks, units, zone, actions.quickDrink, actions.saveDrink, actions.deleteDrink, water = water)
                             else -> Unit
                         }
@@ -185,7 +193,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
     if (arranging) ArrangeSheet(FoodSections.KEY, "Food", items, { arranging = false })
     editing?.let { entry ->
         EditEntryDialog(
-            entry,
+            entry, numbers,
             onDismiss = { editing = null },
             onSave = { change -> entry.id?.let { actions.change(it, change) }; editing = null },
             onDelete = { entry.id?.let(actions.delete); editing = null },
@@ -198,7 +206,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
  * viewing a share); the menu asks for another meal. Without numbers (eating disorder recovery), no amounts.
  */
 @Composable
-private fun IdeasCard(ideas: FoodSuggestions?, meal: Meal?, error: String?, actions: FoodActions) {
+private fun IdeasCard(ideas: FoodSuggestions?, meal: Meal?, error: String?, actions: FoodActions, numbers: Boolean = true) {
     val readOnly = com.health.app.ui.care.LocalReadOnly.current
     val shown = ideas?.meal ?: meal
     val word = shown?.let { com.health.app.ui.today.InsightLinks.mealWord(it) } ?: "now"
@@ -216,7 +224,7 @@ private fun IdeasCard(ideas: FoodSuggestions?, meal: Meal?, error: String?, acti
                     Column(Modifier.weight(1f)) {
                         Text(idea.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         // Amounts stay together on a line ("38 g protein · 650 kcal").
-                        val amounts = if (ideas.showNumbers) " · ${Format.number(idea.nutrients.protein)}\u00a0g\u00a0protein\u00a0·\u00a0${Format.number(idea.nutrients.calories)}\u00a0kcal" else ""
+                        val amounts = if (ideas.showNumbers && numbers) " ·${Format.number(idea.nutrients.protein)}\u00a0g\u00a0protein\u00a0·\u00a0${Format.number(idea.nutrients.calories)}\u00a0kcal" else ""
                         Text(idea.why + amounts, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (!readOnly) {
@@ -264,7 +272,7 @@ private fun Totals(day: FoodDay) {
 }
 
 @Composable
-private fun MealCard(meal: Meal, entries: List<FoodEntry>, onAdd: () -> Unit, onEdit: (FoodEntry) -> Unit, onCopy: () -> Unit) {
+private fun MealCard(meal: Meal, entries: List<FoodEntry>, numbers: Boolean, onAdd: () -> Unit, onEdit: (FoodEntry) -> Unit, onCopy: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     AppCard(padding = 0.dp) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -272,7 +280,11 @@ private fun MealCard(meal: Meal, entries: List<FoodEntry>, onAdd: () -> Unit, on
                 Text(meal.label, style = MaterialTheme.typography.titleMedium)
                 val kcal = entries.sumOf { it.nutrients.calories }
                 Text(
-                    if (entries.isEmpty()) "Nothing yet" else "${Format.number(kcal)} kcal · ${Format.number(entries.sumOf { it.nutrients.protein })} g protein",
+                    when {
+                        entries.isEmpty() -> "Nothing yet"
+                        !numbers -> if (entries.size == 1) "1 thing" else "${entries.size} things"
+                        else -> "${Format.number(kcal)} kcal · ${Format.number(entries.sumOf { it.nutrients.protein })} g protein"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -291,7 +303,7 @@ private fun MealCard(meal: Meal, entries: List<FoodEntry>, onAdd: () -> Unit, on
             Column(Modifier.padding(bottom = 8.dp)) {
                 entries.forEachIndexed { i, entry ->
                     if (i > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                    EntryRow(entry) { onEdit(entry) }
+                    EntryRow(entry, numbers) { onEdit(entry) }
                 }
             }
         } else {
@@ -301,7 +313,7 @@ private fun MealCard(meal: Meal, entries: List<FoodEntry>, onAdd: () -> Unit, on
 }
 
 @Composable
-private fun EntryRow(entry: FoodEntry, onClick: () -> Unit) {
+private fun EntryRow(entry: FoodEntry, numbers: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(entry.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -314,27 +326,34 @@ private fun EntryRow(entry: FoodEntry, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(Format.number(entry.nutrients.calories), style = MaterialTheme.typography.titleSmall)
-            Text("kcal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (numbers) {
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(Format.number(entry.nutrients.calories), style = MaterialTheme.typography.titleSmall)
+                Text("kcal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
 @Composable
-private fun WaterCard(day: FoodDay, units: Units, actions: FoodActions) {
+private fun WaterCard(day: FoodDay, units: Units, actions: FoodActions, numbers: Boolean) {
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.WaterDrop, null, tint = AppTheme.data.water)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("Water", style = MaterialTheme.typography.titleMedium)
-                Text("${Format.water(day.waterMl, units)} of ${Format.water(day.target.waterMl, units)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (numbers) "${Format.water(day.waterMl, units)} of ${Format.water(day.target.waterMl, units)}" else "${Format.water(day.waterMl, units)} so far today",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        Spacer(Modifier.height(10.dp))
-        ProgressBar(day.waterMl.toFloat() / day.target.waterMl.coerceAtLeast(1), color = AppTheme.data.water, height = 10.dp)
+        if (numbers) {
+            Spacer(Modifier.height(10.dp))
+            ProgressBar(day.waterMl.toFloat() / day.target.waterMl.coerceAtLeast(1), color = AppTheme.data.water, height = 10.dp)
+        }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = { actions.addWater(250) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("+250 ml") }
@@ -347,7 +366,7 @@ private fun WaterCard(day: FoodDay, units: Units, actions: FoodActions) {
 }
 
 @Composable
-private fun EditEntryDialog(entry: FoodEntry, onDismiss: () -> Unit, onSave: (FoodEntryChange) -> Unit, onDelete: () -> Unit) {
+private fun EditEntryDialog(entry: FoodEntry, numbers: Boolean, onDismiss: () -> Unit, onSave: (FoodEntryChange) -> Unit, onDelete: () -> Unit) {
     var servings by remember { mutableStateOf(Format.compact(entry.servings)) }
     var meal by remember { mutableStateOf(entry.meal) }
     val value = Format.parse(servings)
@@ -357,7 +376,7 @@ private fun EditEntryDialog(entry: FoodEntry, onDismiss: () -> Unit, onSave: (Fo
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 NumberField(servings, { servings = it }, "Servings", supporting = entry.serving)
-                value?.takeIf { it > 0 }?.let { v ->
+                value?.takeIf { it > 0 && numbers }?.let { v ->
                     val n = entry.nutrients * (v / entry.servings.coerceAtLeast(0.01))
                     Hint("${Format.number(n.calories)} kcal · ${Format.number(n.protein)} g protein · ${Format.number(n.carbs)} g carbs · ${Format.number(n.fat)} g fat")
                 }
