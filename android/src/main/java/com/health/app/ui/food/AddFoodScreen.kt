@@ -115,12 +115,16 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
             snap = { snapping = true },
         ),
         numbers = com.health.app.ui.components.foodNumbers(),
+        micros = showsMicros(),
     )
 }
 
-/** Finding a food to add. Without [numbers] (eating disorder recovery), no calories or macros on the foods. */
+/**
+ * Finding a food to add. Without [numbers] (eating disorder recovery), no calories or macros on the
+ * foods; with [micros], the vitamins and minerals they carry, and "More nutrients" for new ones.
+ */
 @Composable
-fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numbers: Boolean = true) {
+fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numbers: Boolean = true, micros: Boolean = false) {
     var quick by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf<String?>(null) }
 
@@ -162,24 +166,24 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
                     }
                 } else {
                     item { SectionTitle("Your foods") }
-                    items(state.recent.size) { i -> CardItem(i, state.recent.size) { FoodRow(state.recent[i], numbers) { actions.pick(state.recent[i]) } } }
+                    items(state.recent.size) { i -> CardItem(i, state.recent.size) { FoodRow(state.recent[i], numbers, micros) { actions.pick(state.recent[i]) } } }
                 }
             } else {
                 if (results.mine.isNotEmpty()) {
                     item { SectionTitle("Your foods") }
-                    items(results.mine.size) { i -> CardItem(i, results.mine.size) { FoodRow(results.mine[i], numbers) { actions.pick(results.mine[i]) } } }
+                    items(results.mine.size) { i -> CardItem(i, results.mine.size) { FoodRow(results.mine[i], numbers, micros) { actions.pick(results.mine[i]) } } }
                 }
                 item { SectionTitle("Open Food Facts") }
                 when {
                     results.onlineError != null -> item { Hint(results.onlineError.orEmpty(), Modifier.padding(horizontal = 20.dp)) }
                     results.online.isEmpty() -> item { Hint("Nothing found. Try fewer words, or make it a new food.", Modifier.padding(horizontal = 20.dp)) }
-                    else -> items(results.online.size) { i -> CardItem(i, results.online.size) { FoodRow(results.online[i], numbers) { actions.pick(results.online[i]) } } }
+                    else -> items(results.online.size) { i -> CardItem(i, results.online.size) { FoodRow(results.online[i], numbers, micros) { actions.pick(results.online[i]) } } }
                 }
             }
         }
     }
 
-    state.picked?.let { food -> ServingsDialog(food, numbers, onDismiss = { actions.pick(null) }) { actions.add(food, it) } }
+    state.picked?.let { food -> ServingsDialog(food, numbers, micros, onDismiss = { actions.pick(null) }) { actions.add(food, it) } }
     state.unknownBarcode?.let { code ->
         AlertDialog(
             onDismissRequest = actions.dismissUnknown,
@@ -189,12 +193,12 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
             dismissButton = { TextButton(onClick = actions.dismissUnknown) { Text("Not now") } },
         )
     }
-    if (quick) QuickAddDialog(onDismiss = { quick = false }) { name, n -> actions.quickAdd(name, n); quick = false }
-    creating?.let { barcode -> NewFoodDialog(barcode.ifBlank { null }, onDismiss = { creating = null }) { food, servings -> actions.create(food, servings); creating = null } }
+    if (quick) QuickAddDialog(micros, onDismiss = { quick = false }) { name, n -> actions.quickAdd(name, n); quick = false }
+    creating?.let { barcode -> NewFoodDialog(barcode.ifBlank { null }, micros, onDismiss = { creating = null }) { food, servings -> actions.create(food, servings); creating = null } }
 }
 
 @Composable
-fun FoodRow(food: Food, numbers: Boolean = true, onClick: () -> Unit) {
+fun FoodRow(food: Food, numbers: Boolean = true, micros: Boolean = false, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(food.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -205,6 +209,7 @@ fun FoodRow(food: Food, numbers: Boolean = true, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (micros) CarriedLine(food.nutrients)
         }
         if (numbers) {
             Spacer(Modifier.width(12.dp))
@@ -218,7 +223,7 @@ fun FoodRow(food: Food, numbers: Boolean = true, onClick: () -> Unit) {
 
 /** How much of [food]: a stepper in quarter servings, with what that amount holds (unless amounts of food don't show: [numbers]). */
 @Composable
-fun ServingsDialog(food: Food, numbers: Boolean = true, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
+fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
     var servings by remember { mutableDoubleStateOf(1.0) }
     var text by remember { mutableStateOf("1") }
     fun set(v: Double) {
@@ -230,7 +235,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, onDismiss: () -> Unit, o
         onDismissRequest = onDismiss,
         title = { Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 listOfNotNull(food.brand, if (food.source == FoodSource.OPEN_FOOD_FACTS) "Open Food Facts" else null).takeIf { it.isNotEmpty() }?.let {
                     Hint(it.joinToString(" · "))
                 }
@@ -255,6 +260,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, onDismiss: () -> Unit, o
                         Nutrient("${Format.number(n.fat)} g", "fat")
                     }
                 }
+                if (numbers && micros) CarriedList(n)
             }
         },
         confirmButton = { TextButton(enabled = servings > 0, onClick = { onAdd(servings) }) { Text("Add") } },
@@ -270,9 +276,10 @@ private fun Nutrient(value: String, label: String) {
     }
 }
 
-/** Just the numbers: calories, and macros if you know them. */
+/** Just the numbers: calories, and macros if you know them (and, with [micros], more nutrients). */
 @Composable
-fun QuickAddDialog(onDismiss: () -> Unit, onAdd: (String, Nutrients) -> Unit) {
+fun QuickAddDialog(micros: Boolean = false, onDismiss: () -> Unit, onAdd: (String, Nutrients) -> Unit) {
+    var more by remember { mutableStateOf(mapOf<String, String>()) }
     var name by remember { mutableStateOf("") }
     var kcal by remember { mutableStateOf("") }
     var protein by remember { mutableStateOf("") }
@@ -291,12 +298,12 @@ fun QuickAddDialog(onDismiss: () -> Unit, onAdd: (String, Nutrients) -> Unit) {
                     NumberField(carbs, { carbs = it }, "Carbs", Modifier.weight(1f), suffix = "g")
                     NumberField(fat, { fat = it }, "Fat", Modifier.weight(1f), suffix = "g")
                 }
+                if (micros) MoreNutrients(more, { more = it })
             }
         },
         confirmButton = {
-            TextButton(enabled = calories != null && calories >= 0, onClick = {
-                onAdd(name.trim(), Nutrients(calories!!, Format.parse(protein) ?: 0.0, Format.parse(carbs) ?: 0.0, Format.parse(fat) ?: 0.0))
-            }) { Text("Add") }
+            val (typed, problem) = MicroText.typed(Nutrients(calories ?: 0.0, Format.parse(protein) ?: 0.0, Format.parse(carbs) ?: 0.0, Format.parse(fat) ?: 0.0), more)
+            TextButton(enabled = calories != null && calories >= 0 && problem == null, onClick = { onAdd(name.trim(), typed) }) { Text("Add") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -304,7 +311,8 @@ fun QuickAddDialog(onDismiss: () -> Unit, onAdd: (String, Nutrients) -> Unit) {
 
 /** A food of the person's own, kept for next time (with its [barcode], if it came from a scan). */
 @Composable
-fun NewFoodDialog(barcode: String?, onDismiss: () -> Unit, onSave: (Food, Double) -> Unit) {
+fun NewFoodDialog(barcode: String?, micros: Boolean = false, startOpen: Boolean = false, onDismiss: () -> Unit, onSave: (Food, Double) -> Unit) {
+    var more by remember { mutableStateOf(mapOf<String, String>()) }
     var name by remember { mutableStateOf("") }
     var brand by remember { mutableStateOf("") }
     var serving by remember { mutableStateOf("1 serving") }
@@ -334,10 +342,13 @@ fun NewFoodDialog(barcode: String?, onDismiss: () -> Unit, onSave: (Food, Double
                     NumberField(carbs, { carbs = it }, "Carbs", Modifier.weight(1f), suffix = "g")
                     NumberField(fat, { fat = it }, "Fat", Modifier.weight(1f), suffix = "g")
                 }
+                if (micros) MoreNutrients(more, { more = it }, startOpen)
             }
         },
         confirmButton = {
-            TextButton(enabled = name.isNotBlank() && calories != null, onClick = {
+            // Fibre and the rest: only what's filled in (a blank stays unknown).
+            val (typed, problem) = MicroText.typed(Nutrients(calories ?: 0.0, Format.parse(protein) ?: 0.0, Format.parse(carbs) ?: 0.0, Format.parse(fat) ?: 0.0), more)
+            TextButton(enabled = name.isNotBlank() && calories != null && problem == null, onClick = {
                 onSave(
                     Food(
                         name = name.trim(),
@@ -345,7 +356,7 @@ fun NewFoodDialog(barcode: String?, onDismiss: () -> Unit, onSave: (Food, Double
                         serving = serving.trim().ifBlank { "1 serving" },
                         servingGrams = Format.parse(grams),
                         barcode = barcode,
-                        nutrients = Nutrients(calories!!, Format.parse(protein) ?: 0.0, Format.parse(carbs) ?: 0.0, Format.parse(fat) ?: 0.0),
+                        nutrients = typed,
                     ),
                     1.0,
                 )

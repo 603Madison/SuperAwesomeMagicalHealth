@@ -3,6 +3,7 @@ package com.health.server.food
 import com.health.api.ApiJson
 import com.health.api.Food
 import com.health.api.FoodSource
+import com.health.api.Micronutrient
 import com.health.api.Nutrients
 import com.health.server.Services
 import com.health.server.db.Database
@@ -38,7 +39,7 @@ class OpenFoodFacts(
     suspend fun search(text: String): List<Food> {
         val query = text.trim().take(100)
         if (query.length < 2) return emptyList()
-        return cached("search:${query.lowercase()}") {
+        return cached("search2:${query.lowercase()}") {
             val url = urls.search.toHttpUrl().newBuilder()
                 .addQueryParameter("q", query)
                 .addQueryParameter("page_size", "25")
@@ -52,7 +53,7 @@ class OpenFoodFacts(
     suspend fun barcode(code: String): Food? {
         val clean = code.filter { it.isDigit() }.take(20)
         if (clean.length < 6) return null
-        return cached("barcode:$clean") {
+        return cached("barcode2:$clean") {
             val json = try {
                 ApiJson.parseToJsonElement(http.fetchString(request("${urls.product}$clean?fields=$FIELDS"))).jsonObject
             } catch (e: com.health.server.util.HttpException) {
@@ -62,6 +63,7 @@ class OpenFoodFacts(
         }.firstOrNull()
     }
 
+    /** An answer kept for a week under [key] ("search2:", "barcode2:": the 2 since foods carry vitamins and minerals), or [fetch]ed. */
     private suspend fun cached(key: String, fetch: suspend () -> List<Food>): List<Food> {
         val now = clock()
         val kept = db.tx {
@@ -105,6 +107,7 @@ class OpenFoodFacts(
                 sugar = n.number("sugars_100g"),
                 saturatedFat = n.number("saturated-fat_100g"),
                 sodiumMg = n.number("sodium_100g")?.let { it * 1000 },
+                micros = micros(n, "_100g"),
             )
             val grams = product.number("serving_quantity")?.takeIf { it > 0 && it < 2000 }
             val label = product.text("serving_size")?.trim()?.takeIf { it.isNotEmpty() && it.length <= 60 }
@@ -113,9 +116,23 @@ class OpenFoodFacts(
                 is JsonPrimitive -> b.contentOrNull?.split(',')?.firstOrNull()
                 else -> null
             }?.trim()?.takeIf { it.isNotEmpty() }
+            // Per serving where the label gives one: per 100 g scaled, or the label's own per-serving
+            // value for what's only given that way.
+            val nutrients = if (grams != null) {
+                val scaled = per100 * (grams / 100.0)
+                scaled.copy(
+                    fiber = scaled.fiber ?: n.number("fiber_serving"),
+                    sugar = scaled.sugar ?: n.number("sugars_serving"),
+                    saturatedFat = scaled.saturatedFat ?: n.number("saturated-fat_serving"),
+                    sodiumMg = scaled.sodiumMg ?: n.number("sodium_serving")?.let { it * 1000 },
+                    micros = micros(n, "_serving") + scaled.micros,
+                )
+            } else {
+                per100
+            }
             return Food(
                 name = name.take(160),
-                nutrients = round(if (grams != null) per100 * (grams / 100.0) else per100),
+                nutrients = round(nutrients),
                 serving = if (grams != null) label ?: "${grams.roundToInt()} g" else "100 g",
                 servingGrams = grams ?: 100.0,
                 brand = brand,
@@ -124,9 +141,33 @@ class OpenFoodFacts(
             )
         }
 
+        /**
+         * The vitamins, minerals and finer fats given with [suffix] ("_100g" or "_serving"), each from
+         * Open Food Facts' grams into its own unit ([Micronutrient.fromGrams]). Ones that can't be
+         * right (below nothing, or more than the whole 100 g) are left out.
+         */
+        fun micros(n: JsonObject, suffix: String): Map<Micronutrient, Double> = Micronutrient.entries.mapNotNull { m ->
+            val grams = n.number(m.offKey.removeSuffix("_100g") + suffix)?.takeIf { it >= 0 && it <= 100 } ?: return@mapNotNull null
+            m to grams * m.fromGrams
+        }.toMap()
+
         private fun round(n: Nutrients): Nutrients {
             fun r(v: Double) = (v * 10).roundToInt() / 10.0
-            return Nutrients(r(n.calories), r(n.protein), r(n.carbs), r(n.fat), n.fiber?.let(::r), n.sugar?.let(::r), n.saturatedFat?.let(::r), n.sodiumMg?.let(::r))
+            return Nutrients(
+                r(n.calories), r(n.protein), r(n.carbs), r(n.fat), n.fiber?.let(::r), n.sugar?.let(::r), n.saturatedFat?.let(::r), n.sodiumMg?.let(::r),
+                micros = n.micros.mapValues { (_, v) -> significant(v) },
+            )
+        }
+
+        /** Three significant figures or so: vitamin B12's 0.24 µg keeps its digits, potassium's 412 mg needs none. */
+        private fun significant(v: Double): Double {
+            val places = when {
+                v >= 100 -> 0
+                v >= 10 -> 1
+                v >= 1 -> 2
+                else -> 3
+            }
+            return java.math.BigDecimal(v).setScale(places, java.math.RoundingMode.HALF_UP).toDouble()
         }
 
         private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull

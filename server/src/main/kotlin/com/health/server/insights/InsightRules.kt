@@ -37,9 +37,10 @@ object InsightRules {
 
     /**
      * Food for the insights: with [numbers] false (eating disorder recovery) no insight gives an
-     * amount of food or a target; [suggestions] are ideas for the protein insight, today only.
+     * amount of food or a target; [suggestions] are ideas for the protein insight, today only;
+     * [micro] is the week's one nutrient insight, if there is one (never in recovery).
      */
-    class Food(val numbers: Boolean = true, val suggestions: List<FoodSuggestion> = emptyList())
+    class Food(val numbers: Boolean = true, val suggestions: List<FoodSuggestion> = emptyList(), val micro: Insight? = null)
 
     /**
      * The share of the day's protein most people have eaten by [hourNow]: none expected before 11:00,
@@ -160,6 +161,8 @@ object InsightRules {
                 add(56, "info", "flame", "%,d kcal over your target".format((eaten.calories - c.target.calories).roundToInt()), "One day doesn't change much; your trend over a week is what counts.", AppPage.FOOD)
             }
         }
+        // A nutrient under its target most of the week: gentle, and below what's about today.
+        if (c.food.numbers) c.food.micro?.let { out += Ranked(36, it) }
         if (c.water && c.isToday && c.hourNow >= 16 && today.waterMl < c.target.waterMl * 0.5) {
             add(48, "info", "droplet", "Time for some water", if (c.food.numbers) "${today.waterMl} ml so far of your ${c.target.waterMl} ml." else "A glass now would help.", AppPage.FOOD)
         }

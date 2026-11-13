@@ -94,6 +94,52 @@ enum class Micronutrient(val label: String, val unit: String, val group: MicroGr
 @Serializable
 data class MicroTarget(val micro: Micronutrient, val amount: Double, val upper: Double? = null, val custom: Boolean = false)
 
+/**
+ * Fibre, sugar, saturated fat and sodium: the parts of [Nutrients] with fields of their own, each
+ * with a target on [NutritionTarget] (fibre to reach, the rest to stay under).
+ */
+@Serializable
+enum class ExtraNutrient(val label: String, val unit: String, val aim: MicroAim) {
+    FIBER("Fibre", "g", MicroAim.AT_LEAST),
+    SUGAR("Sugar", "g", MicroAim.AT_MOST),
+    SATURATED_FAT("Saturated fat", "g", MicroAim.AT_MOST),
+    SODIUM("Sodium", "mg", MicroAim.AT_MOST),
+    ;
+
+    /** How much of it [n] holds, where known. */
+    fun of(n: Nutrients): Double? = when (this) {
+        FIBER -> n.fiber
+        SUGAR -> n.sugar
+        SATURATED_FAT -> n.saturatedFat
+        SODIUM -> n.sodiumMg
+    }
+
+    /** The day's target for it, where there is one. */
+    fun target(t: NutritionTarget): Double? = when (this) {
+        FIBER -> t.fiberG
+        SUGAR -> t.sugarG
+        SATURATED_FAT -> t.saturatedFatG
+        SODIUM -> t.sodiumMg
+    }
+}
+
+/**
+ * One nutrient's target in the settings (`GET /api/food/targets`): [key] is an [ExtraNutrient] or
+ * [Micronutrient] name. [reference] is the reference intake for the person's chosen
+ * [EnergyProfile] (none for a few, like monounsaturated fat), [upper] the upper limit where there
+ * is one, and [own] the person's own target, if they've set one.
+ */
+@Serializable
+data class NutrientTargetSetting(val key: String, val reference: Double? = null, val upper: Double? = null, val own: Double? = null)
+
+/** Every nutrient's target, with where the reference intakes come from: [basis] ("Adult reference intake, female values") and [source]. */
+@Serializable
+data class NutrientTargets(val items: List<NutrientTargetSetting>, val basis: String, val source: String)
+
+/** `PUT /api/food/targets`: the person's own targets by key; a nutrient left out goes back to its reference intake. */
+@Serializable
+data class NutrientTargetsChange(val own: Map<String, Double> = emptyMap())
+
 @Serializable
 enum class FoodSource { CUSTOM, OPEN_FOOD_FACTS }
 
@@ -162,6 +208,13 @@ data class NutritionTarget(
     val basis: String,
     /** Fibre, sodium, vitamins and minerals: a day's targets (see [MicroTarget]). */
     val micros: List<MicroTarget> = emptyList(),
+    /** Fibre to reach, and sugar, saturated fat and sodium to stay under (see [ExtraNutrient]), where there's a target. */
+    val fiberG: Double? = null,
+    val sugarG: Double? = null,
+    val saturatedFatG: Double? = null,
+    val sodiumMg: Double? = null,
+    /** Where those targets come from, in a few words: "Adult reference intake, female values". */
+    val microBasis: String? = null,
 )
 
 @Serializable

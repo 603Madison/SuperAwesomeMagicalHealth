@@ -573,6 +573,45 @@ button.insight-main:focus-visible { outline: 2px solid var(--primary); outline-o
 .macro-amount strong { color: var(--text); font-weight: var(--w-semibold); }
 .macros { display: flex; flex-direction: column; gap: 10px; }
 
+/* Vitamins & minerals (Food): quiet bars, "No data" where nothing carried one, and "More nutrients". */
+.micros { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px 32px; margin-top: 4px; }
+.micro { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; min-width: 0; }
+.micro-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.micro-name { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.micro-amount { font-variant-numeric: tabular-nums; text-align: right; }
+.micro-amount.is-none { color: var(--faint); }
+.micro .meter { height: 6px; }
+.micro-track { display: block; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--outline) 22%, transparent); }
+.micro-note { font-size: 0.8rem; color: var(--muted); }
+.micro-group + .micro-group { margin-top: 6px; }
+.micro-group-title { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: var(--w-semibold); margin: 10px 0 8px; }
+.row-sub.micro-line { font-size: 0.8rem; white-space: normal; }
+.micro-details summary { font-weight: var(--w-medium); }
+.micro-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 20px; margin: 6px 0 0; }
+.micro-list div { display: flex; justify-content: space-between; gap: 8px; font-size: 0.88rem; }
+.micro-list dt { color: var(--muted); }
+.micro-list dd { margin: 0; font-variant-numeric: tabular-nums; }
+.micro-inputs { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px 12px; align-items: end; }
+.micro-inputs legend { padding: 0; margin-bottom: 6px; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: var(--w-semibold); }
+.micro-input { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); min-width: 0; }
+.micro-input-box { display: flex; align-items: center; gap: 6px; }
+.micro-input-box input { width: 100%; min-width: 0; }
+.micro-input-box .muted { min-width: 1.6em; }
+.nutrient-targets { display: flex; flex-direction: column; }
+.micro-inputs.nutrient-target-group { display: block; }
+.nutrient-pick { display: block; margin-bottom: 10px; }
+.nutrient-pick select { max-width: 100%; }
+.nutrient-target { display: grid; grid-template-columns: minmax(0, 1fr) 150px 76px; gap: 6px 12px; align-items: center; padding: 8px 0; border-top: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); }
+.nutrient-target:first-child { border-top: 0; }
+.nutrient-target .micro-input-box input { text-align: right; }
+.nutrient-target-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nutrient-target-name small { color: var(--muted); font-size: 0.8rem; }
+@media (max-width: 560px) {
+  .micro-list { grid-template-columns: 1fr; }
+  .nutrient-target { grid-template-columns: minmax(0, 1fr) 104px; }
+  .nutrient-target > .btn { grid-column: 2; justify-self: end; }
+}
+
 /* ---------- Day navigation ---------- */
 
 .date-nav { display: flex; align-items: center; gap: 4px; background: var(--card); border-radius: 999px; padding: 4px; border: 1px solid color-mix(in srgb, var(--outline) 30%, transparent); }

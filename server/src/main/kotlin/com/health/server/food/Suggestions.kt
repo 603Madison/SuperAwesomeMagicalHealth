@@ -282,12 +282,25 @@ class SuggestionService(
      */
     suspend fun forInsights(userId: String, date: LocalDate, isToday: Boolean, today: DayStats, target: NutritionTarget): InsightRules.Food {
         val numbers = numbers(userId)
-        if (!numbers || !isToday) return InsightRules.Food(numbers)
+        if (!numbers) return InsightRules.Food(numbers)
+        val micro = microInsight(userId, date, isToday, target)
+        if (!isToday) return InsightRules.Food(numbers, micro = micro)
         val zone = profiles.days(userId).zone
-        val gap = InsightRules.proteinGap(today, target, isToday = true, hourNow = timeNow(zone).hour) ?: return InsightRules.Food(numbers)
+        val gap = InsightRules.proteinGap(today, target, isToday = true, hourNow = timeNow(zone).hour) ?: return InsightRules.Food(numbers, micro = micro)
         val history = foods.entries(userId, date.minusDays(Suggestions.HISTORY_DAYS), date)
         val left = Suggestions.gap(target, today.nutrition ?: Nutrients()).copy(protein = gap)
-        return InsightRules.Food(numbers, Suggestions.rank(history, date, Suggestions.mealAt(timeNow(zone)), left, limit = 3))
+        return InsightRules.Food(numbers, Suggestions.rank(history, date, Suggestions.mealAt(timeNow(zone)), left, limit = 3), micro)
+    }
+
+    /**
+     * The week's nutrient insight ([Micros.weeklyInsight]), while vitamins and minerals show
+     * ([com.health.api.Fields.NUTRITION_MICROS]): over the seven days before today, or the seven ending on a past day.
+     */
+    private suspend fun microInsight(userId: String, date: LocalDate, isToday: Boolean, target: NutritionTarget): com.health.api.Insight? {
+        if (!conditions.shows(userId, com.health.api.Fields.NUTRITION_MICROS)) return null
+        val last = if (isToday) date.minusDays(1) else date
+        val week = (6 downTo 0).map { last.minusDays(it.toLong()) }
+        return Micros.weeklyInsight(foods.entries(userId, week.first(), last), week, target)
     }
 
     private fun timeNow(zone: ZoneId): LocalTime = Instant.ofEpochMilli(clock()).atZone(zone).toLocalTime()

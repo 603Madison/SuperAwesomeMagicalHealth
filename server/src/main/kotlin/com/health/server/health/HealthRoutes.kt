@@ -5,6 +5,7 @@ import com.health.api.DeviceChoices
 import com.health.api.FitImportResult
 import com.health.api.IngestBatch
 import com.health.api.MeasurementInput
+import com.health.api.Module
 import com.health.api.Metric
 import com.health.api.Profile
 import com.health.api.Sample
@@ -58,7 +59,8 @@ fun Route.healthRoutes(services: Services) {
 
     get("/api/day/{date}") {
         val user = call.requireUser(services)
-        val summary = services.days.summary(user.id, call.parameters["date"].orEmpty())
+        // Pregnancy's nutrient targets would tell a viewer who doesn't see the cycle.
+        val summary = services.days.summary(user.id, call.parameters["date"].orEmpty(), pregnancy = call.viewScope?.let { Module.CYCLE in it.modules } ?: true)
         // Someone viewing shared data sees only the features shared with them.
         call.respond(call.viewScope?.let { com.health.server.care.SharedView.limit(summary, it.modules) } ?: summary)
     }
@@ -72,8 +74,13 @@ fun Route.healthRoutes(services: Services) {
             q["from"]?.let { days.parse(it, services.clock()) },
             q["to"]?.let { days.parse(it, services.clock()) },
             q["days"]?.toIntOrNull(),
+            pregnancy = call.viewScope?.let { Module.CYCLE in it.modules } ?: true,
         )
-        call.respond(call.viewScope?.let { v -> trends.copy(days = trends.days.map { com.health.server.care.SharedView.limit(it, v.modules) }) } ?: trends)
+        call.respond(
+            call.viewScope?.let { v ->
+                trends.copy(days = trends.days.map { com.health.server.care.SharedView.limit(it, v.modules) }, nutritionTarget = trends.nutritionTarget.takeIf { Module.NUTRITION in v.modules })
+            } ?: trends,
+        )
     }
 
     get("/api/series") {

@@ -3,17 +3,19 @@ import { useSearchParams } from "react-router-dom";
 import { ArrowRightLeft, Barcode, Copy, GlassWater, Lightbulb, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { dayLabel, num, shiftDate, today } from "../lib/format";
-import type { Food as FoodItem, FoodDay, FoodEntry, Meal, Nutrients } from "../lib/types";
+import type { Food as FoodItem, FoodDay, FoodEntry, Meal } from "../lib/types";
 import { Meter } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
-import { useFoodNumbers, useWater } from "../lib/fields";
+import { useFoodNumbers, useMicros, useWater } from "../lib/fields";
 import { useModules } from "../App";
 import { DrinksCard } from "./Drinks";
 import { useReadOnly } from "../lib/viewing";
 import { amountText, logSuggestion } from "../components/Insights";
 import { FoodPhotoFlow, SnapPhoto } from "./FoodPhoto";
+import { CarriedLine, CarriedList, MicrosCard, MoreNutrients } from "./FoodMicros";
+import { scaled, typedNutrients, type NutrientKey } from "../lib/micros";
 
 const MEALS: { id: Meal; label: string }[] = [
   { id: "BREAKFAST", label: "Breakfast" },
@@ -29,9 +31,12 @@ export function Food() {
   const { data, error, loading, reload, setData } = useLoad(() => api.foodDay(date), [date]);
   const drinks = useLoad(() => api.drinksDay(date).catch(() => undefined), [date]);
   const readOnly = useReadOnly();
-  const water = useWater(useModules());
+  const modules = useModules();
+  const water = useWater(modules);
   // In eating disorder recovery: foods and meals, and no amounts (calories, macros, targets) anywhere.
   const numbers = useFoodNumbers();
+  // Vitamins and minerals: while their field shows, and never in recovery.
+  const micros = useMicros(modules);
   const [adding, setAdding] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<FoodEntry | null>(null);
   useHashScroll(!!data);
@@ -40,6 +45,7 @@ export function Food() {
     // Ideas from what's been eaten before, for the meal it is now: today only.
     { id: "ideas", label: "Ideas", when: date === today(), node: data && <Ideas date={date} readOnly={readOnly} numbers={numbers} onChanged={reload} /> },
     { id: "totals", label: "Totals", when: numbers, node: data && <Totals day={data} /> },
+    { id: "micros", label: "Vitamins & minerals", when: micros, node: data && <MicrosCard day={data} /> },
     { id: "water", label: "Water", when: water, node: data && <WaterCard day={data} readOnly={readOnly} onChanged={reload} /> },
     { id: "drinks", label: "Drinks", node: data && <DrinksCard day={drinks.data} date={date} readOnly={readOnly} onChanged={() => { drinks.reload(); reload(); }} /> },
     ...MEALS.map((m) => ({
@@ -69,7 +75,7 @@ export function Food() {
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
       <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
-      {adding && <AddFood date={date} meal={adding} numbers={numbers} onClose={() => setAdding(null)} onAdded={reload} />}
+      {adding && <AddFood date={date} meal={adding} numbers={numbers} micros={micros} onClose={() => setAdding(null)} onAdded={reload} />}
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
   );
@@ -237,17 +243,13 @@ function MealCard({ meal, day, readOnly, numbers, onAdd, onEdit, onChanged, onRe
   );
 }
 
-function scaled(n: Nutrients, factor: number): Nutrients {
-  return { calories: n.calories * factor, protein: n.protein * factor, carbs: n.carbs * factor, fat: n.fat * factor };
-}
-
 /** Adding something eaten: search (your foods, then Open Food Facts), a barcode, recent foods, a quick add, or a new food. */
-function AddFood({ date, meal, numbers, onClose, onAdded }: { date: string; meal: Meal; numbers: boolean; onClose: () => void; onAdded: () => void }) {
+function AddFood({ date, meal, numbers, micros, onClose, onAdded }: { date: string; meal: Meal; numbers: boolean; micros: boolean; onClose: () => void; onAdded: () => void }) {
   const [tab, setTab] = useState<"search" | "recent" | "quick" | "new">("search");
   const [chosen, setChosen] = useState<FoodItem | null>(null);
   const [photo, setPhoto] = useState(false);
   const label = MEALS.find((m) => m.id === meal)!.label;
-  if (chosen) return <Servings food={chosen} date={date} meal={meal} numbers={numbers} onBack={() => setChosen(null)} onClose={onClose} onAdded={onAdded} />;
+  if (chosen) return <Servings food={chosen} date={date} meal={meal} numbers={numbers} micros={micros} onBack={() => setChosen(null)} onClose={onClose} onAdded={onAdded} />;
   if (photo) return <FoodPhotoFlow date={date} meal={meal} mealLabel={label} onBack={() => setPhoto(false)} onClose={onClose} onAdded={onAdded} />;
   return (
     <Modal title={`Add to ${label.toLowerCase()}`} onClose={onClose} wide>
@@ -255,15 +257,15 @@ function AddFood({ date, meal, numbers, onClose, onAdded }: { date: string; meal
       <Segmented label="How to add" value={tab} onChange={setTab} options={[
         { value: "search", label: "Search" }, { value: "recent", label: "Recent" }, { value: "quick", label: "Quick add" }, { value: "new", label: "New food" },
       ]} />
-      {tab === "search" && <SearchFoods numbers={numbers} onChoose={setChosen} />}
-      {tab === "recent" && <RecentFoods numbers={numbers} onChoose={setChosen} />}
-      {tab === "quick" && <QuickAdd date={date} meal={meal} numbers={numbers} onDone={() => { onAdded(); onClose(); }} />}
-      {tab === "new" && <NewFood numbers={numbers} onSaved={setChosen} />}
+      {tab === "search" && <SearchFoods numbers={numbers} micros={micros} onChoose={setChosen} />}
+      {tab === "recent" && <RecentFoods numbers={numbers} micros={micros} onChoose={setChosen} />}
+      {tab === "quick" && <QuickAdd date={date} meal={meal} numbers={numbers} micros={micros} onDone={() => { onAdded(); onClose(); }} />}
+      {tab === "new" && <NewFood numbers={numbers} micros={micros} onSaved={setChosen} />}
     </Modal>
   );
 }
 
-function SearchFoods({ numbers, onChoose }: { numbers: boolean; onChoose: (f: FoodItem) => void }) {
+function SearchFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: boolean; onChoose: (f: FoodItem) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ mine: FoodItem[]; online: FoodItem[]; onlineError?: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -294,9 +296,9 @@ function SearchFoods({ numbers, onChoose }: { numbers: boolean; onChoose: (f: Fo
       {results && (
         <div className="search-results">
           {results.mine.length > 0 && <div className="result-group-title">Your foods</div>}
-          {results.mine.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} onChoose={onChoose} />)}
+          {results.mine.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
           {results.online.length > 0 && <div className="result-group-title">Open Food Facts</div>}
-          {results.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} onChoose={onChoose} />)}
+          {results.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
           {results.onlineError && <p className="muted small">{results.onlineError}</p>}
           {results.mine.length === 0 && results.online.length === 0 && !results.onlineError && <p className="muted">Nothing found. Try other words, or add it as a new food.</p>}
         </div>
@@ -305,27 +307,28 @@ function SearchFoods({ numbers, onChoose }: { numbers: boolean; onChoose: (f: Fo
   );
 }
 
-function RecentFoods({ numbers, onChoose }: { numbers: boolean; onChoose: (f: FoodItem) => void }) {
+function RecentFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: boolean; onChoose: (f: FoodItem) => void }) {
   const { data, loading, error } = useLoad(() => api.recentFoods(), []);
   if (loading) return <Spinner />;
   if (error) return <div className="notice notice-error">{error}</div>;
   if (!data?.length) return <p className="muted">Foods you log show up here, most recent first.</p>;
-  return <div className="search-results">{data.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} onChoose={onChoose} />)}</div>;
+  return <div className="search-results">{data.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}</div>;
 }
 
-function FoodRow({ food, numbers, onChoose }: { food: FoodItem; numbers: boolean; onChoose: (f: FoodItem) => void }) {
+function FoodRow({ food, numbers, micros, onChoose }: { food: FoodItem; numbers: boolean; micros: boolean; onChoose: (f: FoodItem) => void }) {
   return (
     <button className="row" onClick={() => onChoose(food)}>
       <div className="row-main">
         <div className="row-title">{food.name}</div>
         <div className="row-sub">{food.brand ? `${food.brand} · ` : ""}{food.serving}{numbers ? ` · P ${num(food.nutrients.protein)} · C ${num(food.nutrients.carbs)} · F ${num(food.nutrients.fat)}` : ""}</div>
+        {micros && <CarriedLine nutrients={food.nutrients} />}
       </div>
       {numbers && <div className="row-end">{num(food.nutrients.calories)}<div className="muted">kcal</div></div>}
     </button>
   );
 }
 
-function Servings({ food, date, meal, numbers, onBack, onClose, onAdded }: { food: FoodItem; date: string; meal: Meal; numbers: boolean; onBack: () => void; onClose: () => void; onAdded: () => void }) {
+function Servings({ food, date, meal, numbers, micros, onBack, onClose, onAdded }: { food: FoodItem; date: string; meal: Meal; numbers: boolean; micros: boolean; onBack: () => void; onClose: () => void; onAdded: () => void }) {
   const [servings, setServings] = useState("1");
   const [grams, setGrams] = useState(food.servingGrams ? String(Math.round(food.servingGrams)) : "");
   const [busy, setBusy] = useState(false);
@@ -369,22 +372,26 @@ function Servings({ food, date, meal, numbers, onBack, onClose, onAdded }: { foo
         <div className="stat"><div className="stat-label">Carbs</div><div className="stat-value">{num(n.carbs, 1)}<span className="stat-unit">g</span></div></div>
         <div className="stat"><div className="stat-label">Fat</div><div className="stat-value">{num(n.fat, 1)}<span className="stat-unit">g</span></div></div>
       </div>}
+      {micros && <CarriedList nutrients={n} />}
     </Modal>
   );
 }
 
 /** A quick add: what it was and its amounts; without numbers (eating disorder recovery), just what it was. */
-function QuickAdd({ date, meal, numbers, onDone }: { date: string; meal: Meal; numbers: boolean; onDone: () => void }) {
+function QuickAdd({ date, meal, numbers, micros, onDone }: { date: string; meal: Meal; numbers: boolean; micros: boolean; onDone: () => void }) {
   const [name, setName] = useState("");
   const [values, setValues] = useState({ calories: "", protein: "", carbs: "", fat: "" });
+  const [more, setMore] = useState<Partial<Record<NutrientKey, string>>>({});
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => setValues({ ...values, [k]: e.target.value });
   const save = async () => {
     const n = (v: string) => Number(v.replace(",", ".")) || 0;
     if (numbers ? !n(values.calories) : !name.trim()) return;
+    const extra = typedNutrients(micros ? more : {});
+    if (extra.error) { errorToast(new Error(extra.error)); return; }
     setBusy(true);
     try {
-      await api.logFood({ date, meal, servings: 1, name: name.trim() || "Quick add", nutrients: { calories: n(values.calories), protein: n(values.protein), carbs: n(values.carbs), fat: n(values.fat) } });
+      await api.logFood({ date, meal, servings: 1, name: name.trim() || "Quick add", nutrients: { calories: n(values.calories), protein: n(values.protein), carbs: n(values.carbs), fat: n(values.fat), ...extra.extras, micros: extra.micros } });
       toast("Added");
       onDone();
     } catch (e) { errorToast(e); setBusy(false); }
@@ -398,24 +405,29 @@ function QuickAdd({ date, meal, numbers, onDone }: { date: string; meal: Meal; n
         <Field label="Carbs (g)"><input inputMode="decimal" value={values.carbs} onChange={set("carbs")} /></Field>
         <Field label="Fat (g)"><input inputMode="decimal" value={values.fat} onChange={set("fat")} /></Field>
       </div>}
+      {numbers && micros && <MoreNutrients values={more} onChange={setMore} />}
       <Button variant="primary" busy={busy} type="submit"><Zap size={16} /> Add</Button>
     </form>
   );
 }
 
 /** A food of the person's own; without numbers (eating disorder recovery), its name and serving only. */
-function NewFood({ numbers, onSaved }: { numbers: boolean; onSaved: (f: FoodItem) => void }) {
-  const [food, setFood] = useState({ name: "", brand: "", serving: "1 serving", grams: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
+function NewFood({ numbers, micros, onSaved }: { numbers: boolean; micros: boolean; onSaved: (f: FoodItem) => void }) {
+  const [food, setFood] = useState({ name: "", brand: "", serving: "1 serving", grams: "", calories: "", protein: "", carbs: "", fat: "" });
+  const [more, setMore] = useState<Partial<Record<NutrientKey, string>>>({});
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof food) => (e: React.ChangeEvent<HTMLInputElement>) => setFood({ ...food, [k]: e.target.value });
   const n = (v: string) => Number(v.replace(",", ".")) || 0;
   const save = async () => {
+    // Fibre and the rest: only what's filled in (a blank stays unknown).
+    const extra = typedNutrients(micros ? more : {});
+    if (extra.error) { errorToast(new Error(extra.error)); return; }
     setBusy(true);
     try {
       const saved = await api.saveFood({
         name: food.name.trim(), brand: food.brand.trim() || undefined, serving: food.serving.trim() || "1 serving",
         servingGrams: n(food.grams) || undefined, source: "CUSTOM", uses: 0,
-        nutrients: { calories: n(food.calories), protein: n(food.protein), carbs: n(food.carbs), fat: n(food.fat), fiber: food.fiber ? n(food.fiber) : undefined },
+        nutrients: { calories: n(food.calories), protein: n(food.protein), carbs: n(food.carbs), fat: n(food.fat), ...extra.extras, micros: extra.micros },
       });
       toast("Saved to your foods");
       onSaved(saved);
@@ -439,6 +451,7 @@ function NewFood({ numbers, onSaved }: { numbers: boolean; onSaved: (f: FoodItem
           <Field label="Carbs (g)"><input inputMode="decimal" value={food.carbs} onChange={set("carbs")} /></Field>
           <Field label="Fat (g)"><input inputMode="decimal" value={food.fat} onChange={set("fat")} /></Field>
         </div>
+        {micros && <MoreNutrients values={more} onChange={setMore} />}
       </>}
       <Button variant="primary" busy={busy} type="submit">Save and choose amount</Button>
     </form>

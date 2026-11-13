@@ -63,6 +63,7 @@ the insight out while that card shows. The protein insight (today only) carries 
 | `GET /api/foods/barcode/{code}` | `Food`, or 404 |
 | `GET /api/foods/recent` | `[Food]`: the person's foods, most used first |
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
+| `GET /api/food/targets` · `PUT` | `NutrientTargets` / `NutrientTargetsChange`: each nutrient's reference intake, upper limit and the person's own target |
 | `POST /api/water` · `DELETE /api/water/{id}` | `WaterEntry` |
 
 Suggestions are single foods and whole meals the person has had (one day's meal of 2–5 things),
@@ -76,6 +77,40 @@ name and nutrients); `why` is plain words and never an amount ("You often have t
 condition), `showNumbers` is false and `gap` absent: the ranking goes by habit alone, the apps show
 no amounts, and Today has no food insights with amounts or targets (protein, calories; water
 without its numbers).
+
+**Vitamins and minerals.** `Nutrients.micros` maps each `Micronutrient` (the finer fats, minerals
+and vitamins, each in its `unit`) to an amount; with `fiber`, `sugar`, `saturatedFat` and
+`sodiumMg` (the `ExtraNutrient`s), a nutrient that's missing is unknown, never 0, and sums and
+servings keep it that way (`Nutrients.plus`, `times`). Entries stored before micronutrients read
+with none. Open Food Facts foods carry every `Micronutrient.offKey` the product has (grams per
+100 g, turned into each unit with `fromGrams`; per serving where the label gives a serving, using
+the `_serving` value for what's only given that way). What a person types (`POST /api/foods`,
+`PUT`, and `POST /api/food/entries` with `nutrients`) is checked: each micronutrient 0 or more and
+at most 2,000 g, 100,000 mg or 1,000,000 µg, else 400; a database food's odd values are dropped.
+`FoodDay.target` (and `DaySummary.nutritionTarget`, `Trends.nutritionTarget` for the last day)
+carries `micros` (`MicroTarget`: `amount`, `upper` where an upper limit applies to food, `custom`
+for the person's own) and `fiberG`, `sugarG`, `saturatedFatG`, `sodiumMg`, with `microBasis`
+("Adult reference intake, female values"). The reference intakes are the US National Academies'
+DRIs as the NIH Office of Dietary Supplements lists them (RDA or AI; the UL), by age (19–50, 51–70,
+71 and over; 30 without a birth year), with the female, male or average values of the person's
+chosen `EnergyProfile` (the calorie formula's choice, never inferred); sodium's 2,300 mg limit;
+saturated fat under 10% and trans fat under 1% of the day's calories; cholesterol 300 mg; total
+sugars 90 g (the EU's reference intake); and in pregnancy (the life stage, with the cycle on) at
+least 600 µg folate, 27 mg iron and 220 µg iodine. Someone viewing a share that leaves out the
+cycle gets the targets without pregnancy's. `GET /api/food/targets` lists every nutrient by key
+(`ExtraNutrient` or `Micronutrient` name) with its `reference`, `upper` and `own`, plus `basis`
+and `source`; `PUT` with `{own: {"IRON": 15}}` replaces the person's own (sealed in their
+settings; each more than 0 and within the maxima above; a key left out goes back to the
+reference). `TrendDay` has `fiber`, `sugar`, `saturatedFat`, `sodiumMg` and `micros` where a food
+that day carried them. At most one gentle insight a day looks at the week before (`salad`, linking
+to `FOOD`): fibre or a vitamin or mineral under its target on at least 4 of the 7 days, counting
+only days where at least half the foods carried it, and only when 5 of the 7 do. It's never shown
+in eating-disorder recovery or with the field `nutrition.micros` ("Vitamins & minerals", on by
+default) hidden; the apps hide the Food section, a food's micronutrients, "More nutrients", the
+Trends chart and the targets the same way. The CSV export's `food.csv` and `daily.csv` have a
+column for each (`fiber_g`, `sugar_g`, `saturated_fat_g`, `sodium_mg`, `iron_mg`, `vitamin_d_ug`…),
+empty where nothing carried it; the connector's `food_log` and `day` add the totals the foods
+carried.
 
 ## Body, workouts, sleep, check-ins
 
@@ -475,7 +510,8 @@ in. What it looks at is sent to Anthropic, under Anthropic's commercial terms an
 
 **Food photo estimates.** With Food among the features the person allowed, `POST /api/ai/food-photo`
 sends one photo of a meal to Anthropic and returns what's in it: each food and drink with its
-portion (grams, or ml), estimated kcal, protein, carbs, fat and fibre, a confidence (`LOW`,
+portion (grams, or ml), estimated kcal, protein, carbs, fat, fibre, sugar, saturated fat and
+sodium (never vitamins or minerals, which a photo can't show), a confidence (`LOW`,
 `MEDIUM`, `HIGH`) and a line on what it assumed, plus `match`, the person's own food with a
 similar name, if they have one. The apps shrink the photo to 1024 px and re-encode it (dropping
 location and camera details); the server does the same again, sends it in that one request, and

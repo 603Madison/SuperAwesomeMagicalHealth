@@ -120,8 +120,13 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
         zone = c.zone(),
         water = showsField(Fields.NUTRITION_WATER),
         numbers = com.health.app.ui.components.foodNumbers(),
+        micros = showsMicros(),
     )
 }
+
+/** Whether vitamins and minerals show: their field (on by default), and never in eating disorder recovery. */
+@Composable
+fun showsMicros(): Boolean = showsField(Fields.NUTRITION_MICROS) && com.health.app.ui.components.foodNumbers()
 
 /** The Food tab's sections, arranged under `android.food`: their ids are saved, so they stay as they are. */
 object FoodSections {
@@ -130,17 +135,20 @@ object FoodSections {
     const val TOTALS = "totals"
     const val WATER = "water"
     const val DRINKS = "drinks"
+    const val MICROS = "micros"
 
     /** A meal's section: "breakfast", "lunch", "dinner", "snack". */
     fun meal(meal: Meal): String = meal.name.lowercase()
 
     /**
-     * The sections, in the default order; ideas only for today, water only while it's shown, and
-     * the totals only while amounts of food show ([numbers]: not in eating disorder recovery).
+     * The sections, in the default order; ideas only for today, water only while it's shown, the
+     * totals only while amounts of food show ([numbers]: not in eating disorder recovery), and
+     * vitamins and minerals while they show ([micros]).
      */
-    fun items(water: Boolean, ideas: Boolean = true, numbers: Boolean = true): List<ArrangeItem> = buildList {
+    fun items(water: Boolean, ideas: Boolean = true, numbers: Boolean = true, micros: Boolean = false): List<ArrangeItem> = buildList {
         if (ideas) add(ArrangeItem(IDEAS, "Ideas"))
         if (numbers) add(ArrangeItem(TOTALS, "Calories and nutrients"))
+        if (numbers && micros) add(ArrangeItem(MICROS, "Vitamins & minerals"))
         Meal.entries.forEach { add(ArrangeItem(meal(it), it.label)) }
         if (water) add(ArrangeItem(WATER, "Water"))
         add(ArrangeItem(DRINKS, "Drinks"))
@@ -153,11 +161,14 @@ object FoodSections {
  * totals, meals by what's in them, water without its goal.
  */
 @Composable
-fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault(), water: Boolean = true, numbers: Boolean = true) {
+fun FoodScreen(
+    state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault(), water: Boolean = true, numbers: Boolean = true,
+    micros: Boolean = false,
+) {
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     var arranging by remember { mutableStateOf(false) }
     val day = state.day
-    val items = FoodSections.items(water, ideas = state.date == state.today, numbers = numbers)
+    val items = FoodSections.items(water, ideas = state.date == state.today, numbers = numbers, micros = micros)
     val shown = arranged(FoodSections.KEY, items)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Food", Format.day(state.date, state.today)) {
@@ -177,6 +188,7 @@ fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneI
                         when {
                             id == FoodSections.IDEAS -> IdeasCard(state.ideas, state.ideasMeal, state.ideasError, actions, numbers)
                             id == FoodSections.TOTALS -> if (numbers) Totals(day)
+                            id == FoodSections.MICROS -> if (numbers && micros) MicrosCard(day, state.date == state.today)
                             meal != null -> MealCard(
                                 meal, day.entries.filter { it.meal == meal }, numbers,
                                 onAdd = { actions.add(state.date, meal) }, onEdit = { editing = it }, onCopy = { actions.copyYesterday(meal) },

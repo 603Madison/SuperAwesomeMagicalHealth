@@ -299,6 +299,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { back -> AppointmentEditorRoute(back.arguments?.getString("id"), onDone = { nav.popBackStack() }) }
         composable("settings/reminders") { RemindersRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/nutrients") { com.health.app.ui.settings.NutrientTargetsRoute(onBack = { nav.popBackStack() }) }
         composable("settings/sharing") {
             SharingRoute(onBack = { nav.popBackStack() }, onViewing = { nav.navigate("today") { popUpTo("today") { inclusive = true } } })
         }

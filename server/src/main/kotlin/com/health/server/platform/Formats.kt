@@ -75,7 +75,12 @@ object Csv {
         return if (safe.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + safe.replace("\"", "\"\"") + "\"" else safe
     }
 
-    fun num(v: Double?, decimals: Int = 2): String = v?.let { String.format(Locale.US, "%.${decimals}f", it).trimEnd('0').trimEnd('.') }.orEmpty()
+    /** [v] to at most [decimals] places, without trailing zeros after the point ("2.5", "700"); empty for null. */
+    fun num(v: Double?, decimals: Int = 2): String = v?.let {
+        val text = String.format(Locale.US, "%.${decimals}f", it)
+        // Only zeros after a point go: 700 kcal stays 700.
+        if ('.' in text) text.trimEnd('0').trimEnd('.') else text
+    }.orEmpty()
 
     fun iso(ms: Long?, zone: ZoneId): String = ms?.let { Instant.ofEpochMilli(it).atZone(zone).toOffsetDateTime().toString() }.orEmpty()
 }

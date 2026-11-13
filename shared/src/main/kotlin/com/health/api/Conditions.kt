@@ -175,6 +175,9 @@ object Fields {
     // Food: water (and the water goal) can be left out; drinks still count caffeine and alcohol.
     const val NUTRITION_WATER = "nutrition.water"
 
+    // Food: vitamins, minerals and the finer fats (the Food page's section, and "More nutrients" on foods).
+    const val NUTRITION_MICROS = "nutrition.micros"
+
     /** On for everyone who has the feature, until hidden. */
     val DEFAULTS: Set<String> = setOf(
         CONTINENCE_URGENCY, CONTINENCE_VOLUME, CONTINENCE_LEAK_SIZE, CONTINENCE_TRIGGERS, CONTINENCE_BRISTOL, CONTINENCE_PELVIC_FLOOR,
@@ -182,6 +185,7 @@ object Fields {
         NEURO_ABOUT_ME, NEURO_CALM, NEURO_CARDS,
         TRANSITION_MILESTONES, TRANSITION_CHANGES, TRANSITION_MOMENTS,
         NUTRITION_WATER,
+        NUTRITION_MICROS,
     )
 
     /** Every field, for settings pages: key to its feature and label. */
@@ -251,5 +255,6 @@ object Fields {
         TRANSITION_MEASUREMENTS to (Module.TRANSITION to "Body measurements"),
         BODY_MEASUREMENTS to (Module.BODY to "Body measurements"),
         NUTRITION_WATER to (Module.NUTRITION to "Water"),
+        NUTRITION_MICROS to (Module.NUTRITION to "Vitamins & minerals"),
     )
 }

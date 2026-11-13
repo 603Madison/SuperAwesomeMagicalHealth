@@ -12,6 +12,7 @@ import type {
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
   AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices, FoodPhotoEstimate,
+  NutrientTargets,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -38,7 +39,7 @@ const SHARED_PATHS = [
 ];
 
 /** The person's own settings, never someone's share: no X-SAMH-View, and no changes while viewing one. */
-const OWN_PATHS = ["/api/devices/choices"];
+const OWN_PATHS = ["/api/devices/choices", "/api/food/targets"];
 
 /** Where a photo's picture is, for an <img> (the session cookie goes with it). */
 export const photoUrl = (id: string, thumb = false) => `/api/photos/${encodeURIComponent(id)}/${thumb ? "thumb" : "image"}`;
@@ -63,7 +64,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (owner && method !== "GET" && OWN_PATHS.some((p) => path.startsWith(p))) {
     throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
   }
-  if (owner && SHARED_PATHS.some((p) => path.startsWith(p))) {
+  if (owner && SHARED_PATHS.some((p) => path.startsWith(p)) && !OWN_PATHS.some((p) => path.startsWith(p))) {
     if (method !== "GET") throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
     headers["X-SAMH-View"] = owner;
   }
@@ -147,6 +148,8 @@ export const api = {
   series: (metric: Metric, from: number, to: number) => get<Point[]>(`/api/series?metric=${metric}&from=${from}&to=${to}`),
 
   foodDay: (date: string) => get<FoodDay>(`/api/food/${q(date)}`),
+  nutrientTargets: () => get<NutrientTargets>("/api/food/targets"),
+  saveNutrientTargets: (own: Partial<Record<string, number>>) => put<NutrientTargets>("/api/food/targets", { own }),
   logFood: (entry: { date: string; meal: Meal; servings: number; food?: Food; name?: string; nutrients?: Nutrients; serving?: string }) => post<FoodEntry>("/api/food/entries", entry),
   changeEntry: (id: string, change: { meal?: Meal; servings?: number; date?: string }) => patch<FoodEntry>(`/api/food/entries/${q(id)}`, change),
   deleteEntry: (id: string) => del<unknown>(`/api/food/entries/${q(id)}`),

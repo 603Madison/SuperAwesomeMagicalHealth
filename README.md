@@ -61,7 +61,14 @@ quick-add calories, make your own foods, copy yesterday's breakfast, and track w
 went with your sleep and HRV. Calorie
 targets come from your resting energy (Mifflin–St Jeor, with the female or male formula, or the
 average of both, as fits your body), your devices' active calories, and the weight change you're
-aiming for.
+aiming for. **Vitamins and minerals** come along with foods that carry them (Open Food Facts, or
+your own foods' "More nutrients"), and go to Health Connect with your food. Food shows fibre,
+sodium, iron, calcium, vitamin D, potassium and 22 more against adult reference intakes (the US
+Dietary Reference Intakes, with the same female, male or average values as your calorie formula,
+and more folate, iron and iodine in pregnancy), says how many of the day's foods came with any, and
+never counts a missing value as none. Set your own targets in Settings, chart any of them in
+Trends, and hide them all in What to record. In eating-disorder recovery none of these numbers
+show.
 
 **Two devices, one set of numbers**: when a ring and a watch (say a Colmi ring and a Pebble
 Time 2) both measure something, the server works out its own number from both: steps from
@@ -357,7 +364,9 @@ it, it says plainly what that means:
   photo (shrunk, without its location or camera details) to Anthropic to estimate what's on the
   plate and roughly how much. You check and change everything before it's logged, it can use your
   own foods where the names match, and the photo isn't kept on your server. A photo goes only when
-  you take one. In eating-disorder recovery it shows foods and portions without numbers.
+  you take one. It estimates fibre, sugar, saturated fat and sodium too, but not vitamins or
+  minerals, which a photo can't tell. In eating-disorder recovery it shows foods and portions
+  without numbers.
 - Letting it log things for you is a separate choice, and only if the admin allows it.
 - Each answer shows what it looked at, and a log keeps which features and tools it used (never
   your words). You can stop and withdraw your choice at any time.

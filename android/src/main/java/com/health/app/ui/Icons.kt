@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.rounded.TrendingDown
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.Egg
 import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.BatteryAlert
@@ -62,6 +63,7 @@ object AppIcons {
         "wind", "breath", "lungs" -> Icons.Rounded.Air
         "pill", "syringe" -> Icons.Rounded.Medication
         "egg" -> Icons.Rounded.Egg
+        "salad", "leaf" -> Icons.Rounded.Eco
         "calendar", "calendar-clock" -> Icons.Rounded.CalendarMonth
         else -> Icons.Rounded.AutoAwesome
     }

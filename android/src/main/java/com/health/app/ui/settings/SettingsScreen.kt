@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Group
@@ -123,6 +124,7 @@ fun SettingsRoute(onOpen: (String) -> Unit = {}) {
         ),
         onOpen = onOpen,
         water = showsField(Fields.NUTRITION_WATER),
+        micros = com.health.app.ui.food.showsMicros(),
         ai = ai,
         hiddenFromHealth = screenLayout(Layouts.NAV)?.hidden.orEmpty(),
         serverNotice = com.health.app.ui.components.serverNotice(),
@@ -172,6 +174,8 @@ fun SettingsScreen(
     hiddenFromHealth: Set<String> = emptySet(),
     serverNotice: com.health.app.ui.components.ServerNoticeState? = null,
     serverVersion: String? = null,
+    /** Whether vitamins and minerals show (their field, never in eating disorder recovery): their targets are under Goals. */
+    micros: Boolean = false,
 ) {
     var editing by remember { mutableStateOf<Edit?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
@@ -188,7 +192,9 @@ fun SettingsScreen(
                     when (section) {
                         SettingsSections.YOU -> if (profile != null) YouSection(profile, units, actions) { editing = it }
                         SettingsSections.FEATURES -> if (profile != null) FeaturesSection(profile, water, hiddenFromHealth, actions, onOpen)
-                        SettingsSections.GOALS -> if (profile != null) GoalsSection(profile.goals, units, water && Module.NUTRITION in profile.modules) { editing = it }
+                        SettingsSections.GOALS -> if (profile != null) {
+                            GoalsSection(profile.goals, units, water && Module.NUTRITION in profile.modules, micros && Module.NUTRITION in profile.modules, onOpen) { editing = it }
+                        }
                         SettingsSections.REMINDERS -> SectionCard("Reminders & sharing") {
                             NavRow(Icons.Rounded.Notifications, "Reminders", "Doses, refills, habits and appointments", onClick = { onOpen("settings/reminders") })
                             NavRow(Icons.Rounded.Summarize, "Weekly digest", "Your week in health, on your chosen day", onClick = { onOpen("digest") })
@@ -308,7 +314,7 @@ private fun FeatureRow(m: Module, on: Boolean, hidden: Boolean, onToggle: (Boole
 }
 
 @Composable
-private fun GoalsSection(g: Goals, units: Units, water: Boolean, edit: (Edit) -> Unit) {
+private fun GoalsSection(g: Goals, units: Units, water: Boolean, micros: Boolean, onOpen: (String) -> Unit, edit: (Edit) -> Unit) {
     SectionCard("Goals") {
         ValueRow("Steps", Format.number(g.steps), onClick = { edit(Edit.STEPS) })
         ValueRow("Active calories", "${Format.number(g.activeCalories)} kcal", onClick = { edit(Edit.ACTIVE) })
@@ -319,6 +325,7 @@ private fun GoalsSection(g: Goals, units: Units, water: Boolean, edit: (Edit) ->
         if (water) ValueRow("Water", Format.water(g.waterMl, units), onClick = { edit(Edit.WATER) })
         ValueRow("Goal weight", g.targetWeightKg?.let { Format.weight(it, units) } ?: "Not set", onClick = { edit(Edit.TARGET_WEIGHT) })
         ValueRow("Weight change", weeklyLabel(g.weeklyChangeKg, units), onClick = { edit(Edit.WEEKLY) })
+        if (micros) NavRow(Icons.Rounded.Eco, "Vitamins & minerals", "Fibre, sodium, iron and the rest: reference intakes, or your own", onClick = { onOpen("settings/nutrients") })
     }
 }
 

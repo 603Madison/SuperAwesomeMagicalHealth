@@ -9,6 +9,7 @@ import { useReadOnly } from "../lib/viewing";
 import type { EstimateConfidence, Food, FoodPhotoEstimate, FoodPhotoItem, Meal, Nutrients } from "../lib/types";
 import { Button, Field, IconButton, Modal, Spinner, errorToast, toast } from "../components/ui";
 import { useAiStatus } from "./Assistant";
+import { scaled } from "../lib/micros";
 
 /*
  * Food photo estimates: snap a photo of a meal and the assistant estimates what's in it, to check
@@ -42,10 +43,8 @@ const CONFIDENCE: Record<EstimateConfidence, string> = { LOW: "A rough guess", M
 
 export function scaleNutrients(n: Nutrients, factor: number): Nutrients {
   const f = Number.isFinite(factor) && factor > 0 ? factor : 0;
-  return {
-    calories: n.calories * f, protein: n.protein * f, carbs: n.carbs * f, fat: n.fat * f,
-    fiber: n.fiber != null ? n.fiber * f : undefined,
-  };
+  // Fibre, sugar, saturated fat and sodium from the estimate; micros from a food of their own.
+  return scaled(n, f);
 }
 
 /** One row on the review: the estimate as it came, and what the person made of it. */
@@ -273,6 +272,7 @@ function Review({ estimate, date, meal, mealLabel, onRetake, onClose, onAdded }:
     </>}>
       <p className="notice notice-info" role="note">These are estimates from a photo, so they can be off. Check the {hide ? "foods and amounts" : "amounts"} before you log them.</p>
       {estimate.notes && <p className="muted small">{estimate.notes}</p>}
+      {!hide && <p className="muted small">Vitamins and minerals can't be judged from a photo.</p>}
       <ul className="photo-items">
         {rows.map((r) => {
           const mine = r.useMine ? r.item.match : undefined;

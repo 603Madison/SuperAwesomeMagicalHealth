@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Activity, Baby, BatteryLow, Brain, CalendarClock, CalendarHeart, CloudSun, Coffee, Droplet, Droplets, Dumbbell, Egg, Flame, FlaskConical, Footprints,
-  Gauge, Heart, HeartPulse, ListChecks, Moon, Pill, Scale, Sparkles, Stethoscope, Syringe, Thermometer, ThermometerSun, Wine, Zap, type LucideIcon,
+  Gauge, Heart, HeartPulse, ListChecks, Moon, Pill, Salad, Scale, Sparkles, Stethoscope, Syringe, Thermometer, ThermometerSun, Wine, Zap, type LucideIcon,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { localInput, toKg, useUnits, weightValue, WORKOUT_TYPES } from "../lib/format";
@@ -11,7 +11,7 @@ import { Button, errorToast, Field, Modal, toast } from "./ui";
 /** The insights' icons, by the names the server gives them. */
 export const INSIGHT_ICONS: Record<string, LucideIcon> = {
   zap: Zap, "battery-low": BatteryLow, heart: Heart, activity: Activity, thermometer: Thermometer, moon: Moon,
-  footprints: Footprints, dumbbell: Dumbbell, egg: Egg, flame: Flame, droplet: Droplet, scale: Scale, sparkles: Sparkles,
+  footprints: Footprints, dumbbell: Dumbbell, egg: Egg, flame: Flame, droplet: Droplet, scale: Scale, sparkles: Sparkles, salad: Salad,
   pill: Pill, calendar: CalendarHeart,
   gauge: Gauge, "heart-pulse": HeartPulse, coffee: Coffee, wine: Wine, stethoscope: Stethoscope, "list-checks": ListChecks, syringe: Syringe,
   baby: Baby, "thermometer-sun": ThermometerSun, "calendar-clock": CalendarClock, flask: FlaskConical, "flask-conical": FlaskConical,
