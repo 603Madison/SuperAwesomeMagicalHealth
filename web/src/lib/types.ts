@@ -2182,9 +2182,9 @@ export const layoutKey = (screen: string) => `web.${screen}`;
 export const LAYOUT_MAX_SECTIONS = 80;
 
 export type TodaySection =
-  | "SCORES" | "INSIGHTS" | "QUICK" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "NEURO" | "TRANSITION"
+  | "SCORES" | "UP_NEXT" | "INSIGHTS" | "QUICK" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "NEURO" | "TRANSITION"
   | "VITALS" | "DRINKS" | "SYMPTOMS" | "HABITS" | "HORMONES" | "LIFE_STAGE" | "APPOINTMENTS" | "ACTIVITY" | "SLEEP"
-  | "HEART" | "STRESS" | "FOOD" | "WATER" | "WORKOUTS" | "BODY";
+  | "HEART" | "STRESS" | "FOOD" | "WATER" | "WORKOUTS" | "BODY" | "ALSO";
 
 export type QuickAction =
   | "FOOD" | "WATER" | "MOOD" | "PERIOD" | "BLADDER" | "DOSE" | "WEIGHT" | "COFFEE" | "DRINK" | "WORKOUT" | "SLEEP"

@@ -67,8 +67,10 @@ object Layouts {
 @Serializable
 enum class TodaySection(val label: String) {
     SCORES("Readiness, sleep and activity scores"),
-    INSIGHTS("Insights"),
-    QUICK("Quick actions"),
+    /** What needs doing now: doses due, today's appointment, a routine, a bladder-training trip, a restock. */
+    UP_NEXT("Up next"),
+    INSIGHTS("For you"),
+    QUICK("Quick log"),
     MEDS("Medications"),
     MIND("Mind"),
     CYCLE("Cycle"),
@@ -91,6 +93,8 @@ enum class TodaySection(val label: String) {
     WATER("Water"),
     WORKOUTS("Workouts"),
     BODY("Body"),
+    /** The features with nothing logged yet today, as one card of short rows. */
+    ALSO("Also today"),
 }
 
 /** Today's quick actions, in the default order. The first few for the features that are on show; the rest go under "More". */
