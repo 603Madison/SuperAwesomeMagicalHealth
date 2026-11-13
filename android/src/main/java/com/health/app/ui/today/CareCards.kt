@@ -1,26 +1,16 @@
 package com.health.app.ui.today
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Science
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.health.api.Appointment
 import com.health.api.HormonesToday
 import com.health.api.LifeStage
 import com.health.api.LifeStageToday
 import com.health.api.Module
 import com.health.app.ui.care.CareFormat
-import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
-import com.health.app.ui.components.Pill
 import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.theme.AppTheme
 import java.time.LocalDate
@@ -32,60 +22,51 @@ import java.time.temporal.ChronoUnit
 fun HormonesTodayCard(h: HormonesToday, today: LocalDate, onOpen: () -> Unit) {
     InfoCard("Hormone therapy", icon = Icons.Rounded.Science, onClick = onOpen, onOpen = onOpen) {
         val due = h.nextLabsDue?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        when {
-            due == null -> Text("${h.medications} ${if (h.medications == 1) "medication" else "medications"}", style = MaterialTheme.typography.bodyLarge)
-            else -> {
-                val days = ChronoUnit.DAYS.between(today, due)
-                Text(
-                    when {
-                        days < 0 -> "Labs were due ${CareFormat.date(due)}"
-                        days == 0L -> "Labs are due today"
-                        days <= 14 -> "Labs due in $days ${if (days == 1L) "day" else "days"}"
-                        else -> "Next labs around ${CareFormat.date(due)}"
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+        val labs = due?.let {
+            val days = ChronoUnit.DAYS.between(today, it)
+            when {
+                days < 0 -> "Labs were due ${CareFormat.date(it)}"
+                days == 0L -> "Labs are due today"
+                days <= 14 -> "Labs due in $days ${if (days == 1L) "day" else "days"}"
+                else -> "Next labs around ${CareFormat.date(it)}"
             }
         }
-        if (h.outOfRange.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Pill("Outside your range: ${h.outOfRange.joinToString()}", AppTheme.status.warn)
-            Hint("Worth mentioning to your clinician.", Modifier.padding(top = 4.dp))
-        }
+        val out = h.outOfRange.takeIf { it.isNotEmpty() }?.let { "Outside your range: ${it.joinToString()}" }
+        if (labs != null) Headline(labs, supporting = out, supportingColor = AppTheme.status.warn)
+        else Headline(out ?: "${h.medications} ${if (h.medications == 1) "medication" else "medications"}", supporting = if (out != null) "Worth mentioning to your clinician" else null)
     }
 }
 
 @Composable
 fun LifeStageTodayCard(s: LifeStageToday, zone: ZoneId, onOpen: () -> Unit) {
     InfoCard(s.stage.label, icon = ModuleInfo.icon(Module.CYCLE), onClick = onOpen, onOpen = onOpen, openLabel = "cycle") {
-        Text(s.headline, style = MaterialTheme.typography.titleMedium)
-        when (s.stage) {
-            LifeStage.PREGNANT -> s.pregnancy?.let { p ->
-                Hint("Due ${CareFormat.date(p.dueDate) ?: p.dueDate}" + if (p.daysToGo > 0) " · ${p.daysToGo} days to go" else "")
-            }
-            LifeStage.POSTPARTUM -> {
-                if (s.feedsToday > 0) Hint("${s.feedsToday} ${if (s.feedsToday == 1) "feed" else "feeds"} today")
-                s.lastFeed?.let { Hint("Last: ${it.kind.label.lowercase()} at ${CareFormat.time(it.start, zone)}") }
-            }
+        val more = when (s.stage) {
+            LifeStage.PREGNANT -> s.pregnancy?.let { p -> "Due ${CareFormat.date(p.dueDate) ?: p.dueDate}" + if (p.daysToGo > 0) " · ${p.daysToGo} days to go" else "" }
+            LifeStage.POSTPARTUM -> listOfNotNull(
+                s.feedsToday.takeIf { it > 0 }?.let { "$it ${if (it == 1) "feed" else "feeds"} today" },
+                s.lastFeed?.let { "last: ${it.kind.label.lowercase()} at ${CareFormat.time(it.start, zone)}" },
+            ).joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null }
             LifeStage.PERIMENOPAUSE, LifeStage.MENOPAUSE ->
-                if (s.hotFlashesToday > 0) Hint("${s.hotFlashesToday} hot ${if (s.hotFlashesToday == 1) "flash" else "flashes"} today")
-            else -> Unit
+                s.hotFlashesToday.takeIf { it > 0 }?.let { "$it hot ${if (it == 1) "flash" else "flashes"} today" }
+            else -> null
         }
+        Headline(s.headline, supporting = more)
     }
 }
 
+/** The week's next appointment (today's are in Up next), with how many more there are. */
 @Composable
 fun AppointmentsTodayCard(list: List<Appointment>, zone: ZoneId, now: Long, onOpen: () -> Unit) {
-    InfoCard("This week", icon = Icons.Rounded.Event, onClick = onOpen, onOpen = onOpen, openLabel = "appointments") {
-        list.sortedBy { it.at }.take(3).forEach { a ->
-            Column(Modifier.padding(vertical = 3.dp)) {
-                Text(a.title + (a.with?.takeIf { it.isNotBlank() && !a.title.contains(it, true) }?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyLarge)
-                val open = a.questions.count { !it.done }
-                Hint(
-                    com.health.app.reminders.CarePlanner.appointmentWhen(a.at, now, zone).replaceFirstChar(Char::uppercase) +
-                        if (open > 0) " · $open ${if (open == 1) "question" else "questions"} to ask" else "",
-                )
-            }
-        }
+    val next = list.minByOrNull { it.at } ?: return
+    InfoCard("Appointments", icon = Icons.Rounded.Event, onClick = onOpen, onOpen = onOpen, openLabel = "appointments") {
+        val open = next.questions.count { !it.done }
+        Headline(
+            next.title + (next.with?.takeIf { it.isNotBlank() && !next.title.contains(it, true) }?.let { " with $it" } ?: ""),
+            supporting = listOfNotNull(
+                com.health.app.reminders.CarePlanner.appointmentWhen(next.at, now, zone).replaceFirstChar(Char::uppercase),
+                open.takeIf { it > 0 }?.let { if (it == 1) "1 question to ask" else "$it questions to ask" },
+                (list.size - 1).takeIf { it > 0 }?.let { "$it more this week" },
+            ).joinToString(" · "),
+        )
     }
 }

@@ -123,7 +123,7 @@ class ForYouScreenshotTest {
     private val modules = Module.DEFAULT + Module.MEDICATIONS
     private val notice = ServerNoticeState("0.2.0", "0.3.0")
 
-    /** Medications hidden on Today, so the day's doses show in "For you". */
+    /** Medications hidden on Today, so the day's doses aren't in Up next and show in "For you". */
     private val noMedsCard = LayoutPrefs(mapOf(Layouts.TODAY to ScreenLayout(hidden = setOf(TodaySection.MEDS.name))))
 
     private fun render(dark: Boolean = false, layout: LayoutPrefs = LayoutPrefs(), readOnly: Boolean = false, tab: String = "today", content: @Composable () -> Unit) {
@@ -149,7 +149,7 @@ class ForYouScreenshotTest {
     private fun Today(opened: (String) -> Unit = {}, added: (FoodSuggestion) -> Unit = {}) {
         TodayScreen(
             TodayState(today, today, summary, loading = false), Units.METRIC, zone,
-            TodayActions(open = opened, addIdea = added), modules = modules, serverNotice = notice,
+            TodayActions(open = opened, addIdea = added), modules = modules, serverNotice = notice, now = at(14),
         )
     }
 
@@ -165,7 +165,7 @@ class ForYouScreenshotTest {
         save("for_you_dark")
     }
 
-    /** With Medications showing the doses, "For you" leaves them out (and has no "Show more"). */
+    /** With Up next showing the doses, "For you" leaves them out (and has no "Show more"). */
     @Test
     fun forYouWithMedsCard() {
         render { Today() }

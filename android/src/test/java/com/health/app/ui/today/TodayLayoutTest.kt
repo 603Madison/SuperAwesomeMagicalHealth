@@ -37,11 +37,15 @@ class TodayLayoutTest {
             listOf(
                 TodaySection.SCORES, TodaySection.INSIGHTS, TodaySection.QUICK, TodaySection.DRINKS, TodaySection.ACTIVITY, TodaySection.SLEEP,
                 TodaySection.HEART, TodaySection.STRESS, TodaySection.FOOD, TodaySection.WATER, TodaySection.WORKOUTS, TodaySection.BODY,
+                TodaySection.ALSO,
             ),
             TodayLayout.sections(Module.DEFAULT),
         )
+        // Up next only with something that can be due: doses, appointments, bladder training, routines, supplies.
+        assertFalse(TodaySection.UP_NEXT in TodayLayout.sections(Module.DEFAULT))
         val more = TodayLayout.sections(Module.DEFAULT + setOf(Module.MEDICATIONS, Module.CYCLE, Module.HABITS))
-        assertTrue(listOf(TodaySection.MEDS, TodaySection.CYCLE, TodaySection.SUPPLIES, TodaySection.LIFE_STAGE, TodaySection.HABITS).all { it in more })
+        assertTrue(listOf(TodaySection.UP_NEXT, TodaySection.MEDS, TodaySection.CYCLE, TodaySection.SUPPLIES, TodaySection.LIFE_STAGE, TodaySection.HABITS).all { it in more })
+        assertEquals(listOf(TodaySection.SCORES, TodaySection.UP_NEXT, TodaySection.INSIGHTS, TodaySection.QUICK), more.take(4))
         // Every section knows whether it applies, and the order is always the enum's.
         val all = TodayLayout.sections(Module.entries.toSet())
         assertEquals(TodaySection.entries.toList(), all)
@@ -53,46 +57,65 @@ class TodayLayoutTest {
         assertEquals("Energy", TodayLayout.label(TodaySection.NEURO, setOf(Module.MIND)))
         assertEquals("Autism & ADHD", TodayLayout.label(TodaySection.NEURO, setOf(Module.MIND, Module.NEURO)))
         assertEquals("For you", TodayLayout.label(TodaySection.INSIGHTS, Module.DEFAULT))
-        // Quick actions and insights are there for everyone; scores only with activity or sleep.
-        assertEquals(listOf(TodaySection.INSIGHTS, TodaySection.QUICK, TodaySection.MIND, TodaySection.NEURO), TodayLayout.sections(setOf(Module.MIND)))
+        assertEquals("Quick log", TodayLayout.label(TodaySection.QUICK, Module.DEFAULT))
+        assertEquals("Up next", TodayLayout.label(TodaySection.UP_NEXT, Module.DEFAULT))
+        assertEquals("Also today", TodayLayout.label(TodaySection.ALSO, Module.DEFAULT))
+        // Quick log and For you are there for everyone; scores only with activity or sleep; Also today with any feature on.
+        assertEquals(listOf(TodaySection.INSIGHTS, TodaySection.QUICK, TodaySection.MIND, TodaySection.NEURO, TodaySection.ALSO), TodayLayout.sections(setOf(Module.MIND)))
+        assertEquals(listOf(TodaySection.INSIGHTS, TodaySection.QUICK), TodayLayout.sections(emptySet()))
     }
 
     @Test
     fun `the person's order comes first, hidden sections go, and new ones go where they'd be`() {
         val layout = ScreenLayout(listOf("FOOD", "QUICK", "SCORES", "MIND"), hidden = setOf("INSIGHTS", "HEART"))
         val shown = TodayLayout.visible(Module.DEFAULT, water = true, layout)
-        assertEquals(listOf(TodaySection.FOOD, TodaySection.WATER, TodaySection.WORKOUTS, TodaySection.BODY, TodaySection.QUICK, TodaySection.DRINKS), shown.take(6))
+        // Also today, new since that order was saved, goes after Body, where it is by default.
+        assertEquals(listOf(TodaySection.FOOD, TodaySection.WATER, TodaySection.WORKOUTS, TodaySection.BODY, TodaySection.ALSO, TodaySection.QUICK, TodaySection.DRINKS), shown.take(7))
         assertFalse(TodaySection.INSIGHTS in shown)
         assertFalse(TodaySection.HEART in shown)
         assertEquals(TodayLayout.sections(Module.DEFAULT).size - 2, shown.size)
     }
 
     @Test
-    fun `the first six quick actions show, and the rest are under More`() {
+    fun `an order saved before Up next and Also today still works, and keeps what was hidden`() {
+        val modules = Module.DEFAULT + setOf(Module.MEDICATIONS, Module.MIND)
+        // Saved by an older app: Medications hidden, insights moved first, no Up next or Also today.
+        val old = ScreenLayout(listOf("INSIGHTS", "SCORES", "QUICK", "MEDS", "MIND", "FOOD"), hidden = setOf("MEDS"))
+        val shown = TodayLayout.visible(modules, water = true, old)
+        assertEquals(listOf(TodaySection.INSIGHTS, TodaySection.SCORES, TodaySection.UP_NEXT, TodaySection.QUICK), shown.take(4))
+        assertFalse(TodaySection.MEDS in shown)
+        assertEquals(TodaySection.ALSO, shown.last())
+        // Hidden like any other section.
+        val hidden = TodayLayout.visible(modules, water = true, ScreenLayout(hidden = setOf("UP_NEXT", "ALSO")))
+        assertFalse(TodaySection.UP_NEXT in hidden || TodaySection.ALSO in hidden)
+    }
+
+    @Test
+    fun `the first five quick actions show, and the rest are under More`() {
         val available = TodayLayout.quickActions(Module.DEFAULT)
         assertEquals(listOf(FOOD, WATER, WEIGHT, COFFEE, DRINK, WORKOUT, SLEEP, CHECK_IN), available)
         val row = TodayLayout.quickRow(available, null)
-        assertEquals(QuickAction.SHOWN, row.shown.size)
-        assertEquals(listOf(FOOD, WATER, WEIGHT, COFFEE, DRINK, WORKOUT), row.shown)
-        assertEquals(listOf(SLEEP, CHECK_IN), row.more)
-        assertEquals(setOf("SLEEP", "CHECK_IN"), TodayLayout.defaultUnderMore(available))
-        // Fewer than six: all show, and nothing's under More.
+        assertEquals(5, QuickAction.SHOWN)
+        assertEquals(listOf(FOOD, WATER, WEIGHT, COFFEE, DRINK), row.shown)
+        assertEquals(listOf(WORKOUT, SLEEP, CHECK_IN), row.more)
+        assertEquals(setOf("WORKOUT", "SLEEP", "CHECK_IN"), TodayLayout.defaultUnderMore(available))
+        // Fewer than five: all show, and nothing's under More.
         val few = TodayLayout.quickRow(TodayLayout.quickActions(setOf(Module.SLEEP)), null)
         assertEquals(listOf(SLEEP, CHECK_IN), few.shown)
         assertTrue(few.more.isEmpty())
     }
 
     @Test
-    fun `arranged quick actions follow the person, with those hidden under More`() {
+    fun `arranged quick actions follow the person, at most five, with those hidden under More`() {
         val available = TodayLayout.quickActions(Module.DEFAULT)
         val row = TodayLayout.quickRow(available, ScreenLayout(listOf("CHECK_IN", "FOOD"), hidden = setOf("WATER", "COFFEE")))
-        assertEquals(listOf(CHECK_IN, FOOD, WEIGHT, DRINK, WORKOUT, SLEEP), row.shown)
-        assertEquals(listOf(WATER, COFFEE), row.more)
-        // Once arranged, what isn't hidden shows: the person chose it.
+        assertEquals(listOf(CHECK_IN, FOOD, WEIGHT, DRINK, WORKOUT), row.shown)
+        assertEquals(listOf(WATER, COFFEE, SLEEP), row.more)
+        // Once arranged, what isn't hidden shows, five of it: one row that never wraps.
         val all = TodayLayout.quickRow(available, ScreenLayout(listOf("SLEEP", "FOOD")))
-        assertEquals(available.size, all.shown.size)
+        assertEquals(QuickAction.SHOWN, all.shown.size)
         assertEquals(SLEEP, all.shown.first())
-        assertTrue(all.more.isEmpty())
+        assertEquals(available.size - QuickAction.SHOWN, all.more.size)
     }
 
     @Test
@@ -113,8 +136,8 @@ class TodayLayoutTest {
         assertFalse(WATER in available)
         // The next one moves up from under More.
         val row = TodayLayout.quickRow(available, null)
-        assertEquals(listOf(FOOD, WEIGHT, COFFEE, DRINK, WORKOUT, SLEEP), row.shown)
-        assertEquals(listOf(CHECK_IN), row.more)
+        assertEquals(listOf(FOOD, WEIGHT, COFFEE, DRINK, WORKOUT), row.shown)
+        assertEquals(listOf(SLEEP, CHECK_IN), row.more)
         // A saved order naming water just skips it.
         val arranged = TodayLayout.quickRow(available, ScreenLayout(listOf("WATER", "COFFEE", "FOOD")))
         assertEquals(COFFEE, arranged.shown.first())
@@ -187,6 +210,8 @@ class TodayLayoutTest {
         assertEquals(listOf("ideas", "totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true).map { it.id })
         // Ideas are for today only.
         assertEquals(listOf("totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true, ideas = false).map { it.id })
+        // Without amounts of food (eating disorder recovery), no totals.
+        assertEquals(listOf("ideas", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true, numbers = false).map { it.id })
         assertEquals("android.food", FoodSections.KEY)
     }
 }

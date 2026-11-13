@@ -18,6 +18,10 @@ object TodayLayout {
         return when (section) {
             TodaySection.SCORES, TodaySection.HEART -> on(Module.ACTIVITY, Module.SLEEP)
             TodaySection.INSIGHTS, TodaySection.QUICK -> true
+            // Doses, today's appointments, a bladder-training trip, a routine, supplies to restock.
+            TodaySection.UP_NEXT -> on(Module.MEDICATIONS, Module.APPOINTMENTS, Module.CONTINENCE, Module.NEURO, Module.CYCLE)
+            // The features with nothing yet today.
+            TodaySection.ALSO -> modules.isNotEmpty()
             TodaySection.MEDS -> on(Module.MEDICATIONS)
             TodaySection.MIND -> on(Module.MIND)
             TodaySection.CYCLE, TodaySection.LIFE_STAGE -> on(Module.CYCLE)
@@ -47,10 +51,9 @@ object TodayLayout {
     fun visible(modules: Set<Module>, water: Boolean, layout: ScreenLayout?): List<TodaySection> =
         Layouts.visible(sections(modules, water), { it.name }, layout)
 
-    /** A section's name in the Arrange sheet: the insights are the "For you" card. */
+    /** A section's name in the Arrange sheet ([TodaySection.label]); with only Mind on, its energy budget is "Energy". */
     fun label(section: TodaySection, modules: Set<Module>): String = when {
         section == TodaySection.NEURO && Module.NEURO !in modules -> "Energy"
-        section == TodaySection.INSIGHTS -> "For you"
         else -> section.label
     }
 
@@ -70,16 +73,26 @@ object TodayLayout {
     /** Under "More" until the person arranges them: all but the first [QuickAction.SHOWN]. */
     fun defaultUnderMore(available: List<QuickAction>): Set<String> = available.drop(QuickAction.SHOWN).map { it.name }.toSet()
 
-    /** The quick actions on Today, and those under "More". */
+    /** Today's Quick log row, and the rest (all of them are in the + Log sheet that "More" opens). */
     data class QuickRow(val shown: List<QuickAction>, val more: List<QuickAction>)
 
     /**
-     * Splits [available] into what shows and what's under "More": in the person's order, those
-     * they've hidden under More; until they've arranged them, the first [QuickAction.SHOWN] show.
+     * Splits [available] into Today's Quick log row and the rest: in the person's order, at most
+     * [QuickAction.SHOWN] of those they haven't put under More (one row that never wraps or
+     * scrolls); until they've arranged them, the first [QuickAction.SHOWN].
      */
     fun quickRow(available: List<QuickAction>, layout: ScreenLayout?): QuickRow {
         val ordered = Layouts.arrange(available, { it.name }, layout)
         val under = layout?.hidden ?: defaultUnderMore(available)
-        return QuickRow(ordered.filter { it.name !in under }, ordered.filter { it.name in under })
+        val shown = ordered.filter { it.name !in under }.take(QuickAction.SHOWN)
+        return QuickRow(shown, ordered - shown.toSet())
     }
+
+    /**
+     * The + Log sheet: every logging action for the features that are on, grouped by feature
+     * (null: everyone's, such as Check in), the groups in the order the person's quick actions
+     * first name them.
+     */
+    fun logGroups(available: List<QuickAction>, layout: ScreenLayout?): List<Pair<Module?, List<QuickAction>>> =
+        Layouts.arrange(available, { it.name }, layout).groupBy { it.module }.toList()
 }

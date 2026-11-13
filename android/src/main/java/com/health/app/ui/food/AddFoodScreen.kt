@@ -114,11 +114,13 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
             dismissUnknown = vm::dismissUnknown,
             snap = { snapping = true },
         ),
+        numbers = com.health.app.ui.components.foodNumbers(),
     )
 }
 
+/** Finding a food to add. Without [numbers] (eating disorder recovery), no calories or macros on the foods. */
 @Composable
-fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions) {
+fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numbers: Boolean = true) {
     var quick by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf<String?>(null) }
 
@@ -134,8 +136,11 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions) {
             FilledTonalButton(onClick = actions.scan, contentPadding = PaddingValues(horizontal = 14.dp)) {
                 Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Scan barcode")
             }
-            FilledTonalButton(onClick = { quick = true }, contentPadding = PaddingValues(horizontal = 14.dp)) {
-                Icon(Icons.Rounded.Bolt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Quick add")
+            // Quick add is calories by hand: not when amounts of food don't show.
+            if (numbers) {
+                FilledTonalButton(onClick = { quick = true }, contentPadding = PaddingValues(horizontal = 14.dp)) {
+                    Icon(Icons.Rounded.Bolt, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Quick add")
+                }
             }
             FilledTonalButton(onClick = { creating = "" }, contentPadding = PaddingValues(horizontal = 14.dp)) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("New food")
@@ -149,28 +154,32 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions) {
             if (results == null) {
                 if (state.recent.isEmpty()) {
                     item {
-                        EmptyState(Icons.Rounded.Restaurant, "Find a food", "Search by name, scan a packet's barcode, or quick-add calories. Foods you log show up here next time.")
+                        EmptyState(
+                            Icons.Rounded.Restaurant, "Find a food",
+                            if (numbers) "Search by name, scan a packet's barcode, or quick-add calories. Foods you log show up here next time."
+                            else "Search by name or scan a packet's barcode. Foods you log show up here next time.",
+                        )
                     }
                 } else {
                     item { SectionTitle("Your foods") }
-                    items(state.recent.size) { i -> CardItem(i, state.recent.size) { FoodRow(state.recent[i]) { actions.pick(state.recent[i]) } } }
+                    items(state.recent.size) { i -> CardItem(i, state.recent.size) { FoodRow(state.recent[i], numbers) { actions.pick(state.recent[i]) } } }
                 }
             } else {
                 if (results.mine.isNotEmpty()) {
                     item { SectionTitle("Your foods") }
-                    items(results.mine.size) { i -> CardItem(i, results.mine.size) { FoodRow(results.mine[i]) { actions.pick(results.mine[i]) } } }
+                    items(results.mine.size) { i -> CardItem(i, results.mine.size) { FoodRow(results.mine[i], numbers) { actions.pick(results.mine[i]) } } }
                 }
                 item { SectionTitle("Open Food Facts") }
                 when {
                     results.onlineError != null -> item { Hint(results.onlineError.orEmpty(), Modifier.padding(horizontal = 20.dp)) }
                     results.online.isEmpty() -> item { Hint("Nothing found. Try fewer words, or make it a new food.", Modifier.padding(horizontal = 20.dp)) }
-                    else -> items(results.online.size) { i -> CardItem(i, results.online.size) { FoodRow(results.online[i]) { actions.pick(results.online[i]) } } }
+                    else -> items(results.online.size) { i -> CardItem(i, results.online.size) { FoodRow(results.online[i], numbers) { actions.pick(results.online[i]) } } }
                 }
             }
         }
     }
 
-    state.picked?.let { food -> ServingsDialog(food, onDismiss = { actions.pick(null) }) { actions.add(food, it) } }
+    state.picked?.let { food -> ServingsDialog(food, numbers, onDismiss = { actions.pick(null) }) { actions.add(food, it) } }
     state.unknownBarcode?.let { code ->
         AlertDialog(
             onDismissRequest = actions.dismissUnknown,
@@ -185,7 +194,7 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions) {
 }
 
 @Composable
-fun FoodRow(food: Food, onClick: () -> Unit) {
+fun FoodRow(food: Food, numbers: Boolean = true, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(food.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -197,17 +206,19 @@ fun FoodRow(food: Food, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(Format.number(food.nutrients.calories), style = MaterialTheme.typography.titleSmall)
-            Text("kcal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (numbers) {
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(Format.number(food.nutrients.calories), style = MaterialTheme.typography.titleSmall)
+                Text("kcal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
-/** How much of [food]: a stepper in quarter servings, with what that amount holds. */
+/** How much of [food]: a stepper in quarter servings, with what that amount holds (unless amounts of food don't show: [numbers]). */
 @Composable
-fun ServingsDialog(food: Food, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
+fun ServingsDialog(food: Food, numbers: Boolean = true, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
     var servings by remember { mutableDoubleStateOf(1.0) }
     var text by remember { mutableStateOf("1") }
     fun set(v: Double) {
@@ -235,12 +246,14 @@ fun ServingsDialog(food: Food, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
                     FilledTonalIconButton(onClick = { set(servings + 0.25) }) { Icon(Icons.Rounded.Add, "More") }
                 }
                 Hint("1 serving = ${food.serving}${food.servingGrams?.let { " (${Format.compact(it)} g)" } ?: ""}")
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Nutrient(Format.number(n.calories), "kcal")
-                    Nutrient("${Format.number(n.protein)} g", "protein")
-                    Nutrient("${Format.number(n.carbs)} g", "carbs")
-                    Nutrient("${Format.number(n.fat)} g", "fat")
+                if (numbers) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Nutrient(Format.number(n.calories), "kcal")
+                        Nutrient("${Format.number(n.protein)} g", "protein")
+                        Nutrient("${Format.number(n.carbs)} g", "carbs")
+                        Nutrient("${Format.number(n.fat)} g", "fat")
+                    }
                 }
             }
         },
