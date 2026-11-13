@@ -171,6 +171,7 @@ export function Today() {
 
   const meds = m?.meds;
   const dosesShown = upNext.items.some((i) => i.kind === "dose");
+  const appointmentShown = upNext.items.some((i) => i.kind === "appointment");
   const takenToday = (meds?.due ?? []).some((d) => d.log) || (meds?.extra ?? []).length > 0;
   const nextDose = isToday ? dosesLater(meds?.due ?? [], Date.now())[0] : undefined;
   const workouts = data ? workoutsLine(data, units, foodNumbers) : null;
@@ -251,6 +252,7 @@ export function Today() {
   // What's on the screen, so an insight that repeats it is left out: the day's doses while Up next has them.
   const showing = new Set<string>(shown.filter((s) => s.node).map((s) => s.id));
   if (dosesShown && showing.has("UP_NEXT")) showing.add("MEDS");
+  if (appointmentShown && showing.has("UP_NEXT")) showing.add("APPOINTMENTS");
   const openScores = () => {
     if (data?.readiness) setScore({ title: "Readiness", score: data.readiness });
     else document.querySelector(".content")?.scrollTo({ top: 0, behavior: "smooth" });

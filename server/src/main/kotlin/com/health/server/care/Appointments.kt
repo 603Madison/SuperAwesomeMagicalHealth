@@ -106,6 +106,8 @@ class AppointmentsService(
                     listOfNotNull(where?.let { "$it." }, if (open > 0) "${plural(open, "question")} ready to ask." else "Add the questions you want to ask.").joinToString(" ")
                 },
                 "calendar", Module.APPOINTMENTS,
+                // Today's, the apps show in Up next, so they leave this out while it does.
+                shownBy = if (day == "today") com.health.api.TodaySection.APPOINTMENTS else null,
             )
         }
         return list to insights
