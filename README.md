@@ -63,6 +63,14 @@ aiming for.
 the same steps; the night with sleep stages wins over one without). Sending the same data again
 is harmless.
 
+## What you're tracking
+
+Pick the **conditions and goals** you live with or want to work on (overactive bladder, IBS,
+endometriosis, PCOS, ADHD, autism, depression, high blood pressure, diabetes, transition,
+pregnancy, losing weight, sleeping better… or your own), and the apps turn on the features and
+the fields within them that fit, so you see what helps you and nothing else. Every field can
+still be shown or hidden by hand, with a note of which condition brought it.
+
 ## Features you turn on
 
 Settings › **Features**: each person picks what they use. Activity, sleep, food and body are on
@@ -80,11 +88,24 @@ database), and shown to an AI connector only if the person says so when making i
 - **Cycle**: periods, symptoms, pain, ovulation tests, mucus and basal temperature. Averages,
   the next period with a likely range and confidence, the estimated fertile window, and ovulation
   confirmed by a sustained temperature rise from your ring or basal temperature. Readiness
-  understands that a warmer, faster heart after ovulation is normal.
+  understands that a warmer, faster heart after ovulation is normal. As much detail as you want:
+  products used, clots, colour, where it hurts, mood, energy, libido, sex, cervix, LH and
+  pregnancy tests, discharge, and **your own symptoms, moods and fields**. Your own cycle and
+  period lengths, reminders before a period and when it's late, and **neutral wording** that
+  leaves out fertility talk.
 - **Bladder & bowel**: one-tap diary of toilet trips, leaks, bowel movements and pad changes,
   with urgency, leak size, triggers and the Bristol scale; night-time trips from your recorded
   sleep; patterns worth knowing; a guided **pelvic floor exercise**; and a printable **3-day
-  bladder diary** for your doctor.
+  bladder diary** for your doctor. Then **every detail you want** for an accident: what came
+  out, what you were doing, whether you felt it coming and how long you had, whether you made
+  it, where you were, **how full the pad or brief was** (dry to leaked through), its weight (and
+  so how much was lost), changed clothes or bedding, sore skin, signs of an infection (with a
+  nudge to see someone), wet nights, catheters, your own tags and fields. **Is it getting better
+  or worse?** The last four weeks against the four before, week by week. **Bladder training**
+  with reminders that space out over time, and weekly check-ins on how much it bothers you.
+- **Supplies**: the pads, briefs, diapers, bed pads, reusable underwear, catheters, wipes and
+  period products you have on hand, counted down as you log changes, with how long they'll last
+  and a reminder before you run out.
 - **Medications**: medications and supplements on daily, weekly, every-few-days or as-needed
   schedules; Take and Skip, reminders (again if a dose isn't marked; refills), adherence, doses
   left, **injection and patch site rotation**, and **lab results** charted over time.
@@ -97,6 +118,21 @@ database), and shown to an AI connector only if the person says so when making i
   labs are next due.
 - **Appointments**: who, when and where, reminders before, **questions to ask** (suggested from
   what you've logged since the last one, from every feature that's on), and notes afterwards.
+- **Autism & ADHD**, in Mind, in your words: **about me** (senses you avoid or seek, how you
+  like to communicate, what helps, accommodations, warning signs, interests and stims) to show
+  people who support you; times things got **too much** (overwhelm, meltdowns, shutdowns) with
+  triggers and what helped; an **energy budget** (spoons) and social battery; check-ins on
+  masking and executive function; a **focus timer** and body doubling that learn how long things
+  really take; **routines** as checklists; **communication cards** for when talking is hard; a
+  calm mode; and patterns, with a gentle note if burnout looks to be building.
+- **Transition**, whatever it means to you, at your pace: pronouns, **milestones** (social,
+  legal, medical, voice) with checklists for documents, changes you notice, **voice practice**
+  with a pitch meter on your own device (nothing is recorded), hair removal, and moments of
+  **euphoria** and dysphoria. With hormone therapy, it shows how long you've been on it.
+- **Progress photos**, for transition, weight or anything else: albums and poses, a ghost of the
+  last photo to line up the next one (in the phone app), and side-by-side comparisons with the
+  weight and time on hormones then. Encrypted, stripped of location and camera details, **never
+  shown to AI**, and shared only if you share Photos.
 - **Life stages**, with the cycle: **pregnancy** (week, due date, a kick counter, a contraction
   timer that knows the 5-1-1 pattern), **after a birth** (feeds, and the **EPDS** check-in in
   Mind), **perimenopause** and **after menopause** (hot flashes, months since the last period;
@@ -127,6 +163,10 @@ And two that aren't private, so they aren't encrypted:
 - **A report for your doctor**: a PDF for the dates you choose, with averages, charts and what
   changed, feature by feature; private features only if you tick them.
 - **Export everything**: CSV files, and a FHIR R4 bundle for health record systems.
+- **To other apps**: the phone app can write weight, body fat, blood pressure, glucose, water,
+  food and workouts to **Health Connect** (you pick which), where Samsung Health, MyFitnessPal,
+  MyNetDiary and Google Fit read them. Workouts and weight also export as **FIT** files for
+  Garmin Connect, Strava and others. Body measurements (waist, hips, chest…) chart with weight.
 - **Webhooks**: the server calls a URL when something happens (morning scores ready, readiness
   low, a dose due or missed, blood pressure high, glucose low, a device's battery low…), signed
   with HMAC. Home Assistant's webhook trigger works as it is, and a **Home Assistant key** reads
@@ -248,6 +288,26 @@ Settings given here win at every start; the rest are on the Admin page.
 - **Anything else**: make an **upload key** on the Devices page and `POST /api/ingest` (see
   [docs/API.md](docs/API.md)). A key can only send data in.
 
+## The AI assistant (optional, off unless turned on)
+
+An admin can add an Anthropic API key so people can ask questions about their data in the apps
+("How have my nights been since I started the new medication?", "Am I leaking less?"). **It's
+off until the admin turns it on, and then each person decides for themselves.** Before anyone uses
+it, it says plainly what that means:
+
+- What the assistant looks at to answer is **sent to Anthropic**, a company outside your server,
+  and handled under its [commercial terms](https://www.anthropic.com/legal/commercial-terms) and
+  [privacy policy](https://www.anthropic.com/legal/privacy).
+- **You choose the features it may look at.** Private ones (mind, cycle, bladder and bowel,
+  medications…) are never ticked for you and need a separate OK. It **never sees photos**.
+- Letting it log things for you is a separate choice, and only if the admin allows it.
+- Each answer shows what it looked at, and a log keeps which features and tools it used (never
+  your words). You can stop and withdraw your choice at any time.
+- It can be wrong, and it isn't medical advice.
+
+If your data is very sensitive to you, leaving it off is a perfectly good choice: everything else
+works the same without it.
+
 ## The AI connector (MCP)
 
 Settings › **AI connector** makes a link that gives an AI your data over the
@@ -265,8 +325,11 @@ device and day) and `readings` (raw data as devices sent it). Links made with **
 entries** add `log_food`, `log_water`, `log_weight`, `log_workout` and `check_in`.
 
 The private features are opt-in per link: **Also let it see** Mind (`mind`, `journal`), Cycle
-(`cycle`), Bladder & bowel (`continence`) or Medications (`medications`), with `log_mood`,
-`log_cycle_day`, `log_continence` and `log_dose` for links that may log. An admin's
+(`cycle`), Bladder & bowel (`continence`, `supplies`, `continence_progress`), Medications
+(`medications`), Autism & ADHD (`neuro`), Transition (`transition`) and the others, with
+`log_mood`, `log_cycle_day`, `log_continence`, `log_dose`, `log_overload`, `log_energy` and
+`log_moment` for links that may log. `conditions` lists only the conditions whose private
+features the link may see. Photos are never offered. An admin's
 **every-account** link reads any account's activity, sleep, food and devices, plus `server_log`
 and `recent_warnings`, but never the private features.
 

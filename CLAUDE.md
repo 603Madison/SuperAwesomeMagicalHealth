@@ -15,21 +15,31 @@
   (vitals, drinks, symptoms with the weather, habits; stress in `insights/Stress.kt`), `care/`
   (hormone therapy, life stages, appointments, sharing via the `X-SAMH-View` header, allowlisted
   per path in `SharedView`), `platform/` (scheduler, web push, webhooks, Home Assistant and watch
-  keys, digest and mail, PDF report, CSV/FHIR export). Each feature plugs into digests, reports,
+  keys, digest and mail, PDF report, CSV/FHIR/FIT export), `conditions/` (the catalog and what each
+  condition turns on), `neuro/` (Autism & ADHD), `transition/`, `photos/` (sealed files under the
+  data folder), `ai/` (the optional assistant). Each feature plugs into digests, reports,
   exports, reminders and appointment questions through `platform/FeatureHooks`, listed in
-  `Services.hooks`. `IntegrationTest` covers the features working together.
+  `Services.hooks`. `IntegrationTest` covers the features working together. A person's own
+  settings go in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature).
 - `web/`: React + Vite + TypeScript, built into the server's jar.
 - `pebble/`: the Pebble watch app (C + PebbleKit JS, `node --test pebble/test/*.test.js`).
 - `fdroid/`: the F-Droid repository's listing, build script and page (see Releases).
 - `android/`: Jetpack Compose, signs in to the server; device conduits in `devices/`, sync in
   `sync/`.
 - Health modules (`Module` in `shared/…/Modules.kt`, `server/…/modules/`): each person turns them
-  on in `Profile.modules`. The sensitive ones (mind, cycle, continence, medications, symptoms,
-  hormones, appointments) keep their entries sealed in the `entries` and `medications` tables
+  on in `Profile.modules`, or their conditions do. The sensitive ones (mind, cycle, continence,
+  medications, symptoms, hormones, appointments, neuro, transition, photos) keep their entries sealed in the `entries` and `medications` tables
   (`EntryStore`, `SecretBox`), add their part of a day (Today, Trends, insights tagged with their
   `module`), and
   are only visible to AI connector links whose `scope` names them; every-account links never see
-  them. Keep it that way, and keep the copy for these modules kind, plain and never gendered.
+  them. Keep it that way, and keep the copy for these modules kind, plain and never gendered
+  (neurodiversity-affirming for Autism & ADHD; for transition, never assume a direction or steps).
+- Fields: optional inputs within a feature have a key in `Fields` (`shared/…/Conditions.kt`) and
+  show only when `GET /api/fields` says so (web `lib/fields.ts`, Android `showsField`). A new
+  optional input gets a key there, and the catalog entries that should bring it.
+- The AI assistant (`ai/`) only offers the connector's tools listed in `AiTools.MODULES`, each with
+  the feature it reads: add a new tool there, or it stays out. Photos are never offered. Its
+  warnings link Anthropic's terms and privacy policy and don't claim anything about retention.
 
 ## Design
 
