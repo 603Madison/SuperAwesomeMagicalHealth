@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity, Brain, CalendarClock, CalendarHeart, Droplet, HeartPulse, ListChecks, Moon, Pill, Salad, Stethoscope, Syringe, Weight,
+  Activity, Brain, CalendarClock, CalendarHeart, Camera, Droplet, HeartPulse, Infinity as InfinityIcon, ListChecks, Moon, Pill, Salad, Sparkles,
+  Stethoscope, Syringe, Weight,
 } from "lucide-react";
 import type { Module, ReportSectionKey } from "../lib/types";
 
@@ -27,6 +28,9 @@ export const FEATURES: Feature[] = [
   { id: "SYMPTOMS", name: "Symptoms & pain", about: "Symptoms, pain and migraines, and what seems to go with them.", route: "/symptoms", icon: Stethoscope },
   { id: "HORMONES", name: "Hormone therapy", about: "Dose history, levels against your own targets, and when labs are due.", route: "/hormones", icon: Syringe },
   { id: "APPOINTMENTS", name: "Appointments", about: "Appointments with questions to ask, and notes afterwards.", route: "/appointments", icon: CalendarClock },
+  { id: "NEURO", name: "Autism & ADHD", about: "Your sensory profile, overwhelm, energy, focus, routines, cards to show people and a calm mode.", route: "/neuro", icon: InfinityIcon },
+  { id: "TRANSITION", name: "Transition", about: "Milestones, the changes you notice, voice practice, hair removal and the moments that feel right.", route: "/transition", icon: Sparkles },
+  { id: "PHOTOS", name: "Progress photos", about: "Private, encrypted photos over time, to compare side by side.", route: "/photos", icon: Camera },
 ];
 
 export const featureName = (id: Module) => FEATURES.find((f) => f.id === id)?.name ?? id;
@@ -48,4 +52,6 @@ export const REPORT_SECTIONS: { id: ReportSectionKey; name: string; module?: Mod
   { id: "SYMPTOMS", name: "Symptoms", module: "SYMPTOMS" },
   { id: "HABITS", name: "Habits", module: "HABITS" },
   { id: "APPOINTMENTS", name: "Appointments", module: "APPOINTMENTS" },
+  { id: "NEURO", name: "Autism and ADHD", module: "NEURO" },
+  { id: "TRANSITION", name: "Transition", module: "TRANSITION" },
 ];

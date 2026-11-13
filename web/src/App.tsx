@@ -1,6 +1,15 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { loadFields } from "./lib/fields";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
+import { Bot, Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
+import { Conditions } from "./pages/Conditions";
+import { ContinenceSettingsPage } from "./pages/Continence";
+import { CycleSettingsPage } from "./pages/Cycle";
+import { Supplies } from "./pages/Supplies";
+import { CalmMode, Neuro } from "./pages/Neuro";
+import { Transition } from "./pages/Transition";
+import { Photos } from "./pages/Photos";
+import { Assistant, AssistantSent, useAiStatus } from "./pages/Assistant";
 import type { Module } from "./lib/types";
 import { Mind } from "./pages/Mind";
 import { Cycle } from "./pages/Cycle";
@@ -52,6 +61,8 @@ function Root() {
   if (!user) return <Navigate to={`/login?return=${encodeURIComponent(here)}`} replace />;
   if (location.pathname === "/connect-app") return <ConnectApp />;
   if (location.pathname === "/watch-setup") return <WatchSetup />;
+  // Calm mode fills the screen, with nothing else around it.
+  if (location.pathname === "/calm") return <CalmMode />;
   return <Shell />;
 }
 
@@ -75,7 +86,18 @@ function Shell() {
   const user = useSession((s) => s.user)!;
   const viewing = useViewing((s) => s.share);
   const on = useModules();
-  const features = FEATURES.filter((f) => on.includes(f.id) && f.route);
+  // Autism & ADHD lives inside Mind when both are on (a tab there), and on its own otherwise.
+  const features = FEATURES.filter((f) => on.includes(f.id) && f.route && !(f.id === "NEURO" && on.includes("MIND")));
+  const ai = useAiStatus();
+  const pronouns = usePronouns(on.includes("TRANSITION") && !viewing);
+  // Which fields show is the shown person's: reload it when that changes.
+  const owner = viewing?.ownerId;
+  const firstOwner = useRef(owner);
+  useEffect(() => {
+    if (firstOwner.current === owner) return;
+    firstOwner.current = owner;
+    void loadFields(true);
+  }, [owner]);
   return (
     <div className={`shell ${viewing ? "is-viewing" : ""}`}>
       <nav className="sidebar" aria-label="Main">
@@ -90,6 +112,7 @@ function Shell() {
           </NavLink>
         ))}
         <NavLink to="/trends" className="nav-link"><TrendingUp size={20} /> <span>Trends</span></NavLink>
+        {!viewing && ai?.available && <NavLink to="/assistant" className="nav-link nav-optional"><Bot size={20} /> <span>Assistant</span></NavLink>}
         {!viewing && <NavLink to="/reports" className="nav-link nav-optional"><FileText size={20} /> <span>Reports</span></NavLink>}
         {!viewing && <NavLink to="/devices" className="nav-link nav-optional"><Watch size={20} /> <span>Devices</span></NavLink>}
         {!viewing && <NavLink to="/settings" className="nav-link"><SettingsIcon size={20} /> <span>Settings</span></NavLink>}
@@ -98,7 +121,7 @@ function Shell() {
         <div className="nav-spacer" />
         <ViewSwitcher />
         <div className="sidebar-user">
-          <span>{user.displayName}</span>
+          <span>{user.displayName}{pronouns && <span className="pronouns"> ({pronouns})</span>}</span>
           <IconButton label="Sign out" onClick={() => { startViewing(null); void session.signOut(); }}><LogOut size={18} /></IconButton>
         </div>
       </nav>
@@ -124,6 +147,15 @@ function Shell() {
           <Route path="/symptoms" element={<Shared id="SYMPTOMS"><Symptoms /></Shared>} />
           <Route path="/hormones" element={<Shared id="HORMONES"><Hormones /></Shared>} />
           <Route path="/appointments" element={<Shared id="APPOINTMENTS"><Appointments /></Shared>} />
+          <Route path="/neuro" element={<Shared id="NEURO"><Neuro /></Shared>} />
+          <Route path="/transition" element={<Shared id="TRANSITION"><Transition /></Shared>} />
+          <Route path="/photos" element={<Shared id="PHOTOS"><Photos /></Shared>} />
+          <Route path="/supplies" element={<SharedAny ids={["CONTINENCE", "CYCLE"]}><Supplies /></SharedAny>} />
+          {!viewing && <Route path="/bladder/settings" element={<ContinenceSettingsPage />} />}
+          {!viewing && <Route path="/cycle/settings" element={<CycleSettingsPage />} />}
+          {!viewing && <Route path="/conditions" element={<Conditions />} />}
+          {!viewing && <Route path="/assistant" element={<Assistant />} />}
+          {!viewing && <Route path="/assistant/sent" element={<AssistantSent />} />}
           {!viewing && <Route path="/reports" element={<Reports />} />}
           {!viewing && <Route path="/digest" element={<DigestPage />} />}
           {!viewing && <Route path="/devices" element={<Devices />} />}
@@ -141,6 +173,19 @@ function Shared({ id, children }: { id: Module; children: ReactNode }) {
   const viewing = useViewing((s) => s.share);
   if (viewing && !viewing.modules.includes(id)) return <Navigate to="/" replace />;
   return <>{children}</>;
+}
+
+/** A page several features share (supplies: bladder and bowel, and periods): reachable if any was shared. */
+function SharedAny({ ids, children }: { ids: Module[]; children: ReactNode }) {
+  const viewing = useViewing((s) => s.share);
+  if (viewing && !ids.some((id) => viewing.modules.includes(id))) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/** The person's pronouns, from their transition profile, shown with their name. */
+function usePronouns(enabled: boolean): string | undefined {
+  const { data } = useLoad(() => (enabled ? api.transitionProfile().catch(() => null) : Promise.resolve(null)), [enabled]);
+  return data?.pronouns ?? undefined;
 }
 
 /** "Viewing Alex": whose data is showing, from the people who shared theirs with this account. */

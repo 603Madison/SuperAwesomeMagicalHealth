@@ -37,7 +37,8 @@ export interface AuthConfig {
 export type Metric =
   | "HEART_RATE" | "RESTING_HEART_RATE" | "HRV" | "SPO2" | "RESPIRATORY_RATE" | "SKIN_TEMPERATURE" | "TEMPERATURE_DEVIATION"
   | "STRESS" | "STEPS" | "DISTANCE" | "ACTIVE_CALORIES" | "FLOORS" | "WEIGHT" | "BODY_FAT"
-  | "BLOOD_PRESSURE_SYSTOLIC" | "BLOOD_PRESSURE_DIASTOLIC" | "BLOOD_GLUCOSE";
+  | "BLOOD_PRESSURE_SYSTOLIC" | "BLOOD_PRESSURE_DIASTOLIC" | "BLOOD_GLUCOSE"
+  | "WAIST" | "HIPS" | "CHEST" | "BUST" | "UNDERBUST" | "SHOULDERS" | "NECK" | "UPPER_ARM" | "THIGH" | "CALF";
 
 export interface Sample {
   metric: Metric;
@@ -391,9 +392,11 @@ export interface AdminSettings {
 
 export type Module =
   | "ACTIVITY" | "SLEEP" | "NUTRITION" | "BODY" | "MIND" | "CYCLE" | "CONTINENCE" | "MEDICATIONS"
-  | "VITALS" | "HABITS" | "SYMPTOMS" | "HORMONES" | "APPOINTMENTS";
+  | "VITALS" | "HABITS" | "SYMPTOMS" | "HORMONES" | "APPOINTMENTS" | "NEURO" | "TRANSITION" | "PHOTOS";
 
-export const SENSITIVE: Module[] = ["MIND", "CYCLE", "CONTINENCE", "MEDICATIONS", "SYMPTOMS", "HORMONES", "APPOINTMENTS"];
+export const SENSITIVE: Module[] = [
+  "MIND", "CYCLE", "CONTINENCE", "MEDICATIONS", "SYMPTOMS", "HORMONES", "APPOINTMENTS", "NEURO", "TRANSITION", "PHOTOS",
+];
 
 export interface MoodEntry {
   at: number;
@@ -519,6 +522,21 @@ export interface CycleDay {
   ovulationTest?: OvulationTest;
   temperature?: number;
   note?: string;
+  products?: ProductUse[];
+  clots?: Clots;
+  color?: string;
+  painAreas?: string[];
+  symptomSeverity?: Record<string, number>;
+  mood?: string[];
+  energy?: number;
+  libido?: number;
+  sex?: SexEntry;
+  cervix?: Cervix;
+  lh?: number;
+  pregnancyTest?: PregnancyTest;
+  discharge?: string;
+  tags?: string[];
+  details?: Record<string, string>;
 }
 
 export interface Cycle {
@@ -552,8 +570,8 @@ export interface CycleOverview {
   caveat: string;
 }
 
-export type ContinenceKind = "URINATION" | "LEAK" | "BOWEL" | "PAD_CHANGE" | "PELVIC_FLOOR";
-export type LeakSize = "DROPS" | "SMALL" | "MEDIUM" | "LARGE";
+export type ContinenceKind = "URINATION" | "LEAK" | "BOWEL" | "PAD_CHANGE" | "PELVIC_FLOOR" | "BOWEL_LEAK" | "CATHETER" | "BEDWETTING";
+export type LeakSize = "DROPS" | "SMALL" | "MEDIUM" | "LARGE" | "FULL";
 
 export interface ContinenceEntry {
   at: number;
@@ -571,6 +589,24 @@ export interface ContinenceEntry {
   id?: string;
   date?: string;
   night: boolean;
+  contents?: LeakContents;
+  activity?: string[];
+  awareness?: Awareness;
+  reachedToilet?: ReachedToilet;
+  warningSeconds?: number;
+  location?: string;
+  supplyId?: string;
+  fullness?: Fullness;
+  padWeightG?: number;
+  lossG?: number;
+  changedClothes?: boolean;
+  changedBedding?: boolean;
+  leakedThrough?: boolean;
+  skin?: number;
+  utiSigns?: string[];
+  count?: number;
+  tags?: string[];
+  details?: Record<string, string>;
 }
 
 export interface ContinenceDay {
@@ -584,6 +620,15 @@ export interface ContinenceDay {
   voidedMl?: number;
   fluidMl: number;
   urgentTrips: number;
+  bowelLeaks: number;
+  wetNights: number;
+  /** Products changed (each change's count). */
+  products: number;
+  leakedThrough: number;
+  catheters: number;
+  catheterMl?: number;
+  /** Grams lost, from weighed pads. */
+  lossG?: number;
 }
 
 export interface ContinenceSummary {
@@ -683,6 +728,9 @@ export interface ModulesToday {
   hormones?: HormonesToday;
   lifeStage?: LifeStageToday;
   appointments?: Appointment[];
+  lowSupplies?: SupplyStatus[];
+  neuro?: NeuroToday;
+  transition?: TransitionToday;
 }
 
 // ---- Blood pressure and glucose, drinks, symptoms, stress, habits, hormones, life stages, appointments
@@ -1100,7 +1148,8 @@ export interface Digest {
 
 export type WebhookEvent =
   | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
-  | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST";
+  | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST"
+  | "BLADDER_TRAINING" | "SUPPLIES_LOW" | "CYCLE_REMINDER";
 
 export interface Webhook {
   name: string;
@@ -1160,7 +1209,7 @@ export interface PushMessage {
 
 export type ReportSectionKey =
   | "OVERVIEW" | "SLEEP" | "ACTIVITY" | "STRESS" | "BODY" | "NUTRITION" | "VITALS" | "MEDICATIONS" | "HORMONES"
-  | "MIND" | "CYCLE" | "CONTINENCE" | "SYMPTOMS" | "HABITS" | "APPOINTMENTS";
+  | "MIND" | "CYCLE" | "CONTINENCE" | "SYMPTOMS" | "HABITS" | "APPOINTMENTS" | "NEURO" | "TRANSITION";
 
 export interface WatchToday {
   date: string;
@@ -1175,4 +1224,637 @@ export interface WatchToday {
   doses: { medicationId: string; scheduledFor: number; name: string; time: string; taken: boolean }[];
   habits: { id: string; name: string; done: boolean }[];
   stress?: StressState;
+}
+
+// ---------------------------------------------------------------- Conditions and goals (Conditions.kt)
+
+export type ConditionKind = "CONDITION" | "GOAL" | "LIFE";
+export const CONDITION_KINDS: { id: ConditionKind; label: string }[] = [
+  { id: "CONDITION", label: "Conditions" }, { id: "GOAL", label: "Goals" }, { id: "LIFE", label: "Life" },
+];
+
+export interface ConditionDefinition {
+  id: string;
+  name: string;
+  kind: ConditionKind;
+  group: string;
+  about: string;
+  modules: Module[];
+  fields: string[];
+  symptoms: string[];
+  triggers: string[];
+  aliases: string[];
+}
+
+export type ConditionStatus = "DIAGNOSED" | "SELF_IDENTIFIED" | "SUSPECTED" | "MANAGING" | "PAST";
+export const CONDITION_STATUSES: { id: ConditionStatus; label: string }[] = [
+  { id: "DIAGNOSED", label: "Diagnosed" }, { id: "SELF_IDENTIFIED", label: "Self-identified" }, { id: "SUSPECTED", label: "Wondering" },
+  { id: "MANAGING", label: "Managing" }, { id: "PAST", label: "In the past" },
+];
+
+export interface MyCondition {
+  id: string;
+  name: string;
+  kind: ConditionKind;
+  status?: ConditionStatus;
+  since?: string;
+  notes?: string;
+  modules: Module[];
+  fields: string[];
+}
+
+export interface MyConditions {
+  conditions: MyCondition[];
+}
+
+export interface FieldLayout {
+  effective: string[];
+  show: string[];
+  hide: string[];
+  because: Record<string, string>;
+}
+
+export interface FieldChoices {
+  show: string[];
+  hide: string[];
+}
+
+export type CustomFieldType = "TEXT" | "NUMBER" | "SCALE" | "CHOICE" | "MULTI" | "YES_NO";
+
+export interface CustomField {
+  key: string;
+  label: string;
+  type: CustomFieldType;
+  options: string[];
+  min: number;
+  max: number;
+  unit?: string;
+}
+
+// ---------------------------------------------------------------- Bladder and bowel, in detail
+
+export type Fullness = "DRY" | "DAMP" | "WET" | "FULL" | "SOAKED" | "LEAKED";
+export const FULLNESS: { id: Fullness; label: string; level: number }[] = [
+  { id: "DRY", label: "Dry", level: 0 }, { id: "DAMP", label: "Damp", level: 1 }, { id: "WET", label: "Wet", level: 2 },
+  { id: "FULL", label: "Full", level: 3 }, { id: "SOAKED", label: "Soaked", level: 4 }, { id: "LEAKED", label: "Leaked through", level: 5 },
+];
+export type Awareness = "FELT_IT" | "FELT_DURING" | "NOTICED_AFTER" | "DIDNT_NOTICE";
+export const AWARENESS: { id: Awareness; label: string }[] = [
+  { id: "FELT_IT", label: "Felt it coming" }, { id: "FELT_DURING", label: "Felt it happening" },
+  { id: "NOTICED_AFTER", label: "Noticed afterwards" }, { id: "DIDNT_NOTICE", label: "Didn't notice" },
+];
+export type ReachedToilet = "YES" | "PARTLY" | "NO" | "NOT_TRYING";
+export const REACHED_TOILET: { id: ReachedToilet; label: string }[] = [
+  { id: "YES", label: "Made it" }, { id: "PARTLY", label: "Partly" }, { id: "NO", label: "Didn't make it" }, { id: "NOT_TRYING", label: "Wasn't trying" },
+];
+export type LeakContents = "URINE" | "STOOL" | "WIND" | "BOTH";
+export const LEAK_CONTENTS: { id: LeakContents; label: string }[] = [
+  { id: "URINE", label: "Urine" }, { id: "STOOL", label: "Stool" }, { id: "WIND", label: "Wind" }, { id: "BOTH", label: "Urine and stool" },
+];
+
+export interface BladderTraining {
+  enabled: boolean;
+  intervalMinutes: number;
+  from: string;
+  to: string;
+  stepMinutes: number;
+  stepEveryDays: number;
+  goalMinutes: number;
+  startedOn?: string;
+}
+
+export interface ContinenceSettings {
+  quickButtons: ContinenceKind[];
+  triggers: string[];
+  activities: string[];
+  locations: string[];
+  customFields: CustomField[];
+  defaultSupplyId?: string;
+  nightFrom?: string;
+  nightTo?: string;
+  bladderTraining: BladderTraining;
+}
+
+export interface ContinenceCheckIn {
+  date: string;
+  bother: number;
+  compared?: number;
+  impact: string[];
+  note?: string;
+  id?: string;
+}
+
+export type Verdict = "IMPROVING" | "STEADY" | "WORSENING" | "NOT_ENOUGH";
+export const VERDICT_LABEL: Record<Verdict, string> = {
+  IMPROVING: "Getting better", STEADY: "About the same", WORSENING: "Getting worse", NOT_ENOUGH: "Not enough to tell yet",
+};
+
+export interface ProgressMetric {
+  key: string;
+  label: string;
+  before?: number;
+  after?: number;
+  unit: string;
+  lowerIsBetter: boolean;
+  verdict: Verdict;
+}
+
+export interface ProgressWeek {
+  weekStart: string;
+  days: number;
+  voidsPerDay?: number;
+  nightVoidsPerDay?: number;
+  leaksPerDay?: number;
+  bowelLeaksPerDay?: number;
+  urgency?: number;
+  productsPerDay?: number;
+  fullness?: number;
+  lossGPerDay?: number;
+  bother?: number;
+  pelvicFloorSets: number;
+}
+
+export interface ContinenceProgress {
+  verdict: Verdict;
+  headline: string;
+  recentWeeks: number;
+  metrics: ProgressMetric[];
+  weeks: ProgressWeek[];
+  notes: string[];
+}
+
+// ---------------------------------------------------------------- Supplies
+
+export type SupplyCategory = "CONTINENCE" | "PERIOD" | "OTHER";
+export type SupplyKind =
+  | "LINER" | "PAD" | "BOOSTER" | "PULL_UP" | "BRIEF" | "BED_PAD" | "REUSABLE_UNDERWEAR" | "CATHETER" | "WIPES" | "BARRIER_CREAM"
+  | "PERIOD_PAD" | "TAMPON" | "CUP" | "DISC" | "PERIOD_UNDERWEAR" | "OTHER";
+export const SUPPLY_KINDS: { id: SupplyKind; label: string; category: SupplyCategory }[] = [
+  { id: "LINER", label: "Liner", category: "CONTINENCE" },
+  { id: "PAD", label: "Pad", category: "CONTINENCE" },
+  { id: "BOOSTER", label: "Booster pad", category: "CONTINENCE" },
+  { id: "PULL_UP", label: "Pull-up / protective underwear", category: "CONTINENCE" },
+  { id: "BRIEF", label: "Brief / diaper (with tabs)", category: "CONTINENCE" },
+  { id: "BED_PAD", label: "Bed pad", category: "CONTINENCE" },
+  { id: "REUSABLE_UNDERWEAR", label: "Reusable underwear", category: "CONTINENCE" },
+  { id: "CATHETER", label: "Catheter", category: "CONTINENCE" },
+  { id: "WIPES", label: "Wipes", category: "OTHER" },
+  { id: "BARRIER_CREAM", label: "Barrier cream", category: "OTHER" },
+  { id: "PERIOD_PAD", label: "Period pad", category: "PERIOD" },
+  { id: "TAMPON", label: "Tampon", category: "PERIOD" },
+  { id: "CUP", label: "Cup", category: "PERIOD" },
+  { id: "DISC", label: "Disc", category: "PERIOD" },
+  { id: "PERIOD_UNDERWEAR", label: "Period underwear", category: "PERIOD" },
+  { id: "OTHER", label: "Other", category: "OTHER" },
+];
+export const supplyKindLabel = (k: SupplyKind) => SUPPLY_KINDS.find((x) => x.id === k)?.label ?? "Other";
+
+export interface Supply {
+  name: string;
+  kind: SupplyKind;
+  brand?: string;
+  size?: string;
+  absorbency?: string;
+  dryWeightG?: number;
+  onHand: number;
+  perPack?: number;
+  lowAt?: number;
+  reusable: boolean;
+  notes?: string;
+  active: boolean;
+  id?: string;
+}
+
+export type SupplyReason = "USED" | "RESTOCKED" | "COUNTED" | "GAVE_AWAY";
+
+export interface SupplyAdjustment {
+  at: number;
+  delta: number;
+  reason: SupplyReason;
+  note?: string;
+  id?: string;
+  supplyId?: string;
+}
+
+export interface SupplyStatus {
+  supply: Supply;
+  perDay?: number;
+  daysLeft?: number;
+  low: boolean;
+  lastRestocked?: string;
+}
+
+// ---------------------------------------------------------------- Cycle, in detail
+
+export interface ProductUse {
+  kind: SupplyKind;
+  count: number;
+  fullness?: Fullness;
+  supplyId?: string;
+}
+export type Clots = "NONE" | "SMALL" | "LARGE";
+export const CLOTS: { id: Clots; label: string }[] = [{ id: "NONE", label: "None" }, { id: "SMALL", label: "Small" }, { id: "LARGE", label: "Larger than a coin" }];
+export interface SexEntry {
+  had: boolean;
+  protected?: boolean;
+  note?: string;
+}
+export interface Cervix {
+  position?: string;
+  firmness?: string;
+  opening?: string;
+}
+export type PregnancyTest = "NEGATIVE" | "FAINT" | "POSITIVE";
+export const PREGNANCY_TESTS: { id: PregnancyTest; label: string }[] = [
+  { id: "NEGATIVE", label: "Negative" }, { id: "FAINT", label: "Faint line" }, { id: "POSITIVE", label: "Positive" },
+];
+
+export interface CycleSettings {
+  symptoms: string[];
+  hiddenSymptoms: string[];
+  moods: string[];
+  painAreas: string[];
+  customFields: CustomField[];
+  cycleLength?: number;
+  periodLength?: number;
+  lutealLength?: number;
+  remindBeforePeriod?: number;
+  remindLateAfter?: number;
+  dailyReminder?: string;
+  neutralWording: boolean;
+}
+
+// ---------------------------------------------------------------- Autism and ADHD (Neuro.kt)
+
+export type Wording = "IDENTITY_FIRST" | "PERSON_FIRST";
+export type Sense = "SOUND" | "LIGHT" | "TOUCH" | "SMELL" | "TASTE" | "TEMPERATURE" | "MOVEMENT" | "BODY_SIGNALS" | "CROWDS";
+export const SENSES: { id: Sense; label: string }[] = [
+  { id: "SOUND", label: "Sound" }, { id: "LIGHT", label: "Light" }, { id: "TOUCH", label: "Touch and textures" }, { id: "SMELL", label: "Smell" },
+  { id: "TASTE", label: "Taste" }, { id: "TEMPERATURE", label: "Temperature" }, { id: "MOVEMENT", label: "Movement and balance" },
+  { id: "BODY_SIGNALS", label: "Body signals (hunger, thirst, needing the toilet)" }, { id: "CROWDS", label: "Crowds and busy places" },
+];
+export const senseLabel = (s: Sense) => SENSES.find((x) => x.id === s)?.label ?? s;
+
+export interface SensePreference {
+  sense: Sense;
+  response: number;
+  notes?: string;
+  helps: string[];
+}
+
+export interface NeuroProfile {
+  identities: string[];
+  wording: Wording;
+  senses: SensePreference[];
+  communication: string[];
+  whatHelps: string[];
+  accommodations: string[];
+  warningSigns: string[];
+  interests: string[];
+  stims: string[];
+  aboutMe?: string;
+}
+
+export type OverloadKind = "OVERWHELM" | "SENSORY_OVERLOAD" | "MELTDOWN" | "SHUTDOWN" | "PANIC";
+export const OVERLOAD_KINDS: { id: OverloadKind; label: string }[] = [
+  { id: "OVERWHELM", label: "Overwhelm" }, { id: "SENSORY_OVERLOAD", label: "Sensory overload" }, { id: "MELTDOWN", label: "Meltdown" },
+  { id: "SHUTDOWN", label: "Shutdown" }, { id: "PANIC", label: "Panic" },
+];
+
+export interface OverloadEvent {
+  start: number;
+  end?: number;
+  kind: OverloadKind;
+  intensity: number;
+  senses: Sense[];
+  triggers: string[];
+  warningSigns: string[];
+  whereAt?: string;
+  whatHelped: string[];
+  recoveryMinutes?: number;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export interface EnergySpend {
+  what: string;
+  amount: number;
+  at?: number;
+}
+
+export interface EnergyDay {
+  date: string;
+  startWith?: number;
+  spends: EnergySpend[];
+  socialBattery?: number;
+  note?: string;
+}
+
+export interface NeuroCheckIn {
+  at: number;
+  masking?: number;
+  socialLoad?: number;
+  sensoryLoad?: number;
+  starting?: number;
+  focus?: number;
+  organising?: number;
+  remembering?: number;
+  switching?: number;
+  restlessness?: number;
+  emotions?: number;
+  burnout?: number;
+  medEffect?: number;
+  woreOffAt?: string;
+  note?: string;
+  id?: string;
+  date?: string;
+}
+
+export type FocusKind = "FOCUS" | "BODY_DOUBLING" | "INTEREST" | "HYPERFOCUS";
+export const FOCUS_KINDS: { id: FocusKind; label: string }[] = [
+  { id: "FOCUS", label: "Focus timer" }, { id: "BODY_DOUBLING", label: "Body doubling" },
+  { id: "INTEREST", label: "Special interest time" }, { id: "HYPERFOCUS", label: "Hyperfocus" },
+];
+
+export interface FocusSession {
+  start: number;
+  end?: number;
+  kind: FocusKind;
+  task?: string;
+  estimateMinutes?: number;
+  breaks: number;
+  rating?: number;
+  note?: string;
+  id?: string;
+}
+
+export interface RoutineStep {
+  text: string;
+  minutes?: number;
+}
+
+export interface Routine {
+  name: string;
+  steps: RoutineStep[];
+  reminder?: string;
+  days: number[];
+  icon: string;
+  active: boolean;
+  id?: string;
+}
+
+export interface RoutineRun {
+  routineId: string;
+  date: string;
+  done: number[];
+  at?: number;
+  id?: string;
+}
+
+export interface CommunicationCard {
+  text: string;
+  detail?: string;
+  color?: string;
+  id?: string;
+}
+
+export interface NeuroSummary {
+  days: number;
+  overloads: number;
+  byKind: Count[];
+  triggers: Count[];
+  whatHelped: Count[];
+  averageMasking?: number;
+  averageEnergyUsed?: number;
+  focusMinutes: number;
+  estimateRatio?: number;
+  patterns: Insight[];
+  burnoutRisk?: string;
+}
+
+export interface NeuroToday {
+  overloadsToday: number;
+  energyLeft?: number;
+  socialBattery?: number;
+  routinesDue: string[];
+  focusMinutes: number;
+}
+
+// ---------------------------------------------------------------- Transition (Transition.kt)
+
+export type MilestoneArea = "SOCIAL" | "LEGAL" | "MEDICAL" | "VOICE" | "OTHER";
+export const MILESTONE_AREAS: { id: MilestoneArea; label: string }[] = [
+  { id: "SOCIAL", label: "Social" }, { id: "LEGAL", label: "Legal and documents" }, { id: "MEDICAL", label: "Medical" },
+  { id: "VOICE", label: "Voice" }, { id: "OTHER", label: "Other" },
+];
+export type MilestoneStatus = "IDEA" | "PLANNED" | "IN_PROGRESS" | "DONE";
+export const MILESTONE_STATUSES: { id: MilestoneStatus; label: string }[] = [
+  { id: "IDEA", label: "Thinking about it" }, { id: "PLANNED", label: "Planned" }, { id: "IN_PROGRESS", label: "In progress" }, { id: "DONE", label: "Done" },
+];
+
+export interface ChecklistItem {
+  text: string;
+  done: boolean;
+}
+
+export interface Milestone {
+  title: string;
+  area: MilestoneArea;
+  status: MilestoneStatus;
+  date?: string;
+  notes?: string;
+  checklist: ChecklistItem[];
+  id?: string;
+}
+
+export interface MilestoneTemplate {
+  title: string;
+  area: MilestoneArea;
+  checklist: string[];
+  about?: string;
+}
+
+export interface BodyChange {
+  date: string;
+  area: string;
+  note: string;
+  feeling?: number;
+  id?: string;
+}
+
+export interface VoiceSession {
+  at: number;
+  minutes: number;
+  exercises: string[];
+  pitchAvgHz?: number;
+  pitchMinHz?: number;
+  pitchMaxHz?: number;
+  feeling?: number;
+  note?: string;
+  id?: string;
+}
+
+export type HairRemovalMethod = "LASER" | "ELECTROLYSIS" | "IPL" | "WAXING" | "OTHER";
+export const HAIR_METHODS: { id: HairRemovalMethod; label: string }[] = [
+  { id: "LASER", label: "Laser" }, { id: "ELECTROLYSIS", label: "Electrolysis" }, { id: "IPL", label: "IPL" },
+  { id: "WAXING", label: "Waxing" }, { id: "OTHER", label: "Other" },
+];
+
+export interface HairRemovalSession {
+  at: number;
+  method: HairRemovalMethod;
+  area: string;
+  minutes?: number;
+  pulses?: number;
+  provider?: string;
+  pain?: number;
+  cost?: number;
+  note?: string;
+  id?: string;
+}
+
+export type MomentKind = "EUPHORIA" | "DYSPHORIA";
+
+export interface GenderMoment {
+  at: number;
+  kind: MomentKind;
+  intensity: number;
+  context: string[];
+  note?: string;
+  id?: string;
+}
+
+export interface TransitionProfile {
+  pronouns?: string;
+  startedOn?: string;
+  goals: string[];
+  voiceTargetHz?: number;
+}
+
+export interface TransitionOverview {
+  profile: TransitionProfile;
+  sinceStart?: string;
+  onHormones?: string;
+  milestones: Milestone[];
+  recentChanges: BodyChange[];
+  voice: VoiceSession[];
+  hairByArea: Count[];
+  euphoria: number;
+  dysphoria: number;
+  highlights: string[];
+  /** Body measurements (cm) over the last two years, oldest first, when Fields.TRANSITION_MEASUREMENTS is on. */
+  measurements: MeasurementSet[];
+}
+
+/** One time's body measurements, in cm, by metric. */
+export interface MeasurementSet {
+  at: number;
+  values: Partial<Record<Metric, number>>;
+}
+
+export interface TransitionToday {
+  headline?: string;
+  milestonesDue: string[];
+  euphoriaThisWeek: number;
+}
+
+// ---------------------------------------------------------------- Progress photos
+
+export type Pose = "FRONT" | "SIDE" | "BACK" | "FACE" | "FACE_SIDE" | "OTHER";
+export const POSES: { id: Pose; label: string }[] = [
+  { id: "FRONT", label: "Front" }, { id: "SIDE", label: "Side" }, { id: "BACK", label: "Back" }, { id: "FACE", label: "Face" },
+  { id: "FACE_SIDE", label: "Face, side" }, { id: "OTHER", label: "Other" },
+];
+
+export interface Photo {
+  album: string;
+  pose: Pose;
+  at: number;
+  note?: string;
+  tags: string[];
+  id?: string;
+  date?: string;
+  width?: number;
+  height?: number;
+  weightKg?: number;
+  onHormones?: string;
+}
+
+export interface PhotoAlbum {
+  name: string;
+  count: number;
+  latest?: string;
+  coverId?: string;
+}
+
+/** Body measurements, in cm, saved as Metric samples like weight. */
+export const BODY_MEASUREMENTS: { id: Metric; label: string }[] = [
+  { id: "WAIST", label: "Waist" }, { id: "HIPS", label: "Hips" }, { id: "CHEST", label: "Chest" }, { id: "BUST", label: "Bust" },
+  { id: "UNDERBUST", label: "Underbust" }, { id: "SHOULDERS", label: "Shoulders" }, { id: "NECK", label: "Neck" },
+  { id: "UPPER_ARM", label: "Upper arm" }, { id: "THIGH", label: "Thigh" }, { id: "CALF", label: "Calf" },
+];
+
+// ---------------------------------------------------------------- The AI assistant (Ai.kt)
+
+export interface AiSettings {
+  enabled: boolean;
+  model: string;
+  effort: string;
+  dailyLimit: number;
+  allowLogging: boolean;
+  acknowledgedAt?: number;
+  hasKey: boolean;
+}
+
+export interface AiConsent {
+  modules: Module[];
+  allowLogging: boolean;
+  acknowledged: boolean;
+  sensitiveAcknowledged: boolean;
+  since?: number;
+}
+
+export interface AiStatus {
+  available: boolean;
+  provider: string;
+  model?: string;
+  consent?: AiConsent;
+  usedToday: number;
+  dailyLimit: number;
+  dataNotice: string;
+  termsUrl: string;
+  privacyUrl: string;
+}
+
+export interface AiMessage {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface AiLook {
+  tool: string;
+  module?: Module;
+  summary: string;
+}
+
+export interface AiChatReply {
+  text: string;
+  looked: AiLook[];
+  modules: Module[];
+  usedToday: number;
+}
+
+export interface AiBreakdownReply {
+  steps: RoutineStep[];
+}
+
+export interface AiAuditEntry {
+  at: number;
+  kind: string;
+  modules: Module[];
+  tools: string[];
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
 }

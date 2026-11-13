@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Archive, FileDown, FileText, Lock } from "lucide-react";
+import { Archive, FileDown, FileText, Lock, Share2 } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
 import { shiftDate, today } from "../lib/format";
@@ -49,6 +49,7 @@ export function Reports() {
   const [exportFrom, setExportFrom] = useState("2000-01-01");
   const [exportTo, setExportTo] = useState(today());
   const [exporting, setExporting] = useState(false);
+  const [fitting, setFitting] = useState(false);
 
   const toggle = (id: ReportSectionKey) => setSections(sections.includes(id) ? sections.filter((s) => s !== id) : [...sections, id]);
 
@@ -92,6 +93,40 @@ export function Reports() {
               setExporting(false);
             }}><Archive size={18} /> Download .zip (CSV + FHIR)</Button>
           </div>
+        </Card>
+
+        <Card title="For other apps" icon={<Share2 size={18} />} className="span-2">
+          <ul className="export-list">
+            <li>
+              <div>
+                <strong>Garmin Connect, Strava and others</strong>
+                <p className="muted small">Workouts, and weight with body fat, as FIT files (the format sports apps import), for the dates above.</p>
+              </div>
+              <Button busy={fitting} onClick={async () => {
+                setFitting(true);
+                try { await api.downloadFit(exportFrom, exportTo); toast("FIT files downloaded"); } catch (e) { errorToast(e); }
+                setFitting(false);
+              }}><FileDown size={18} /> Download FIT files</Button>
+            </li>
+            <li>
+              <div>
+                <strong>Spreadsheets and health records</strong>
+                <p className="muted small">The CSV and FHIR export above opens in a spreadsheet, and imports into many health record systems.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Health Connect (Android)</strong>
+                <p className="muted small">The phone app can write to Health Connect, which Samsung Health, Google Fit and others read: turn it on in the app's settings and choose what to share.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Apple Health</strong>
+                <p className="muted small">Not available: Apple Health only takes data from an iPhone app, and there isn't one.</p>
+              </div>
+            </li>
+          </ul>
         </Card>
       </div>
     </div>
