@@ -16,6 +16,8 @@ data class Nutrients(
     val sugar: Double? = null,
     val saturatedFat: Double? = null,
     val sodiumMg: Double? = null,
+    /** Vitamins, minerals and the rest, where known, each in its [Micronutrient.unit]. */
+    val micros: Map<Micronutrient, Double> = emptyMap(),
 ) {
     operator fun plus(other: Nutrients) = Nutrients(
         calories = calories + other.calories,
@@ -26,6 +28,7 @@ data class Nutrients(
         sugar = add(sugar, other.sugar),
         saturatedFat = add(saturatedFat, other.saturatedFat),
         sodiumMg = add(sodiumMg, other.sodiumMg),
+        micros = (micros.keys + other.micros.keys).associateWith { (micros[it] ?: 0.0) + (other.micros[it] ?: 0.0) },
     )
 
     operator fun times(factor: Double) = Nutrients(
@@ -37,10 +40,59 @@ data class Nutrients(
         sugar = sugar?.times(factor),
         saturatedFat = saturatedFat?.times(factor),
         sodiumMg = sodiumMg?.times(factor),
+        micros = micros.mapValues { it.value * factor },
     )
 
     private fun add(a: Double?, b: Double?): Double? = if (a == null && b == null) null else (a ?: 0.0) + (b ?: 0.0)
 }
+
+/** Whether more is better (up to a point) or less is: for a target's bar and wording. */
+@Serializable
+enum class MicroAim { AT_LEAST, AT_MOST }
+
+@Serializable
+enum class MicroGroup(val label: String) { FATS("Fats"), MINERALS("Minerals"), VITAMINS("Vitamins") }
+
+/**
+ * The vitamins, minerals and finer fats a food can carry (alongside [Nutrients]' fibre, sugar,
+ * saturated fat and sodium). [offKey] is Open Food Facts' per-100 g key, whose values are in
+ * grams, so [fromGrams] turns them into [unit].
+ */
+@Serializable
+enum class Micronutrient(val label: String, val unit: String, val group: MicroGroup, val offKey: String, val fromGrams: Double, val aim: MicroAim = MicroAim.AT_LEAST) {
+    TRANS_FAT("Trans fat", "g", MicroGroup.FATS, "trans-fat_100g", 1.0, MicroAim.AT_MOST),
+    MONO_FAT("Monounsaturated fat", "g", MicroGroup.FATS, "monounsaturated-fat_100g", 1.0),
+    POLY_FAT("Polyunsaturated fat", "g", MicroGroup.FATS, "polyunsaturated-fat_100g", 1.0),
+    OMEGA_3("Omega-3", "g", MicroGroup.FATS, "omega-3-fat_100g", 1.0),
+    CHOLESTEROL("Cholesterol", "mg", MicroGroup.FATS, "cholesterol_100g", 1000.0, MicroAim.AT_MOST),
+    POTASSIUM("Potassium", "mg", MicroGroup.MINERALS, "potassium_100g", 1000.0),
+    CALCIUM("Calcium", "mg", MicroGroup.MINERALS, "calcium_100g", 1000.0),
+    IRON("Iron", "mg", MicroGroup.MINERALS, "iron_100g", 1000.0),
+    MAGNESIUM("Magnesium", "mg", MicroGroup.MINERALS, "magnesium_100g", 1000.0),
+    ZINC("Zinc", "mg", MicroGroup.MINERALS, "zinc_100g", 1000.0),
+    PHOSPHORUS("Phosphorus", "mg", MicroGroup.MINERALS, "phosphorus_100g", 1000.0),
+    SELENIUM("Selenium", "µg", MicroGroup.MINERALS, "selenium_100g", 1_000_000.0),
+    IODINE("Iodine", "µg", MicroGroup.MINERALS, "iodine_100g", 1_000_000.0),
+    VITAMIN_A("Vitamin A", "µg", MicroGroup.VITAMINS, "vitamin-a_100g", 1_000_000.0),
+    VITAMIN_C("Vitamin C", "mg", MicroGroup.VITAMINS, "vitamin-c_100g", 1000.0),
+    VITAMIN_D("Vitamin D", "µg", MicroGroup.VITAMINS, "vitamin-d_100g", 1_000_000.0),
+    VITAMIN_E("Vitamin E", "mg", MicroGroup.VITAMINS, "vitamin-e_100g", 1000.0),
+    VITAMIN_K("Vitamin K", "µg", MicroGroup.VITAMINS, "vitamin-k_100g", 1_000_000.0),
+    THIAMIN("Thiamin (B1)", "mg", MicroGroup.VITAMINS, "vitamin-b1_100g", 1000.0),
+    RIBOFLAVIN("Riboflavin (B2)", "mg", MicroGroup.VITAMINS, "vitamin-b2_100g", 1000.0),
+    NIACIN("Niacin (B3)", "mg", MicroGroup.VITAMINS, "vitamin-pp_100g", 1000.0),
+    VITAMIN_B6("Vitamin B6", "mg", MicroGroup.VITAMINS, "vitamin-b6_100g", 1000.0),
+    FOLATE("Folate", "µg", MicroGroup.VITAMINS, "vitamin-b9_100g", 1_000_000.0),
+    VITAMIN_B12("Vitamin B12", "µg", MicroGroup.VITAMINS, "vitamin-b12_100g", 1_000_000.0),
+}
+
+/**
+ * A daily target for one nutrient: [amount] to reach (AT_LEAST) or stay under (AT_MOST), and an
+ * upper limit where one is set. From adult reference intakes for the person's chosen
+ * [EnergyProfile] (never inferred), unless they've set their own ([custom]).
+ */
+@Serializable
+data class MicroTarget(val micro: Micronutrient, val amount: Double, val upper: Double? = null, val custom: Boolean = false)
 
 @Serializable
 enum class FoodSource { CUSTOM, OPEN_FOOD_FACTS }
@@ -108,6 +160,8 @@ data class NutritionTarget(
     val waterMl: Int,
     /** "Your goal", or how the calories were estimated. */
     val basis: String,
+    /** Fibre, sodium, vitamins and minerals: a day's targets (see [MicroTarget]). */
+    val micros: List<MicroTarget> = emptyList(),
 )
 
 @Serializable
