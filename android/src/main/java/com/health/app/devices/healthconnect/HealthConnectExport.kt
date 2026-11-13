@@ -25,6 +25,7 @@ import com.health.api.BloodPressure
 import com.health.api.Device
 import com.health.api.DeviceKind
 import com.health.api.Drink
+import com.health.api.Fields
 import com.health.api.FoodEntry
 import com.health.api.GlucoseContext
 import com.health.api.GlucoseReading
@@ -38,6 +39,7 @@ import com.health.app.data.DeviceChoices
 import com.health.app.net.ServerApi
 import com.health.app.net.bloodPressure
 import com.health.app.net.drinksDay
+import com.health.app.net.fields
 import com.health.app.net.glucose
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +103,13 @@ object HealthConnectExportMapping {
 
     /** Whether a reading from [source] should go to Health Connect: not if it came from there. */
     fun mayWrite(source: String?, fromHealthConnect: Set<String>): Boolean = source == null || source !in fromHealthConnect
+
+    /**
+     * The chosen [kinds] to write, given the person's shown [fields]: water and drinks only while
+     * water is shown ([Fields.NUTRITION_WATER]). Fields not known (null): not written this time.
+     */
+    fun writable(kinds: Set<ExportKind>, fields: Set<String>?): Set<ExportKind> =
+        if (fields != null && Fields.NUTRITION_WATER in fields) kinds else kinds - ExportKind.HYDRATION
 
     fun weight(s: Sample, zone: ZoneId) = Outgoing(
         ExportKind.WEIGHT, "weight:${s.id ?: s.start}", s.start, "${s.start}:${s.value}",
@@ -281,7 +290,11 @@ class HealthConnectWriter(
         if (kinds.isEmpty()) return null
         val client = client() ?: return "Health Connect isn't available on this phone".also(choices::setHealthConnectNote)
         val granted = granted()
-        val allowed = kinds.filter { it.permission in granted }.toSet()
+        // Water and drinks only while the person shows water (Settings › Features › Water).
+        val fields = if (ExportKind.HYDRATION in kinds) runCatching { api.fields().effective }.getOrNull() else null
+        val wanted = HealthConnectExportMapping.writable(kinds, fields)
+        if (wanted.isEmpty()) return "Water is hidden, so nothing's written".also(choices::setHealthConnectNote)
+        val allowed = wanted.filter { it.permission in granted }.toSet()
         if (allowed.isEmpty()) return "Health Connect hasn't allowed the app to write yet".also(choices::setHealthConnectNote)
         val now = clock()
         val windowStart = now - WINDOW_DAYS * 86_400_000L

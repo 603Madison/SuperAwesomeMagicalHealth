@@ -62,8 +62,15 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.ProgressBar
 import com.health.app.ui.components.Ring
 import com.health.app.ui.components.ScreenTitle
-
+import com.health.app.ui.components.ArrangeButton
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.components.ArrangeSheet
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.arranged
+import com.health.app.ui.components.showsField
+import com.health.api.Fields
+import com.health.api.Layouts
+import androidx.compose.runtime.key
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.tracking.DrinksCard
@@ -100,35 +107,68 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
             quickDrink = { vm.quickDrink(it) }, saveDrink = { vm.saveDrink(it) }, deleteDrink = { vm.deleteDrink(it) },
         ),
         zone = c.zone(),
+        water = showsField(Fields.NUTRITION_WATER),
     )
 }
 
+/** The Food tab's sections, arranged under `android.food`: their ids are saved, so they stay as they are. */
+object FoodSections {
+    val KEY = Layouts.screen(Layouts.ANDROID, "food")
+    const val TOTALS = "totals"
+    const val WATER = "water"
+    const val DRINKS = "drinks"
+
+    /** A meal's section: "breakfast", "lunch", "dinner", "snack". */
+    fun meal(meal: Meal): String = meal.name.lowercase()
+
+    /** The sections, in the default order; water only while it's shown. */
+    fun items(water: Boolean): List<ArrangeItem> = buildList {
+        add(ArrangeItem(TOTALS, "Calories and nutrients"))
+        Meal.entries.forEach { add(ArrangeItem(meal(it), it.label)) }
+        if (water) add(ArrangeItem(WATER, "Water"))
+        add(ArrangeItem(DRINKS, "Drinks"))
+    }
+}
+
+/** The day's food: totals, each meal, water (unless it's hidden) and drinks, in the person's order. */
 @Composable
-fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault()) {
+fun FoodScreen(state: FoodState, units: Units, actions: FoodActions, zone: ZoneId = ZoneId.systemDefault(), water: Boolean = true) {
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
+    var arranging by remember { mutableStateOf(false) }
     val day = state.day
+    val items = FoodSections.items(water)
+    val shown = arranged(FoodSections.KEY, items)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Food", Format.day(state.date, state.today)) {
             IconButton(onClick = { actions.go(state.date.minusDays(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Day before") }
             IconButton(onClick = { actions.go(state.date.plusDays(1)) }, enabled = state.date < state.today) {
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Day after")
             }
+            ArrangeButton { arranging = true }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && day == null -> Loading()
                 state.error != null && day == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                day != null -> {
-                    Totals(day)
-                    Meal.entries.forEach { meal ->
-                        MealCard(meal, day.entries.filter { it.meal == meal }, onAdd = { actions.add(state.date, meal) }, onEdit = { editing = it }, onCopy = { actions.copyYesterday(meal) })
+                day != null -> shown.forEach { id ->
+                    key(id) {
+                        val meal = Meal.entries.firstOrNull { FoodSections.meal(it) == id }
+                        when {
+                            id == FoodSections.TOTALS -> Totals(day)
+                            meal != null -> MealCard(
+                                meal, day.entries.filter { it.meal == meal },
+                                onAdd = { actions.add(state.date, meal) }, onEdit = { editing = it }, onCopy = { actions.copyYesterday(meal) },
+                            )
+                            id == FoodSections.WATER -> WaterCard(day, units, actions)
+                            id == FoodSections.DRINKS -> DrinksCard(state.drinks, units, zone, actions.quickDrink, actions.saveDrink, actions.deleteDrink)
+                            else -> Unit
+                        }
                     }
-                    WaterCard(day, units, actions)
-                    DrinksCard(state.drinks, units, zone, actions.quickDrink, actions.saveDrink, actions.deleteDrink)
                 }
             }
         }
     }
+    if (arranging) ArrangeSheet(FoodSections.KEY, "Food", items, { arranging = false })
     editing?.let { entry ->
         EditEntryDialog(
             entry,

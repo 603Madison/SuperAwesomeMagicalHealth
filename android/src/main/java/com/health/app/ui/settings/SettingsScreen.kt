@@ -11,24 +11,44 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.MedicalInformation
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Summarize
+import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,8 +62,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.health.api.AiStatus
 import com.health.api.EnergyProfile
+import com.health.api.Fields
 import com.health.api.Goals
+import com.health.api.Layouts
 import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.Units
@@ -51,7 +74,11 @@ import com.health.app.BuildConfig
 import com.health.app.data.Palette
 import com.health.app.data.Settings
 import com.health.app.data.ThemeMode
+import com.health.app.net.aiStatus
 import com.health.app.ui.Format
+import com.health.app.ui.components.ArrangeButton
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.components.ArrangeSheet
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
@@ -60,8 +87,12 @@ import com.health.app.ui.components.SectionCard
 import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.components.ValueRow
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.arranged
+import com.health.app.ui.components.screenLayout
+import com.health.app.ui.components.showsField
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.ModuleInfo
+import com.health.app.ui.modules.NavRow
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -70,6 +101,8 @@ class SettingsActions(
     val saveProfile: (Profile) -> Unit = {},
     val updateSettings: ((Settings) -> Settings) -> Unit = {},
     val signOut: () -> Unit = {},
+    /** Shows or hides water (a field), keeping the person's other choices. */
+    val setWater: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -78,129 +111,97 @@ fun SettingsRoute(onOpen: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val settings by c.settings.collectAsState()
     val profile by c.profile.collectAsState()
+    var ai by remember { mutableStateOf<AiStatus?>(null) }
+    LaunchedEffect(Unit) { ai = runCatching { c.api.aiStatus() }.getOrNull() }
     SettingsScreen(
         settings, profile,
         SettingsActions(
             saveProfile = { p -> scope.launch { runCatching { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
             updateSettings = { t -> scope.launch { c.prefs.update(t) } },
             signOut = { scope.launch { c.signOut() } },
+            setWater = { on -> scope.launch { runCatching { WaterSetting.save(c, on) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
         ),
         onOpen = onOpen,
+        water = showsField(Fields.NUTRITION_WATER),
+        ai = ai,
+        hiddenFromHealth = screenLayout(Layouts.NAV)?.hidden.orEmpty(),
+    )
+}
+
+/** Settings' sections, arranged under `android.settings`: their ids are saved, so they stay as they are. */
+object SettingsSections {
+    val KEY = Layouts.screen(Layouts.ANDROID, "settings")
+    const val YOU = "you"
+    const val FEATURES = "features"
+    const val GOALS = "goals"
+    const val REMINDERS = "reminders"
+    const val CONNECTIONS = "connections"
+    const val APPEARANCE = "appearance"
+    const val ACCOUNT = "account"
+
+    val ITEMS = listOf(
+        ArrangeItem(YOU, "You"),
+        ArrangeItem(FEATURES, "Features"),
+        ArrangeItem(GOALS, "Goals"),
+        ArrangeItem(REMINDERS, "Reminders & sharing"),
+        ArrangeItem(CONNECTIONS, "Connections"),
+        ArrangeItem(APPEARANCE, "Appearance"),
+        ArrangeItem(ACCOUNT, "Account"),
     )
 }
 
 /** Which dialog is open: a field of the profile or goals. */
 private enum class Edit { BIRTH_YEAR, HEIGHT, ENERGY, STEPS, ACTIVE, SLEEP, CALORIES, PROTEIN, WATER, WORKOUTS, TARGET_WEIGHT, WEEKLY }
 
+/**
+ * Settings, in sections the person can arrange: You, Features, Goals, Reminders & sharing,
+ * Connections, Appearance and Account. [water] is whether water is shown; [ai] the assistant's
+ * status (null until known, or without one); [hiddenFromHealth] the features hidden from the
+ * Health tab, which open from here instead.
+ */
 @Composable
-fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActions, onOpen: (String) -> Unit = {}) {
+fun SettingsScreen(
+    settings: Settings,
+    profile: Profile?,
+    actions: SettingsActions,
+    onOpen: (String) -> Unit = {},
+    water: Boolean = true,
+    ai: AiStatus? = null,
+    hiddenFromHealth: Set<String> = emptySet(),
+) {
     var editing by remember { mutableStateOf<Edit?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
+    var arranging by remember { mutableStateOf(false) }
     val units = profile?.units ?: settings.units
+    val shown = arranged(SettingsSections.KEY, SettingsSections.ITEMS)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Settings")
+        ScreenTitle("Settings") { ArrangeButton { arranging = true } }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            if (profile == null) {
-                Loading()
-            } else {
-                val g = profile.goals
-                SectionCard("You") {
-                    ValueRow("Born in", profile.birthYear?.toString() ?: "Not set", onClick = { editing = Edit.BIRTH_YEAR })
-                    ValueRow("Height", profile.heightCm?.let { Format.height(it, units) } ?: "Not set", onClick = { editing = Edit.HEIGHT })
-                    ValueRow(
-                        "Calorie estimates use", profile.energyProfile.label,
-                        subtitle = "The formula for the energy your body uses at rest",
-                        onClick = { editing = Edit.ENERGY },
-                    )
-                    Text("Units", style = MaterialTheme.typography.bodyLarge)
-                    SegmentedChoice(Units.entries, profile.units, { if (it == Units.METRIC) "Metric" else "Imperial" }, { actions.saveProfile(profile.copy(units = it)) })
-                    val phone = ZoneId.systemDefault().id
-                    ValueRow("Time zone", profile.timezone.ifBlank { phone }, subtitle = "When your days start and end")
-                    if (profile.timezone.isNotBlank() && profile.timezone != phone) {
-                        OutlinedButton(onClick = { actions.saveProfile(profile.copy(timezone = phone)) }) { Text("Use this phone's ($phone)") }
+            if (profile == null) Loading()
+            shown.forEach { section ->
+                key(section) {
+                    when (section) {
+                        SettingsSections.YOU -> if (profile != null) YouSection(profile, units, actions) { editing = it }
+                        SettingsSections.FEATURES -> if (profile != null) FeaturesSection(profile, water, hiddenFromHealth, actions, onOpen)
+                        SettingsSections.GOALS -> if (profile != null) GoalsSection(profile.goals, units, water && Module.NUTRITION in profile.modules) { editing = it }
+                        SettingsSections.REMINDERS -> SectionCard("Reminders & sharing") {
+                            NavRow(Icons.Rounded.Notifications, "Reminders", "Doses, refills, habits and appointments", onClick = { onOpen("settings/reminders") })
+                            NavRow(Icons.Rounded.Summarize, "Weekly digest", "Your week in health, on your chosen day", onClick = { onOpen("digest") })
+                            NavRow(Icons.Rounded.Group, "Sharing", "Let someone you trust see what you choose", onClick = { onOpen("settings/sharing") })
+                            NavRow(Icons.Rounded.Description, "Reports and export", "A PDF for your doctor, or all your data", onClick = { onOpen("reports") })
+                        }
+                        SettingsSections.CONNECTIONS -> ConnectionsSection(settings, ai, actions, onOpen)
+                        SettingsSections.APPEARANCE -> AppearanceSection(settings, actions)
+                        SettingsSections.ACCOUNT -> SectionCard("Account") {
+                            Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
+                            Hint("${settings.user?.username ?: ""} on ${settings.serverName.ifBlank { settings.server }}")
+                            Hint(settings.server)
+                            Hint("Your password, signed-in devices and upload keys are on the server's web page.")
+                            OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out") }
+                        }
                     }
+                    Unit
                 }
-                SectionCard("Features") {
-                    Hint("Turn on what's useful to you. What's off is hidden, and nothing you've logged is lost.")
-                    Module.entries.forEach { m ->
-                        val on = m in profile.modules
-                        LabeledSwitch(
-                            m.label, on,
-                            { v -> actions.saveProfile(profile.copy(modules = if (v) profile.modules + m else profile.modules - m)) },
-                            subtitle = ModuleInfo.description(m),
-                        )
-                    }
-                    val sensitive = Module.entries.filter { it.sensitive }.map { it.label }
-                    Hint(
-                        sensitive.dropLast(1).joinToString(", ") + " and ${sensitive.last()} are encrypted on your server, and an AI connector " +
-                            "link only sees them if you allow it when making the link.",
-                    )
-                }
-                SectionCard("Goals") {
-                    ValueRow("Steps", Format.number(g.steps), onClick = { editing = Edit.STEPS })
-                    ValueRow("Active calories", "${Format.number(g.activeCalories)} kcal", onClick = { editing = Edit.ACTIVE })
-                    ValueRow("Sleep", Format.minutes(g.sleepMinutes), onClick = { editing = Edit.SLEEP })
-                    ValueRow("Workouts", "${g.workoutsPerWeek} a week", onClick = { editing = Edit.WORKOUTS })
-                    ValueRow("Calories to eat", g.calories?.let { "${Format.number(it)} kcal" } ?: "Automatic", subtitle = "Automatic follows what you burn and your weight goal", onClick = { editing = Edit.CALORIES })
-                    ValueRow("Protein", g.protein?.let { "$it g" } ?: "Automatic", onClick = { editing = Edit.PROTEIN })
-                    ValueRow("Water", Format.water(g.waterMl, units), onClick = { editing = Edit.WATER })
-                    ValueRow("Goal weight", g.targetWeightKg?.let { Format.weight(it, units) } ?: "Not set", onClick = { editing = Edit.TARGET_WEIGHT })
-                    ValueRow("Weight change", weeklyLabel(g.weeklyChangeKg, units), onClick = { editing = Edit.WEEKLY })
-                }
-            }
-            // Reminders, the digest, sharing, reports, the watch and integrations.
-            com.health.app.ui.care.MoreSettings(onOpen)
-            // Conditions and goals, fields, and the AI assistant.
-            com.health.app.ui.conditions.YourHealthSettings(onOpen)
-            // Export to other apps, calm mode and the photo lock (ui/settings/ExportSettings.kt).
-            MoreChoices(profile?.modules ?: Module.DEFAULT, onOpen)
-            SectionCard("Appearance") {
-                Text("Theme", style = MaterialTheme.typography.bodyLarge)
-                val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Palette.entries.forEach { palette ->
-                        FilterChip(
-                            selected = palette == settings.palette,
-                            enabled = !wallpaperOn,
-                            onClick = { actions.updateSettings { it.copy(palette = palette) } },
-                            label = { Text(palette.label) },
-                            leadingIcon = {
-                                Box(Modifier.size(20.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(palette.swatchA), Color(palette.swatchB)))))
-                            },
-                        )
-                    }
-                }
-                if (wallpaperOn) Hint("Your wallpaper's colours are in use.")
-                Text("Style", style = MaterialTheme.typography.bodyLarge)
-                SegmentedChoice(ThemeMode.entries, settings.themeMode, { it.label }, { mode -> actions.updateSettings { it.copy(themeMode = mode) } })
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    LabeledSwitch(
-                        "Wallpaper colours", settings.wallpaperColors, { v -> actions.updateSettings { it.copy(wallpaperColors = v) } },
-                        subtitle = "Use your phone's wallpaper colours instead of the theme's.",
-                    )
-                }
-                LabeledSwitch(
-                    "Bold text", settings.boldText, { v -> actions.updateSettings { it.copy(boldText = v) } },
-                    subtitle = "All text in Lexend Bold, the way your phone's Bold text setting draws it.",
-                )
-            }
-            SectionCard("Sync") {
-                LabeledSwitch(
-                    "Sync in the background", settings.backgroundSync, { v -> actions.updateSettings { it.copy(backgroundSync = v) } },
-                    subtitle = "About once an hour, your ring, Health Connect and Gadgetbridge send what's new to your server.",
-                )
-                LabeledSwitch(
-                    "Only on Wi-Fi", settings.syncOnWifiOnly, { v -> actions.updateSettings { it.copy(syncOnWifiOnly = v) } },
-                    enabled = settings.backgroundSync,
-                    subtitle = "Background syncs wait for Wi-Fi. Opening the app still syncs.",
-                )
-            }
-            SectionCard("Account") {
-                Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
-                Hint("${settings.user?.username ?: ""} on ${settings.serverName.ifBlank { settings.server }}")
-                Hint(settings.server)
-                Hint("Your password, signed-in devices and upload keys are on the server's web page.")
-                OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out") }
             }
             Text(
                 "SuperAwesomeMagicalHealth ${BuildConfig.VERSION_NAME}",
@@ -212,6 +213,8 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
         }
     }
 
+    if (arranging) ArrangeSheet(SettingsSections.KEY, "Settings", SettingsSections.ITEMS, { arranging = false })
+
     if (confirmSignOut) {
         AlertDialog(
             onDismissRequest = { confirmSignOut = false },
@@ -222,10 +225,165 @@ fun SettingsScreen(settings: Settings, profile: Profile?, actions: SettingsActio
         )
     }
 
+    EditDialogs(profile, units, editing, actions) { editing = null }
+}
+
+@Composable
+private fun YouSection(profile: Profile, units: Units, actions: SettingsActions, edit: (Edit) -> Unit) {
+    SectionCard("You") {
+        ValueRow("Born in", profile.birthYear?.toString() ?: "Not set", onClick = { edit(Edit.BIRTH_YEAR) })
+        ValueRow("Height", profile.heightCm?.let { Format.height(it, units) } ?: "Not set", onClick = { edit(Edit.HEIGHT) })
+        ValueRow(
+            "Calorie estimates use", profile.energyProfile.label,
+            subtitle = "The formula for the energy your body uses at rest",
+            onClick = { edit(Edit.ENERGY) },
+        )
+        Text("Units", style = MaterialTheme.typography.bodyLarge)
+        SegmentedChoice(Units.entries, profile.units, { if (it == Units.METRIC) "Metric" else "Imperial" }, { actions.saveProfile(profile.copy(units = it)) })
+        val phone = ZoneId.systemDefault().id
+        ValueRow("Time zone", profile.timezone.ifBlank { phone }, subtitle = "When your days start and end")
+        if (profile.timezone.isNotBlank() && profile.timezone != phone) {
+            OutlinedButton(onClick = { actions.saveProfile(profile.copy(timezone = phone)) }) { Text("Use this phone's ($phone)") }
+        }
+    }
+}
+
+/** The features to turn on, with water under Food and the photo lock under photos; a hidden feature opens from here. */
+@Composable
+private fun FeaturesSection(profile: Profile, water: Boolean, hiddenFromHealth: Set<String>, actions: SettingsActions, onOpen: (String) -> Unit) {
+    SectionCard("Features") {
+        NavRow(Icons.Rounded.MedicalInformation, "Conditions and goals", "What you live with or want to keep track of", onClick = { onOpen("settings/conditions") })
+        NavRow(Icons.Rounded.EditNote, "Fields", "The details each form asks for", onClick = { onOpen("settings/fields") })
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Hint("Turn on what's useful to you. What's off is hidden, and nothing you've logged is lost.")
+        Module.entries.forEach { m ->
+            val on = m in profile.modules
+            val hidden = on && m.name in hiddenFromHealth && m in ModuleInfo.OPT_IN
+            FeatureRow(
+                m, on, hidden,
+                onToggle = { v -> actions.saveProfile(profile.copy(modules = if (v) profile.modules + m else profile.modules - m)) },
+                onOpen = ModuleInfo.route(m)?.takeIf { hidden }?.let { route -> { onOpen(route) } },
+            )
+            if (m == Module.NUTRITION && on) {
+                LabeledSwitch(
+                    "Water", water, actions.setWater,
+                    subtitle = "Its goal, and logging it on Today and in Food",
+                    modifier = Modifier.padding(start = 16.dp),
+                )
+            }
+            if (m == Module.PHOTOS && on) PhotoLockSwitch(Modifier.padding(start = 16.dp))
+        }
+        val sensitive = Module.entries.filter { it.sensitive }.map { it.label }
+        Hint(
+            sensitive.dropLast(1).joinToString(", ") + " and ${sensitive.last()} are encrypted on your server, and an AI connector " +
+                "link only sees them if you allow it when making the link.",
+        )
+    }
+}
+
+/** A feature's switch; one hidden from the Health tab says so, and has a way to open it. */
+@Composable
+private fun FeatureRow(m: Module, on: Boolean, hidden: Boolean, onToggle: (Boolean) -> Unit, onOpen: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().clickable { onToggle(!on) }, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(m.label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                if (hidden) "Hidden from the Health tab" else ModuleInfo.description(m),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (onOpen != null) {
+            IconButton(onClick = onOpen) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Open ${m.label}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            Spacer(Modifier.width(12.dp))
+        }
+        Switch(checked = on, onCheckedChange = onToggle)
+    }
+}
+
+@Composable
+private fun GoalsSection(g: Goals, units: Units, water: Boolean, edit: (Edit) -> Unit) {
+    SectionCard("Goals") {
+        ValueRow("Steps", Format.number(g.steps), onClick = { edit(Edit.STEPS) })
+        ValueRow("Active calories", "${Format.number(g.activeCalories)} kcal", onClick = { edit(Edit.ACTIVE) })
+        ValueRow("Sleep", Format.minutes(g.sleepMinutes), onClick = { edit(Edit.SLEEP) })
+        ValueRow("Workouts", "${g.workoutsPerWeek} a week", onClick = { edit(Edit.WORKOUTS) })
+        ValueRow("Calories to eat", g.calories?.let { "${Format.number(it)} kcal" } ?: "Automatic", subtitle = "Automatic follows what you burn and your weight goal", onClick = { edit(Edit.CALORIES) })
+        ValueRow("Protein", g.protein?.let { "$it g" } ?: "Automatic", onClick = { edit(Edit.PROTEIN) })
+        if (water) ValueRow("Water", Format.water(g.waterMl, units), onClick = { edit(Edit.WATER) })
+        ValueRow("Goal weight", g.targetWeightKg?.let { Format.weight(it, units) } ?: "Not set", onClick = { edit(Edit.TARGET_WEIGHT) })
+        ValueRow("Weight change", weeklyLabel(g.weeklyChangeKg, units), onClick = { edit(Edit.WEEKLY) })
+    }
+}
+
+/** Syncing, other apps, the watch, webhooks and the AI assistant. */
+@Composable
+private fun ConnectionsSection(settings: Settings, ai: AiStatus?, actions: SettingsActions, onOpen: (String) -> Unit) {
+    SectionCard("Connections") {
+        LabeledSwitch(
+            "Sync in the background", settings.backgroundSync, { v -> actions.updateSettings { it.copy(backgroundSync = v) } },
+            subtitle = "About once an hour, your ring, Health Connect and Gadgetbridge send what's new to your server.",
+        )
+        LabeledSwitch(
+            "Only on Wi-Fi", settings.syncOnWifiOnly, { v -> actions.updateSettings { it.copy(syncOnWifiOnly = v) } },
+            enabled = settings.backgroundSync,
+            subtitle = "Background syncs wait for Wi-Fi. Opening the app still syncs.",
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        NavRow(Icons.Rounded.FileUpload, "Export to other apps", "Health Connect, FIT files, CSV and FHIR", onClick = { onOpen("settings/export") })
+        NavRow(Icons.Rounded.Watch, "Pebble watch", "Today's scores and one-tap logging on your wrist", onClick = { onOpen("settings/watch") })
+        NavRow(Icons.Rounded.Hub, "Integrations", "Webhooks and Home Assistant", onClick = { onOpen("settings/integrations") })
+        if (ai?.available == true) {
+            NavRow(
+                Icons.Rounded.AutoAwesome, "AI assistant",
+                if (ai.consent != null) "On: it can look at what you chose" else "Optional. Read what it means before turning it on",
+                onClick = { onOpen("settings/ai") },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppearanceSection(settings: Settings, actions: SettingsActions) {
+    SectionCard("Appearance") {
+        Text("Theme", style = MaterialTheme.typography.bodyLarge)
+        val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Palette.entries.forEach { palette ->
+                FilterChip(
+                    selected = palette == settings.palette,
+                    enabled = !wallpaperOn,
+                    onClick = { actions.updateSettings { it.copy(palette = palette) } },
+                    label = { Text(palette.label) },
+                    leadingIcon = {
+                        Box(Modifier.size(20.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(palette.swatchA), Color(palette.swatchB)))))
+                    },
+                )
+            }
+        }
+        if (wallpaperOn) Hint("Your wallpaper's colours are in use.")
+        Text("Style", style = MaterialTheme.typography.bodyLarge)
+        SegmentedChoice(ThemeMode.entries, settings.themeMode, { it.label }, { mode -> actions.updateSettings { it.copy(themeMode = mode) } })
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            LabeledSwitch(
+                "Wallpaper colours", settings.wallpaperColors, { v -> actions.updateSettings { it.copy(wallpaperColors = v) } },
+                subtitle = "Use your phone's wallpaper colours instead of the theme's.",
+            )
+        }
+        LabeledSwitch(
+            "Bold text", settings.boldText, { v -> actions.updateSettings { it.copy(boldText = v) } },
+            subtitle = "All text in Lexend Bold, the way your phone's Bold text setting draws it.",
+        )
+        CalmModeSwitch()
+    }
+}
+
+@Composable
+private fun EditDialogs(profile: Profile?, units: Units, editing: Edit?, actions: SettingsActions, close: () -> Unit) {
     val p = profile ?: return
     val g = p.goals
     fun goals(change: (Goals) -> Goals) = actions.saveProfile(p.copy(goals = change(g)))
-    val close = { editing = null }
     when (editing) {
         Edit.BIRTH_YEAR -> NumberDialog("Born in", p.birthYear?.toString(), null, valid = { it in 1900.0..2020.0 }, close) { v -> actions.saveProfile(p.copy(birthYear = v?.roundToInt())); close() }
         Edit.HEIGHT -> HeightDialog(p.heightCm, units, close) { cm -> actions.saveProfile(p.copy(heightCm = cm)); close() }

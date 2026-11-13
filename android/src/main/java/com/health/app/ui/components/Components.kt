@@ -29,6 +29,8 @@ import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +45,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,8 +140,22 @@ fun AppCard(modifier: Modifier = Modifier, padding: Dp = 16.dp, onClick: (() -> 
 }
 
 /**
- * A card with its title inside (in titleSmall), as Cockpit Manager's cards: an optional icon and
- * trailing content (a value, a button) on the title row.
+ * A card's one primary action, as an icon on its title row (read out as [label]). With [menu],
+ * the icon opens a short menu of choices instead.
+ */
+class CardAction(
+    val icon: ImageVector,
+    val label: String,
+    val menu: List<Pair<String, () -> Unit>> = emptyList(),
+    val onClick: () -> Unit = {},
+)
+
+/**
+ * A card with its title inside (in titleSmall), as Cockpit Manager's cards. The title row is the
+ * same on every card: the icon and title on the left; on the right, a short [status] ("2 of 3"),
+ * at most one primary [action], and a chevron that opens the feature's page ([onOpen], read out
+ * as "Open [openLabel]"). Without [content] the card is just that row, for a slim empty state.
+ * [trailing] is the older free-form slot, drawn before the action.
  */
 @Composable
 fun InfoCard(
@@ -145,13 +165,26 @@ fun InfoCard(
     iconTint: Color = MaterialTheme.colorScheme.primary,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
+    status: String? = null,
+    statusColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    action: CardAction? = null,
+    onOpen: (() -> Unit)? = null,
+    openLabel: String? = null,
+    content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
+    val buttons = action != null || onOpen != null
+    val header = title != null || trailing != null || buttons || status != null
     AppCard(modifier, padding = 0.dp, onClick = onClick) {
-        if (title != null || trailing != null) {
+        if (header) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = if (trailing != null) 8.dp else 16.dp, top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(
+                    start = 16.dp,
+                    // Icon buttons line their icons up with the content's edge.
+                    end = if (buttons) 4.dp else if (trailing != null) 8.dp else 16.dp,
+                    top = 8.dp,
+                    bottom = if (content == null) 8.dp else 0.dp,
+                ),
             ) {
                 if (icon != null) {
                     Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
@@ -161,12 +194,50 @@ fun InfoCard(
                     title.orEmpty(),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(vertical = 8.dp).semantics { heading() },
                 )
+                if (status != null) {
+                    Text(
+                        status,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = statusColor,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 8.dp, end = if (buttons) 4.dp else 0.dp),
+                    )
+                }
                 trailing?.invoke(this)
+                action?.let { CardActionButton(it) }
+                if (onOpen != null) {
+                    IconButton(onClick = onOpen) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            "Open ${openLabel ?: title?.replaceFirstChar { it.lowercase() }.orEmpty()}",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = if (title == null && trailing == null) 16.dp else 2.dp), content = content)
+        if (content != null) {
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = if (header) 2.dp else 16.dp), content = content)
+        }
+    }
+}
+
+@Composable
+private fun CardActionButton(action: CardAction) {
+    if (action.menu.isEmpty()) {
+        IconButton(onClick = action.onClick) { Icon(action.icon, action.label, tint = MaterialTheme.colorScheme.primary) }
+        return
+    }
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(action.icon, action.label, tint = MaterialTheme.colorScheme.primary) }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            action.menu.forEach { (label, go) -> DropdownMenuItem(text = { Text(label) }, onClick = { open = false; go() }) }
+        }
     }
 }
 

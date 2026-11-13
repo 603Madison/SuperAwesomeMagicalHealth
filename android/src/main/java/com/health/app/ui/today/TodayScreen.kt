@@ -4,13 +4,11 @@ package com.health.app.ui.today
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,22 +27,19 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.MonitorWeight
-import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.Watch
-import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +47,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,26 +55,40 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.CheckIn
 import com.health.api.ContinenceKind
-import com.health.api.DueDose
-import com.health.api.Module
 import com.health.api.DaySummary
+import com.health.api.DrinkKind
+import com.health.api.DueDose
+import com.health.api.Fields
+import com.health.api.GlucoseUnit
 import com.health.api.Insight
+import com.health.api.LifeStage
+import com.health.api.Layouts
+import com.health.api.Module
+import com.health.api.QuickAction
 import com.health.api.Score
 import com.health.api.SleepStage
 import com.health.api.SleepSummary
+import com.health.api.SymptomEntry
+import com.health.api.TodaySection
 import com.health.api.Units
 import com.health.api.Workout
 import com.health.app.ui.AppIcons
 import com.health.app.ui.Format
+import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.AppCard
+import com.health.app.ui.components.ArrangeButton
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.components.ArrangeSheet
 import com.health.app.ui.components.AxisLabels
+import com.health.app.ui.components.CardAction
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.GoalBar
 import com.health.app.ui.components.Hint
@@ -95,15 +105,24 @@ import com.health.app.ui.components.ScoreRing
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.Stat
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.arrangedBy
+import com.health.app.ui.components.screenLayout
+import com.health.app.ui.components.showsField
 import com.health.app.ui.components.stageColor
 import com.health.app.ui.log.CheckInDialog
 import com.health.app.ui.log.SleepDialog
 import com.health.app.ui.log.WeightDialog
 import com.health.app.ui.log.WorkoutDialog
+import com.health.app.ui.modules.FaceScale
+import com.health.app.ui.modules.continence.QuickButtons
+import com.health.app.ui.modules.continence.SupplyArea
 import com.health.app.ui.theme.AppTheme
+import com.health.app.ui.tracking.BloodPressureDialog
+import com.health.app.ui.tracking.DrinkDialog
+import com.health.app.ui.tracking.GlucoseDialog
+import com.health.app.ui.tracking.SymptomForm
 import com.health.app.ui.tracking.TrackingTodayActions
-import com.health.app.ui.tracking.TrackingTodayCards
-import com.health.api.GlucoseUnit
+import com.health.app.ui.tracking.quickDrink
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -120,7 +139,7 @@ class TodayActions(
     val logSleep: (com.health.api.SleepSession) -> Unit = {},
     val saveCheckIn: (CheckIn) -> Unit = {},
     val openDevices: () -> Unit = {},
-    /** Opens a module's page ("mind", "cycle?log=2026-11-12", "continence", "meds"). */
+    /** Opens a page ("mind", "cycle?log=2026-11-12", "continence", "meds", "food", "trends"). */
     val open: (String) -> Unit = {},
     val quickMood: (Int) -> Unit = {},
     val logContinence: (ContinenceKind) -> Unit = {},
@@ -141,6 +160,8 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
         units = settings.units,
         zone = c.zone(),
         modules = com.health.app.ui.care.shownModules(),
+        water = showsField(Fields.NUTRITION_WATER),
+        measurements = com.health.app.ui.modules.body.measurementsShown(),
         actions = TodayActions(
             go = vm::go,
             refresh = vm::refresh,
@@ -161,13 +182,67 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
     )
 }
 
-private enum class Dialog { WEIGHT, WORKOUT, SLEEP, CHECK_IN }
+private enum class Dialog { WEIGHT, WORKOUT, SLEEP, CHECK_IN, DRINK, BLOOD_PRESSURE, GLUCOSE }
 
+private enum class Sheet { MOOD, BLADDER, SYMPTOM, MORE, ARRANGE_TODAY, ARRANGE_QUICK }
+
+/**
+ * Today: a card for each feature that's on, in the person's order ([Layouts.TODAY]), and the quick
+ * actions ([Layouts.QUICK]): the first few on Today, the rest under "More". [water] is whether
+ * water is shown (a field that can be hidden); [measurements] whether body measurements are.
+ */
 @Composable
-fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayActions, modules: Set<Module> = Module.DEFAULT) {
+fun TodayScreen(
+    state: TodayState,
+    units: Units,
+    zone: ZoneId,
+    actions: TodayActions,
+    modules: Set<Module> = Module.DEFAULT,
+    water: Boolean = true,
+    measurements: Boolean = false,
+) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
-    var sheet by remember { mutableStateOf<Pair<String, Score>?>(null) }
+    var sheet by remember { mutableStateOf<Sheet?>(null) }
+    var score by remember { mutableStateOf<Pair<String, Score>?>(null) }
+    var arrangeMenu by remember { mutableStateOf(false) }
     val summary = state.summary
+    val readOnly = LocalReadOnly.current
+
+    val sections = TodayLayout.sections(modules, water)
+    val visible = arrangedBy(Layouts.TODAY, sections) { it.name }
+    val quickAvailable = TodayLayout.quickActions(modules, water, measurements)
+    val quick = TodayLayout.quickRow(quickAvailable, screenLayout(Layouts.QUICK))
+    // Water is logged from one place: its quick action when that's on Today, else the Water card.
+    val quickHasWater = !readOnly && TodaySection.QUICK in visible && QuickAction.WATER in quick.shown
+
+    fun doQuick(action: QuickAction) {
+        sheet = null
+        when (action) {
+            QuickAction.FOOD -> actions.logFood(state.date)
+            QuickAction.WATER -> actions.addWater(QUICK_WATER_ML)
+            QuickAction.MOOD -> sheet = Sheet.MOOD
+            QuickAction.PERIOD -> actions.open("cycle?log=${state.date}")
+            QuickAction.BLADDER -> sheet = Sheet.BLADDER
+            QuickAction.DOSE -> actions.open("meds")
+            QuickAction.WEIGHT -> dialog = Dialog.WEIGHT
+            QuickAction.COFFEE -> actions.tracking.quickDrink(DrinkKind.COFFEE)
+            QuickAction.DRINK -> dialog = Dialog.DRINK
+            QuickAction.WORKOUT -> dialog = Dialog.WORKOUT
+            QuickAction.SLEEP -> dialog = Dialog.SLEEP
+            QuickAction.CHECK_IN -> dialog = Dialog.CHECK_IN
+            QuickAction.SYMPTOM -> sheet = Sheet.SYMPTOM
+            QuickAction.BLOOD_PRESSURE -> dialog = Dialog.BLOOD_PRESSURE
+            QuickAction.GLUCOSE -> dialog = Dialog.GLUCOSE
+            QuickAction.HABIT -> actions.open("habits")
+            QuickAction.ENERGY -> actions.open("neuro/energy")
+            QuickAction.OVERLOAD -> actions.open("neuro/overload")
+            QuickAction.CALM -> actions.open("mind/tool/box-breathing")
+            QuickAction.MOMENT -> actions.open("transition/moment")
+            QuickAction.PHOTO -> actions.open("photos/add?id=camera")
+            QuickAction.MEASUREMENTS -> actions.open("measurements")
+            QuickAction.APPOINTMENT -> actions.open("appointments/edit")
+        }
+    }
 
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = actions.refresh, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -176,6 +251,13 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                 IconButton(onClick = { actions.go(state.date.plusDays(1)) }, enabled = state.date < state.today) {
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Day after")
                 }
+                Box {
+                    ArrangeButton { arrangeMenu = true }
+                    DropdownMenu(arrangeMenu, onDismissRequest = { arrangeMenu = false }) {
+                        DropdownMenuItem(text = { Text("Arrange Today's cards") }, onClick = { arrangeMenu = false; sheet = Sheet.ARRANGE_TODAY })
+                        DropdownMenuItem(text = { Text("Choose quick actions") }, onClick = { arrangeMenu = false; sheet = Sheet.ARRANGE_QUICK })
+                    }
+                }
             }
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when {
@@ -183,85 +265,166 @@ fun TodayScreen(state: TodayState, units: Units, zone: ZoneId, actions: TodayAct
                     state.error != null && summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
                     summary != null -> {
                         state.error?.let { ErrorCard(it, actionLabel = "Try again", onAction = actions.retry) }
-                        val tracking = Module.ACTIVITY in modules || Module.SLEEP in modules
-                        if (tracking) Scores(summary) { name, score -> sheet = name to score }
-                        if (!summary.hasData && tracking) NoDataCard(actions.openDevices)
-                        summary.insights.forEach { InsightCard(it) }
-                        // Someone viewing a share only looks: no logging from here.
-                        val readOnly = com.health.app.ui.care.LocalReadOnly.current
-                        if (!readOnly) QuickActions(
-                            modules,
-                            onFood = { actions.logFood(state.date) },
-                            onWater = { actions.addWater(250) },
-                            onWeight = { dialog = Dialog.WEIGHT },
-                            onWorkout = { dialog = Dialog.WORKOUT },
-                            onSleep = { dialog = Dialog.SLEEP },
-                            onCheckIn = { dialog = Dialog.CHECK_IN },
-                            onPeriod = { actions.open("cycle?log=${state.date}") },
-                        )
                         val isToday = state.date == state.today
-                        if (Module.MEDICATIONS in modules && (isToday || summary.modules.meds?.due?.isNotEmpty() == true)) {
-                            MedsTodayCard(summary.modules.meds, zone, actions.takeDose) { actions.open("meds") }
+                        val m = summary.modules
+                        val open = actions.open
+                        visible.forEach { section ->
+                            key(section) {
+                                when (section) {
+                                    TodaySection.SCORES -> ScoresCard(
+                                        summary, isToday, readOnly,
+                                        onScore = { name, s -> score = name to s },
+                                        onConnect = actions.openDevices,
+                                        onCheckIn = { dialog = Dialog.CHECK_IN },
+                                    )
+                                    TodaySection.INSIGHTS -> summary.insights.forEach { InsightCard(it) }
+                                    TodaySection.QUICK -> if (!readOnly) QuickActionsRow(quick, units, ::doQuick, onMore = { sheet = Sheet.MORE })
+                                    TodaySection.MEDS -> if (isToday || m.meds?.due?.isNotEmpty() == true) MedsTodayCard(m.meds, zone, actions.takeDose) { open("meds") }
+                                    TodaySection.MIND -> MindTodayCard(m.mind, actions.quickMood) { open("mind") }
+                                    TodaySection.CYCLE -> CycleTodayCard(m.cycle, onLog = { open("cycle?log=${state.date}") }) { open("cycle") }
+                                    TodaySection.CONTINENCE -> ContinenceTodayCard(m.continence, actions.logContinence) { open("continence") }
+                                    TodaySection.SUPPLIES -> m.lowSupplies?.takeIf { it.isNotEmpty() }?.let { low ->
+                                        SuppliesTodayCard(low) { open("supplies/" + SupplyArea.forLow(low).route) }
+                                    }
+                                    TodaySection.NEURO -> m.neuro?.let { n ->
+                                        val energyOnly = Module.NEURO !in modules
+                                        NeuroTodayCard(n, energyOnly) { open(if (energyOnly) "mind" else "neuro") }
+                                    }
+                                    TodaySection.TRANSITION -> m.transition?.let { TransitionTodayCard(it) { open("transition") } }
+                                    TodaySection.VITALS -> VitalsTodayCard(
+                                        m.vitals, actions.tracking.glucoseUnit, readOnly,
+                                        onBloodPressure = { dialog = Dialog.BLOOD_PRESSURE }, onGlucose = { dialog = Dialog.GLUCOSE },
+                                    ) { open("vitals") }
+                                    TodaySection.DRINKS -> DrinksTodayCard(summary.drinks, units, water, readOnly, onAdd = { dialog = Dialog.DRINK }) { open("food") }
+                                    TodaySection.SYMPTOMS -> SymptomsTodayCard(m.symptoms, readOnly, onLog = { sheet = Sheet.SYMPTOM }) { open("symptoms") }
+                                    TodaySection.HABITS -> HabitsTodayCard(m.habits.orEmpty(), readOnly, actions.tracking.tickHabit) { open("habits") }
+                                    TodaySection.HORMONES -> m.hormones?.let { HormonesTodayCard(it, state.date) { open("hormones") } }
+                                    TodaySection.LIFE_STAGE -> m.lifeStage?.takeIf { it.stage != LifeStage.CYCLING }?.let { LifeStageTodayCard(it, zone) { open("cycle") } }
+                                    TodaySection.APPOINTMENTS -> m.appointments?.takeIf { it.isNotEmpty() }?.let {
+                                        AppointmentsTodayCard(it, zone, System.currentTimeMillis()) { open("appointments") }
+                                    }
+                                    TodaySection.ACTIVITY -> ActivityCard(summary, units) { open("trends") }
+                                    TodaySection.SLEEP -> SleepCard(summary.sleepSummary, zone, readOnly, onAdd = { dialog = Dialog.SLEEP }) { open("trends") }
+                                    TodaySection.HEART -> HeartCard(summary, units, zone) { open("trends") }
+                                    TodaySection.STRESS -> if (summary.stressDay != null || summary.resilience != null) {
+                                        StressTodayCard(summary.stressDay, summary.resilience) { open("trends") }
+                                    }
+                                    TodaySection.FOOD -> FoodCard(summary, readOnly, onLog = { actions.logFood(state.date) }) { open("food") }
+                                    TodaySection.WATER -> WaterTodayCard(
+                                        summary.waterMl, summary.nutritionTarget?.waterMl ?: summary.goals.waterMl, units,
+                                        onAdd = if (readOnly || quickHasWater) null else ({ actions.addWater(QUICK_WATER_ML) }),
+                                    ) { open("food") }
+                                    TodaySection.WORKOUTS -> if (summary.workouts.isNotEmpty()) WorkoutsCard(summary.workouts, units, zone) { open("trends") }
+                                    TodaySection.BODY -> BodyCard(summary, units, readOnly, onLog = { dialog = Dialog.WEIGHT }) { open(if (measurements) "measurements" else "trends") }
+                                }
+                                Unit
+                            }
                         }
-                        if (Module.MIND in modules) MindTodayCard(summary.modules.mind, actions.quickMood) { actions.open("mind") }
-                        if (Module.CYCLE in modules) {
-                            CycleTodayCard(summary.modules.cycle, onLog = { actions.open("cycle?log=${state.date}") }) { actions.open("cycle") }
-                        }
-                        if (Module.CONTINENCE in modules) {
-                            ContinenceTodayCard(summary.modules.continence, actions.logContinence) { actions.open("continence") }
-                        }
-                        // Autism & ADHD (or Mind's energy budget alone), and transition.
-                        summary.modules.neuro?.let { n ->
-                            val energyOnly = Module.NEURO !in modules
-                            NeuroTodayCard(n, energyOnly) { actions.open(if (energyOnly) "mind" else "neuro") }
-                        }
-                        if (Module.TRANSITION in modules) summary.modules.transition?.let { TransitionTodayCard(it) { actions.open("transition") } }
-                        TrackingTodayCards(summary, modules, units, zone, actions.tracking, actions.open)
-                        // Supplies running low (bladder and bowel, periods).
-                        summary.modules.lowSupplies?.takeIf { it.isNotEmpty() }?.let { low ->
-                            com.health.app.ui.modules.continence.LowSuppliesCard(low) { actions.open("supplies/" + com.health.app.ui.modules.continence.SupplyArea.forLow(low).route) }
-                        }
-                        // Hormone therapy, the life stage and this week's appointments.
-                        CareTodayCards(summary.modules, modules, state.date, zone, System.currentTimeMillis(), actions.open)
-                        if (Module.ACTIVITY in modules) ActivityCard(summary, units)
-                        if (Module.SLEEP in modules) SleepCard(summary.sleepSummary, zone) { dialog = Dialog.SLEEP }
-                        if (tracking) HeartCard(summary, units, zone)
-                        if (Module.NUTRITION in modules) FoodCard(summary, units, onLog = { actions.logFood(state.date) }, onWater = actions.addWater)
-                        if (summary.workouts.isNotEmpty() && Module.ACTIVITY in modules) WorkoutsCard(summary.workouts, units, zone)
-                        if (Module.BODY in modules) BodyCard(summary, units) { dialog = Dialog.WEIGHT }
-                        if (!readOnly) CheckInCard(summary.checkIn) { dialog = Dialog.CHECK_IN }
                     }
                 }
             }
         }
     }
 
+    val close = { dialog = null }
     when (dialog) {
-        Dialog.WEIGHT -> WeightDialog(units, summary?.weightKg, { dialog = null }) { actions.logWeight(it); dialog = null }
-        Dialog.WORKOUT -> WorkoutDialog(units, state.date, zone, { dialog = null }) { actions.logWorkout(it); dialog = null }
-        Dialog.SLEEP -> SleepDialog(state.date, zone, { dialog = null }) { actions.logSleep(it); dialog = null }
-        Dialog.CHECK_IN -> CheckInDialog(summary?.checkIn ?: CheckIn(state.date.toString()), { dialog = null }) { actions.saveCheckIn(it); dialog = null }
+        Dialog.WEIGHT -> WeightDialog(units, summary?.weightKg, close) { actions.logWeight(it); close() }
+        Dialog.WORKOUT -> WorkoutDialog(units, state.date, zone, close) { actions.logWorkout(it); close() }
+        Dialog.SLEEP -> SleepDialog(state.date, zone, close) { actions.logSleep(it); close() }
+        Dialog.CHECK_IN -> CheckInDialog(summary?.checkIn ?: CheckIn(state.date.toString()), close) { actions.saveCheckIn(it); close() }
+        Dialog.DRINK -> DrinkDialog(quickDrink(DrinkKind.COFFEE), units, close, onSave = { actions.tracking.saveDrink(it); close() })
+        Dialog.BLOOD_PRESSURE -> BloodPressureDialog(close) { actions.tracking.logBloodPressure(it); close() }
+        Dialog.GLUCOSE -> GlucoseDialog(actions.tracking.glucoseUnit, close) { actions.tracking.logGlucose(it); close() }
         null -> Unit
     }
 
-    sheet?.let { (name, score) ->
-        ModalBottomSheet(onDismissRequest = { sheet = null }) { ScoreDetails(name, score) }
+    val closeSheet = { sheet = null }
+    when (sheet) {
+        Sheet.MOOD -> ModalBottomSheet(onDismissRequest = closeSheet) {
+            Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
+                Text("How are you feeling?", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                Spacer(Modifier.height(16.dp))
+                FaceScale(null, { mood -> mood?.let { actions.quickMood(it); closeSheet() } })
+            }
+        }
+        Sheet.BLADDER -> ModalBottomSheet(onDismissRequest = closeSheet) {
+            Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
+                Text("Bladder & bowel", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                Spacer(Modifier.height(12.dp))
+                QuickButtons({ kind -> actions.logContinence(kind); closeSheet() })
+            }
+        }
+        Sheet.SYMPTOM -> ModalBottomSheet(onDismissRequest = closeSheet) {
+            SymptomForm(SymptomEntry(System.currentTimeMillis(), "", 4), onSave = { actions.tracking.logSymptom(it); closeSheet() }, onDelete = null)
+        }
+        Sheet.MORE -> ModalBottomSheet(onDismissRequest = closeSheet) {
+            QuickMoreContent(quick.more, units, ::doQuick, onArrange = { sheet = Sheet.ARRANGE_QUICK })
+        }
+        Sheet.ARRANGE_TODAY -> ArrangeSheet(Layouts.TODAY, "Today", sections.map { ArrangeItem(it.name, TodayLayout.label(it, modules)) }, closeSheet)
+        Sheet.ARRANGE_QUICK -> ArrangeSheet(
+            Layouts.QUICK, "quick actions", quickAvailable.map { ArrangeItem(it.name, it.label) }, closeSheet,
+            hiddenMeans = "Under More", defaultHidden = TodayLayout.defaultUnderMore(quickAvailable),
+        )
+        null -> Unit
+    }
+
+    score?.let { (name, s) ->
+        ModalBottomSheet(onDismissRequest = { score = null }) { ScoreDetails(name, s) }
     }
 }
 
+/**
+ * Readiness, sleep and activity, as rings; with none yet, one short line instead (and the way to
+ * connect a device, when nothing's come in). How the person feels, once they've checked in, goes
+ * with them: it's part of readiness.
+ */
 @Composable
-private fun Scores(summary: DaySummary, onOpen: (String, Score) -> Unit) {
+private fun ScoresCard(summary: DaySummary, isToday: Boolean, readOnly: Boolean, onScore: (String, Score) -> Unit, onConnect: () -> Unit, onCheckIn: () -> Unit) {
+    val scores = listOf("Readiness" to summary.readiness, "Sleep" to summary.sleep, "Activity" to summary.activity)
+    val checkIn = summary.checkIn?.takeIf { it.mood != null || it.energy != null || it.stress != null || it.soreness != null || it.tags.isNotEmpty() || it.note != null }
+    if (scores.all { it.second == null }) {
+        InfoCard(
+            if (isToday) "No scores yet today" else "No scores for this day", icon = Icons.Rounded.Watch,
+            trailing = if (!summary.hasData && !readOnly) ({ TextButton(onClick = onConnect) { Text("Connect a device") } }) else null,
+            content = checkIn?.let { c -> { CheckInPills(c, readOnly, onCheckIn) } },
+        )
+        return
+    }
     AppCard(padding = 18.dp) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            listOf("Readiness" to summary.readiness, "Sleep" to summary.sleep, "Activity" to summary.activity).forEach { (name, score) ->
+            scores.forEach { (name, s) ->
                 ScoreRing(
-                    name, score?.score, score?.label,
+                    name, s?.score, s?.label,
                     modifier = Modifier.clip(RoundedCornerShape(16.dp))
-                        .clickable(enabled = score != null) { score?.let { onOpen(name, it) } }
+                        .clickable(enabled = s != null) { s?.let { onScore(name, it) } }
                         .padding(6.dp),
                 )
             }
         }
+        when {
+            checkIn != null -> {
+                Spacer(Modifier.height(12.dp))
+                CheckInPills(checkIn, readOnly, onCheckIn)
+            }
+            isToday && !readOnly -> TextButton(onClick = onCheckIn, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("How are you feeling? Check in") }
+        }
+    }
+}
+
+/** The day's check-in as small labels; a tap changes it. */
+@Composable
+private fun CheckInPills(checkIn: CheckIn, readOnly: Boolean, onEdit: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).then(if (readOnly) Modifier else Modifier.clickable(onClickLabel = "Change your check-in", onClick = onEdit)),
+    ) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            checkIn.mood?.let { Pill("Mood $it/5", MaterialTheme.colorScheme.primary) }
+            checkIn.energy?.let { Pill("Energy $it/5", MaterialTheme.colorScheme.tertiary) }
+            checkIn.stress?.let { Pill("Stress $it/5", AppTheme.status.warn) }
+            checkIn.soreness?.let { Pill("Soreness $it/5", AppTheme.data.protein) }
+            checkIn.tags.forEach { Pill(it, MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        checkIn.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Start, modifier = Modifier.padding(top = 8.dp)) }
     }
 }
 
@@ -303,21 +466,6 @@ private fun contributorColor(score: Int): Color = when {
 }
 
 @Composable
-private fun NoDataCard(onOpenDevices: () -> Unit) {
-    AppCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Watch, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Nothing recorded yet", style = MaterialTheme.typography.titleSmall)
-                Hint("Connect your ring or watch, or log something by hand, and your scores fill in.")
-            }
-        }
-        TextButton(onClick = onOpenDevices, modifier = Modifier.align(Alignment.End)) { Text("Connect a device") }
-    }
-}
-
-@Composable
 fun InsightCard(insight: Insight) {
     val tone = when (insight.tone) {
         "good" -> AppTheme.status.good
@@ -339,42 +487,9 @@ fun InsightCard(insight: Insight) {
 }
 
 @Composable
-private fun QuickActions(
-    modules: Set<Module>,
-    onFood: () -> Unit,
-    onWater: () -> Unit,
-    onWeight: () -> Unit,
-    onWorkout: () -> Unit,
-    onSleep: () -> Unit,
-    onCheckIn: () -> Unit,
-    onPeriod: () -> Unit,
-) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (Module.NUTRITION in modules) {
-            QuickAction(Icons.Rounded.Restaurant, "Food", onFood)
-            QuickAction(Icons.Rounded.WaterDrop, "+250 ml", onWater)
-        }
-        if (Module.CYCLE in modules) QuickAction(Icons.Rounded.CalendarMonth, "Period", onPeriod)
-        if (Module.BODY in modules) QuickAction(Icons.Rounded.MonitorWeight, "Weight", onWeight)
-        if (Module.ACTIVITY in modules) QuickAction(Icons.Rounded.FitnessCenter, "Workout", onWorkout)
-        if (Module.SLEEP in modules) QuickAction(Icons.Rounded.Bedtime, "Sleep", onSleep)
-        QuickAction(Icons.Rounded.Mood, "Check in", onCheckIn)
-    }
-}
-
-@Composable
-private fun QuickAction(icon: ImageVector, label: String, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
-        Icon(icon, null, Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(label)
-    }
-}
-
-@Composable
-private fun ActivityCard(summary: DaySummary, units: Units) {
+private fun ActivityCard(summary: DaySummary, units: Units, onOpen: () -> Unit) {
     val goal = summary.goals.steps
-    InfoCard("Activity", icon = Icons.AutoMirrored.Rounded.DirectionsWalk) {
+    InfoCard("Activity", icon = Icons.AutoMirrored.Rounded.DirectionsWalk, onClick = onOpen, onOpen = onOpen, openLabel = "trends") {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(Format.number(summary.steps), style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.width(8.dp))
@@ -398,43 +513,46 @@ private fun ActivityCard(summary: DaySummary, units: Units) {
 }
 
 @Composable
-private fun SleepCard(sleep: SleepSummary?, zone: ZoneId, onAdd: () -> Unit) {
-    InfoCard("Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem) {
-        if (sleep == null) {
-            Hint("No sleep recorded for last night.")
-            if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = onAdd, contentPadding = PaddingValues(0.dp)) { Text("Add it by hand") }
-            return@InfoCard
-        }
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(Format.minutes(sleep.asleepMinutes), style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.width(8.dp))
-            Text("asleep", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
-        }
-        Text(
-            "${Format.timeOfDay(sleep.start, zone)} – ${Format.timeOfDay(sleep.end, zone)} · ${sleep.efficiency}% efficient" +
-                (sleep.lowestHeartRate?.let { " · lowest ${it.roundToInt()} bpm" } ?: ""),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (sleep.staged && sleep.stages.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Hypnogram(sleep.stages, sleep.start, sleep.end)
-            Spacer(Modifier.height(10.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                LegendItem(stageColor(SleepStage.DEEP), "Deep", value = Format.minutes(sleep.deepMinutes))
-                LegendItem(stageColor(SleepStage.REM), "REM", value = Format.minutes(sleep.remMinutes))
-                LegendItem(stageColor(SleepStage.LIGHT), "Light", value = Format.minutes(sleep.lightMinutes))
-                LegendItem(stageColor(SleepStage.AWAKE), "Awake", value = Format.minutes(sleep.awakeMinutes))
-            }
+private fun SleepCard(sleep: SleepSummary?, zone: ZoneId, readOnly: Boolean, onAdd: () -> Unit, onOpen: () -> Unit) {
+    InfoCard(
+        "Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem, onClick = onOpen, onOpen = onOpen, openLabel = "trends",
+        status = if (sleep == null) "None last night" else null,
+        action = if (sleep == null && !readOnly) CardAction(Icons.Rounded.Add, "Add a night by hand", onClick = onAdd) else null,
+        content = sleep?.let { s -> { SleepBody(s, zone) } },
+    )
+}
+
+@Composable
+private fun SleepBody(sleep: SleepSummary, zone: ZoneId) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(Format.minutes(sleep.asleepMinutes), style = MaterialTheme.typography.displaySmall)
+        Spacer(Modifier.width(8.dp))
+        Text("asleep", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+    }
+    Text(
+        "${Format.timeOfDay(sleep.start, zone)} – ${Format.timeOfDay(sleep.end, zone)} · ${sleep.efficiency}% efficient" +
+            (sleep.lowestHeartRate?.let { " · lowest ${it.roundToInt()} bpm" } ?: ""),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (sleep.staged && sleep.stages.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp))
+        Hypnogram(sleep.stages, sleep.start, sleep.end)
+        Spacer(Modifier.height(10.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LegendItem(stageColor(SleepStage.DEEP), "Deep", value = Format.minutes(sleep.deepMinutes))
+            LegendItem(stageColor(SleepStage.REM), "REM", value = Format.minutes(sleep.remMinutes))
+            LegendItem(stageColor(SleepStage.LIGHT), "Light", value = Format.minutes(sleep.lightMinutes))
+            LegendItem(stageColor(SleepStage.AWAKE), "Awake", value = Format.minutes(sleep.awakeMinutes))
         }
     }
 }
 
 @Composable
-private fun HeartCard(summary: DaySummary, units: Units, zone: ZoneId) {
+private fun HeartCard(summary: DaySummary, units: Units, zone: ZoneId, onOpen: () -> Unit) {
     val any = summary.restingHeartRate != null || summary.hrv != null || summary.heartRate.isNotEmpty() || summary.spo2 != null
     if (!any) return
-    InfoCard("Heart", icon = Icons.Rounded.Favorite, iconTint = AppTheme.data.heart) {
+    InfoCard("Heart", icon = Icons.Rounded.Favorite, iconTint = AppTheme.data.heart, onClick = onOpen, onOpen = onOpen, openLabel = "trends") {
         Row(Modifier.fillMaxWidth()) {
             Stat(summary.restingHeartRate?.roundToInt()?.toString() ?: "—", "resting", Modifier.weight(1f), unit = "bpm")
             Stat(summary.hrv?.roundToInt()?.toString() ?: "—", "HRV", Modifier.weight(1f), unit = "ms")
@@ -469,17 +587,15 @@ private fun HeartCard(summary: DaySummary, units: Units, zone: ZoneId) {
     }
 }
 
+/** Calories and the macros against the target; water has its own card. */
 @Composable
-private fun FoodCard(summary: DaySummary, units: Units, onLog: () -> Unit, onWater: (Int) -> Unit) {
+private fun FoodCard(summary: DaySummary, readOnly: Boolean, onLog: () -> Unit, onOpen: () -> Unit) {
     val target = summary.nutritionTarget
     val eaten = summary.nutrition
-    InfoCard("Food", icon = Icons.Rounded.Restaurant, trailing = {
-        if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = onLog) {
-            Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Log food")
-        }
-    }) {
+    InfoCard(
+        "Food", icon = Icons.Rounded.Restaurant, onClick = onOpen, onOpen = onOpen,
+        action = if (readOnly) null else CardAction(Icons.Rounded.Add, "Log food", onClick = onLog),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val fraction = target?.calories?.takeIf { it > 0 }?.let { (eaten.calories / it).toFloat() }
             Ring(fraction ?: 0f, size = 100.dp, stroke = 9.dp, colors = listOf(AppTheme.data.carbs, AppTheme.data.protein)) {
@@ -504,25 +620,12 @@ private fun FoodCard(summary: DaySummary, units: Units, onLog: () -> Unit, onWat
                 modifier = Modifier.padding(top = 10.dp),
             )
         }
-        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        val waterGoal = target?.waterMl ?: summary.goals.waterMl
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.WaterDrop, null, tint = AppTheme.data.water, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text("${Format.water(summary.waterMl, units)} of ${Format.water(waterGoal, units)}", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(4.dp))
-                ProgressBar(if (waterGoal > 0) summary.waterMl.toFloat() / waterGoal else 0f, color = AppTheme.data.water)
-            }
-            Spacer(Modifier.width(8.dp))
-            if (!com.health.app.ui.care.LocalReadOnly.current) OutlinedButton(onClick = { onWater(250) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("+250 ml") }
-        }
     }
 }
 
 @Composable
-fun WorkoutsCard(workouts: List<Workout>, units: Units, zone: ZoneId) {
-    InfoCard("Workouts", icon = Icons.Rounded.FitnessCenter) {
+fun WorkoutsCard(workouts: List<Workout>, units: Units, zone: ZoneId, onOpen: (() -> Unit)? = null) {
+    InfoCard("Workouts", icon = Icons.Rounded.FitnessCenter, onClick = onOpen, onOpen = onOpen, openLabel = "trends") {
         workouts.forEachIndexed { i, w ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
             WorkoutRow(w, units, zone)
@@ -552,39 +655,20 @@ fun WorkoutRow(w: Workout, units: Units, zone: ZoneId) {
 }
 
 @Composable
-private fun BodyCard(summary: DaySummary, units: Units, onLog: () -> Unit) {
-    InfoCard("Body", icon = Icons.Rounded.MonitorWeight, trailing = {
-        if (!com.health.app.ui.care.LocalReadOnly.current) TextButton(onClick = onLog) { Text(if (summary.weightKg == null) "Weigh in" else "Update") }
-    }) {
-        Row(Modifier.fillMaxWidth()) {
-            Stat(summary.weightKg?.let { Format.compact(Format.weightValue(it, units)) } ?: "—", "weight", Modifier.weight(1f), unit = Format.weightUnit(units))
-            summary.bodyFat?.let { Stat(Format.compact(it), "body fat", Modifier.weight(1f), unit = "%") }
-            summary.goals.targetWeightKg?.let { Stat(Format.compact(Format.weightValue(it, units)), "goal", Modifier.weight(1f), unit = Format.weightUnit(units)) }
-        }
-    }
-}
-
-@Composable
-private fun CheckInCard(checkIn: CheckIn?, onOpen: () -> Unit) {
-    val filled = checkIn != null && (checkIn.mood != null || checkIn.energy != null || checkIn.stress != null || checkIn.soreness != null || checkIn.tags.isNotEmpty() || checkIn.note != null)
-    InfoCard("How you feel", icon = Icons.Rounded.Mood, onClick = onOpen) {
-        if (!filled) {
-            Hint("How are you feeling today? A quick check-in helps make sense of your scores.")
-            Spacer(Modifier.height(8.dp))
-            FilledTonalButton(onClick = onOpen) { Text("Check in") }
-            return@InfoCard
-        }
-        checkIn!!
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            checkIn.mood?.let { Pill("Mood $it/5", MaterialTheme.colorScheme.primary) }
-            checkIn.energy?.let { Pill("Energy $it/5", MaterialTheme.colorScheme.tertiary) }
-            checkIn.stress?.let { Pill("Stress $it/5", AppTheme.status.warn) }
-            checkIn.soreness?.let { Pill("Soreness $it/5", AppTheme.data.protein) }
-            checkIn.tags.forEach { Pill(it, MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        checkIn.note?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Start)
-        }
-    }
+private fun BodyCard(summary: DaySummary, units: Units, readOnly: Boolean, onLog: () -> Unit, onOpen: () -> Unit) {
+    val empty = summary.weightKg == null && summary.bodyFat == null
+    InfoCard(
+        "Body", icon = Icons.Rounded.MonitorWeight, onClick = onOpen, onOpen = onOpen,
+        status = if (empty) "No weight yet" else null,
+        action = if (readOnly) null else CardAction(Icons.Rounded.Add, "Log your weight", onClick = onLog),
+        content = if (empty) null else {
+            {
+                Row(Modifier.fillMaxWidth()) {
+                    Stat(summary.weightKg?.let { Format.compact(Format.weightValue(it, units)) } ?: "—", "weight", Modifier.weight(1f), unit = Format.weightUnit(units))
+                    summary.bodyFat?.let { Stat(Format.compact(it), "body fat", Modifier.weight(1f), unit = "%") }
+                    summary.goals.targetWeightKg?.let { Stat(Format.compact(Format.weightValue(it, units)), "goal", Modifier.weight(1f), unit = Format.weightUnit(units)) }
+                }
+            }
+        },
+    )
 }
