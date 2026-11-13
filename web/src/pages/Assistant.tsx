@@ -76,7 +76,7 @@ function Consent({ status, onDone, onCancel }: { status: AiStatus; onDone: () =>
   const save = async () => {
     setBusy(true);
     try {
-      await api.saveAiConsent({ modules, allowLogging, acknowledged: true, sensitiveAcknowledged: picksSensitive && sensitiveOk });
+      await api.saveAiConsent({ modules, allowLogging: allowLogging && status.loggingAllowed, acknowledged: true, sensitiveAcknowledged: picksSensitive && sensitiveOk });
       toast("The assistant is on for you");
       onDone();
     } catch (e) { errorToast(e); } finally { setBusy(false); }
@@ -111,9 +111,11 @@ function Consent({ status, onDone, onCancel }: { status: AiStatus; onDone: () =>
                 checked={sensitiveOk} onChange={setSensitiveOk} />
             </div>
           )}
-          <Toggle label="Let it log things for me"
-            help={allowLogging ? "It can add entries you ask for, like a meal or a mood, if your server's admin allows it" : "Off: it only reads"}
-            checked={allowLogging} onChange={setAllowLogging} />
+          {status.loggingAllowed && (
+            <Toggle label="Let it log things for me"
+              help={allowLogging ? "It can add entries you ask for, like a meal or a mood" : "Off: it only reads"}
+              checked={allowLogging} onChange={setAllowLogging} />
+          )}
           <hr className="rule" />
           <Toggle label="I've read this, and I want to use the assistant" checked={understood} onChange={setUnderstood} />
           <div className="button-row">

@@ -51,6 +51,8 @@ data class AiStatus(
     val consent: AiConsent? = null,
     val usedToday: Int = 0,
     val dailyLimit: Int = 0,
+    /** Whether the admin lets people allow it to log entries for them (each person still chooses). */
+    val loggingAllowed: Boolean = false,
     /** Where data goes, said plainly, and the links to the terms. */
     val dataNotice: String = "",
     val termsUrl: String = "https://www.anthropic.com/legal/commercial-terms",

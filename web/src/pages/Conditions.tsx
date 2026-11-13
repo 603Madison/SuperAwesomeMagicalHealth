@@ -69,7 +69,7 @@ export function Conditions() {
                   <div className="row-main">
                     <div className="row-title">{c.name}</div>
                     <div className="row-sub">
-                      {[c.status ? CONDITION_STATUSES.find((s) => s.id === c.status)?.label : null, c.since ? `since ${sinceText(c.since)}` : null, c.notes].filter(Boolean).join(" · ") || CONDITION_KINDS.find((k) => k.id === c.kind)?.label}
+                      {[c.status ? CONDITION_STATUSES.find((s) => s.id === c.status)?.label : null, c.since ? `since ${sinceText(c.since)}` : null, c.notes].filter(Boolean).join(" · ") || CONDITION_KINDS.find((k) => k.id === c.kind)?.label.replace(/s$/, "")}
                     </div>
                     {modules.length > 0 && <div className="tag-list tight">{modules.map((m) => <span key={m} className="chip is-static small">{featureName(m)}</span>)}</div>}
                   </div>

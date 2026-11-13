@@ -214,11 +214,13 @@ class AiTest {
         s.useFakeAnthropic()
         val admin = adminBrowser()
         admin.turnOn(allowLogging = false)
+        assertFalse(admin.get("/api/ai/status").obj()["loggingAllowed"]!!.jsonPrimitive.boolean)
         admin.consent("\"NUTRITION\"")
         admin.ask("What did I eat?")
         assertTrue(toolNames(requests.last().second).none { it.startsWith("log_") })
 
         admin.turnOn(allowLogging = true)
+        assertTrue(admin.get("/api/ai/status").obj()["loggingAllowed"]!!.jsonPrimitive.boolean)
         admin.consent("\"NUTRITION\"", logging = false)
         admin.ask("What did I eat?")
         assertTrue(toolNames(requests.last().second).none { it.startsWith("log_") })

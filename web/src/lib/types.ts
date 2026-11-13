@@ -1822,6 +1822,8 @@ export interface AiStatus {
   consent?: AiConsent;
   usedToday: number;
   dailyLimit: number;
+  /** Whether the admin lets people allow it to log entries for them. */
+  loggingAllowed: boolean;
   dataNotice: string;
   termsUrl: string;
   privacyUrl: string;

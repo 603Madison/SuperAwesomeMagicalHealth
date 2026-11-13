@@ -142,6 +142,7 @@ class AiService(private val services: Services) {
             consent = consentOf(user.id),
             usedToday = usedToday(user.id),
             dailyLimit = settings.dailyLimit,
+            loggingAllowed = available && settings.allowLogging,
             dataNotice = DATA_NOTICE,
         )
     }
