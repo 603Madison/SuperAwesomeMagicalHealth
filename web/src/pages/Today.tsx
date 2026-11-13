@@ -80,7 +80,7 @@ export function Today() {
   const sections: (Section & { id: TodaySection })[] = [
     { id: "SCORES", label: "Readiness, sleep and activity scores", when: rings.length > 0,
       node: data && <Scores day={data} rings={rings} readOnly={readOnly} onOpen={(title, s) => setScore({ title, score: s })} /> },
-    { id: "INSIGHTS", label: "Insights", node: data && <Insights day={data} on={on} lowSupplies={lowSupplies.map((s) => s.supply.name)} readOnly={readOnly} date={date} /> },
+    { id: "INSIGHTS", label: "Insights", node: data && <Insights day={data} on={on} readOnly={readOnly} date={date} /> },
     { id: "QUICK", label: "Quick actions", when: !readOnly, node: null /* filled in below, once the cards are known */ },
     { id: "MEDS", label: "Medications", when: is("MEDICATIONS"), node: m?.meds && m.meds.due.length > 0 && <MedsCard meds={m.meds} date={date} readOnly={readOnly} onChanged={reload} /> },
     { id: "MIND", label: "Mood", when: is("MIND"), node: data && <MoodCard mind={m?.mind} readOnly={readOnly} onMood={setMood} /> },
@@ -240,9 +240,8 @@ function Scores({ day, rings, readOnly, onOpen }: { day: DaySummary; rings: type
 }
 
 /** The day's insights, and the weekly digest on its day. Supplies running low show once: in their card. */
-function Insights({ day, on, lowSupplies, readOnly, date }: { day: DaySummary; on: Module[]; lowSupplies: string[]; readOnly: boolean; date: string }) {
-  const aboutSupplies = (title: string) => lowSupplies.some((n) => title === `Running low on ${n}` || title === `Out of ${n}`);
-  const list = day.insights.filter((i) => (!i.module || on.includes(i.module)) && !((i.module === "CONTINENCE" || i.module === "CYCLE") && aboutSupplies(i.title)));
+function Insights({ day, on, readOnly, date }: { day: DaySummary; on: Module[]; readOnly: boolean; date: string }) {
+  const list = day.insights.filter((i) => !i.module || on.includes(i.module));
   return (
     <section className="insights span-2" aria-label="Insights">
       {!readOnly && date === today() && <DigestCard />}

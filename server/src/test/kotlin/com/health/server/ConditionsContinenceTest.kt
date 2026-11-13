@@ -165,7 +165,8 @@ class ConditionsContinenceTest {
         assertTrue(status.low)
         val day = s.days.summary(me, today.toString())
         assertEquals("Briefs", day.modules.lowSupplies!!.single().supply.name)
-        assertTrue(day.insights.any { it.title == "Running low on Briefs" })
+        // The apps show it as a card, so no insight repeats it.
+        assertTrue(day.insights.none { it.title == "Running low on Briefs" })
         val hooks = s.hooks.filterIsInstance<com.health.server.modules.SuppliesHooks>().single()
         val profile = s.profiles.get(me)
         val refill = at(today, 10)

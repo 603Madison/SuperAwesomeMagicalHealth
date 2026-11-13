@@ -96,15 +96,7 @@ class ModuleService(
             if (Module.CYCLE in on) add(com.health.api.SupplyCategory.PERIOD)
         }
         val lowSupplies = if (supplyCategories.isEmpty()) null else supplies?.low(userId, supplyCategories)?.takeIf { it.isNotEmpty() }
-        lowSupplies?.firstOrNull()?.let { s ->
-            val period = s.supply.kind.category == com.health.api.SupplyCategory.PERIOD
-            insights += 62 to Insight(
-                "info", if (s.supply.onHand == 0) "Out of ${s.supply.name}" else "Running low on ${s.supply.name}",
-                (if (s.supply.onHand == 0) "Time to restock." else "${s.supply.onHand} left${s.daysLeft?.let { d -> ", about $d ${if (d == 1) "day" else "days"}" } ?: ""}: time to restock.") +
-                    if (lowSupplies.size > 1) " ${lowSupplies.size - 1} more running low too." else "",
-                "droplet", if (period) Module.CYCLE else Module.CONTINENCE,
-            )
-        }
+        // Shown by the apps as their own card (ModulesToday.lowSupplies), so no insight repeats it.
 
         val medsDay = if (Module.MEDICATIONS in on) {
             meds.day(userId, date).takeIf { it.due.isNotEmpty() || it.asNeeded.isNotEmpty() }?.also { m ->

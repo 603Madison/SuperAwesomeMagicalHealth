@@ -1123,6 +1123,9 @@ class McpServer(private val services: Services) {
             appendLine("Cycle: ${c.cycleDay?.let { "day $it" } ?: "no recent period logged"}, ${c.phase.label.lowercase()}${c.daysUntilPeriod?.let { u -> if (u >= 0) ", period in about $u days" else ", period ${-u} days later than expected" } ?: ""}${c.logged?.let { l -> "; logged: " + cycleDayText(l) } ?: ""}")
         }
         if (Module.CONTINENCE in scope) m.continence?.let { appendLine("Bladder and bowel: ${it.voids} toilet trips (${it.nightVoids} at night), ${it.leaks} leaks, ${it.bowel} bowel movements, ${it.pelvicFloor} pelvic floor sessions") }
+        m.lowSupplies?.filter { if (it.supply.kind.category == com.health.api.SupplyCategory.PERIOD) Module.CYCLE in scope else Module.CONTINENCE in scope }
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { low -> appendLine("Supplies running low: " + low.joinToString { "${it.supply.name} (${it.supply.onHand} left)" }) }
         if (Module.MEDICATIONS in scope) m.meds?.let { md ->
             appendLine("Medications: ${md.due.count { it.log?.status == DoseStatus.TAKEN }} of ${md.due.size} scheduled doses taken${md.adherence7d?.let { a -> " ($a% over 7 days)" } ?: ""}")
         }
