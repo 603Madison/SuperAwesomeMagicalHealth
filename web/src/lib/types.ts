@@ -1149,7 +1149,7 @@ export interface Digest {
 export type WebhookEvent =
   | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
   | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST"
-  | "BLADDER_TRAINING" | "SUPPLIES_LOW" | "CYCLE_REMINDER";
+  | "BLADDER_TRAINING" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE";
 
 export interface Webhook {
   name: string;

@@ -314,8 +314,38 @@ words.
 | `GET /api/transition/milestones` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Milestone` |
 | `GET /api/transition/changes` · `POST` · `PUT /{id}` · `DELETE /{id}` | `BodyChange` |
 | `GET /api/transition/voice?days=180` · `POST` · `DELETE /{id}` | `VoiceSession` |
+| `GET /api/transition/voice/program` | `VoiceProgram`: the voice programme (`VoiceCatalog.PROGRAM`) |
+| `GET /api/transition/voice/plan` · `PUT` | `VoicePlan` |
+| `GET /api/transition/voice/progress` | `VoiceProgress` |
 | `GET /api/transition/hair-removal?days=365` · `POST` · `DELETE /{id}` | `HairRemovalSession` |
 | `GET /api/transition/moments?days=90` · `POST` · `DELETE /{id}` | `GenderMoment` |
+
+**The voice trainer** is a free, guided programme with live feedback on pitch, resonance, weight,
+intonation and loudness, for whichever direction the person chooses (`VoiceGoal`: `LIGHTER`,
+`DEEPER` or `EXPLORING`). Sound is only ever listened to on the person's device; the server gets
+the numbers. The programme lives in `shared/…/VoiceCatalog.kt` (the phone app uses it offline):
+eight units in order (looking after your voice and a starting recording, warm-ups, pitch,
+resonance, vocal weight, intonation, everyday speech, keeping it going), each lesson 5–15 minutes.
+Most exercises suit every goal and take their direction from the person's target range and
+resonance target (`MATCH` notes are semitones from the middle of the range); where direction
+matters there are variants by goal (`VoiceExercise.goals`, `VoiceLesson.goals`, empty meaning all),
+and `EXPLORING` gets both. `VoiceCatalog.lessonsFor(goal)` and `exercisesFor(lesson, goal)` give a
+person's path. `health` puts vocal health first (warm up, stop if it hurts, rest days, water, and
+when to see a speech-language pathologist) and `daily` is a short daily routine.
+
+The plan is sealed in the person's settings (`voice.plan`). A target range sits within 60–500 Hz
+with its bottom below its top, resonance is 0–100, `dailyMinutes` 1–60, `reminder` is `HH:mm`
+and `restDays` are ISO days (1 Monday … 7 Sunday); anything else is a 400. Sessions from the
+trainer carry `lessonId`, `results` (each `ExerciseResult.exerciseId` must be in the programme,
+and its numbers in range), `resonance`, `weight` and `strain`. Progress gives the lessons done,
+the next lesson for the goal (in unit order), the streak (rest days don't break it), minutes this
+week, up to twelve `VoiceWeek`s, kind highlights against the week before and the starting point
+(only ever "nearer your target", never a direction), and a `restNote` after strain. A reminder
+goes out at the plan's time as `voice.practice` (not on rest days, nor once the day's practice is
+done; a locked screen shows only "Time for a little practice"). Practice has a line in the digest,
+the report's Transition section (with the pitch chart banded by the target range, and resonance),
+the export (`voice.csv`) and the connector's `transition` tool. Shares that include `TRANSITION`
+can read the programme, plan and progress, and change nothing.
 
 Body measurements are `Metric.WAIST`, `HIPS`, `CHEST`, `BUST`, `UNDERBUST`, `SHOULDERS`, `NECK`,
 `UPPER_ARM`, `THIGH`, `CALF` through `/api/measurements` (in cm), like weight.
@@ -390,8 +420,8 @@ with the header (a change, or `/api/me`, devices, settings, admin, reports, expo
 | `GET /api/admin/smtp` · `PUT` · `POST /api/admin/smtp/test` | Admins: `{settings, passwordSet}` · `{settings, password?}` · `{to}` |
 
 Every minute the server sends what's due: doses (and again, every `remindAgainMinutes` while
-unmarked), refills, appointments, habits, routines, bladder training, low supplies, cycle reminders
-and the weekly digest, by browser push (names only if
+unmarked), refills, appointments, habits, routines, bladder training, low supplies, cycle reminders,
+voice practice and the weekly digest, by browser push (names only if
 `ReminderPrefs.showNames`; nothing but doses in quiet hours) and to webhooks subscribed to the
 event. A push is a `PushMessage` (JSON, encrypted per RFC 8291); "taken" and "skip" actions carry
 `medicationId` and `scheduledFor` for `POST /api/meds/doses`.

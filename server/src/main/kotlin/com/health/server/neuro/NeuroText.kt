@@ -2,6 +2,8 @@ package com.health.server.neuro
 
 import com.health.api.MilestoneStatus
 import com.health.api.MomentKind
+import com.health.api.VoiceCatalog
+import com.health.api.VoicePlan
 import com.health.server.Services
 import com.health.server.platform.Say
 import java.util.Locale
@@ -50,10 +52,31 @@ object NeuroText {
         o.recentChanges.take(5).forEach { appendLine("- ${it.date} ${it.area}: ${it.note}") }
         if (o.voice.isNotEmpty()) appendLine("Voice practice (180 days): ${o.voice.sumOf { it.minutes }} minutes in ${plural(o.voice.size, "session")}" +
             (o.voice.mapNotNull { it.pitchAvgHz }.takeIf { it.isNotEmpty() }?.let { "; latest average pitch ${it.first().toInt()} Hz" } ?: "") + ".")
+        voiceTrainer(services, userId)?.let { append(it) }
         if (o.hairByArea.isNotEmpty()) appendLine("Hair removal sessions: " + o.hairByArea.joinToString(", ") { "${it.name} ${it.count}" } + ".")
         appendLine("Last 30 days: ${plural(o.euphoria, "moment")} of euphoria, ${plural(o.dysphoria, "moment")} of dysphoria.")
         services.transition.moments(userId, 14).take(5).forEach { m ->
             appendLine("- ${Say.dateTime(m.at, zone)} ${if (m.kind == MomentKind.EUPHORIA) "euphoria" else "dysphoria"}, ${m.intensity} of 5${if (m.context.isNotEmpty()) " (${m.context.joinToString(", ")})" else ""}")
         }
     }.trim().ifEmpty { "Nothing logged yet." }
+
+    /** The voice programme: the person's goal and range, lessons done, this week, and how it's going. */
+    private suspend fun voiceTrainer(services: Services, userId: String): String? {
+        val p = services.transition.trainer.progress(userId)
+        if (p.lessonsDone.isEmpty() && p.weeks.isEmpty() && p.plan == VoicePlan()) return null
+        val plan = p.plan
+        val path = VoiceCatalog.lessonsFor(plan.goal)
+        return buildString {
+            append("Voice programme: goal ${plan.goal.label.lowercase(Locale.ROOT)}")
+            if (plan.targetLowHz != null && plan.targetHighHz != null) append(", target range ${plan.targetLowHz!!.toInt()}–${plan.targetHighHz!!.toInt()} Hz")
+            plan.targetResonance?.let { append(", resonance target ${it.toInt()} of 100") }
+            append("; ${path.count { it.id in p.lessonsDone }} of ${path.size} lessons done")
+            p.nextLessonId?.let { VoiceCatalog.lesson(it) }?.let { append(", next: ${it.title}") }
+            append("; ${p.minutesThisWeek} minutes this week")
+            if (p.streakDays > 0) append(", ${plural(p.streakDays, "day")} in a row")
+            appendLine(".")
+            p.highlights.forEach { appendLine("- $it") }
+            p.restNote?.let { appendLine(it) }
+        }
+    }
 }

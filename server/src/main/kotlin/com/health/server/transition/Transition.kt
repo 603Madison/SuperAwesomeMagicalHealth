@@ -22,6 +22,7 @@ import com.health.api.SuggestedQuestion
 import com.health.api.TransitionOverview
 import com.health.api.TransitionProfile
 import com.health.api.TransitionToday
+import com.health.api.VoicePlan
 import com.health.api.VoiceSession
 import com.health.server.ApiError
 import com.health.server.care.HormonesService
@@ -35,6 +36,7 @@ import com.health.server.neuro.plural
 import com.health.server.neuro.text
 import com.health.server.platform.Csv
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Reminder
 import com.health.server.platform.ReportChart
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
@@ -59,6 +61,9 @@ class TransitionService(
     private val clock: () -> Long = System::currentTimeMillis,
 ) : FeatureHooks {
     override val module = Module.TRANSITION
+
+    /** The voice trainer: the plan, progress and the practice reminder (Voice.kt). */
+    val trainer = VoiceTrainer(entries, personal, profiles, clock)
 
     // ---------------------------------------------------------------- Profile
 
@@ -119,8 +124,9 @@ class TransitionService(
 
     suspend fun voice(userId: String, days: Int): List<VoiceSession> = timed(userId, EntryKind.TRANSITION_VOICE, days, VoiceSession.serializer()) { v, id -> v.copy(id = id) }.sortedByDescending { it.at }
 
-    suspend fun saveVoice(userId: String, v: VoiceSession): VoiceSession {
-        notFuture(v.at)
+    suspend fun saveVoice(userId: String, session: VoiceSession): VoiceSession {
+        notFuture(session.at)
+        val v = VoiceTrainer.checkSession(session)
         fun Double?.hz() = this?.takeIf { it.isFinite() }?.coerceIn(40.0, 600.0)
         val clean = v.copy(
             minutes = v.minutes.coerceIn(1, 600), exercises = v.exercises.clean(20, 80),
@@ -225,15 +231,16 @@ class TransitionService(
 
     // ---------------------------------------------------------------- Hooks
 
+    override suspend fun reminders(userId: String, profile: Profile, from: Long, to: Long): List<Reminder> = trainer.reminders(userId, profile, from, to)
+
     override suspend fun digest(userId: String, profile: Profile, from: LocalDate, to: LocalDate): DigestSection? {
-        val zone = Days(Days.zoneOf(profile.timezone))
         val moments = between(userId, EntryKind.TRANSITION_MOMENT, from, to, GenderMoment.serializer())
-        val voice = between(userId, EntryKind.TRANSITION_VOICE, from, to, VoiceSession.serializer())
+        val voice = trainer.sessions(userId, from, to)
         val done = milestones(userId).filter { it.status == MilestoneStatus.DONE && it.date != null && LocalDate.parse(it.date) in from..to }
         if (moments.isEmpty() && voice.isEmpty() && done.isEmpty()) return null
         val lines = listOfNotNull(
             moments.count { it.kind == MomentKind.EUPHORIA }.takeIf { it > 0 }?.let { "${plural(it, "moment")} of euphoria." },
-            voice.takeIf { it.isNotEmpty() }?.let { v -> "Voice practice: ${v.sumOf { it.minutes }} minutes over ${plural(v.map { zone.dateOf(it.at) }.distinct().size, "day")}." },
+            VoiceTrainer.digestLine(voice, trainer.sessions(userId, from.minusDays(7), from.minusDays(1)), trainer.plan(userId)),
             done.takeIf { it.isNotEmpty() }?.let { d -> "Done: ${d.joinToString(", ") { it.title }}." },
         )
         return DigestSection("Transition", Module.TRANSITION, "good", lines)
@@ -241,15 +248,18 @@ class TransitionService(
 
     override suspend fun report(userId: String, profile: Profile, from: LocalDate, to: LocalDate): ReportSection? {
         val o = overview(userId)
-        val voice = between(userId, EntryKind.TRANSITION_VOICE, from, to, VoiceSession.serializer()).sortedBy { it.at }
+        val dated = trainer.sessions(userId, from, to)
+        val voice = dated.map { it.session }.sortedBy { it.at }
+        val plan = trainer.plan(userId)
+        val lessonsDone = trainer.sessions(userId).mapNotNull { it.session.lessonId }.toSet()
         val hair = between(userId, EntryKind.TRANSITION_HAIR, from, to, HairRemovalSession.serializer())
         val changes = o.recentChanges.filter { LocalDate.parse(it.date) in from..to }
-        if (o.milestones.isEmpty() && voice.isEmpty() && hair.isEmpty() && changes.isEmpty() && o.profile == TransitionProfile()) return null
+        if (o.milestones.isEmpty() && voice.isEmpty() && hair.isEmpty() && changes.isEmpty() && o.profile == TransitionProfile() && plan == VoicePlan()) return null
         val summary = listOfNotNull(
             o.profile.pronouns?.let { "Pronouns: $it." },
             o.sinceStart?.let { "Transitioning for $it." },
             o.onHormones?.let { "On hormone therapy for $it." },
-            voice.takeIf { it.isNotEmpty() }?.let { v -> "Voice practice: ${v.sumOf { it.minutes }} minutes in ${plural(v.size, "session")}." },
+        ) + VoiceTrainer.reportLines(dated, plan, lessonsDone) + listOfNotNull(
             hair.takeIf { it.isNotEmpty() }?.let { h -> "Hair removal: ${plural(h.size, "session")} (${h.groupingBy { it.area }.eachCount().entries.joinToString(", ") { "${it.key} ${it.value}" }})." },
         )
         val tables = listOfNotNull(
@@ -258,9 +268,14 @@ class TransitionService(
             },
             changes.takeIf { it.isNotEmpty() }?.let { c -> ReportTable("Changes noticed", listOf("Date", "Area", "Note"), c.map { listOf(it.date, it.area, it.note) }) },
         )
-        val pitch = voice.filter { it.pitchAvgHz != null }
+        val pitch = voice.mapNotNull { s -> VoiceTrainer.pitchOf(s)?.let { Point(s.at, it) } }
+        val resonance = voice.mapNotNull { s -> VoiceTrainer.resonanceOf(s)?.let { Point(s.at, it) } }
+        val range = plan.targetLowHz?.let { low -> plan.targetHighHz?.let { high -> low..high } }
         val charts = listOfNotNull(
-            pitch.takeIf { it.size >= 2 }?.let { v -> ReportChart("Voice pitch", "Hz", listOf("Average pitch" to v.map { Point(it.at, it.pitchAvgHz!!) })) },
+            pitch.takeIf { it.size >= 2 }?.let { ReportChart("Voice pitch", "Hz", listOf("Average pitch" to it), band = range) },
+            resonance.takeIf { it.size >= 2 }?.let { r ->
+                ReportChart("Voice resonance", "0 darker, 100 brighter", listOf("Resonance" to r), band = plan.targetResonance?.let { (it - 5).coerceAtLeast(0.0)..(it + 5).coerceAtMost(100.0) })
+            },
         )
         return ReportSection(ReportSectionKey.TRANSITION, summary, tables, charts)
     }
@@ -276,8 +291,14 @@ class TransitionService(
             files["transition-changes.csv"] = listOf(listOf("date", "area", "note", "feeling")) + c.map { listOf(it.date, it.area, it.note, it.feeling?.toString().orEmpty()) }
         }
         between(userId, EntryKind.TRANSITION_VOICE, from, to, VoiceSession.serializer()).takeIf { it.isNotEmpty() }?.let { v ->
-            files["voice.csv"] = listOf(listOf("at", "minutes", "exercises", "pitch_avg_hz", "pitch_min_hz", "pitch_max_hz", "feeling", "note")) +
-                v.map { listOf(Csv.iso(it.at, zone), "${it.minutes}", it.exercises.joinToString(";"), Csv.num(it.pitchAvgHz), Csv.num(it.pitchMinHz), Csv.num(it.pitchMaxHz), it.feeling?.toString().orEmpty(), it.note.orEmpty()) }
+            files["voice.csv"] = listOf(listOf("at", "minutes", "exercises", "pitch_avg_hz", "pitch_min_hz", "pitch_max_hz", "feeling", "note", "lesson", "resonance", "weight", "in_range", "strain")) +
+                v.map {
+                    listOf(
+                        Csv.iso(it.at, zone), "${it.minutes}", it.exercises.joinToString(";"), Csv.num(it.pitchAvgHz), Csv.num(it.pitchMinHz), Csv.num(it.pitchMaxHz),
+                        it.feeling?.toString().orEmpty(), it.note.orEmpty(), it.lessonId.orEmpty(), Csv.num(it.resonance), Csv.num(it.weight),
+                        VoiceTrainer.inRange(listOf(it))?.toString().orEmpty(), it.strain.toString(),
+                    )
+                }
         }
         between(userId, EntryKind.TRANSITION_HAIR, from, to, HairRemovalSession.serializer()).takeIf { it.isNotEmpty() }?.let { h ->
             files["hair-removal.csv"] = listOf(listOf("at", "method", "area", "minutes", "pulses", "provider", "pain", "cost", "note")) +
