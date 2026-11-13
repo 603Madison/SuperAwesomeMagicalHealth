@@ -41,11 +41,26 @@ object InsightRules {
      */
     class Food(val numbers: Boolean = true, val suggestions: List<FoodSuggestion> = emptyList())
 
-    /** How far protein is under target, when it's far enough under (and late enough) for the protein insight; else null. */
+    /**
+     * The share of the day's protein most people have eaten by [hourNow]: none expected before 11:00,
+     * about a quarter by then (breakfast), 55% from 15:00 (lunch), all of it from 19:00 or for a day that's over.
+     */
+    fun proteinShare(isToday: Boolean, hourNow: Int): Double = when {
+        !isToday || hourNow >= 19 -> 1.0
+        hourNow >= 15 -> 0.55
+        hourNow >= 11 -> 0.25
+        else -> 0.0
+    }
+
+    /**
+     * How far protein is behind what's usual by this time of day, when it's far enough behind for the
+     * protein insight (under 70% of it, and at least 15 g short); else null.
+     */
     fun proteinGap(today: DayStats, target: NutritionTarget, isToday: Boolean, hourNow: Int): Double? {
         val eaten = today.nutrition ?: return null
-        val late = !isToday || hourNow >= 19
-        return if (late && eaten.protein < target.protein * 0.7) target.protein - eaten.protein else null
+        val expected = target.protein * proteinShare(isToday, hourNow)
+        val gap = expected - eaten.protein
+        return if (expected > 0 && eaten.protein < expected * 0.7 && gap >= 15) gap else null
     }
 
     private class Ranked(val priority: Int, val insight: Insight)
@@ -130,13 +145,17 @@ object InsightRules {
         // Food and water: no amounts or targets at all for people in eating disorder recovery.
         val eaten = today.nutrition
         val late = !c.isToday || c.hourNow >= 19
-        if (eaten != null && late && c.food.numbers) {
+        if (eaten != null && c.food.numbers) {
+            // Through the day, against what's usual by now, with ideas for the meal coming up.
             proteinGap(today, c.target, c.isToday, c.hourNow)?.let { gap ->
                 val ideas = c.food.suggestions.take(3)
                 val body = com.health.server.food.Suggestions.proteinSentence(ideas, gap, java.time.LocalDate.parse(today.date))
                     ?: "Protein helps you recover and keeps you full: eggs, yoghurt, beans, tofu, fish or chicken."
-                out += Ranked(58, Insight("info", "Protein ${gap.roundToInt()} g under target", body, "egg", link = AppPage.FOOD, suggestions = ideas))
+                val title = if (late) "Protein ${gap.roundToInt()} g under target" else "Protein ${gap.roundToInt()} g behind for this time of day"
+                out += Ranked(58, Insight("info", title, body, "egg", link = AppPage.FOOD, suggestions = ideas))
             }
+        }
+        if (eaten != null && late && c.food.numbers) {
             if (eaten.calories > c.target.calories * 1.2) {
                 add(56, "info", "flame", "%,d kcal over your target".format((eaten.calories - c.target.calories).roundToInt()), "One day doesn't change much; your trend over a week is what counts.", AppPage.FOOD)
             }
@@ -146,8 +165,9 @@ object InsightRules {
         }
 
         // Weight trend over two weeks.
+        // Not for people in eating disorder recovery: weight numbers can make recovery harder.
         val weights = (c.history.takeLast(21) + today).mapNotNull { day -> day.weightKg?.let { day.date to it } }
-        if (weights.size >= 3) {
+        if (weights.size >= 3 && c.food.numbers) {
             val change = weights.last().second - weights.first().second
             val aim = goals.weeklyChangeKg
             if (abs(change) >= 0.5) {

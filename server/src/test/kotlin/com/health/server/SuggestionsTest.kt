@@ -171,6 +171,23 @@ class SuggestionsTest {
     }
 
     @Test
+    fun `protein is compared with what's usual by this time of day, so ideas come for the next meal`() {
+        fun protein(eaten: Double, hour: Int) =
+            InsightRules.insights(context(Nutrients(calories = 600.0, protein = eaten), InsightRules.Food(true, listOf(yoghurt)), hour = hour)).singleOrNull { it.icon == "egg" }
+        // Nothing expected before 11:00.
+        assertNull(protein(0.0, 9))
+        // At lunchtime a quarter of the 100 g is usual: 5 g eaten is 20 g behind.
+        val lunch = protein(5.0, 12)!!
+        assertEquals("Protein 20 g behind for this time of day", lunch.title)
+        assertEquals(listOf(yoghurt), lunch.suggestions)
+        // 20 g by lunchtime is fine; so is a gap under 15 g.
+        assertNull(protein(20.0, 12))
+        assertNull(protein(42.0, 16))
+        // From 19:00, the whole day's target.
+        assertEquals("Protein 60 g under target", protein(40.0, 20)!!.title)
+    }
+
+    @Test
     fun `in recovery there are no insights with amounts of food`() {
         val insights = InsightRules.insights(context(Nutrients(calories = 3000.0, protein = 20.0), InsightRules.Food(numbers = false), hour = 20))
         assertTrue(insights.none { it.icon == "egg" || it.icon == "flame" })
@@ -179,6 +196,10 @@ class SuggestionsTest {
         // With numbers, both show.
         val shown = InsightRules.insights(context(Nutrients(calories = 3000.0, protein = 20.0), InsightRules.Food(), hour = 20))
         assertTrue(shown.any { it.icon == "egg" } && shown.any { it.icon == "flame" && it.link == AppPage.FOOD })
+        // Nor any weight trend in recovery.
+        val weights = listOf(80.0, 79.0, 78.0).mapIndexed { i, kg -> DayStats(date = "2026-11-0${i + 1}", weightKg = kg) }
+        assertTrue(InsightRules.insights(context(Nutrients(), InsightRules.Food(numbers = false), history = weights)).none { it.icon == "scale" })
+        assertTrue(InsightRules.insights(context(Nutrients(), InsightRules.Food(), history = weights)).any { it.icon == "scale" })
     }
 
     @Test
