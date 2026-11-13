@@ -251,6 +251,26 @@ class CombineTest {
         assertEquals(clock(0, 7), apart.session.end)
         assertTrue(apart.combined!!.how.startsWith("Waking averaged, bedtime from the ring"))
 
+        // The ring's battery ran out at 3 am, mid-REM: the watch carried on asleep until 7:30, so the night
+        // ends then, and the last stretch counts as asleep (without stages) for the ring too.
+        val ringPlan = listOf(SleepStage.LIGHT to 120, SleepStage.DEEP to 60, SleepStage.REM to 60)
+        var rt = clock(-1, 23)
+        val ringStages = ringPlan.map { (stage, minutes) -> StageSpan(stage, rt, rt + minutes * MINUTE).also { rt += minutes * MINUTE } }
+        val died = SleepSession(clock(-1, 23), rt, ringStages, id = "r2", deviceId = "ring", source = "Colmi R02")
+        val carried = SleepSession(clock(-1, 23, 10), clock(0, 7, 30), id = "w4", deviceId = "watch", source = "Pebble Time 2")
+        val whole = Combine.nights(listOf(carried, died), devices, null).single()
+        assertEquals(clock(-1, 23, 5), whole.session.start)
+        assertEquals(clock(0, 7, 30), whole.session.end)
+        assertEquals(SleepStage.ASLEEP, whole.session.stages.last().stage)
+        assertEquals(clock(0, 3), whole.session.stages.last().start)
+        // The ring: 240 recorded + 270 carried on = 510; the watch: 500 in bed, counting less as it has no stages;
+        // about 507 between them, but never more than the 505 minutes in bed.
+        assertEquals(minOf(((510 * 1.0 + 500 * 0.45) / 1.45).roundToInt(), 505), whole.asleepMinutes)
+        assertTrue(whole.combined!!.how.startsWith("Bedtime averaged, waking from the watch, as the ring stopped recording while you were still asleep"))
+        // A ring that saw the waking keeps its own, even if the watch thinks the night went on.
+        val lateWatch = SleepSession(clock(-1, 23, 10), clock(0, 9), id = "w5", deviceId = "watch", source = "Pebble Time 2")
+        assertEquals(ringNight.end, Combine.nights(listOf(lateWatch, ringNight), devices, null).single().session.end)
+
         // A nap the watch alone recorded stays its own.
         val nap = SleepSession(clock(0, 14), clock(0, 14, 40), id = "w3", deviceId = "watch", source = "Pebble Time 2")
         val withNap = Combine.nights(listOf(watchNight, ringNight, nap), devices, null)

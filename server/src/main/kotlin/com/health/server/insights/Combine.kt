@@ -9,6 +9,7 @@ import com.health.api.Point
 import com.health.api.SleepSession
 import com.health.api.SleepSource
 import com.health.api.SleepStage
+import com.health.api.StageSpan
 import com.health.api.SourceValue
 import com.health.server.health.StoredSample
 import kotlinx.serialization.Serializable
@@ -626,19 +627,33 @@ object Combine {
             return (close.sum() / close.size) to (close.size > 1)
         }
         val (start, startAveraged) = near(group.map { it.start }, primary.start)
-        val (end, endAveraged) = near(group.map { it.end }, primary.end)
-        val stages = primary.stages
+        // A staged device whose night stops mid-sleep (a ring's battery running out, or taken off to charge)
+        // didn't see the waking: where the others carry on asleep for more than 45 minutes, their waking is used,
+        // and that last stretch counts as asleep without stages.
+        val lastStage = primary.stages.lastOrNull()?.stage
+        val carriedOn = group.drop(1).filter { it.end - primary.end > CLOSE_MS }
+        val cutShort = staged(primary) && lastStage != null && lastStage != SleepStage.AWAKE && carriedOn.isNotEmpty()
+        val (end, endAveraged) = if (cutShort) carriedOn.map { it.end }.sorted()[carriedOn.size / 2] to false else near(group.map { it.end }, primary.end)
+        val tail = if (cutShort) listOf(StageSpan(SleepStage.ASLEEP, primary.end, end)) else emptyList()
+        val stages = (primary.stages + tail)
             .map { it.copy(start = it.start.coerceIn(start, end), end = it.end.coerceIn(start, end)) }
             .filter { it.end > it.start }
+        // The others' time asleep in that last stretch, added to the device that stopped.
+        val tailAsleep = if (!cutShort) 0 else carriedOn.first().let { o ->
+            if (o.stages.isEmpty()) ((end - primary.end) / 60_000).toInt()
+            else (o.stages.filter { it.stage != SleepStage.AWAKE }.sumOf { (minOf(it.end, end) - maxOf(it.start, primary.end)).coerceAtLeast(0) } / 60_000).toInt()
+        }
         val weights = group.associate { s ->
             val ref = devices[s.deviceId]
             s.deviceId!! to SLEEP_SUITS.of(placement(ref?.kind, ref?.name ?: s.source.orEmpty())) * (if (s.stages.isEmpty()) NO_STAGES_WEIGHT else 1.0)
         }
         val total = weights.values.sum()
-        val asleep = (group.sumOf { asleep(it) * weights.getValue(it.deviceId!!) } / total).let { kotlin.math.round(it).toInt() }
+        val asleep = (group.sumOf { (asleep(it) + if (it === primary) tailAsleep else 0) * weights.getValue(it.deviceId!!) } / total).let { kotlin.math.round(it).toInt() }
             .coerceAtMost(((end - start) / 60_000).toInt())
         val who = names.the(primary.deviceId)
         val timing = when {
+            cutShort -> (if (startAveraged) "Bedtime averaged" else "Bedtime from $who") +
+                ", waking from ${names.the(carriedOn.first().deviceId)}, as $who stopped recording while you were still asleep"
             startAveraged && endAveraged -> "Bedtime and waking averaged"
             startAveraged -> "Bedtime averaged, waking from $who"
             endAveraged -> "Waking averaged, bedtime from $who"
