@@ -52,7 +52,6 @@ import com.health.app.net.deleteDoseChange
 import com.health.app.net.hormones
 import com.health.app.net.saveHormoneSettings
 import com.health.app.ui.Format
-import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
@@ -60,6 +59,16 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.Pill
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.TitleAction
+import com.health.app.ui.modules.EmptyLine
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.sectionId
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Tune
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.meds.formIcon
 import com.health.app.ui.modules.IconTile
@@ -145,6 +154,17 @@ fun HormonesRoute(onEditMedication: (String?) -> Unit) {
     )
 }
 
+/**
+ * Hormone therapy's sections in the default order (the sections of [FeatureScreens.HORMONES]):
+ * when labs are due, the medications, and each test's levels (or where they'll go).
+ */
+fun hormoneSections(labs: List<LabSeries>): List<ArrangeItem> = buildList {
+    add(ArrangeItem("labs", "When labs are due"))
+    add(ArrangeItem("meds", "Medications"))
+    if (labs.isEmpty()) add(ArrangeItem("levels", "Levels"))
+    else labs.map { ArrangeItem(sectionId("level", it.name), it.name) }.distinctBy { it.id }.forEach(::add)
+}
+
 @Composable
 fun HormonesScreen(state: HormonesState, zone: ZoneId, actions: HormonesActions) {
     val readOnly = LocalReadOnly.current
@@ -152,36 +172,39 @@ fun HormonesScreen(state: HormonesState, zone: ZoneId, actions: HormonesActions)
     var editingTarget by remember { mutableStateOf<LabSeries?>(null) }
     var editingSchedule by remember { mutableStateOf(false) }
     val overview = state.overview
+    val sections = hormoneSections(overview?.labs.orEmpty())
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Hormone therapy", "Doses over time, levels and labs")
+        ScreenTitle("Hormone therapy", "Doses over time, levels and labs") {
+            ArrangeAction(FeatureScreens.HORMONES, "Hormone therapy", sections)
+        }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && overview == null -> Loading()
                 state.error != null && overview == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
                 overview != null -> {
-                    LabsDueCard(overview, state.today, readOnly) { editingSchedule = true }
-                    if (overview.medications.isEmpty()) {
-                        EmptyState(
-                            Icons.Rounded.Medication, "Nothing here yet",
-                            "Mark a medication as part of hormone therapy in Medications, and it shows here with its dose history.",
-                        ) {
-                            if (!readOnly) OutlinedButton(onClick = { actions.editMedication(null) }) { Text("Add a medication") }
-                        }
-                    } else {
-                        InfoCard("Medications", icon = Icons.Rounded.Medication, trailing = {
-                            if (!readOnly) TextButton(onClick = { addingChange = true }) { Text("Note a change") }
-                        }) {
-                            overview.medications.forEachIndexed { i, med ->
-                                if (i > 0) Spacer(Modifier.height(12.dp))
-                                HormoneMedRow(med, state.today, zone, readOnly, actions)
+                    val levels = overview.labs.associateBy { sectionId("level", it.name) }
+                    Sections(arrangedIn(FeatureScreens.HORMONES, sections)) { id ->
+                        when (id) {
+                            "labs" -> LabsDueCard(overview, state.today, readOnly) { editingSchedule = true }
+                            "meds" -> if (overview.medications.isEmpty()) {
+                                EmptyLine(
+                                    "Mark a medication as hormone therapy to see it here.",
+                                    action = "Add".takeIf { !readOnly }, onAction = { actions.editMedication(null) },
+                                )
+                            } else {
+                                InfoCard("Medications", icon = Icons.Rounded.Medication, trailing = if (readOnly) null else ({
+                                    TitleAction(Icons.Rounded.Add, "Note a dose change") { addingChange = true }
+                                })) {
+                                    overview.medications.forEachIndexed { i, med ->
+                                        if (i > 0) Spacer(Modifier.height(12.dp))
+                                        HormoneMedRow(med, state.today, zone, readOnly, actions)
+                                    }
+                                }
                             }
-                        }
-                    }
-                    if (overview.labs.isNotEmpty()) {
-                        overview.labs.forEach { series -> LevelCard(series, zone, readOnly) { editingTarget = series } }
-                    } else {
-                        InfoCard("Levels", icon = Icons.Rounded.Science) {
-                            Hint("Add lab results in Medications › Labs, and each test is charted here against your own range.")
+                            "levels" -> InfoCard("Levels", icon = Icons.Rounded.Science) {
+                                Hint("Add lab results in Medications › Labs, and each test is charted here against your own range.")
+                            }
+                            else -> levels[id]?.let { series -> LevelCard(series, zone, readOnly) { editingTarget = series } }
                         }
                     }
                     Hint(
@@ -215,7 +238,7 @@ fun HormonesScreen(state: HormonesState, zone: ZoneId, actions: HormonesActions)
 @Composable
 private fun LabsDueCard(overview: HormoneOverview, today: LocalDate, readOnly: Boolean, onEdit: () -> Unit) {
     val due = overview.nextLabsDue?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    InfoCard("Labs", icon = Icons.Rounded.EventRepeat, trailing = { if (!readOnly) TextButton(onClick = onEdit) { Text("How often") } }) {
+    InfoCard("Labs", icon = Icons.Rounded.EventRepeat, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Edit, "How often labs are checked", onEdit) })) {
         when {
             due == null && overview.settings.labsEveryWeeks == null -> Hint("No lab reminders. Set how often your labs are checked, and the next ones show here.")
             due == null -> Hint("Once you've added a lab result, the next ones show here.")
@@ -295,7 +318,7 @@ private fun LevelCard(series: LabSeries, zone: ZoneId, readOnly: Boolean, onTarg
     val latest = sorted.lastOrNull()
     val target = series.target
     val outside = latest != null && ((target?.low != null && latest.value < target.low!!) || (target?.high != null && latest.value > target.high!!))
-    InfoCard(series.name, icon = Icons.Rounded.Science, trailing = { if (!readOnly) TextButton(onClick = onTarget) { Text("My range") } }) {
+    InfoCard(series.name, icon = Icons.Rounded.Science, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Tune, "Your range for ${series.name}", onTarget) })) {
         if (latest != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${Format.upTo2(latest.value)} ${latest.unit.ifBlank { series.unit }}", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))

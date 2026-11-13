@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,6 +78,13 @@ import com.health.app.ui.components.Pill
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.Stat
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.History
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.async
@@ -194,31 +202,57 @@ fun severityColor(severity: Int) = when {
     else -> MaterialTheme.colorScheme.primary
 }
 
+/** Symptoms' sections in the default order (the sections of [FeatureScreens.SYMPTOMS]); nothing to log while viewing a share. */
+fun symptomsSections(readOnly: Boolean = false): List<ArrangeItem> = buildList {
+    if (!readOnly) add(ArrangeItem("log", "How are you feeling?"))
+    add(ArrangeItem("migraine", "Migraine"))
+    add(ArrangeItem("lately", "Lately"))
+    add(ArrangeItem("summary", "Last three months"))
+    add(ArrangeItem("weather", "Air pressure"))
+}
+
+/** How many symptoms to offer in one tap; the rest are a tap on "Something else" away. */
+private const val QUICK_SYMPTOMS = 6
+
 @Composable
 fun SymptomsScreen(state: SymptomsState, zone: ZoneId, actions: SymptomsActions, now: Long = System.currentTimeMillis()) {
     var logging by remember { mutableStateOf<SymptomEntry?>(null) }
     var migraine by remember { mutableStateOf<Migraine?>(null) }
     var choosingPlace by remember { mutableStateOf(false) }
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    val sections = symptomsSections(readOnly)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Symptoms & pain", "What you feel, and what goes with it")
+        ScreenTitle("Symptoms & pain", "What you feel, and what goes with it") {
+            ArrangeAction(FeatureScreens.SYMPTOMS, "Symptoms & pain", sections)
+        }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            InfoCard("How are you feeling?", icon = Icons.Rounded.Healing) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SymptomWords.symptoms.take(10).forEach { s ->
-                        SuggestionChip(onClick = { logging = SymptomEntry(System.currentTimeMillis(), s, 4) }, label = { Text(s) })
+            val loaded = !(state.loading && state.summary == null) && !(state.error != null && state.summary == null)
+            Sections(arrangedIn(FeatureScreens.SYMPTOMS, sections)) { id ->
+                when (id) {
+                    "log" -> InfoCard("How are you feeling?", icon = Icons.Rounded.Healing) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SymptomWords.symptoms.take(QUICK_SYMPTOMS).forEach { s ->
+                                SuggestionChip(onClick = { logging = SymptomEntry(System.currentTimeMillis(), s, 4) }, label = { Text(s) })
+                            }
+                            SuggestionChip(
+                                onClick = { logging = SymptomEntry(System.currentTimeMillis(), "", 4) },
+                                label = { Text("Something else") },
+                                icon = { androidx.compose.material3.Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)) },
+                            )
+                        }
                     }
+                    "migraine" -> MigraineCard(
+                        state.open, zone, now, readOnly, onStart = { migraine = Migraine(System.currentTimeMillis(), severity = 6) },
+                        onEnd = { m -> actions.saveMigraine(m.copy(end = System.currentTimeMillis())) }, onOpen = { migraine = it },
+                    )
+                    "lately" -> if (loaded) RecentCard(state, zone, now, onSymptom = { if (!readOnly) logging = it }, onMigraine = { if (!readOnly) migraine = it })
+                    "summary" -> if (loaded) state.summary?.let { SummaryCard(it) }
+                    "weather" -> if (loaded && !readOnly) PlaceCard(state.place) { choosingPlace = true }
                 }
-                TextButton(onClick = { logging = SymptomEntry(System.currentTimeMillis(), "", 4) }) { Text("Something else") }
             }
-            MigraineCard(state.open, zone, now, onStart = { migraine = Migraine(System.currentTimeMillis(), severity = 6) }, onEnd = { m -> actions.saveMigraine(m.copy(end = System.currentTimeMillis())) }, onOpen = { migraine = it })
             when {
                 state.loading && state.summary == null -> Loading()
                 state.error != null && state.summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                else -> {
-                    RecentCard(state, zone, now, onSymptom = { logging = it }, onMigraine = { migraine = it })
-                    state.summary?.let { SummaryCard(it) }
-                    PlaceCard(state.place) { choosingPlace = true }
-                }
             }
             Hint("If something is severe, new or worrying you, talk to a doctor. This diary is what they'll often ask for.", Modifier.padding(horizontal = 4.dp))
         }
@@ -237,12 +271,15 @@ fun SymptomsScreen(state: SymptomsState, zone: ZoneId, actions: SymptomsActions,
 }
 
 @Composable
-private fun MigraineCard(open: Migraine?, zone: ZoneId, now: Long, onStart: () -> Unit, onEnd: (Migraine) -> Unit, onOpen: (Migraine) -> Unit) {
+private fun MigraineCard(open: Migraine?, zone: ZoneId, now: Long, readOnly: Boolean, onStart: () -> Unit, onEnd: (Migraine) -> Unit, onOpen: (Migraine) -> Unit) {
+    if (open == null && readOnly) return
     InfoCard("Migraine", icon = Icons.Rounded.Bolt, iconTint = AppTheme.status.warn) {
         if (open == null) {
             Hint("Starting one? Note it now; you can add the rest when you feel better.")
             Spacer(Modifier.height(8.dp))
             FilledTonalButton(onClick = onStart) { Text("A migraine is starting") }
+        } else if (readOnly) {
+            Text("Since ${Format.timeOfDay(open.start, zone)}", style = MaterialTheme.typography.titleMedium)
         } else {
             Text(
                 "Since ${Format.timeOfDay(open.start, zone)}, ${Format.minutes(((now - open.start) / 60_000).toInt().coerceAtLeast(0))} so far",
@@ -290,7 +327,7 @@ private fun RecentCard(state: SymptomsState, zone: ZoneId, now: Long, onSymptom:
                 }
             }
         }
-    InfoCard("Lately") {
+    InfoCard("Lately", icon = Icons.Rounded.History) {
         if (items.isEmpty()) {
             Hint("Nothing logged in the last month.")
             return@InfoCard
@@ -312,18 +349,21 @@ private fun SummaryCard(summary: SymptomsSummary) {
         if (summary.counts.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
             Text("Most often", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                summary.counts.take(6).forEach { c -> SuggestionChip(onClick = {}, label = { Text("${c.name} · ${c.count}") }) }
+            Spacer(Modifier.height(6.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                summary.counts.take(6).forEach { c -> Pill("${c.name} · ${c.count}", MaterialTheme.colorScheme.primary) }
             }
         }
         if (summary.triggers.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
             Text("What seemed to set them off", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                summary.triggers.take(6).forEach { c -> SuggestionChip(onClick = {}, label = { Text("${c.name} · ${c.count}") }) }
+            Spacer(Modifier.height(6.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                summary.triggers.take(6).forEach { c -> Pill("${c.name} · ${c.count}", MaterialTheme.colorScheme.primary) }
             }
         }
         if (summary.correlations.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(12.dp))
             Text("What went with them", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             summary.correlations.forEach { c ->
                 Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {

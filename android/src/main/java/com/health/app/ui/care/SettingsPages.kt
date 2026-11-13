@@ -314,19 +314,23 @@ fun WatchRoute(onBack: () -> Unit) {
     val c = appContainer()
     val settings by c.settings.collectAsState()
     val context = LocalContext.current
-    WatchScreen(settings.server, onBack) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, RELEASES.toUri())) } }
+    WatchScreen(
+        settings.server, onBack,
+        onReleases = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, RELEASES.toUri())) } },
+        water = com.health.app.ui.modules.waterShown(),
+    )
 }
 
 const val RELEASES = "https://github.com/603madison/superawesomemagicalhealth/releases/latest"
 
 @Composable
-fun WatchScreen(server: String, onBack: () -> Unit, onReleases: () -> Unit) {
+fun WatchScreen(server: String, onBack: () -> Unit, onReleases: () -> Unit, water: Boolean = true) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         BackBar(onBack, "Pebble watch")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             InfoCard("On your wrist", icon = Icons.Rounded.Watch) {
                 Text(
-                    "The watch app shows today's scores and steps, and logs mood, water, coffee, toilet trips, doses, habits, hot flashes and symptoms in one tap.",
+                    "The watch app shows today's scores and steps, and logs mood, ${if (water) "water, " else ""}coffee, toilet trips, doses, habits, hot flashes and symptoms in one tap.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Hint("It talks to your server through the Pebble app on your phone, so it works without this app open.", Modifier.padding(top = 6.dp))

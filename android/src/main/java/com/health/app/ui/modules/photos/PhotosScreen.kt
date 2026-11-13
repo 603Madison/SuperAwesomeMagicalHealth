@@ -38,7 +38,6 @@ import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -73,13 +72,17 @@ import com.health.app.ui.Format
 import com.health.app.ui.care.CareFormat
 import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.BackBar
-import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.modules.ChipPicker
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.EmptyLine
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.arrangedIn
 import java.time.Instant
 import java.time.ZoneId
 
@@ -105,27 +108,48 @@ class PhotosActions(
     val retry: () -> Unit = {},
 )
 
+/** Progress photos' sections, in the default order (the sections of [FeatureScreens.PHOTOS]); nothing to add while viewing a share. */
+fun photoSections(readOnly: Boolean = false): List<ArrangeItem> = buildList {
+    if (!readOnly) add(ArrangeItem("add", "Take or add a photo"))
+    add(ArrangeItem("albums", "Albums"))
+    add(ArrangeItem("compare", "Compare two dates"))
+    add(ArrangeItem("photos", "Photos"))
+}
+
 /** Albums, then each album's photos as a grid of thumbnails. */
 @Composable
 fun PhotosHome(state: PhotosState, album: String?, onAlbum: (String?) -> Unit, image: PhotoImage, actions: PhotosActions) {
     val readOnly = LocalReadOnly.current
     val shown = state.photos.filter { album == null || it.album.equals(album, ignoreCase = true) }
+    val sections = photoSections(readOnly)
+    val order = arrangedIn(FeatureScreens.PHOTOS, sections)
+    // Each part above the grid spans it, with the same gap as cards elsewhere.
+    val gap = Modifier.padding(bottom = 6.dp)
     Column(Modifier.fillMaxSize()) {
-        BackBar(actions.back, "Progress photos")
+        BackBar(actions.back, "Progress photos") { ArrangeAction(FeatureScreens.PHOTOS, "Progress photos", sections) }
         LazyVerticalGrid(
             GridCells.Adaptive(108.dp), Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "section.privacy") {
+                Column(gap, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Hint("Encrypted on your server, never shown to AI, and only seen by people you share photos with.")
                     }
-                    if (!readOnly) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when {
+                        state.loading && state.photos.isEmpty() -> Loading()
+                        state.error != null && state.photos.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
+                        shown.isEmpty() -> EmptyLine("No photos yet. The same pose and light every few weeks shows change that's hard to see day to day.")
+                    }
+                }
+            }
+            order.forEach { id ->
+                when (id) {
+                    "add" -> item(span = { GridItemSpan(maxLineSpan) }, key = "section.add") {
+                        Row(gap, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { actions.open("photos/add?id=camera" + (album?.let { "&album=$it" } ?: "")) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp)) {
                                 Icon(Icons.Rounded.CameraAlt, null); Spacer(Modifier.width(8.dp)); Text("Take one")
                             }
@@ -134,35 +158,31 @@ fun PhotosHome(state: PhotosState, album: String?, onAlbum: (String?) -> Unit, i
                             }
                         }
                     }
-                    if (state.albums.isNotEmpty()) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    "albums" -> if (state.albums.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }, key = "section.albums") {
+                        FlowRow(gap, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FilterChip(selected = album == null, onClick = { onAlbum(null) }, label = { Text("All") })
                             state.albums.forEach { a -> FilterChip(selected = album.equals(a.name, true), onClick = { onAlbum(a.name) }, label = { Text("${a.name} · ${a.count}") }) }
                         }
                     }
-                    if (shown.size >= 2) {
-                        OutlinedButton(onClick = { actions.open("photos/compare" + (album?.let { "?album=$it" } ?: "")) }, modifier = Modifier.fillMaxWidth()) {
+                    "compare" -> if (shown.size >= 2) item(span = { GridItemSpan(maxLineSpan) }, key = "section.compare") {
+                        OutlinedButton(onClick = { actions.open("photos/compare" + (album?.let { "?album=$it" } ?: "")) }, modifier = gap.fillMaxWidth()) {
                             Icon(Icons.Rounded.Compare, null); Spacer(Modifier.width(8.dp)); Text("Compare two dates")
                         }
                     }
-                    when {
-                        state.loading && state.photos.isEmpty() -> Loading()
-                        state.error != null && state.photos.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                        shown.isEmpty() -> EmptyState(
-                            Icons.Rounded.PhotoLibrary, "No photos yet",
-                            "Photos taken in the same pose and light, every few weeks, show change that's hard to see day to day. " +
-                                "Use them for whatever you're working on: transition, weight, skin, strength.",
-                        )
-                    }
+                    "photos" -> photoGrid(shown, image, actions)
                 }
             }
-            items(shown, key = { it.id ?: it.at.toString() }) { p ->
-                Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable { actions.open("photos/photo?id=${p.id}") }) {
-                    image(p, true, Modifier.fillMaxWidth().aspectRatio(0.8f).clip(RoundedCornerShape(12.dp)))
-                    Text(CareFormat.date(p.date) ?: "", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
-                    Text(listOf(p.pose.label, p.album).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
+        }
+    }
+}
+
+/** The photos, as thumbnails with their date, pose and album. */
+private fun androidx.compose.foundation.lazy.grid.LazyGridScope.photoGrid(shown: List<Photo>, image: PhotoImage, actions: PhotosActions) {
+    items(shown, key = { it.id ?: it.at.toString() }) { p ->
+        Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable { actions.open("photos/photo?id=${p.id}") }) {
+            image(p, true, Modifier.fillMaxWidth().aspectRatio(0.8f).clip(RoundedCornerShape(12.dp)))
+            Text(CareFormat.date(p.date) ?: "", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
+            Text(listOf(p.pose.label, p.album).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

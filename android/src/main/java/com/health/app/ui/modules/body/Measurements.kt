@@ -40,6 +40,11 @@ import com.health.app.ui.Format
 import com.health.app.ui.care.CareFormat
 import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.BackBar
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
@@ -152,60 +157,81 @@ fun MeasurementsRoute(onBack: () -> Unit) {
     MeasurementsScreen(state, units, c.zone(), onBack, onRetry = vm::load) { values -> vm.save(MeasurementFormat.inputs(values, units, System.currentTimeMillis())) }
 }
 
+/** Body measurements' sections, in the default order (the sections of [FeatureScreens.MEASUREMENTS]); nothing to fill in while viewing a share. */
+fun measurementSections(readOnly: Boolean = false): List<ArrangeItem> = buildList {
+    add(ArrangeItem("latest", "Latest"))
+    if (!readOnly) add(ArrangeItem("measure", "Measure now"))
+}
+
 @Composable
 fun MeasurementsScreen(state: MeasurementsState, units: Units, zone: ZoneId, onBack: () -> Unit, onRetry: () -> Unit = {}, onSave: (Map<Metric, String>) -> Unit) {
     val readOnly = LocalReadOnly.current
     val typed = remember { mutableStateMapOf<Metric, String>() }
+    val sections = measurementSections(readOnly)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
-        BackBar(onBack, "Body measurements")
+        BackBar(onBack, "Body measurements") { ArrangeAction(FeatureScreens.MEASUREMENTS, "Body measurements", sections) }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            when {
-                state.loading && state.latest.isEmpty() -> Loading()
-                state.error != null && state.latest.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = onRetry)
-                state.latest.isNotEmpty() -> InfoCard("Latest", icon = Icons.Rounded.Straighten) {
-                    BODY_MEASUREMENTS.forEach { m ->
-                        val s = state.latest[m] ?: return@forEach
-                        val points = state.series[m].orEmpty()
-                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(m.label, style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    CareFormat.date(Instant.ofEpochMilli(s.start).atZone(zone).toLocalDate()),
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (points.size >= 2) {
-                                LineChart(
-                                    points.map { MeasurementFormat.value(it.v, units) }, height = 36.dp, dots = false,
-                                    color = com.health.app.ui.theme.AppTheme.data.fat,
-                                    modifier = Modifier.width(80.dp).semantics { contentDescription = "${m.label} over the last year" },
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 12.dp)) {
-                                Text(MeasurementFormat.length(s.value, units), style = MaterialTheme.typography.titleMedium)
-                                points.takeIf { it.size >= 2 }?.let { p -> MeasurementFormat.change(p.first().v, p.last().v, units) }?.let {
-                                    Text("$it in a year", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-                }
-                else -> Hint("Nothing measured yet. Measurements show here, and with your weight in reports and exports.", Modifier.padding(horizontal = 4.dp))
-            }
-            if (!readOnly) {
-                InfoCard("Measure now") {
-                    Hint("Fill in any you like. Measure at the same spot each time, relaxed, with the tape snug but not tight.")
-                    BODY_MEASUREMENTS.chunked(2).forEach { pair ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                            pair.forEach { m ->
-                                NumberField(typed[m].orEmpty(), { typed[m] = it.take(6) }, m.label, Modifier.weight(1f), suffix = MeasurementFormat.unit(units))
-                            }
-                        }
-                    }
-                    val ready = MeasurementFormat.inputs(typed, units, 0).isNotEmpty()
-                    Button(enabled = ready, onClick = { onSave(typed.toMap()); typed.clear() }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Save") }
+            Sections(arrangedIn(FeatureScreens.MEASUREMENTS, sections)) { id ->
+                when (id) {
+                    "latest" -> LatestMeasurements(state, units, zone, onRetry)
+                    "measure" -> MeasureNow(typed, units, onSave)
                 }
             }
         }
+    }
+}
+
+/** The latest of each measurement, with its year in a small chart. */
+@Composable
+private fun LatestMeasurements(state: MeasurementsState, units: Units, zone: ZoneId, onRetry: () -> Unit) {
+    when {
+        state.loading && state.latest.isEmpty() -> Loading()
+        state.error != null && state.latest.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = onRetry)
+        state.latest.isNotEmpty() -> InfoCard("Latest", icon = Icons.Rounded.Straighten) {
+            BODY_MEASUREMENTS.forEach { m ->
+                val s = state.latest[m] ?: return@forEach
+                val points = state.series[m].orEmpty()
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(m.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            CareFormat.date(Instant.ofEpochMilli(s.start).atZone(zone).toLocalDate()),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (points.size >= 2) {
+                        LineChart(
+                            points.map { MeasurementFormat.value(it.v, units) }, height = 36.dp, dots = false,
+                            color = com.health.app.ui.theme.AppTheme.data.fat,
+                            modifier = Modifier.width(80.dp).semantics { contentDescription = "${m.label} over the last year" },
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 12.dp)) {
+                        Text(MeasurementFormat.length(s.value, units), style = MaterialTheme.typography.titleMedium)
+                        points.takeIf { it.size >= 2 }?.let { p -> MeasurementFormat.change(p.first().v, p.last().v, units) }?.let {
+                            Text("$it in a year", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+        else -> Hint("Nothing measured yet. Measurements show here, and with your weight in reports and exports.", Modifier.padding(horizontal = 4.dp))
+    }
+}
+
+/** A measurement or several, typed in now. */
+@Composable
+private fun MeasureNow(typed: MutableMap<Metric, String>, units: Units, onSave: (Map<Metric, String>) -> Unit) {
+    InfoCard("Measure now") {
+        Hint("Fill in any you like. Measure at the same spot each time, relaxed, with the tape snug but not tight.")
+        BODY_MEASUREMENTS.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                pair.forEach { m ->
+                    NumberField(typed[m].orEmpty(), { typed[m] = it.take(6) }, m.label, Modifier.weight(1f), suffix = MeasurementFormat.unit(units))
+                }
+            }
+        }
+        val ready = MeasurementFormat.inputs(typed, units, 0).isNotEmpty()
+        Button(enabled = ready, onClick = { onSave(typed.toMap()); typed.clear() }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Save") }
     }
 }

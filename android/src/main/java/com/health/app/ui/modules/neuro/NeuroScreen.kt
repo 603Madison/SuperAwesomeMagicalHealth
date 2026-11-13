@@ -26,7 +26,6 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.SelfImprovement
-import androidx.compose.material.icons.rounded.Spa
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.Tune
@@ -79,6 +78,15 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.ProgressBar
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.TitleAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.OpenChevron
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.Sections
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Edit
 import com.health.app.ui.components.shownFields
 import com.health.app.ui.modules.NavRow
 import com.health.app.ui.modules.StepScale
@@ -160,42 +168,76 @@ fun NeuroRoute(open: (String) -> Unit) {
     )
 }
 
+/** Whether the big buttons at the top have anything to offer. */
+fun quickShown(fields: Set<String>, readOnly: Boolean): Boolean =
+    Fields.NEURO_CARDS in fields || (!readOnly && (Fields.NEURO_OVERLOAD in fields || Fields.NEURO_SENSORY in fields || Fields.NEURO_FOCUS in fields || checkInShown(fields)))
+
+/**
+ * Autism & ADHD's sections in the default order (the sections of [FeatureScreens.NEURO]), for the
+ * tools the person has on: the things wanted fastest first.
+ */
+fun neuroSections(fields: Set<String>, readOnly: Boolean = false): List<ArrangeItem> = buildList {
+    fun on(key: String) = key in fields
+    if (quickShown(fields, readOnly)) add(ArrangeItem("quick", "Quick buttons"))
+    if (on(Fields.NEURO_BURNOUT) || on(Fields.NEURO_MASKING) || on(Fields.NEURO_OVERLOAD)) add(ArrangeItem("lookafter", "Look after yourself"))
+    add(ArrangeItem("energy", "Energy today"))
+    if (on(Fields.NEURO_OVERLOAD) || on(Fields.NEURO_SENSORY)) add(ArrangeItem("overload", "Times things got too much"))
+    add(ArrangeItem("insights", "What we've noticed"))
+    if (checkInShown(fields)) add(ArrangeItem("checkins", "Check-ins"))
+    if (on(Fields.NEURO_FOCUS) || on(Fields.NEURO_TIME)) add(ArrangeItem("focus", "Focus"))
+    if (on(Fields.NEURO_ROUTINES)) add(ArrangeItem("routines", "Routines"))
+    if (on(Fields.NEURO_CARDS)) add(ArrangeItem("cards", "Communication cards"))
+    if (on(Fields.NEURO_ABOUT_ME)) add(ArrangeItem("about", "About me"))
+    if (on(Fields.NEURO_CALM) && !readOnly) add(ArrangeItem("calm", "Calm mode"))
+    if (!readOnly && NEURO_TOOLS.any { it.first !in fields }) add(ArrangeItem("more", "More you can turn on"))
+}
+
 @Composable
 fun NeuroHome(state: NeuroState, fields: Set<String>, today: LocalDate, zone: ZoneId, calm: Boolean, actions: NeuroActions) {
     val readOnly = LocalReadOnly.current
     var quick by remember { mutableStateOf(false) }
     fun shows(key: String) = key in fields
+    val sections = neuroSections(fields, readOnly)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Autism & ADHD", "Your senses, energy and tools")
+        ScreenTitle("Autism & ADHD", "Your senses, energy and tools") {
+            ArrangeAction(FeatureScreens.NEURO, "Autism & ADHD", sections)
+        }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // The things wanted fastest come first, big.
-            QuickRow(fields, readOnly, onCards = { actions.open("neuro/cards") }, onTooMuch = { quick = true }, onFocus = { actions.open("neuro/focus") }, onCheckIn = { actions.open("neuro/checkin") })
+            val shown = arrangedIn(FeatureScreens.NEURO, sections)
+            val quickRow: @Composable () -> Unit = {
+                QuickRow(fields, readOnly, onCards = { actions.open("neuro/cards") }, onTooMuch = { quick = true }, onFocus = { actions.open("neuro/focus") }, onCheckIn = { actions.open("neuro/checkin") })
+            }
             when {
-                state.loading && state.summary == null -> Loading()
-                state.error != null && state.summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                else -> {
-                    state.summary?.burnoutRisk?.takeIf { shows(Fields.NEURO_BURNOUT) || shows(Fields.NEURO_MASKING) || shows(Fields.NEURO_OVERLOAD) }?.let { risk ->
-                        InfoCard("Look after yourself", icon = Icons.Rounded.Favorite, iconTint = AppTheme.status.warn) {
-                            Text(risk, style = MaterialTheme.typography.bodyMedium)
+                // The big buttons never wait for the rest.
+                state.loading && state.summary == null -> { if ("quick" in shown) quickRow(); Loading() }
+                state.error != null && state.summary == null -> {
+                    if ("quick" in shown) quickRow()
+                    ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
+                }
+                else -> Sections(shown) { id ->
+                    when (id) {
+                        "quick" -> quickRow()
+                        "lookafter" -> state.summary?.burnoutRisk?.let { risk ->
+                            InfoCard("Look after yourself", icon = Icons.Rounded.Favorite, iconTint = AppTheme.status.warn) {
+                                Text(risk, style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
-                    }
-                    EnergyCard(state.energyOn(today), shows(Fields.NEURO_SOCIAL), readOnly) { actions.open("neuro/energy") }
-                    if (shows(Fields.NEURO_OVERLOAD) || shows(Fields.NEURO_SENSORY)) OverloadCard(state, zone, readOnly, actions)
-                    state.summary?.patterns?.forEach { InsightCard(it) }
-                    if (checkInShown(fields)) CheckInCard(state, zone, readOnly) { actions.open("neuro/checkin") }
-                    if (shows(Fields.NEURO_FOCUS) || shows(Fields.NEURO_TIME)) FocusCard(state, shows(Fields.NEURO_TIME), readOnly) { actions.open("neuro/focus") }
-                    if (shows(Fields.NEURO_ROUTINES)) RoutinesCard(state, today, readOnly, actions.open)
-                    if (shows(Fields.NEURO_CARDS)) CardsPreview(state, actions.open)
-                    if (shows(Fields.NEURO_ABOUT_ME)) AboutMeCard(state, fields, readOnly, actions.open)
-                    if (shows(Fields.NEURO_CALM) && !readOnly) {
-                        InfoCard("Calm mode", icon = Icons.Rounded.Spa) {
+                        "energy" -> EnergyCard(state.energyOn(today), shows(Fields.NEURO_SOCIAL), readOnly) { actions.open("neuro/energy") }
+                        "overload" -> OverloadCard(state, zone, readOnly, actions)
+                        "insights" -> state.summary?.patterns?.forEach { InsightCard(it) }
+                        "checkins" -> CheckInCard(state, zone, readOnly) { actions.open("neuro/checkin") }
+                        "focus" -> FocusCard(state, shows(Fields.NEURO_TIME), readOnly) { actions.open("neuro/focus") }
+                        "routines" -> RoutinesCard(state, today, readOnly, actions.open)
+                        "cards" -> CardsPreview(state, actions.open)
+                        "about" -> AboutMeCard(state, fields, readOnly, actions.open)
+                        "calm" -> InfoCard(null) {
                             LabeledSwitch(
                                 "Calm mode", calm, actions.setCalm,
                                 subtitle = "Less motion, no glow behind the pages, and softer colours everywhere in the app. On this phone only.",
                             )
                         }
+                        "more" -> MoreTools(fields, actions.showField)
                     }
-                    if (!readOnly) MoreTools(fields, actions.showField)
                 }
             }
             Hint(
@@ -257,8 +299,8 @@ fun QuickOverload(onLog: (OverloadKind, Int) -> Unit, onDetail: () -> Unit) {
 @Composable
 fun EnergyCard(day: EnergyDay?, social: Boolean, readOnly: Boolean, onOpen: () -> Unit) {
     InfoCard(
-        "Energy today", icon = Icons.Rounded.BatteryChargingFull,
-        trailing = { if (!readOnly) TextButton(onClick = onOpen) { Text(if (day?.startWith == null) "Plan today" else "Update") } },
+        "Energy today", icon = Icons.Rounded.BatteryChargingFull, onClick = onOpen.takeIf { !readOnly },
+        trailing = if (readOnly) null else ({ OpenChevron(if (day?.startWith == null) "Plan today" else "Update today's energy", onOpen) }),
     ) {
         if (day == null || (day.startWith == null && day.spends.isEmpty() && day.socialBattery == null)) {
             Hint("Start the day with a number of spoons (or any unit you like), then note what uses them and what gives some back.")
@@ -284,10 +326,10 @@ private fun OverloadCard(state: NeuroState, zone: ZoneId, readOnly: Boolean, act
     val s = state.summary
     InfoCard(
         "Times things got too much", icon = Icons.Rounded.Waves,
-        trailing = { if (!readOnly) TextButton(onClick = { actions.open("neuro/overload") }) { Text("Log") } },
+        trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Log a time things got too much") { actions.open("neuro/overload") } }),
     ) {
         if (s == null || s.overloads == 0) {
-            Hint("None logged in the last 30 days. When things get too much, logging it helps you see what sets it off and what helps.")
+            Hint("None in the last 30 days. Logging them shows what sets them off, and what helps.")
         } else {
             Text("${s.overloads} in the last ${s.days} days", style = MaterialTheme.typography.titleMedium)
             if (s.byKind.isNotEmpty()) Hint(s.byKind.joinToString(" · ") { "${it.count} ${it.name.lowercase()}" })
@@ -315,7 +357,7 @@ private fun DetailLine(label: String, value: String) {
 @Composable
 private fun CheckInCard(state: NeuroState, zone: ZoneId, readOnly: Boolean, onCheckIn: () -> Unit) {
     val s = state.summary
-    InfoCard("Check-ins", icon = Icons.Rounded.Insights, trailing = { if (!readOnly) TextButton(onClick = onCheckIn) { Text("Check in") } }) {
+    InfoCard("Check-ins", icon = Icons.Rounded.Insights, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Check in", onCheckIn) })) {
         val last = state.checkIns.firstOrNull()
         if (last == null) {
             Hint("A minute to notice masking, how loud the day's been, and how your brain's working today. As often as you like.")
@@ -334,7 +376,7 @@ private fun CheckInCard(state: NeuroState, zone: ZoneId, readOnly: Boolean, onCh
 @Composable
 private fun FocusCard(state: NeuroState, time: Boolean, readOnly: Boolean, onFocus: () -> Unit) {
     val s: NeuroSummary? = state.summary
-    InfoCard("Focus", icon = Icons.Rounded.Timer, trailing = { if (!readOnly) TextButton(onClick = onFocus) { Text("Start") } }) {
+    InfoCard("Focus", icon = Icons.Rounded.Timer, onClick = onFocus.takeIf { !readOnly }, trailing = if (readOnly) null else ({ OpenChevron("Focus timer", onFocus) })) {
         val minutes = s?.focusMinutes ?: 0
         Text(if (minutes > 0) "${FocusMath.mins(minutes)} in the last ${s?.days ?: 30} days" else "No focus sessions yet", style = MaterialTheme.typography.titleMedium)
         Hint("A timer for a task, body doubling, or time for a special interest.")
@@ -350,7 +392,7 @@ private fun FocusCard(state: NeuroState, time: Boolean, readOnly: Boolean, onFoc
 
 @Composable
 private fun RoutinesCard(state: NeuroState, today: LocalDate, readOnly: Boolean, open: (String) -> Unit) {
-    InfoCard("Routines", icon = Icons.Rounded.Checklist, trailing = { TextButton(onClick = { open("neuro/routines") }) { Text("All") } }) {
+    InfoCard("Routines", icon = Icons.Rounded.Checklist, trailing = { OpenChevron("All routines") { open("neuro/routines") } }) {
         val active = state.routines.filter { it.active }
         if (active.isEmpty()) {
             Hint("A routine is a short checklist with how long each step takes, and a gentle reminder if you'd like one.")
@@ -370,7 +412,7 @@ private fun RoutinesCard(state: NeuroState, today: LocalDate, readOnly: Boolean,
 
 @Composable
 private fun CardsPreview(state: NeuroState, open: (String) -> Unit) {
-    InfoCard("Communication cards", icon = Icons.Rounded.TouchApp, trailing = { TextButton(onClick = { open("neuro/cards") }) { Text("Open") } }) {
+    InfoCard("Communication cards", icon = Icons.Rounded.TouchApp, trailing = { OpenChevron("Your cards") { open("neuro/cards") } }) {
         Hint("Big, clear cards to show someone when talking is hard.")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
             state.cards.take(3).forEach { card -> AssistChip(onClick = { open("neuro/cards?show=${card.id}") }, label = { Text(card.text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }) }
@@ -380,15 +422,12 @@ private fun CardsPreview(state: NeuroState, open: (String) -> Unit) {
 
 @Composable
 private fun AboutMeCard(state: NeuroState, fields: Set<String>, readOnly: Boolean, open: (String) -> Unit) {
-    InfoCard("About me", icon = Icons.Rounded.AssignmentInd) {
+    InfoCard("About me", icon = Icons.Rounded.AssignmentInd, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Edit, "Edit about me") { open("neuro/about") } })) {
         val p = state.profile
         Text(NeuroWords.describe(p) ?: "Who you are, how your senses work, how you like to communicate and what helps: in one place to show people.", style = MaterialTheme.typography.bodyMedium)
         if (p.whatHelps.isNotEmpty()) Hint("What helps: ${p.whatHelps.take(4).joinToString(", ")}")
         if (Fields.NEURO_INTERESTS in fields && p.interests.isNotEmpty()) Hint("Interests: ${p.interests.take(4).joinToString(", ")}")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-            if (!readOnly) OutlinedButton(onClick = { open("neuro/about") }) { Text("Edit") }
-            FilledTonalButton(onClick = { open("neuro/about/show") }) { Text("Show someone") }
-        }
+        FilledTonalButton(onClick = { open("neuro/about/show") }, modifier = Modifier.padding(top = 8.dp)) { Text("Show someone") }
     }
 }
 
@@ -417,24 +456,24 @@ fun openInApp(context: Context, route: String) {
 }
 
 /**
- * What Mind shows of Autism & ADHD: the way in, when it's on, and the energy budget when Mind's
- * energy budget field is on (the same days as Autism & ADHD's). Loads its own; draws nothing
- * where the app isn't running (as in screenshots).
+ * What Mind shows of Autism & ADHD, by [part] (each a section of Mind): "neuro", the way in, when
+ * it's on, and "energy", the energy budget when Mind's energy budget field is on (the same days as
+ * Autism & ADHD's). Loads its own; draws nothing where the app isn't running (as in screenshots).
  */
 @Composable
-fun MindNeuroSection() {
+fun MindNeuroSection(part: String) {
     val app = LocalContext.current.applicationContext as? HealthApp ?: return
     val c = app.container
     val fields = shownFields()
     val modules = com.health.app.ui.care.shownModules()
     val revision by c.revision.collectAsState()
     val context = LocalContext.current
-    val energy = Fields.MIND_ENERGY_BUDGET in fields
+    val energy = part == "energy" && Fields.MIND_ENERGY_BUDGET in fields
     var day by remember { mutableStateOf<EnergyDay?>(null) }
     LaunchedEffect(revision, energy) {
         if (energy) day = runCatching { c.ui.energyDays(1).firstOrNull { it.date == LocalDate.now(c.zone()).toString() } }.getOrNull()
     }
-    MindNeuroCards(Module.NEURO in modules, energy, day, LocalReadOnly.current, Fields.NEURO_SOCIAL in fields) { openInApp(context, it) }
+    MindNeuroCards(part == "neuro" && Module.NEURO in modules, energy, day, LocalReadOnly.current, Fields.NEURO_SOCIAL in fields) { openInApp(context, it) }
 }
 
 /** The cards Mind shows for Autism & ADHD and the energy budget. */

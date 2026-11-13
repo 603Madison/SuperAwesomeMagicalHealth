@@ -81,6 +81,19 @@ import com.health.app.ui.components.Pill
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.SectionTitle
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.components.showsField
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.TitleAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.OpenChevron
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.Sections
+import com.health.api.Fields
+import com.health.api.Module
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.modules.FaceScale
 import com.health.app.ui.modules.Moods
@@ -132,23 +145,46 @@ fun MindRoute(onJournal: () -> Unit, onNewJournal: (JournalKind) -> Unit, onChec
     val c = appContainer()
     val vm = viewModel { MindViewModel(c) }
     val state by vm.state.collectAsState()
-    MindHome(state, c.zone(), MindActions(vm::logMood, onJournal, onNewJournal, onCheck, onTool) { vm.load() })
+    MindHome(
+        state, c.zone(), MindActions(vm::logMood, onJournal, onNewJournal, onCheck, onTool) { vm.load() },
+        energy = showsField(Fields.MIND_ENERGY_BUDGET),
+        neuro = Module.NEURO in com.health.app.ui.care.shownModules(),
+    )
+}
+
+/**
+ * Mind's sections in the default order (the sections of [FeatureScreens.MIND]): the energy budget
+ * when its field is on, the way into Autism & ADHD when that's on, and no mood faces while viewing a share.
+ */
+fun mindSections(readOnly: Boolean = false, energy: Boolean = false, neuro: Boolean = false): List<ArrangeItem> = buildList {
+    if (!readOnly) add(ArrangeItem("feeling", "How are you feeling?"))
+    add(ArrangeItem("mood", "Mood"))
+    add(ArrangeItem("insights", "What we've noticed"))
+    add(ArrangeItem("tools", "Calm tools"))
+    if (energy) add(ArrangeItem("energy", "Energy today"))
+    if (neuro) add(ArrangeItem("neuro", "Autism & ADHD"))
+    add(ArrangeItem("journal", "Journal"))
+    add(ArrangeItem("checkins", "Check-ins"))
 }
 
 @Composable
-fun MindHome(state: MindState, zone: ZoneId, actions: MindActions, initialMood: Int? = null) {
+fun MindHome(state: MindState, zone: ZoneId, actions: MindActions, initialMood: Int? = null, energy: Boolean = false, neuro: Boolean = false) {
     var moodSheet by remember { mutableStateOf(initialMood) }
     var support by remember { mutableStateOf(false) }
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    val sections = mindSections(readOnly, energy, neuro)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Mind", "How you feel, and what helps") {
             TextButton(onClick = { support = true }) {
                 Icon(Icons.Rounded.Support, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Need help now?")
+                Text("Help now")
             }
+            ArrangeAction(FeatureScreens.MIND, "Mind", sections)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (!com.health.app.ui.care.LocalReadOnly.current) {
+            val shown = arrangedIn(FeatureScreens.MIND, sections)
+            val feeling: @Composable () -> Unit = {
                 AppCard(padding = 18.dp) {
                     Text("How are you feeling?", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
@@ -156,21 +192,27 @@ fun MindHome(state: MindState, zone: ZoneId, actions: MindActions, initialMood: 
                 }
             }
             when {
-                state.loading && state.summary == null -> Loading()
-                state.error != null && state.summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                else -> {
-                    MoodCard(state, zone)
-                    state.summary?.patterns?.forEach { InsightCard(it) }
-                    ToolsCard(actions.openTool)
-                    // Autism & ADHD and the energy budget, when they're on (ui/modules/neuro).
-                    com.health.app.ui.modules.neuro.MindNeuroSection()
-                    JournalCard(state.journal, zone, actions)
-                    CheckInsCard(state, actions.openCheck)
+                // Logging a mood never waits for the rest.
+                state.loading && state.summary == null -> { if ("feeling" in shown) feeling(); Loading() }
+                state.error != null && state.summary == null -> {
+                    if ("feeling" in shown) feeling()
+                    ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
+                }
+                else -> Sections(shown) { id ->
+                    when (id) {
+                        "feeling" -> feeling()
+                        "mood" -> MoodCard(state, zone)
+                        "insights" -> state.summary?.patterns?.forEach { InsightCard(it) }
+                        "tools" -> ToolsCard(actions.openTool)
+                        // Autism & ADHD and the energy budget (ui/modules/neuro).
+                        "energy", "neuro" -> com.health.app.ui.modules.neuro.MindNeuroSection(id)
+                        "journal" -> JournalCard(state.journal, zone, readOnly, actions)
+                        "checkins" -> CheckInsCard(state, actions.openCheck)
+                    }
                 }
             }
             Hint(
-                "This is a place to notice how you're doing. It isn't a diagnosis or a replacement for care: " +
-                    "if things feel heavy, a doctor, therapist or someone you trust can help.",
+                "A place to notice how you're doing, not a diagnosis. If things feel heavy, a doctor, therapist or someone you trust can help.",
                 Modifier.padding(horizontal = 4.dp),
             )
         }
@@ -250,23 +292,26 @@ fun toolIcon(kind: String) = when (kind) {
 }
 
 @Composable
-private fun JournalCard(entries: List<JournalEntry>, zone: ZoneId, actions: MindActions) {
-    InfoCard("Journal", icon = Icons.Rounded.EditNote, trailing = {
-        if (entries.isNotEmpty()) TextButton(onClick = actions.openJournal) { Text("All entries") }
-    }) {
-        Hint("Private to you, and encrypted on your server.")
-        Spacer(Modifier.height(10.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            JournalKind.entries.forEach { kind ->
-                FilledTonalButton(onClick = { actions.newJournal(kind) }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(kind.label)
+private fun JournalCard(entries: List<JournalEntry>, zone: ZoneId, readOnly: Boolean, actions: MindActions) {
+    var choosing by remember { mutableStateOf(false) }
+    InfoCard("Journal", icon = Icons.Rounded.EditNote, onClick = actions.openJournal.takeIf { entries.isNotEmpty() }, trailing = {
+        if (!readOnly) {
+            Box {
+                TitleAction(Icons.Rounded.Add, "Write something") { choosing = true }
+                DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
+                    JournalKind.entries.forEach { kind ->
+                        DropdownMenuItem(text = { Text(kind.label) }, onClick = { choosing = false; actions.newJournal(kind) })
+                    }
                 }
             }
         }
-        entries.take(3).forEach { e ->
-            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        if (entries.isNotEmpty()) OpenChevron("All entries", actions.openJournal)
+    }) {
+        if (entries.isEmpty()) {
+            Hint(if (readOnly) "Nothing written yet." else "Private to you. Tap + for a free entry, a gratitude list or a thought record.")
+        }
+        entries.take(3).forEachIndexed { i, e ->
+            if (i > 0) HorizontalDivider(Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outlineVariant)
             JournalPreview(e, zone)
         }
     }
@@ -291,7 +336,7 @@ fun JournalPreview(e: JournalEntry, zone: ZoneId, modifier: Modifier = Modifier)
 @Composable
 private fun CheckInsCard(state: MindState, onCheck: (Screener) -> Unit) {
     InfoCard("Check-ins", icon = Icons.Rounded.Psychology) {
-        Hint("Short, widely used questionnaires about the last two weeks. Every few weeks is plenty.")
+        Hint("Short questionnaires about the last two weeks. Every few weeks is plenty.")
         Spacer(Modifier.height(6.dp))
         com.health.app.ui.care.StageMath.screenersFor(state.stage).forEach { s ->
             val definition = state.screeners.firstOrNull { it.id == s }

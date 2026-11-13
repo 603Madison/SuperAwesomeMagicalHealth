@@ -40,11 +40,21 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.AddCircle
+import androidx.compose.material.icons.rounded.Today
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.TitleAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.OpenChevron
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,7 +85,6 @@ import com.health.app.net.continenceSettings
 import com.health.app.net.supplyStatus
 import com.health.app.reminders.BladderTrainingPlan
 import com.health.app.ui.Format
-import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.AxisLabels
 import com.health.app.ui.components.BarChart
 import com.health.app.ui.components.ErrorCard
@@ -231,70 +240,88 @@ fun quickEntry(kind: ContinenceKind, settings: ContinenceSettings, supplies: Lis
     return ContinenceEntry(now, kind, supplyId = usual.takeIf { kind == ContinenceKind.PAD_CHANGE })
 }
 
+/**
+ * The diary's sections in the default order (the sections of [FeatureScreens.CONTINENCE]), for the
+ * fields that are on. Signs of an infection aren't among them: they always come first.
+ */
+fun continenceSections(fields: Set<String> = Fields.DEFAULTS, readOnly: Boolean = false): List<ArrangeItem> = buildList {
+    if (!readOnly) add(ArrangeItem("log", "Log"))
+    add(ArrangeItem("today", "Today"))
+    if (Fields.CONTINENCE_SUPPLIES in fields) add(ArrangeItem("lowsupplies", "Supplies running low"))
+    add(ArrangeItem("summary", "Last two weeks"))
+    add(ArrangeItem("progress", "How it's going"))
+    add(ArrangeItem("insights", "What we've noticed"))
+    if (Fields.CONTINENCE_BLADDER_TRAINING in fields) add(ArrangeItem("training", "Bladder training"))
+    if (Fields.CONTINENCE_PELVIC_FLOOR in fields && !readOnly) add(ArrangeItem("pelvicfloor", "Pelvic floor exercises"))
+    add(ArrangeItem("more", "Supplies, check-in and settings"))
+}
+
 @Composable
 fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceActions, fields: Set<String> = Fields.DEFAULTS) {
     var editing by remember { mutableStateOf<ContinenceEntry?>(null) }
     val readOnly = com.health.app.ui.care.LocalReadOnly.current
     val supplies = state.supplies.map { it.supply }
+    val sections = continenceSections(fields, readOnly)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Bladder & bowel", "A diary for you, and for your doctor or physio") {
-            TextButton(onClick = actions.share) {
-                Icon(Icons.Rounded.Share, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("3-day diary")
-            }
+        ScreenTitle("Bladder & bowel", "A diary for you and your doctor or physio") {
+            IconButton(onClick = actions.share) { Icon(Icons.Rounded.Share, "Share a 3-day diary") }
+            ArrangeAction(FeatureScreens.CONTINENCE, "Bladder & bowel", sections)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (!readOnly) AppCard(padding = 14.dp) {
-                Text("Log", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                QuickButtons({ kind -> actions.save(quickEntry(kind, state.settings, state.supplies)) }, quickButtonsFor(state.settings, fields))
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Hint("One tap logs it now. Tap an entry below to add details.", Modifier.weight(1f))
-                    TextButton(onClick = { editing = ContinenceEntry(System.currentTimeMillis(), ContinenceKind.URINATION) }) { Text("With details") }
+            val shown = arrangedIn(FeatureScreens.CONTINENCE, sections)
+            val log: @Composable () -> Unit = {
+                InfoCard("Log", icon = Icons.Rounded.AddCircle, trailing = {
+                    TitleAction(Icons.Rounded.EditNote, "Log with details") { editing = ContinenceEntry(System.currentTimeMillis(), ContinenceKind.URINATION) }
+                }) {
+                    QuickButtons({ kind -> actions.save(quickEntry(kind, state.settings, state.supplies)) }, quickButtonsFor(state.settings, fields))
+                    Hint("One tap logs it now; tap an entry to add details.", Modifier.padding(top = 8.dp))
                 }
             }
             when {
-                state.loading && state.summary == null -> Loading()
-                state.error != null && state.summary == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
+                // Logging never waits for the rest.
+                state.loading && state.summary == null -> { if ("log" in shown) log(); Loading() }
+                state.error != null && state.summary == null -> {
+                    if ("log" in shown) log()
+                    ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
+                }
                 else -> {
                     // Signs of an infection come first, and stay in plain sight.
                     val warnings = state.summary?.patterns.orEmpty().filter { it.tone == "warn" }
                     warnings.forEach { InsightCard(it) }
                     if (warnings.isEmpty() && ContinenceText.infectionSigns(state.entries)) InfectionNudge()
-                    TodayTimeline(state.todays(zone), zone, supplies) { if (!readOnly) editing = it }
-                    if (Fields.CONTINENCE_SUPPLIES in fields) {
-                        val low = ContinenceText.lowFor(state.supplies, setOf(SupplyCategory.CONTINENCE, SupplyCategory.OTHER))
-                        if (low.isNotEmpty()) LowSuppliesCard(low) { actions.open("supplies/continence") }
-                    }
-                    state.summary?.let { SummaryCard(it) }
-                    state.progress?.let { ProgressTeaser(it) { actions.open("continence/progress") } }
-                    state.summary?.patterns.orEmpty().filter { it.tone != "warn" }.forEach { InsightCard(it) }
-                    if (Fields.CONTINENCE_BLADDER_TRAINING in fields) {
-                        BladderTrainingCard(state.settings, state.today, readOnly) { actions.open("continence/settings") }
-                    }
-                    if (Fields.CONTINENCE_PELVIC_FLOOR in fields && !readOnly) {
-                        InfoCard("Pelvic floor exercises", icon = Icons.Rounded.SelfImprovement) {
-                            Hint("A few minutes a day strengthens the muscles that hold urine in. A guide squeezes and relaxes with you.")
-                            Spacer(Modifier.height(10.dp))
-                            FilledTonalButton(onClick = actions.pelvicFloor) { Text("Start a set") }
+                    Sections(shown) { id ->
+                        when (id) {
+                            "log" -> log()
+                            "today" -> TodayTimeline(state.todays(zone), zone, supplies) { if (!readOnly) editing = it }
+                            "lowsupplies" -> {
+                                val low = ContinenceText.lowFor(state.supplies, setOf(SupplyCategory.CONTINENCE, SupplyCategory.OTHER))
+                                if (low.isNotEmpty()) LowSuppliesCard(low) { actions.open("supplies/continence") }
+                            }
+                            "summary" -> state.summary?.let { SummaryCard(it) }
+                            "progress" -> state.progress?.let { ProgressTeaser(it) { actions.open("continence/progress") } }
+                            "insights" -> state.summary?.patterns.orEmpty().filter { it.tone != "warn" }.forEach { InsightCard(it) }
+                            "training" -> BladderTrainingCard(state.settings, state.today, readOnly) { actions.open("continence/settings") }
+                            "pelvicfloor" -> InfoCard("Pelvic floor exercises", icon = Icons.Rounded.SelfImprovement) {
+                                Hint("A few minutes a day strengthens the muscles that hold urine in. A guide squeezes and relaxes with you.")
+                                Spacer(Modifier.height(10.dp))
+                                FilledTonalButton(onClick = actions.pelvicFloor) { Text("Start a set") }
+                            }
+                            "more" -> InfoCard(null) {
+                                if (state.progress == null) NavRow(Icons.AutoMirrored.Rounded.TrendingUp, "How it's going", "Getting better or worse, week by week", onClick = { actions.open("continence/progress") })
+                                if (Fields.CONTINENCE_SUPPLIES in fields) {
+                                    NavRow(Icons.Rounded.Inventory2, "Supplies", "Pads, briefs and the rest: what's on hand", onClick = { actions.open("supplies/continence") })
+                                }
+                                if (Fields.CONTINENCE_BOTHER in fields) {
+                                    NavRow(Icons.AutoMirrored.Rounded.EventNote, "Weekly check-in", "How much it's bothered you", onClick = { actions.open("continence/check-in") })
+                                }
+                                if (!readOnly) NavRow(Icons.Rounded.Settings, "Diary settings", "Quick buttons, your own words and fields, night hours", onClick = { actions.open("continence/settings") })
+                            }
                         }
-                    }
-                    InfoCard(null) {
-                        if (state.progress == null) NavRow(Icons.AutoMirrored.Rounded.TrendingUp, "How it's going", "Getting better or worse, week by week", onClick = { actions.open("continence/progress") })
-                        if (Fields.CONTINENCE_SUPPLIES in fields) {
-                            NavRow(Icons.Rounded.Inventory2, "Supplies", "Pads, briefs and the rest: what's on hand", onClick = { actions.open("supplies/continence") })
-                        }
-                        if (Fields.CONTINENCE_BOTHER in fields) {
-                            NavRow(Icons.AutoMirrored.Rounded.EventNote, "Weekly check-in", "How much it's bothered you", onClick = { actions.open("continence/check-in") })
-                        }
-                        if (!readOnly) NavRow(Icons.Rounded.Settings, "Diary settings", "Quick buttons, your own words and fields, night hours", onClick = { actions.open("continence/settings") })
                     }
                 }
             }
             Hint(
-                "Leaks are common and treatable. A doctor, continence nurse or pelvic health physio can help, and this diary is what they'll often ask for.",
+                "Leaks are common and treatable. A continence nurse or pelvic health physio can help.",
                 Modifier.padding(horizontal = 4.dp),
             )
         }
@@ -328,7 +355,7 @@ fun entryDetail(e: ContinenceEntry): String = ContinenceText.detail(e)
 
 @Composable
 private fun TodayTimeline(entries: List<ContinenceEntry>, zone: ZoneId, supplies: List<com.health.api.Supply>, onOpen: (ContinenceEntry) -> Unit) {
-    InfoCard("Today") {
+    InfoCard("Today", icon = Icons.Rounded.Today) {
         if (entries.isEmpty()) {
             Hint("Nothing logged today yet.")
             return@InfoCard
@@ -419,10 +446,12 @@ fun verdictColor(v: Verdict): Color = when (v) {
 private fun ProgressTeaser(p: ContinenceProgress, onOpen: () -> Unit) {
     InfoCard(
         "How it's going", icon = Icons.AutoMirrored.Rounded.TrendingUp, onClick = onOpen,
-        trailing = { Pill(p.verdict.label, verdictColor(p.verdict)) },
+        trailing = {
+            Pill(p.verdict.label, verdictColor(p.verdict))
+            OpenChevron("Week by week", onOpen)
+        },
     ) {
         Text(if (ProgressText.enough(p)) p.headline else ProgressText.notEnough(p), style = MaterialTheme.typography.bodyMedium)
-        TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) { Text("Week by week") }
     }
 }
 
@@ -430,7 +459,10 @@ private fun ProgressTeaser(p: ContinenceProgress, onOpen: () -> Unit) {
 private fun BladderTrainingCard(settings: ContinenceSettings, today: LocalDate, readOnly: Boolean, onOpen: () -> Unit) {
     val t = settings.bladderTraining
     if (!t.enabled && readOnly) return
-    InfoCard("Bladder training", icon = Icons.Rounded.Alarm) {
+    InfoCard(
+        "Bladder training", icon = Icons.Rounded.Alarm, onClick = onOpen.takeIf { !readOnly },
+        trailing = if (readOnly) null else ({ OpenChevron(if (t.enabled) "Change bladder training" else "Set up bladder training", onOpen) }),
+    ) {
         if (t.enabled) {
             Text(BladderTrainingPlan.today(t, today), style = MaterialTheme.typography.bodyLarge)
             val interval = BladderTrainingPlan.interval(t, today)
@@ -441,6 +473,5 @@ private fun BladderTrainingCard(settings: ContinenceSettings, today: LocalDate, 
         } else {
             Hint("Stretch the time between trips a little at a time, with gentle reminders. It often helps with sudden urges.")
         }
-        if (!readOnly) TextButton(onClick = onOpen, modifier = Modifier.align(Alignment.End)) { Text(if (t.enabled) "Change" else "Set it up") }
     }
 }

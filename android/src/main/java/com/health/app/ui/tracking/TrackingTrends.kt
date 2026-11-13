@@ -20,6 +20,7 @@ import com.health.api.StressState
 import com.health.api.TrendDay
 import com.health.api.VitalsTargets
 import com.health.app.ui.Format
+import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.components.BarChart
 import com.health.app.ui.components.LegendItem
 import com.health.app.ui.theme.AppTheme
@@ -29,12 +30,27 @@ import kotlin.math.roundToInt
 private fun average(values: List<Double?>): Double? = values.filterNotNull().takeIf { it.isNotEmpty() }?.average()
 
 /**
- * Trends for blood pressure and glucose, stress, drinks, symptoms and habits: each when its
- * feature is on and there's something in the range to show.
+ * Trends' charts for blood pressure and glucose, stress, drinks, symptoms and habits, for the
+ * features that are on: sections of Trends, by id.
  */
+fun trackingTrendSections(modules: Set<Module>): List<ArrangeItem> = buildList {
+    if (Module.VITALS in modules) {
+        add(ArrangeItem("bp", "Blood pressure"))
+        add(ArrangeItem("glucose", "Glucose"))
+    }
+    if (Module.ACTIVITY in modules) add(ArrangeItem("stress", "Stress and recovery"))
+    if (Module.NUTRITION in modules) {
+        add(ArrangeItem("caffeine", "Caffeine"))
+        add(ArrangeItem("alcohol", "Alcohol"))
+    }
+    if (Module.SYMPTOMS in modules) add(ArrangeItem("symptoms", "Symptoms"))
+    if (Module.HABITS in modules) add(ArrangeItem("habits", "Habits"))
+}
+
+/** One of [trackingTrendSections]' charts, by id: drawn when there's something in the range to show. */
 @Composable
-fun TrackingTrends(days: List<TrendDay>, labels: Triple<String, String?, String>, modules: Set<Module>, targets: VitalsTargets = VitalsTargets()) {
-    if (Module.VITALS in modules && days.any { it.systolic != null }) {
+fun TrackingTrend(id: String, days: List<TrendDay>, labels: Triple<String, String?, String>, targets: VitalsTargets = VitalsTargets()) {
+    if (id == "bp" && days.any { it.systolic != null }) {
         val sys = average(days.map { it.systolic })?.roundToInt()
         val dia = average(days.map { it.diastolic })?.roundToInt()
         val sysColor = AppTheme.data.heart
@@ -51,7 +67,7 @@ fun TrackingTrends(days: List<TrendDay>, labels: Triple<String, String?, String>
             }
         }
     }
-    if (Module.VITALS in modules && days.any { it.glucose != null }) {
+    if (id == "glucose" && days.any { it.glucose != null }) {
         val unit = targets.glucoseUnit
         ChartCard(
             "Glucose", Icons.Rounded.Bloodtype, MaterialTheme.colorScheme.tertiary,
@@ -65,7 +81,7 @@ fun TrackingTrends(days: List<TrendDay>, labels: Triple<String, String?, String>
             )
         }
     }
-    if (Module.ACTIVITY in modules && days.any { it.stressedMinutes != null || it.restoredMinutes != null }) {
+    if (id == "stress" && days.any { it.stressedMinutes != null || it.restoredMinutes != null }) {
         val stressed = stressColor(StressState.STRESSED)
         val restored = stressColor(StressState.RESTORED)
         ChartCard(
@@ -83,20 +99,20 @@ fun TrackingTrends(days: List<TrendDay>, labels: Triple<String, String?, String>
             }
         }
     }
-    if (Module.NUTRITION in modules && days.any { (it.caffeineMg ?: 0.0) > 0 }) {
+    if (id == "caffeine" && days.any { (it.caffeineMg ?: 0.0) > 0 }) {
         ChartCard(
             "Caffeine", Icons.Rounded.LocalCafe, AppTheme.data.carbs,
             average(days.map { it.caffeineMg })?.let { "${it.roundToInt()} mg" }, "a day", labels,
         ) { BarChart(days.map { it.caffeineMg }, color = AppTheme.data.carbs) }
     }
-    if (Module.NUTRITION in modules && days.any { (it.standardDrinks ?: 0.0) > 0 }) {
+    if (id == "alcohol" && days.any { (it.standardDrinks ?: 0.0) > 0 }) {
         ChartCard(
             "Alcohol", Icons.Rounded.LocalBar, AppTheme.data.protein,
             Format.compact(days.sumOf { it.standardDrinks ?: 0.0 }), "standard drinks in these ${days.size} days", labels,
             footer = "${days.count { (it.standardDrinks ?: 0.0) == 0.0 }} days without",
         ) { BarChart(days.map { it.standardDrinks }, color = AppTheme.data.protein) }
     }
-    if (Module.SYMPTOMS in modules && days.any { it.symptomWorst != null || it.migraine == true }) {
+    if (id == "symptoms" && days.any { it.symptomWorst != null || it.migraine == true }) {
         val migraines = days.count { it.migraine == true }
         ChartCard(
             "Symptoms", Icons.Rounded.Healing, AppTheme.status.warn,
@@ -104,7 +120,7 @@ fun TrackingTrends(days: List<TrendDay>, labels: Triple<String, String?, String>
             footer = if (migraines > 0) "$migraines ${if (migraines == 1) "migraine day" else "migraine days"}" else null,
         ) { BarChart(days.map { it.symptomWorst?.toDouble() }, color = AppTheme.status.warn) }
     }
-    if (Module.HABITS in modules && days.any { (it.habitsDue ?: 0) > 0 }) {
+    if (id == "habits" && days.any { (it.habitsDue ?: 0) > 0 }) {
         val due = days.sumOf { it.habitsDue ?: 0 }
         val done = days.sumOf { minOf(it.habitsDone ?: 0, it.habitsDue ?: 0) }
         ChartCard(

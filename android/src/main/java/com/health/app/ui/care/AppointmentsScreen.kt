@@ -57,13 +57,18 @@ import com.health.app.net.appointments
 import com.health.app.net.deleteAppointment
 import com.health.app.net.saveAppointment
 import com.health.app.ui.components.BackBar
-import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.appContainer
+import androidx.compose.material.icons.rounded.History
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.modules.IconTile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -135,33 +140,39 @@ fun AppointmentsRoute(onOpen: (String?) -> Unit) {
     AppointmentsScreen(state, c.zone(), onOpen = onOpen, onRetry = { vm.load() })
 }
 
+/** Appointments' sections, in the default order (the sections of [FeatureScreens.APPOINTMENTS]). */
+val APPOINTMENT_SECTIONS = listOf(ArrangeItem("upcoming", "Coming up"), ArrangeItem("past", "Before"))
+
 @Composable
 fun AppointmentsScreen(state: AppointmentsState, zone: ZoneId, onOpen: (String?) -> Unit, onRetry: () -> Unit = {}) {
     val readOnly = LocalReadOnly.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Appointments", "Questions to ask, and what was said") {
             if (!readOnly) IconButton(onClick = { onOpen(null) }) { Icon(Icons.Rounded.Add, "Add an appointment") }
+            ArrangeAction(FeatureScreens.APPOINTMENTS, "Appointments", APPOINTMENT_SECTIONS)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && state.list.isEmpty() -> Loading()
                 state.error != null && state.list.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = onRetry)
-                state.list.isEmpty() -> EmptyState(
-                    Icons.Rounded.Event, "No appointments yet",
-                    "Add one to keep your questions in one place, get a reminder before it, and note what was said.",
-                ) { if (!readOnly) Button(onClick = { onOpen(null) }) { Text("Add an appointment") } }
-                else -> {
-                    if (state.upcoming.isNotEmpty()) {
-                        InfoCard("Coming up", icon = Icons.Rounded.Event) {
-                            state.upcoming.forEachIndexed { i, a ->
-                                if (i > 0) Spacer(Modifier.height(4.dp))
-                                AppointmentRow(a, zone, state.now) { onOpen(a.id) }
+                state.list.isEmpty() -> com.health.app.ui.modules.EmptyLine(
+                    "No appointments yet. Keep your questions, a reminder and notes for each one here.",
+                    action = "Add".takeIf { !readOnly }, onAction = { onOpen(null) },
+                )
+                else -> Sections(arrangedIn(FeatureScreens.APPOINTMENTS, APPOINTMENT_SECTIONS)) { id ->
+                    when (id) {
+                        "upcoming" -> if (state.upcoming.isNotEmpty()) {
+                            InfoCard("Coming up", icon = Icons.Rounded.Event) {
+                                state.upcoming.forEachIndexed { i, a ->
+                                    if (i > 0) Spacer(Modifier.height(4.dp))
+                                    AppointmentRow(a, zone, state.now) { onOpen(a.id) }
+                                }
                             }
                         }
-                    }
-                    if (state.past.isNotEmpty()) {
-                        InfoCard("Before") {
-                            state.past.take(12).forEach { a -> AppointmentRow(a, zone, state.now) { onOpen(a.id) } }
+                        "past" -> if (state.past.isNotEmpty()) {
+                            InfoCard("Before", icon = Icons.Rounded.History) {
+                                state.past.take(12).forEach { a -> AppointmentRow(a, zone, state.now) { onOpen(a.id) } }
+                            }
                         }
                     }
                 }

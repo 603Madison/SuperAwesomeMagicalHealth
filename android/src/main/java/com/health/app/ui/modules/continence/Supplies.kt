@@ -8,12 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +26,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -65,7 +64,6 @@ import com.health.app.net.updateSupply
 import com.health.app.ui.Format
 import com.health.app.ui.care.CareFormat
 import com.health.app.ui.components.BackBar
-import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
@@ -73,6 +71,12 @@ import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.Pill
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.EmptyLine
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.sectionId
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.async
@@ -175,9 +179,16 @@ fun SuppliesRoute(area: SupplyArea, onBack: () -> Unit) {
     SuppliesScreen(area, state, c.zone(), onBack, SuppliesActions(vm::save, { vm.delete(it) }, { id, a -> vm.adjust(id, a) }, { vm.history(it) }, { vm.load() }))
 }
 
+/** The supplies kept in [area], one section each (the sections of [FeatureScreens.SUPPLIES], shared by both areas). */
+fun supplySections(statuses: List<SupplyStatus>, area: SupplyArea): List<ArrangeItem> =
+    statuses.filter { it.supply.kind.category in area.categories }.mapNotNull { s ->
+        s.supply.id?.let { ArrangeItem(sectionId("supply", it), ContinenceText.supplyName(s.supply)) }
+    }
+
 /**
  * What's on hand: each supply with how many are left, how fast they go and how long they'll
  * last, marked when low; adding, changing, restocking or counting them; and each one's history.
+ * The person puts them in their own order, and can hide ones they rarely look at.
  */
 @Composable
 fun SuppliesScreen(area: SupplyArea, state: SuppliesState, zone: ZoneId, onBack: () -> Unit, actions: SuppliesActions, openId: String? = null) {
@@ -185,25 +196,25 @@ fun SuppliesScreen(area: SupplyArea, state: SuppliesState, zone: ZoneId, onBack:
     var editing by remember { mutableStateOf<Supply?>(null) }
     var open by remember { mutableStateOf(openId) }
     var adjusting by remember { mutableStateOf<Pair<Supply, SupplyReason>?>(null) }
-    val mine = state.statuses.filter { it.supply.kind.category in area.categories }
+    val all = state.statuses.filter { it.supply.kind.category in area.categories }
+    val sections = supplySections(state.statuses, area)
+    val order = arrangedIn(FeatureScreens.SUPPLIES, sections)
+    // In the person's order; any not saved yet (no id) at the end.
+    val mine = order.mapNotNull { id -> all.firstOrNull { it.supply.id != null && sectionId("supply", it.supply.id!!) == id } } + all.filter { it.supply.id == null }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         BackBar(onBack, area.title) {
-            if (!readOnly) TextButton(onClick = { editing = Supply("", area.kinds.first()) }) {
-                Icon(Icons.Rounded.Add, null)
-                Spacer(Modifier.width(4.dp))
-                Text("Add")
-            }
+            if (!readOnly) IconButton(onClick = { editing = Supply("", area.kinds.first()) }) { Icon(Icons.Rounded.Add, "Add a supply") }
+            ArrangeAction(FeatureScreens.SUPPLIES, area.title, sections)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && state.statuses.isEmpty() -> Loading()
                 state.error != null && state.statuses.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                mine.isEmpty() -> EmptyState(
-                    Icons.Rounded.Inventory2, "Nothing here yet",
-                    if (area == SupplyArea.CYCLE) "Add the period products you keep, and each one logged comes off the count."
-                    else "Add the pads, briefs, pull-ups or anything else you keep. Each change in the diary comes off the count, and you'll know when to restock.",
-                    action = if (readOnly) null else ({ FilledTonalButton(onClick = { editing = Supply("", area.kinds.first()) }) { Text("Add a supply") } }),
+                all.isEmpty() -> EmptyLine(
+                    if (area == SupplyArea.CYCLE) "None yet. Each product you log comes off its count." else "None yet. Each change in the diary comes off its count.",
+                    action = "Add".takeIf { !readOnly }, onAction = { editing = Supply("", area.kinds.first()) },
                 )
+                mine.isEmpty() -> EmptyLine("All of these are hidden. Show them again from Arrange.")
                 else -> {
                     InfoCard(null) {
                         mine.forEachIndexed { i, s ->
@@ -227,7 +238,7 @@ fun SuppliesScreen(area: SupplyArea, state: SuppliesState, zone: ZoneId, onBack:
             }
         }
     }
-    val opened = mine.firstOrNull { it.supply.id == open }
+    val opened = all.firstOrNull { it.supply.id == open }
     if (opened != null) {
         ModalBottomSheet(onDismissRequest = { open = null }) {
             SupplyDetail(

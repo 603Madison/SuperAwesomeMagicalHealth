@@ -58,6 +58,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 
 data class ProgressState(val weeks: Int = 12, val progress: ContinenceProgress? = null, val loading: Boolean = true, val error: String? = null)
 
@@ -119,11 +124,19 @@ private val SERIES = listOf(
  * Whether things are getting better: the verdict and its headline, each number before and after,
  * a week-by-week chart, and what went along with it. Says plainly when there isn't enough yet.
  */
+/** "How it's going"'s sections, in the default order (the sections of [FeatureScreens.CONTINENCE_PROGRESS]). */
+val PROGRESS_SECTIONS = listOf(
+    ArrangeItem("verdict", "Getting better or worse"),
+    ArrangeItem("compare", "Lately against before"),
+    ArrangeItem("weeks", "Week by week"),
+    ArrangeItem("notes", "What went along with it"),
+)
+
 @Composable
 fun ProgressScreen(state: ProgressState, onBack: () -> Unit, onWeeks: (Int) -> Unit = {}) {
     var chart by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        BackBar(onBack, "How it's going")
+        BackBar(onBack, "How it's going") { ArrangeAction(FeatureScreens.CONTINENCE_PROGRESS, "How it's going", PROGRESS_SECTIONS) }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(8, 12, 26).forEach { w -> FilterChip(selected = state.weeks == w, onClick = { onWeeks(w) }, label = { Text("$w weeks") }) }
@@ -133,69 +146,81 @@ fun ProgressScreen(state: ProgressState, onBack: () -> Unit, onWeeks: (Int) -> U
                 state.loading && p == null -> Loading()
                 state.error != null && p == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = { onWeeks(state.weeks) })
                 p != null -> {
-                    AppCard(padding = 18.dp) {
-                        Pill(p.verdict.label, verdictColor(p.verdict), icon = Icons.AutoMirrored.Rounded.TrendingUp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(if (ProgressText.enough(p)) p.headline else ProgressText.notEnough(p), style = MaterialTheme.typography.bodyLarge)
-                    }
-                    val shown = p.metrics.filter { it.before != null || it.after != null }
-                    if (shown.isNotEmpty()) {
-                        InfoCard("The last ${p.recentWeeks} ${if (p.recentWeeks == 1) "week" else "weeks"} against the ${if (p.recentWeeks == 1) "week" else "weeks"} before") {
-                            shown.forEachIndexed { i, m ->
-                                if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                                Row(
-                                    Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
-                                        contentDescription = "${m.label}: ${ProgressText.value(m.before, m)} before, ${ProgressText.value(m.after, m)} lately, ${ProgressText.verdictWords(m.verdict)}"
-                                    },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(m.label, style = MaterialTheme.typography.bodyLarge)
-                                        Text(ProgressText.change(m), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Sections(arrangedIn(FeatureScreens.CONTINENCE_PROGRESS, PROGRESS_SECTIONS)) { id ->
+                        when (id) {
+                            "verdict" -> {
+                                AppCard(padding = 18.dp) {
+                                    Pill(p.verdict.label, verdictColor(p.verdict), icon = Icons.AutoMirrored.Rounded.TrendingUp)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(if (ProgressText.enough(p)) p.headline else ProgressText.notEnough(p), style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
+                            "compare" -> {
+                                val shown = p.metrics.filter { it.before != null || it.after != null }
+                                if (shown.isNotEmpty()) {
+                                    InfoCard("The last ${p.recentWeeks} ${if (p.recentWeeks == 1) "week" else "weeks"} against the ${if (p.recentWeeks == 1) "week" else "weeks"} before") {
+                                        shown.forEachIndexed { i, m ->
+                                            if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                                            Row(
+                                                Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                                                    contentDescription = "${m.label}: ${ProgressText.value(m.before, m)} before, ${ProgressText.value(m.after, m)} lately, ${ProgressText.verdictWords(m.verdict)}"
+                                                },
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(m.label, style = MaterialTheme.typography.bodyLarge)
+                                                    Text(ProgressText.change(m), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
+                                                Pill(ProgressText.verdictWords(m.verdict).replaceFirstChar { it.uppercase() }, verdictColor(m.verdict))
+                                            }
+                                        }
+                                        Spacer(Modifier.height(8.dp))
+                                        Hint("Lower is better for each of these.")
                                     }
-                                    Pill(ProgressText.verdictWords(m.verdict).replaceFirstChar { it.uppercase() }, verdictColor(m.verdict))
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
-                            Hint("Lower is better for each of these.")
-                        }
-                    }
-                    val logged = p.weeks.filter { it.days > 0 }
-                    if (logged.isNotEmpty()) {
-                        val available = SERIES.withIndex().filter { (_, s) -> p.weeks.any { s.value(it) != null && s.value(it)!! > 0 } }
-                        if (available.isNotEmpty()) {
-                            val pick = available.firstOrNull { it.index == chart } ?: available.first()
-                            InfoCard("Week by week") {
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    available.forEach { (i, s) -> FilterChip(selected = pick.index == i, onClick = { chart = i }, label = { Text(s.label) }) }
+                            "weeks" -> {
+                                val logged = p.weeks.filter { it.days > 0 }
+                                if (logged.isNotEmpty()) {
+                                    val available = SERIES.withIndex().filter { (_, s) -> p.weeks.any { s.value(it) != null && s.value(it)!! > 0 } }
+                                    if (available.isNotEmpty()) {
+                                        val pick = available.firstOrNull { it.index == chart } ?: available.first()
+                                        InfoCard("Week by week") {
+                                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                available.forEach { (i, s) -> FilterChip(selected = pick.index == i, onClick = { chart = i }, label = { Text(s.label) }) }
+                                            }
+                                            Spacer(Modifier.height(8.dp))
+                                            val values = p.weeks.map { pick.value.value(it) }
+                                            Text(pick.value.caption, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Spacer(Modifier.height(6.dp))
+                                            Column(
+                                                Modifier.semantics(mergeDescendants = true) {
+                                                    contentDescription = "${pick.value.caption}, each week: " + p.weeks.mapNotNull { w ->
+                                                        pick.value.value(w)?.let { "week of ${Format.shortDay(LocalDate.parse(w.weekStart))} ${ContinenceText.fmt(it)}" }
+                                                    }.joinToString(", ")
+                                                },
+                                            ) {
+                                                BarChart(values, color = seriesColor(pick.index), height = 110.dp, highlightLast = true)
+                                                AxisLabels(
+                                                    Format.shortDay(LocalDate.parse(p.weeks.first().weekStart)), null,
+                                                    Format.shortDay(LocalDate.parse(p.weeks.last().weekStart)),
+                                                )
+                                            }
+                                            Spacer(Modifier.height(6.dp))
+                                            Hint("Each bar is a week, from Monday. Weeks with nothing logged are left empty.")
+                                        }
+                                    }
                                 }
-                                Spacer(Modifier.height(8.dp))
-                                val values = p.weeks.map { pick.value.value(it) }
-                                Text(pick.value.caption, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.height(6.dp))
-                                Column(
-                                    Modifier.semantics(mergeDescendants = true) {
-                                        contentDescription = "${pick.value.caption}, each week: " + p.weeks.mapNotNull { w ->
-                                            pick.value.value(w)?.let { "week of ${Format.shortDay(LocalDate.parse(w.weekStart))} ${ContinenceText.fmt(it)}" }
-                                        }.joinToString(", ")
-                                    },
-                                ) {
-                                    BarChart(values, color = seriesColor(pick.index), height = 110.dp, highlightLast = true)
-                                    AxisLabels(
-                                        Format.shortDay(LocalDate.parse(p.weeks.first().weekStart)), null,
-                                        Format.shortDay(LocalDate.parse(p.weeks.last().weekStart)),
-                                    )
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Hint("Each bar is a week, from Monday. Weeks with nothing logged are left empty.")
                             }
-                        }
-                    }
-                    if (p.notes.isNotEmpty()) {
-                        InfoCard("What went along with it", icon = Icons.Rounded.Lightbulb) {
-                            p.notes.forEach { note ->
-                                if (note.contains("infection")) InfectionNudge(Modifier.padding(vertical = 4.dp))
-                                else Text(note, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp))
+                            "notes" -> {
+                                if (p.notes.isNotEmpty()) {
+                                    InfoCard("What went along with it", icon = Icons.Rounded.Lightbulb) {
+                                        p.notes.forEach { note ->
+                                            if (note.contains("infection")) InfectionNudge(Modifier.padding(vertical = 4.dp))
+                                            else Text(note, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 4.dp))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

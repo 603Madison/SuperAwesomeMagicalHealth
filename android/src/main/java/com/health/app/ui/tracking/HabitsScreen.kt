@@ -24,12 +24,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,12 +64,20 @@ import com.health.app.net.habitsToday
 import com.health.app.net.tickHabit
 import com.health.app.net.updateHabit
 import com.health.app.ui.components.AppCard
-import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.components.showsField
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.EmptyLine
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
+import com.health.app.ui.modules.sectionId
+import com.health.api.Fields
 import com.health.app.ui.modules.IconTile
 import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,25 +143,46 @@ fun HabitsRoute() {
     val c = appContainer()
     val vm = viewModel { HabitsViewModel(c) }
     val state by vm.state.collectAsState()
-    HabitsScreen(state, HabitsActions(retry = { vm.load() }, tick = { s, n -> vm.tick(s, n) }, save = { vm.save(it) }, delete = { vm.delete(it) }))
+    HabitsScreen(
+        state, HabitsActions(retry = { vm.load() }, tick = { s, n -> vm.tick(s, n) }, save = { vm.save(it) }, delete = { vm.delete(it) }),
+        water = showsField(Fields.NUTRITION_WATER),
+    )
 }
 
+/** The habits, one section each (the sections of [FeatureScreens.HABITS]): the person puts them in their own order. */
+fun habitSections(statuses: List<HabitStatus>): List<ArrangeItem> =
+    statuses.mapNotNull { s -> s.habit.id?.let { ArrangeItem(sectionId("habit", it), s.habit.name) } }
+
+/** How a habit can be ticked: not by the water goal while water isn't tracked, unless it already is. */
+fun habitSources(water: Boolean, current: HabitSource? = null): List<HabitSource> =
+    HabitSource.entries.filter { water || it != HabitSource.WATER_GOAL || it == current }
+
 @Composable
-fun HabitsScreen(state: HabitsState, actions: HabitsActions) {
+fun HabitsScreen(state: HabitsState, actions: HabitsActions, water: Boolean = true) {
     var editing by remember { mutableStateOf<Habit?>(null) }
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    val sections = habitSections(state.statuses)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Habits", "Small things, kept up kindly") {
-            IconButton(onClick = { editing = Habit("") }) { Icon(Icons.Rounded.Add, "Add a habit") }
+            if (!readOnly) IconButton(onClick = { editing = Habit("") }) { Icon(Icons.Rounded.Add, "Add a habit") }
+            ArrangeAction(FeatureScreens.HABITS, "Habits", sections)
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 state.loading && state.statuses.isEmpty() -> Loading()
                 state.error != null && state.statuses.isEmpty() -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                state.statuses.isEmpty() -> EmptyState(
-                    Icons.Rounded.Checklist, "Start with one small habit",
-                    "Aim for a few days a week: a streak counts weeks that reach it, so a rest day never breaks one.",
-                ) { FilledTonalButton(onClick = { editing = Habit("") }) { Text("Add a habit") } }
-                else -> state.statuses.forEach { s -> HabitCard(s, onTick = { n -> actions.tick(s, n) }, onEdit = { editing = s.habit }) }
+                state.statuses.isEmpty() -> EmptyLine(
+                    "No habits yet. Start with one small thing, a few days a week.",
+                    action = "Add".takeIf { !readOnly }, onAction = { editing = Habit("") },
+                )
+                else -> {
+                    val byId = state.statuses.filter { it.habit.id != null }.associateBy { sectionId("habit", it.habit.id!!) }
+                    Sections(arrangedIn(FeatureScreens.HABITS, sections)) { id ->
+                        byId[id]?.let { s -> HabitCard(s, onTick = { n -> actions.tick(s, n) }, onEdit = { if (!readOnly) editing = s.habit }) }
+                    }
+                    // Any not saved yet go last.
+                    state.statuses.filter { it.habit.id == null }.forEach { s -> HabitCard(s, onTick = { n -> actions.tick(s, n) }, onEdit = { editing = s.habit }) }
+                }
             }
             if (state.statuses.isNotEmpty()) {
                 Hint("Streaks forgive: weeks count when they reach your aim, and one missed day in seven doesn't break a day streak.", Modifier.padding(horizontal = 4.dp))
@@ -164,7 +191,7 @@ fun HabitsScreen(state: HabitsState, actions: HabitsActions) {
     }
     editing?.let { habit ->
         ModalBottomSheet(onDismissRequest = { editing = null }) {
-            HabitForm(habit, onSave = { actions.save(it); editing = null }, onDelete = habit.id?.let { id -> { actions.delete(id); editing = null } })
+            HabitForm(habit, onSave = { actions.save(it); editing = null }, onDelete = habit.id?.let { id -> { actions.delete(id); editing = null } }, water = water)
         }
     }
 }
@@ -294,14 +321,14 @@ fun Streak(s: HabitStatus) {
 private val REMINDER_TIMES = listOf("07:30", "09:00", "12:30", "18:00", "21:00")
 
 @Composable
-fun HabitForm(initial: Habit, onSave: (Habit) -> Unit, onDelete: (() -> Unit)?) {
+fun HabitForm(initial: Habit, onSave: (Habit) -> Unit, onDelete: (() -> Unit)?, water: Boolean = true) {
     var h by remember { mutableStateOf(initial) }
     Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(if (initial.id == null) "A new habit" else "Habit", style = MaterialTheme.typography.titleLarge)
         OutlinedTextField(h.name, { h = h.copy(name = it.take(60)) }, label = { Text("Name") }, placeholder = { Text("e.g. A walk after lunch") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("How it's ticked", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            HabitSource.entries.forEach { src ->
+            habitSources(water, initial.source).forEach { src ->
                 FilterChip(h.source == src, {
                     val name = if (h.name.isBlank() || HabitSource.entries.any { it.label == h.name }) (if (src == HabitSource.MANUAL) "" else src.label) else h.name
                     h = h.copy(source = src, name = name, perDay = if (src == HabitSource.MANUAL) h.perDay else 1)

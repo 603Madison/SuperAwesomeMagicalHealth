@@ -24,7 +24,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -47,13 +46,27 @@ import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.Stat
 import com.health.app.ui.log.NumberField
+import com.health.app.ui.modules.TitleAction
 import com.health.app.ui.modules.IconTile
+import com.health.app.ui.modules.waterShown
 import com.health.app.ui.theme.AppTheme
 import java.time.ZoneId
 import kotlin.math.roundToInt
 
 /** The drinks a tap logs straight away, at their usual size. */
 val QUICK_DRINKS = listOf(DrinkKind.COFFEE, DrinkKind.TEA, DrinkKind.WATER, DrinkKind.BEER, DrinkKind.WINE)
+
+/** [QUICK_DRINKS], without water while it isn't tracked (Fields.NUTRITION_WATER hidden). */
+fun quickDrinks(water: Boolean): List<DrinkKind> = QUICK_DRINKS.filter { water || it != DrinkKind.WATER }
+
+/** The kinds a drink can be: not water while it isn't tracked, unless [current] already is. */
+fun drinkKinds(water: Boolean, current: DrinkKind? = null): List<DrinkKind> =
+    DrinkKind.entries.filter { water || it != DrinkKind.WATER || it == current }
+
+/** What the drinks card says before anything's logged. */
+fun drinksIntro(water: Boolean): String =
+    if (water) "Coffee, tea and the rest count towards your water; caffeine and alcohol are kept apart, to see how they go with your sleep."
+    else "Caffeine and alcohol are kept apart, to see how they go with your sleep."
 
 /** A drink of [kind] now, at its usual size, with its caffeine and alcohol filled in. */
 fun quickDrink(kind: DrinkKind, at: Long = System.currentTimeMillis()): Drink {
@@ -66,7 +79,8 @@ fun standardDrinksText(n: Double): String = "${Format.compact(n)} ${if (Format.c
 
 /**
  * Today's drinks: one-tap logging, caffeine and what's likely still in you at bedtime, and
- * standard drinks of alcohol. For Food and Today.
+ * standard drinks of alcohol. For Food and Today. With water not tracked ([water] false, from
+ * Fields.NUTRITION_WATER), there's no water to log and nothing said about it.
  */
 @Composable
 fun DrinksCard(
@@ -78,17 +92,26 @@ fun DrinksCard(
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    water: Boolean = waterShown(),
 ) {
     var editing by remember { mutableStateOf<Drink?>(null) }
-    InfoCard("Drinks", modifier, icon = Icons.Rounded.LocalCafe, iconTint = AppTheme.data.carbs, trailing = {
-        IconButton(onClick = { editing = quickDrink(DrinkKind.COFFEE) }) { Icon(Icons.Rounded.Add, "Add a drink") }
-    }) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            QUICK_DRINKS.forEach { kind ->
-                FilledTonalButton(onClick = { onQuick(kind) }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)) {
-                    Icon(drinkIcon(kind), null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(kind.label)
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
+    InfoCard("Drinks", modifier, icon = Icons.Rounded.LocalCafe, iconTint = AppTheme.data.carbs, trailing = if (readOnly) null else ({
+        TitleAction(Icons.Rounded.Add, "Add a drink") { editing = quickDrink(DrinkKind.COFFEE) }
+    })) {
+        if (!readOnly) {
+            // Even rows: three and two with water, two and two without.
+            val kinds = quickDrinks(water)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = if (kinds.size == 4) 2 else 3,
+            ) {
+                kinds.forEach { kind ->
+                    FilledTonalButton(onClick = { onQuick(kind) }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp), modifier = Modifier.weight(1f)) {
+                        Icon(drinkIcon(kind), null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(kind.label, maxLines = 1)
+                    }
                 }
             }
         }
@@ -106,17 +129,17 @@ fun DrinksCard(
             d.caffeineAtBedtimeMg?.takeIf { it >= 50 }?.let {
                 Hint("About ${it.roundToInt()} mg of caffeine will likely still be with you at bedtime, which can make sleep lighter.", Modifier.padding(top = 6.dp))
             }
-            if (d.fluidMl > 0) Hint("${Format.water(d.fluidMl, units)} of these count towards your water.", Modifier.padding(top = 4.dp))
+            if (water && d.fluidMl > 0) Hint("${Format.water(d.fluidMl, units)} of these count towards your water.", Modifier.padding(top = 4.dp))
         } else {
-            Spacer(Modifier.height(8.dp))
-            Hint("Coffee, tea and the rest count towards your water; caffeine and alcohol are kept apart, to see how they go with your sleep.")
+            if (!readOnly) Spacer(Modifier.height(8.dp))
+            Hint(drinksIntro(water))
         }
         if (!compact) {
             d.drinks.sortedByDescending { it.at }.forEachIndexed { i, drink ->
                 if (i == 0) Spacer(Modifier.height(8.dp))
                 if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { editing = drink }.padding(vertical = 6.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(enabled = !readOnly) { editing = drink }.padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconTile(drinkIcon(drink.kind), size = 36.dp)
@@ -131,7 +154,7 @@ fun DrinksCard(
         }
     }
     editing?.let { drink ->
-        DrinkDialog(drink, units, onDismiss = { editing = null }, onSave = { onSave(it); editing = null }, onDelete = drink.id?.let { id -> { onDelete(id); editing = null } })
+        DrinkDialog(drink, units, onDismiss = { editing = null }, onSave = { onSave(it); editing = null }, onDelete = drink.id?.let { id -> { onDelete(id); editing = null } }, water = water)
     }
 }
 
@@ -144,7 +167,7 @@ fun drinkDetail(d: Drink, units: Units): String = listOfNotNull(
 
 /** A drink: its kind (which fills in the rest), size, caffeine and alcohol, and a name. */
 @Composable
-fun DrinkDialog(initial: Drink, units: Units, onDismiss: () -> Unit, onSave: (Drink) -> Unit, onDelete: (() -> Unit)? = null) {
+fun DrinkDialog(initial: Drink, units: Units, onDismiss: () -> Unit, onSave: (Drink) -> Unit, onDelete: (() -> Unit)? = null, water: Boolean = true) {
     var kind by remember { mutableStateOf(initial.kind) }
     var ml by remember { mutableStateOf(initial.volumeMl.toString()) }
     var caffeine by remember { mutableStateOf(Format.compact(initial.caffeineMg)) }
@@ -162,7 +185,7 @@ fun DrinkDialog(initial: Drink, units: Units, onDismiss: () -> Unit, onSave: (Dr
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DrinkKind.entries.forEach { k ->
+                    drinkKinds(water, initial.kind).forEach { k ->
                         FilterChip(kind == k, { kind = k; ml = k.defaultMl.toString(); refill(k, k.defaultMl) }, label = { Text(k.label) })
                     }
                 }

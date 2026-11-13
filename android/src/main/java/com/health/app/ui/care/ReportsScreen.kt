@@ -43,6 +43,11 @@ import com.health.api.ReportSectionKey
 import com.health.app.net.exportZip
 import com.health.app.net.reportPdf
 import com.health.app.ui.components.BackBar
+import com.health.app.ui.components.ArrangeItem
+import com.health.app.ui.modules.ArrangeAction
+import com.health.app.ui.modules.FeatureScreens
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.appContainer
@@ -109,6 +114,9 @@ suspend fun shareFile(context: Context, name: String, bytes: ByteArray, type: St
     context.startActivity(Intent.createChooser(send, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+/** Reports' sections, in the default order (the sections of [FeatureScreens.REPORTS]). */
+val REPORT_SECTIONS = listOf(ArrangeItem("range", "Over"), ArrangeItem("pdf", "A report for your doctor"), ArrangeItem("export", "All your data"))
+
 @Composable
 fun ReportsScreen(
     modules: Set<Module>,
@@ -123,37 +131,41 @@ fun ReportsScreen(
     var chosen by remember(offered) { mutableStateOf(offered.toSet()) }
     val from = today.minusDays(range.days - 1)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        BackBar(onBack, "Reports and export")
+        BackBar(onBack, "Reports and export") { ArrangeAction(FeatureScreens.REPORTS, "Reports and export", REPORT_SECTIONS) }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            InfoCard("Over") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ReportRange.entries.forEach { r -> FilterChip(selected = range == r, onClick = { range = r }, label = { Text(r.label) }) }
-                }
-                Hint("${CareFormat.date(from)} to ${CareFormat.date(today)}")
-            }
-            InfoCard("A report for your doctor", icon = Icons.Rounded.Description) {
-                Hint("A PDF with plain summaries, tables and charts. Pick what goes in it:")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
-                    offered.forEach { s ->
-                        FilterChip(
-                            selected = s in chosen,
-                            enabled = s != ReportSectionKey.OVERVIEW,
-                            onClick = { chosen = if (s in chosen) chosen - s else chosen + s },
-                            label = { Text(s.label) },
-                        )
+            Sections(arrangedIn(FeatureScreens.REPORTS, REPORT_SECTIONS)) { id ->
+                when (id) {
+                    "range" -> InfoCard("Over") {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ReportRange.entries.forEach { r -> FilterChip(selected = range == r, onClick = { range = r }, label = { Text(r.label) }) }
+                        }
+                        Hint("${CareFormat.date(from)} to ${CareFormat.date(today)}")
                     }
-                }
-                Button(enabled = busy == null, onClick = { onPdf(from, today, chosen + ReportSectionKey.OVERVIEW) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    if (busy == "pdf") Working() else Text("Make the PDF")
-                }
-            }
-            InfoCard("All your data", icon = Icons.Rounded.Inventory2) {
-                Text(
-                    "Everything in that time as spreadsheet files (CSV), and a FHIR file that other health apps and records can read.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedButton(enabled = busy == null, onClick = { onExport(from, today) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    if (busy == "zip") Working() else Text("Export everything")
+                    "pdf" -> InfoCard("A report for your doctor", icon = Icons.Rounded.Description) {
+                        Hint("A PDF with plain summaries, tables and charts. Pick what goes in it:")
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            offered.forEach { s ->
+                                FilterChip(
+                                    selected = s in chosen,
+                                    enabled = s != ReportSectionKey.OVERVIEW,
+                                    onClick = { chosen = if (s in chosen) chosen - s else chosen + s },
+                                    label = { Text(s.label) },
+                                )
+                            }
+                        }
+                        Button(enabled = busy == null, onClick = { onPdf(from, today, chosen + ReportSectionKey.OVERVIEW) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            if (busy == "pdf") Working() else Text("Make the PDF")
+                        }
+                    }
+                    "export" -> InfoCard("All your data", icon = Icons.Rounded.Inventory2) {
+                        Text(
+                            "Everything in that time as spreadsheet files (CSV), and a FHIR file that other health apps and records can read.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        OutlinedButton(enabled = busy == null, onClick = { onExport(from, today) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            if (busy == "zip") Working() else Text("Export everything")
+                        }
+                    }
                 }
             }
             Hint(
