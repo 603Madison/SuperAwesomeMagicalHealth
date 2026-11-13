@@ -83,6 +83,8 @@ data class SleepSummary(
     val stages: List<StageSpan> = emptyList(),
     val source: String? = null,
     val sessionId: String? = null,
+    /** Where more than one device recorded this night: each one's version, and how the night was worked out. */
+    val combined: CombinedSleep? = null,
 )
 
 /** Something worth knowing about the day: [tone] is "good", "info" or "warn". */
@@ -143,6 +145,8 @@ data class DaySummary(
     val hasData: Boolean = false,
     /** Mood, cycle, bladder and bowel, and medications, for the modules that are on. */
     val modules: ModulesToday = ModulesToday(),
+    /** The day's numbers that more than one device measured: each device's value, and the app's own (see Devices.kt). */
+    val combined: List<CombinedValue> = emptyList(),
 )
 
 /** One day's numbers, for charts over weeks and months. Absent values weren't measured. */

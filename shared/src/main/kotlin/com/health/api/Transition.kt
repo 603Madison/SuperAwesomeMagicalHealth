@@ -61,6 +61,13 @@ data class VoiceSession(
     val feeling: Int? = null,
     val note: String? = null,
     val id: String? = null,
+    /** From the voice trainer: the lesson, each exercise's result, and the session's averages. */
+    val lessonId: String? = null,
+    val results: List<ExerciseResult> = emptyList(),
+    val resonance: Double? = null,
+    val weight: Double? = null,
+    /** The person felt strain or discomfort: the trainer suggests rest, and the next session starts gently. */
+    val strain: Boolean = false,
 )
 
 @Serializable
