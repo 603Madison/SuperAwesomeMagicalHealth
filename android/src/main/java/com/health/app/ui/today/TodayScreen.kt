@@ -509,6 +509,8 @@ private fun ActivityCard(summary: DaySummary, units: Units, onOpen: () -> Unit) 
             Spacer(Modifier.height(14.dp))
             HourlyBars(summary.hourlySteps, color = MaterialTheme.colorScheme.tertiary)
         }
+        // Combined devices: "From 2 devices" where more than one counted these (ui/components/Sources.kt).
+        com.health.app.ui.components.CombinedSources("Activity", summary.combined, com.health.app.ui.components.Sources.ACTIVITY, units)
     }
 }
 
@@ -546,6 +548,8 @@ private fun SleepBody(sleep: SleepSummary, zone: ZoneId) {
             LegendItem(stageColor(SleepStage.AWAKE), "Awake", value = Format.minutes(sleep.awakeMinutes))
         }
     }
+    // Combined devices: "From 2 devices" where more than one recorded the night (ui/components/Sources.kt).
+    sleep.combined?.let { com.health.app.ui.components.CombinedSleepSources(it, zone) }
 }
 
 @Composable
@@ -584,6 +588,8 @@ private fun HeartCard(summary: DaySummary, units: Units, zone: ZoneId, onOpen: (
                 extras.forEach { Pill(it, MaterialTheme.colorScheme.primary) }
             }
         }
+        // Combined devices: "From 2 devices" where more than one measured these (ui/components/Sources.kt).
+        com.health.app.ui.components.CombinedSources("Heart", summary.combined, com.health.app.ui.components.Sources.HEART, units)
     }
 }
 
