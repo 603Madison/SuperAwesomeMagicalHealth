@@ -26,7 +26,8 @@ import java.time.format.DateTimeFormatter
  * near as the phone's idle mode lets), a notification for each reminder due then (and, if the alarm
  * came late, for what came due meanwhile), and the next alarm set when one goes off. Doses come
  * with Taken and Snooze, and again while they aren't marked; refills, habits and appointments have
- * their own channels. On a locked screen, names only show when the person says so. Works from
+ * their own channels. Names only show when the person says so: otherwise every reminder uses its
+ * discreet words, so nothing on the screen names a medication, habit or appointment. Works from
  * [MedsCache] and [ReminderCache], so it needs no network.
  */
 class Reminders(
@@ -113,11 +114,11 @@ class Reminders(
         alarms.forEach { alarm ->
             val dose = alarm.dose
             val site = dose?.let { d -> cache.nextSite(d.medicationId)?.takeIf { d.form == MedForm.INJECTION || d.form == MedForm.PATCH } }
-            val body = listOfNotNull(alarm.body, site?.let { "next site: $it" }).joinToString(" · ")
+            val (title, body) = words(alarm, site, showNames)
             val channel = channelOf(alarm.kind)
             val builder = NotificationCompat.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(alarm.title)
+                .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setCategory(if (alarm.kind == AlarmKind.APPOINTMENT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_REMINDER)
@@ -126,9 +127,7 @@ class Reminders(
                 .setAutoCancel(true)
                 .setSilent(alarm.silent)
             if (showNames) {
-                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            } else {
-                // A locked screen shows only the version without names.
+                // With names, a locked screen that hides private content shows the version without them.
                 builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
                     NotificationCompat.Builder(context, channel)
                         .setSmallIcon(R.drawable.ic_notification)
@@ -136,6 +135,9 @@ class Reminders(
                         .setContentText(alarm.privateBody)
                         .build(),
                 )
+            } else {
+                // Without names, the reminder itself is the discreet version: nothing to hide.
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             }
             if (dose != null) {
                 builder.addAction(0, "Taken", doseIntent(ReminderReceiver.ACTION_TAKEN, dose))
@@ -240,6 +242,15 @@ class Reminders(
         }
 
         fun notificationId(dose: PlannedDose): Int = (dose.medicationId + dose.at).hashCode()
+
+        /**
+         * A reminder's title and text. With names on, what [alarm] says (and an injection's or
+         * patch's next [site]); off, its discreet words, which never name a medication, habit or
+         * appointment, so names show only in the app, whatever the phone's lock-screen setting.
+         */
+        fun words(alarm: PlannedAlarm, site: String?, showNames: Boolean): Pair<String, String> =
+            if (showNames) alarm.title to listOfNotNull(alarm.body, site?.let { "next site: $it" }).joinToString(" · ")
+            else alarm.privateTitle to alarm.privateBody
 
         /** A dose from its [CarePlanner.doseKey], enough to find its notification and alarms again. */
         fun doseOfKey(key: String): PlannedDose? {

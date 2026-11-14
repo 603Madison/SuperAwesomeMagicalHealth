@@ -128,7 +128,7 @@ private fun FocusPage(state: NeuroState, fields: Set<String>, readOnly: Boolean,
     }
     var pending by remember { mutableStateOf<com.health.app.reminders.RunningFocus?>(null) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        pending?.let { FocusAlerts.start(context, it, c.reminders.canNotify()) }
+        pending?.let { FocusAlerts.start(context, it, c.reminders.canNotify(), c.showNames()) }
         pending = null
     }
     FocusScreen(
@@ -143,10 +143,10 @@ private fun FocusPage(state: NeuroState, fields: Set<String>, readOnly: Boolean,
                     pending = started
                     ask.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
-                    FocusAlerts.start(context, started, c.reminders.canNotify())
+                    FocusAlerts.start(context, started, c.reminders.canNotify(), c.showNames())
                 }
             },
-            addBreak = { running?.let { FocusAlerts.start(context, it.copy(breaks = it.breaks + 1), c.reminders.canNotify()) } },
+            addBreak = { running?.let { FocusAlerts.start(context, it.copy(breaks = it.breaks + 1), c.reminders.canNotify(), c.showNames()) } },
             finish = { rating, note ->
                 running?.let { r ->
                     val session = FocusSession(

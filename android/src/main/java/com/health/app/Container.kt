@@ -222,6 +222,9 @@ class Container(val context: Context) {
     /** The modules the person has on (the defaults until the profile has loaded). */
     fun modules(): Set<Module> = profile.value?.modules ?: Module.DEFAULT
 
+    /** Whether reminders (and the focus timer) name what they're for: the person's choice, kept for when the profile hasn't loaded. */
+    fun showNames(): Boolean = profile.value?.reminders?.showNames ?: reminderCache.prefs().showNames
+
     /** The features reminders follow: the profile's, or before it loads the ones kept with the reminders. */
     private fun reminderModules(): Set<Module> = profile.value?.modules ?: reminderCache.modules()
 

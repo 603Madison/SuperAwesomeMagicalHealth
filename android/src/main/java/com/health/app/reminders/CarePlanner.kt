@@ -28,8 +28,9 @@ data class HabitReminder(val id: String, val name: String, val time: String, val
 
 /**
  * A notification to show at [at]. [title] and [body] may name medications, habits and
- * appointments; [privateTitle] and [privateBody] never do (for a locked screen). [silent] is for
- * quiet hours, which never quiet a dose. [key] is unique for this one reminder.
+ * appointments; [privateTitle] and [privateBody] never do, and are what shows unless the person
+ * turns names on. [silent] is for quiet hours, which never quiet a dose. [key] is unique for this
+ * one reminder.
  */
 data class PlannedAlarm(
     val at: Long,

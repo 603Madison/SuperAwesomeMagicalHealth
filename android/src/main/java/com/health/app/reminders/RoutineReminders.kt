@@ -116,6 +116,16 @@ object RoutinePlanner {
         return out.values.toList()
     }
 
+    /**
+     * A routine reminder's title and text: with names on, the routine's; off, words that don't name
+     * it, so its name shows only in the app.
+     */
+    fun words(a: RoutineAlarm, showNames: Boolean): Pair<String, String> =
+        if (showNames) "Time for: ${a.name}" to body(a) else PRIVATE_TITLE to PRIVATE_BODY
+
+    const val PRIVATE_TITLE = "A routine reminder"
+    const val PRIVATE_BODY = "One of your routines is ready when you are."
+
     /** "3 steps, about 20 minutes. One step at a time." */
     fun body(a: RoutineAlarm): String =
         "${a.steps} ${if (a.steps == 1) "step" else "steps"}${if (a.minutes > 0) ", about ${a.minutes} minutes" else ""}. One step at a time."
@@ -187,20 +197,21 @@ class RoutineReminders(private val context: Context) {
                     .putExtra(MainActivity.EXTRA_OPEN, "neuro/routines"),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
+            val (title, text) = RoutinePlanner.words(a, showNames)
             val builder = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Time for: ${a.name}")
-                .setContentText(RoutinePlanner.body(a))
+                .setContentTitle(title)
+                .setContentText(text)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setContentIntent(open)
                 .setAutoCancel(true)
             if (showNames) {
-                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            } else {
                 builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
                     NotificationCompat.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_notification)
-                        .setContentTitle("A routine reminder").setContentText("One of your routines is ready when you are.").build(),
+                        .setContentTitle(RoutinePlanner.PRIVATE_TITLE).setContentText(RoutinePlanner.PRIVATE_BODY).build(),
                 )
+            } else {
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             }
             @Suppress("MissingPermission") // the caller checked
             NotificationManagerCompat.from(context).notify(("routine:" + a.id).hashCode(), builder.build())
@@ -232,7 +243,7 @@ class RoutineReminderReceiver : BroadcastReceiver() {
         when (intent.action) {
             RoutineReminders.ACTION_FIRE -> {
                 val at = intent.getLongExtra(RoutineReminders.EXTRA_AT, 0)
-                if (at > 0) routines.fire(at, c.zone(), c.reminderCache.prefs().showNames, c.reminders.canNotify())
+                if (at > 0) routines.fire(at, c.zone(), c.showNames(), c.reminders.canNotify())
                 routines.reschedule(c.zone())
             }
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED, EXACT_ALARMS_CHANGED ->
