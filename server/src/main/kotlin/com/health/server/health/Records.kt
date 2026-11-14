@@ -210,6 +210,10 @@ class Records(private val db: Database, private val clock: () -> Long = System::
         id
     }
 
+    /** The id of the device's workout starting at [start], if there is one. */
+    fun workoutAt(tx: Tx, userId: String, deviceId: String, start: Long): String? =
+        tx.one("SELECT id FROM workouts WHERE user_id = ? AND device_id = ? AND start = ?", userId, deviceId, start) { it.string("id") }
+
     /** Workouts that start in [from, to), newest first. */
     suspend fun workouts(userId: String, from: Long, to: Long): List<Workout> = db.tx {
         query(

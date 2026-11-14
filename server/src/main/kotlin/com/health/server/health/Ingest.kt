@@ -77,7 +77,14 @@ class Ingest(
         if (clean.effort != null && clean.effort !in 1..10) throw ApiError.badRequest("Effort is from 1 to 10")
         val before = workout.id?.let { records.workout(userId, it) }
         if (workout.id != null && (before == null || !before.manual)) throw ApiError.notFound("No such workout (only ones entered by hand can be changed)")
-        val id = db.tx { records.putWorkouts(this, userId, devices.manual(this, userId), listOf(clean), manual = true).first() }
+        val id = db.tx {
+            val device = devices.manual(this, userId)
+            // Two workouts entered by hand can't start at the same moment: moving one onto another's start is refused.
+            if (workout.id != null && records.workoutAt(this, userId, device, clean.start).let { it != null && it != workout.id }) {
+                throw ApiError.badRequest("Another workout you entered starts at that time. Pick a different start, or change that one instead.")
+            }
+            records.putWorkouts(this, userId, device, listOf(clean), manual = true).first()
+        }
         days.changed(userId, minOf(clean.start, before?.start ?: clean.start), maxOf(clean.end, before?.end ?: clean.end))
         return records.workout(userId, id)!!
     }

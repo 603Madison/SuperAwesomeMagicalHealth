@@ -14,6 +14,8 @@ import com.health.api.Sample
 import com.health.api.SleepSession
 import com.health.api.SleepStage
 import com.health.api.StageSpan
+import com.health.api.Workout
+import com.health.api.WorkoutType
 import com.health.server.insights.DayService
 import com.health.server.insights.DayStats
 import com.health.server.insights.Energy
@@ -222,6 +224,22 @@ class InsightsTest {
         assertEquals(0.0, s.days.summary(userId, date.toString()).nutrition.calories, 0.0)
         assertFalse(armed)
         assertEquals(500.0, s.days.summary(userId, date.toString()).nutrition.calories, 0.01)
+    }
+
+    @Test
+    fun `a workout moved onto another's start is refused plainly`() = runBlocking {
+        val s = services()
+        val user = s.users.byUsername("admin")!!
+        val day = LocalDate.of(2026, 3, 9)
+        val run = s.ingest.manualWorkout(user.id, Workout(WorkoutType.RUN, at(day, 7), at(day, 8)))
+        val walk = s.ingest.manualWorkout(user.id, Workout(WorkoutType.WALK, at(day, 12), at(day, 13)))
+        val error = runCatching { s.ingest.manualWorkout(user.id, walk.copy(start = run.start, end = run.end)) }.exceptionOrNull()
+        assertEquals(HttpStatusCode.BadRequest, (error as ApiError).status)
+        assertTrue(error.message!!.startsWith("Another workout you entered starts at that time"))
+        // Both are as they were; moving it anywhere else is fine.
+        assertEquals(WorkoutType.WALK, s.records.workout(user.id, walk.id!!)!!.type)
+        assertEquals(at(day, 12), s.records.workout(user.id, walk.id!!)!!.start)
+        assertEquals(at(day, 14), s.ingest.manualWorkout(user.id, walk.copy(start = at(day, 14), end = at(day, 15))).start)
     }
 
     @Test
