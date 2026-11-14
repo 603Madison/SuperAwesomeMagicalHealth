@@ -69,13 +69,28 @@ async function openStream(): Promise<MediaStream> {
 /** Starts listening: [onFrames] gets each 20 ms frame and its smoothed values, a few at a time. */
 export async function listen(onFrames: (frames: VoiceFrame[], smooth: Smoothed[]) => void): Promise<Listening> {
   const stream = await openStream();
-  const context = new AudioContext();
+  // From here on the microphone is on: if anything else fails, it's let go before saying so.
+  let context: AudioContext | null = null;
+  let worker: Worker | null = null;
+  try {
+    context = new AudioContext();
+    worker = new Worker(new URL("./voice.worker.ts", import.meta.url), { type: "module" });
+    return await connect(stream, context, worker, onFrames);
+  } catch (e) {
+    stream.getTracks().forEach((t) => t.stop());
+    void context?.close().catch(() => undefined);
+    worker?.terminate();
+    throw e;
+  }
+}
+
+/** The microphone's sound, through [context], to [worker]. */
+async function connect(stream: MediaStream, context: AudioContext, worker: Worker, onFrames: (frames: VoiceFrame[], smooth: Smoothed[]) => void): Promise<Listening> {
   if (context.state === "suspended") await context.resume().catch(() => undefined);
   const source = context.createMediaStreamSource(stream);
   const silent = context.createGain();
   silent.gain.value = 0;
   silent.connect(context.destination);
-  const worker = new Worker(new URL("./voice.worker.ts", import.meta.url), { type: "module" });
   const send = (m: ToWorker, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
   const waiting = new Map<number, (r: Recorded | null) => void>();
   let nextId = 1;

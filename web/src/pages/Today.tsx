@@ -10,7 +10,7 @@ import { useModules } from "../App";
 import { MoodDialog } from "./Mind";
 import { api } from "../lib/api";
 import { F, useFields, useFoodNumbers, useWater } from "../lib/fields";
-import { clock, dayLabel, today, useUnits } from "../lib/format";
+import { clock, dayLabel, today, useDayPicker, useUnits } from "../lib/format";
 import { useScreenLayout } from "../lib/layout";
 import { useSession } from "../lib/session";
 import { QUICK_ROW, dosesLater, quickRow } from "../lib/today";
@@ -71,7 +71,8 @@ interface Part extends Section {
 }
 
 export function Today() {
-  const [date, setDate] = useState(today());
+  // Today until another day is picked; left open overnight, it moves on to the new day.
+  const [date, setDate, now] = useDayPicker();
   const { data, error, loading, reload } = useLoad(() => api.day(date), [date]);
   const user = useSession((s) => s.user)!;
   const [open, setOpen] = useState<Dialog | null>(null);
@@ -90,7 +91,9 @@ export function Today() {
   const navigate = useNavigate();
   const glucoseUnit = useSession((s) => s.profile?.vitalsTargets?.glucoseUnit) ?? "MMOL_L";
   const is = (id: Module) => on.includes(id);
-  const isToday = date === today();
+  const isToday = date === now;
+  // A quick log on today goes to the day it is when it's tapped.
+  const logDate = () => (isToday ? today() : date);
   const rings = RINGS.filter((r) => r.key === "readiness" ? is("SLEEP") || is("ACTIVITY") : r.key === "sleep" ? is("SLEEP") : is("ACTIVITY"));
   // Until something's picked in What you're tracking: a gentle prompt, dismissed per browser.
   const [skipFirstRun, setSkipFirstRun] = useState(() => { try { return localStorage.getItem("samh.firstRun.skip") === "1"; } catch { return false; } });
@@ -110,9 +113,9 @@ export function Today() {
   const changed = () => { reload(); food.reload(); upNext.reload(); };
 
   const addWater = async () => {
-    try { await api.addWater(date, 250); toast("250 ml of water added"); changed(); } catch (e) { errorToast(e); }
+    try { await api.addWater(logDate(), 250); toast("250 ml of water added"); changed(); } catch (e) { errorToast(e); }
   };
-  const coffee = async () => { try { await quickDrink("COFFEE", date); changed(); } catch (e) { errorToast(e); } };
+  const coffee = async () => { try { await quickDrink("COFFEE", logDate()); changed(); } catch (e) { errorToast(e); } };
 
   // ---- Everything to log, with the shared quick-action ids: the quick row's first few, and all of it under + Log ----
   const actions: (Omit<LogAction, "module"> & { when?: boolean })[] = [
@@ -291,7 +294,7 @@ export function Today() {
           <p className="page-subtitle">{new Date(`${date}T12:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
         </div>
         <div className="page-actions">
-          <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
+          <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={now} />
           <ArrangeButton title="Today" onClick={() => setArranging("cards")} />
           {!readOnly && <Button variant="primary" className="log-btn" onClick={() => setLogging(true)} aria-haspopup="dialog"><Plus size={18} aria-hidden="true" /> Log</Button>}
         </div>

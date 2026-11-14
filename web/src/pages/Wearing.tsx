@@ -9,7 +9,7 @@ import {
 } from "../lib/continence";
 import type { ContinenceEntry, ContinenceSettings, ContinenceWearing, Fullness, ProductStats, Supply } from "../lib/types";
 import { FULLNESS } from "../lib/types";
-import { Button, Card, Field, Modal, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, Field, Modal, NumberInput, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { FullnessPicker, ScaleRow } from "../components/FieldKit";
 
 /*
@@ -186,7 +186,7 @@ export function ChangeSheet({ initial, supplies, settings, recent, onClose, onSa
           {has(F.CONTINENCE_SKIN) && <ScaleRow label="Skin" min={0} max={3} low="Fine" high="Sore" value={e.skin} onChange={(skin) => setE({ ...e, skin })} />}
           {has(F.CONTINENCE_PAD_WEIGHT) && (
             <Field label="Weighed (grams)" help={off?.dryWeightG != null ? `Dry it weighs ${num(off.dryWeightG)} g` : "Add the dry weight to the product to see what was lost"}>
-              <input inputMode="decimal" value={e.padWeightG ?? ""} onChange={(ev) => setE({ ...e, padWeightG: ev.target.value ? Number(ev.target.value.replace(",", ".")) : undefined })} />
+              <NumberInput value={e.padWeightG} onChange={(g) => setE({ ...e, padWeightG: g == null || g < 0 ? undefined : g })} />
             </Field>
           )}
           {lost != null && <p className="loss-line" aria-live="polite">About <strong>{num(lost)} g</strong> lost (roughly {num(lost)} ml).</p>}

@@ -2,13 +2,9 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { KeyRound, LogIn } from "lucide-react";
 import { api } from "../lib/api";
+import { safeReturn } from "../lib/paths";
 import { session, useSession } from "../lib/session";
 import { Button, Field } from "../components/ui";
-
-/** Only addresses on this server. */
-export function safeReturn(path: string | null): string {
-  return path && path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\") ? path : "/";
-}
 
 export function Login() {
   const config = useSession((s) => s.config);

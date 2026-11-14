@@ -4,8 +4,9 @@ import {
   Activity, ArrowDown, ArrowUp, ArrowUpDown, BellRing, Download, Droplet, Layers, Minus, Moon, Package, Plus, Printer, Settings as SettingsIcon, Sparkles,
   Timer, Trash2, TrendingDown, TrendingUp,
 } from "lucide-react";
-import { api } from "../lib/api";
-import { clock, isoDate, num, shortDate, today } from "../lib/format";
+import { api, saveFile } from "../lib/api";
+import { toCsv } from "../lib/csv";
+import { clock, dayOf, isoDate, num, shiftDate, shortDate, today, useToday } from "../lib/format";
 import type {
   ContinenceCheckIn, ContinenceEntry, ContinenceKind, ContinenceProgress, ContinenceSettings, ContinenceWear, ContinenceWearing, LeakSize,
   ProgressMetric, Supply, Verdict,
@@ -15,7 +16,7 @@ import { F, useFields } from "../lib/fields";
 import { trainingMinutes } from "../lib/today";
 import { useReadOnly } from "../lib/viewing";
 import { BarChart, LineChart } from "../components/charts";
-import { Button, Card, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, DateTimeInput, ErrorNotice, Field, Modal, NumberInput, PageHeader, Spinner, Stat, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
 import { useWater } from "../lib/fields";
@@ -56,8 +57,10 @@ const DEFAULT_SETTINGS: ContinenceSettings = {
 export function Continence() {
   const { has } = useFields();
   const readOnly = useReadOnly();
-  const entries = useLoad(() => api.continence(3), []);
-  const summary = useLoad(() => api.continenceSummary(14), []);
+  // Today's lists move on to the new day when the page has been open overnight.
+  const now = useToday();
+  const entries = useLoad(() => api.continence(3), [now]);
+  const summary = useLoad(() => api.continenceSummary(14), [now]);
   const settings = useLoad(() => api.continenceSettings().catch(() => DEFAULT_SETTINGS), []);
   // Loaded whatever the fields say: the field layout may still be loading, and the list is small.
   const supplies = useLoad(() => api.supplies().catch(() => [] as Supply[]), []);
@@ -65,7 +68,7 @@ export function Continence() {
   const wearing = useLoad(() => api.continenceWearing().catch(() => undefined), []);
   const products = useLoad(() => api.continenceProducts(90).catch(() => []), []);
   // Grouped by what was worn; an older server doesn't have it, and the day shows as a plain list.
-  const diaryDay = useLoad(() => api.continenceDiary().catch(() => null), []);
+  const diaryDay = useLoad(() => api.continenceDiary().catch(() => null), [now]);
   const [detail, setDetail] = useState<ContinenceEntry | null>(null);
   const [changing, setChanging] = useState<ContinenceEntry | null>(null);
   const [exercise, setExercise] = useState(false);
@@ -82,7 +85,7 @@ export function Continence() {
     try { await api.saveContinence(newEntry(kind, wearing.data, s0)); toast(`${kindLabel(kind)} logged`); reload(); } catch (e) { errorToast(e); }
   };
   const open = (e: ContinenceEntry) => (e.kind === "PAD_CHANGE" ? setChanging(e) : setDetail(e));
-  const todays = (entries.data ?? []).filter((e) => e.date === today());
+  const todays = (entries.data ?? []).filter((e) => e.date === now);
   const s = summary.data;
   // While Wearing now shows what's on (with its own Change), the quick row leaves Change out.
   const layout = useScreenLayout(layoutKey("bladder"));
@@ -260,10 +263,9 @@ function TodayCounts({ entries }: { entries: ContinenceEntry[] }) {
 
 /** "7:48 pm", or "Yesterday 11:30 pm" / "Tue 11:30 pm" for an accident on another day. */
 function when(ms: number): string {
-  const d = new Date(ms);
-  if (isoDate(d) === today()) return clock(ms);
-  const y = new Date(); y.setDate(y.getDate() - 1);
-  return `${isoDate(d) === isoDate(y) ? "Yesterday" : d.toLocaleDateString(undefined, { weekday: "short" })} ${clock(ms)}`;
+  const day = dayOf(ms);
+  if (day === today()) return clock(ms);
+  return `${day === shiftDate(today(), -1) ? "Yesterday" : new Date(ms).toLocaleDateString(undefined, { weekday: "short" })} ${clock(ms)}`;
 }
 
 /** An entry on its own in the day's list. */
@@ -355,7 +357,6 @@ function EntryDialog({ entry, settings, supplies, wearing, onClose, onSaved, onP
       if (then === "change" && onSavedThenChange) onSavedThenChange(saved); else onClose();
     } catch (err) { errorToast(err); setBusy(false); }
   };
-  const local = (ms: number) => { const d = new Date(ms); return `${isoDate(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
   const isLeak = e.kind === "LEAK" || e.kind === "BOWEL_LEAK" || e.kind === "BEDWETTING";
   const isVoid = e.kind === "URINATION" || e.kind === "CATHETER";
   const worn = e.kind === "PAD_CHANGE" || isLeak;
@@ -384,7 +385,7 @@ function EntryDialog({ entry, settings, supplies, wearing, onClose, onSaved, onP
           )}
           {has(F.CONTINENCE_PAD_WEIGHT) && (
             <Field label="Weighed (grams)" help={supply?.dryWeightG != null ? `Dry it weighs ${num(supply.dryWeightG)} g` : "Add the dry weight to the product to see what was lost"}>
-              <input inputMode="decimal" value={e.padWeightG ?? ""} onChange={(ev) => setE({ ...e, padWeightG: ev.target.value ? Number(ev.target.value.replace(",", ".")) : undefined })} />
+              <NumberInput value={e.padWeightG} onChange={(g) => setE({ ...e, padWeightG: g == null || g < 0 ? undefined : g })} />
             </Field>
           )}
           {lost != null && <p className="loss-line" aria-live="polite">About <strong>{num(lost)} g</strong> lost (roughly {num(lost)} ml).</p>}
@@ -399,7 +400,7 @@ function EntryDialog({ entry, settings, supplies, wearing, onClose, onSaved, onP
       <div className="tag-list" role="radiogroup" aria-label="What happened">
         {kinds.map((k) => <button key={k.id} type="button" role="radio" aria-checked={e.kind === k.id} className={`chip ${e.kind === k.id ? "is-on" : ""}`} onClick={() => (k.id === "PAD_CHANGE" && !entry.id ? onPadChange() : setE({ ...e, kind: k.id }))}>{k.label}</button>)}
       </div>
-      <Field label="When"><input type="datetime-local" value={local(e.at)} onChange={(ev) => setE({ ...e, at: new Date(ev.target.value).getTime() })} /></Field>
+      <Field label="When"><DateTimeInput value={e.at} onChange={(at) => setE({ ...e, at })} /></Field>
       {inOn && product}
 
       {isLeak && e.kind !== "BEDWETTING" && <OneOf label="What leaked" options={LEAK_CONTENTS} value={e.contents} onChange={(contents) => setE({ ...e, contents })} />}
@@ -645,16 +646,12 @@ function Diary({ onClose }: { onClose: () => void }) {
   const rows = [...(entries.data ?? [])].reverse();
   const water = useWater(useModules());
   const csv = () => {
-    const lines = [["Date", "Time", "Type", "Volume (ml)", "Urgency (0-3)", "Leak", "Fullness", "Lost (g)", "Triggers", "Activity", "Bristol", "Night", "Note"].join(",")];
-    rows.forEach((e) => lines.push([e.date, clock(e.at), kindLabel(e.kind), e.volumeMl ?? "", e.urgency ?? "", e.leak ?? "", e.fullness ?? "", e.lossG ?? "",
-      e.triggers.join("; "), (e.activity ?? []).join("; "), e.bristol ?? "", e.night ? "yes" : "", (e.note ?? "").replace(/[",\n]/g, " ")].join(",")));
-    if (water) (summary.data?.days ?? []).forEach((d) => lines.push(["", "", `Water on ${d.date}`, d.fluidMl, "", "", "", "", "", "", "", "", ""].join(",")));
-    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `bladder-diary-${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const lines: unknown[][] = [["Date", "Time", "Type", "Volume (ml)", "Urgency (0-3)", "Leak", "Fullness", "Lost (g)", "Triggers", "Activity", "Bristol", "Night", "Note"]];
+    rows.forEach((e) => lines.push([e.date, clock(e.at), kindLabel(e.kind), e.volumeMl, e.urgency, e.leak, e.fullness, e.lossG,
+      e.triggers.join("; "), (e.activity ?? []).join("; "), e.bristol, e.night ? "yes" : "", e.note]));
+    if (water) (summary.data?.days ?? []).forEach((d) => lines.push(["", "", `Water on ${d.date}`, d.fluidMl, "", "", "", "", "", "", "", "", ""]));
+    // With a byte-order mark, so spreadsheets read accents and other letters right.
+    saveFile(new Blob(["﻿", toCsv(lines)], { type: "text/csv;charset=utf-8" }), `bladder-diary-${today()}.csv`);
   };
   return (
     <Modal wide title="3-day bladder and bowel diary" onClose={onClose} footer={<>

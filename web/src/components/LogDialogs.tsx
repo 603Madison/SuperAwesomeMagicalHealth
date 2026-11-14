@@ -25,8 +25,12 @@ export function WeightDialog({ onClose, onSaved }: { onClose: () => void; onSave
   const [at, setAt] = useState(localInput(Date.now()));
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    // Starts from the last weight, which is usually close.
-    api.measurements("WEIGHT", 365).then((list) => list[0] && setValue(weightValue(list[0].value, units).toFixed(1)), () => undefined);
+    // Starts from the last weight, which is usually close: only into an empty field, and not once the dialog has closed.
+    let cancelled = false;
+    api.measurements("WEIGHT", 365).then((list) => {
+      if (!cancelled && list[0]) setValue((typed) => (typed.trim() === "" ? weightValue(list[0].value, units).toFixed(1) : typed));
+    }, () => undefined);
+    return () => { cancelled = true; };
   }, [units]);
   const save = async () => {
     const n = Number(value.replace(",", "."));

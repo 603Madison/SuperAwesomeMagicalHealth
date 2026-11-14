@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { CalendarClock, Layers, ListChecks, ListTodo, Package, Pill, Timer } from "lucide-react";
 import { api } from "../lib/api";
 import { F, useFields } from "../lib/fields";
-import { clock, hm, isoDate, shiftDate, today } from "../lib/format";
+import { clock, dayOf, dayStart, dayZone, hm, shiftDate, useToday } from "../lib/format";
 import { appointmentsToday, dosesDue, nextTrip, orderUpNext, trainingMinutes, type UpNext } from "../lib/today";
 import type { DaySummary, Module, SupplyStatus } from "../lib/types";
 import { Button, Card, errorToast, toast, useLoad } from "../components/ui";
@@ -22,7 +22,7 @@ import { changeDue, hoursShort } from "../lib/continence";
 /** Up next's rows for [day] ([hidden]: Today's hidden sections), and a reload for the bladder-training trip. */
 export function useUpNext(day: DaySummary | undefined, date: string, on: Module[], hidden: Set<string>, readOnly: boolean): { items: UpNext[]; reload: () => void } {
   const { has } = useFields();
-  const isToday = date === today();
+  const isToday = date === useToday();
   // The training's settings and today's trips are the person's own: not asked for while viewing a share.
   const training = isToday && !readOnly && on.includes("CONTINENCE") && has(F.CONTINENCE_BLADDER_TRAINING) && !hidden.has("CONTINENCE");
   const trips = useLoad(() => (training ? Promise.all([api.continenceSettings(), api.continence(1)]).catch(() => null) : Promise.resolve(null)), [training, date]);
@@ -34,8 +34,8 @@ export function useUpNext(day: DaySummary | undefined, date: string, on: Module[
     for (const d of dosesDue(m.meds?.due ?? [], now)) items.push({ kind: "dose", key: `dose-${d.medicationId}-${d.scheduledFor}`, at: d.scheduledFor, dose: d, overdue: d.scheduledFor < now });
   }
   if (on.includes("APPOINTMENTS") && !hidden.has("APPOINTMENTS")) {
-    const from = new Date(`${date}T00:00`).getTime();
-    const to = new Date(`${shiftDate(date, 1)}T00:00`).getTime();
+    const from = dayStart(date);
+    const to = dayStart(shiftDate(date, 1));
     for (const a of appointmentsToday(m.appointments ?? [], from, to, now)) items.push({ kind: "appointment", key: `appointment-${a.id ?? a.at}`, at: a.at, appointment: a });
   }
   if (on.includes("NEURO") && !hidden.has("NEURO")) {
@@ -48,8 +48,8 @@ export function useUpNext(day: DaySummary | undefined, date: string, on: Module[
   }
   if (trips.data) {
     const [settings, entries] = trips.data;
-    const times = entries.filter((e) => (e.kind === "URINATION" || e.kind === "CATHETER") && isoDate(new Date(e.at)) === date).map((e) => e.at);
-    const next = nextTrip(settings.bladderTraining, date, times, now);
+    const times = entries.filter((e) => (e.kind === "URINATION" || e.kind === "CATHETER") && dayOf(e.at) === date).map((e) => e.at);
+    const next = nextTrip(settings.bladderTraining, date, times, now, dayZone());
     if (next != null) items.push({ kind: "trip", key: "trip", at: next, every: trainingMinutes(settings.bladderTraining, date) });
   }
   if ((on.includes("CONTINENCE") || on.includes("CYCLE")) && !hidden.has("SUPPLIES")) {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Moon, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, hm, isoDate, num, shortDate, today } from "../lib/format";
+import { clock, hm, isoDate, num, shortDate, useToday } from "../lib/format";
 import { useSession } from "../lib/session";
 import { BarChart, Hypnogram, LineChart, StageLegend, scoreFloor } from "../components/charts";
 import { Button, Card, ErrorNotice, PageHeader, Segmented, Spinner, Stat, errorToast, useLoad } from "../components/ui";
@@ -16,7 +16,8 @@ export function Sleep() {
   const trends = useLoad(() => api.trends(days), [days]);
   const nights = useLoad(() => api.sleep(Math.min(days, 30)), [days]);
   // Last night's readings, for where they came from when more than one device measured them.
-  const day = useLoad(() => api.day(today()).catch(() => null), []);
+  const now = useToday();
+  const day = useLoad(() => api.day(now).catch(() => null), [now]);
   const [adding, setAdding] = useState(false);
   const reload = () => { trends.reload(); nights.reload(); day.reload(); };
   const rows = trends.data?.days ?? [];

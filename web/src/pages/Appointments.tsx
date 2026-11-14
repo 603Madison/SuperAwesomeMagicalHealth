@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, CalendarPlus, Check, FileText, History, MapPin, MessageCircleQuestion, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, isoDate, localInput, shiftDate, today } from "../lib/format";
+import { clock, dayOf, isoDate, localInput, shiftDate, today } from "../lib/format";
 import { useReadOnly } from "../lib/viewing";
 import type { Appointment, AppointmentQuestion, SuggestedQuestion } from "../lib/types";
 import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
@@ -16,14 +16,14 @@ const REMINDERS: { minutes: number; label: string }[] = [
 
 /** "Today, 2:30 PM", "Tomorrow, 9:00 AM", "Thu 14 Nov, 10:15 AM". */
 export function appointmentWhen(at: number): string {
-  const date = isoDate(new Date(at));
+  const date = dayOf(at);
   const day = date === today() ? "Today" : date === shiftDate(today(), 1) ? "Tomorrow"
     : new Date(at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: new Date(at).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
   return `${day}, ${clock(at)}`;
 }
 
 function inDays(at: number): string {
-  const days = Math.round((new Date(isoDate(new Date(at))).getTime() - new Date(today()).getTime()) / 86_400_000);
+  const days = Math.round((new Date(dayOf(at)).getTime() - new Date(today()).getTime()) / 86_400_000);
   return days <= 0 ? "Today" : days === 1 ? "Tomorrow" : days < 14 ? `In ${days} days` : `In ${Math.round(days / 7)} weeks`;
 }
 

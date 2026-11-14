@@ -4,8 +4,9 @@ import { Check, ChefHat, ExternalLink, Plus } from "lucide-react";
 import { api } from "../lib/api";
 import { canAdd, connectedLine, planLine, recipeLine } from "../lib/mealie";
 import type { Food, MealiePlan, MealieRecipes, MealieStatus } from "../lib/types";
+import { onUserChange } from "../lib/session";
 import { useReadOnly } from "../lib/viewing";
-import { Button, Card, Field, Spinner, errorToast, toast } from "../components/ui";
+import { Button, Card, Field, Spinner, errorToast, toast, useLoad } from "../components/ui";
 
 /*
  * Mealie, the self-hosted recipe manager, in Food: connecting it (Settings › Connections), its
@@ -16,11 +17,27 @@ import { Button, Card, Field, Spinner, errorToast, toast } from "../components/u
 let known: MealieStatus | undefined;
 const listeners = new Set<(s: MealieStatus) => void>();
 let asking: Promise<MealieStatus> | null = null;
+/** Counts sign-ins, so an answer for the last person never counts for the next. */
+let generation = 0;
 
 function ask(): Promise<MealieStatus> {
-  asking ??= api.mealie().catch(() => ({ connected: false }) as MealieStatus).then((s) => { known = s; asking = null; listeners.forEach((l) => l(s)); return s; });
+  const mine = generation;
+  asking ??= api.mealie().catch(() => ({ connected: false }) as MealieStatus).then((s) => {
+    if (mine !== generation) return s;
+    known = s;
+    asking = null;
+    listeners.forEach((l) => l(s));
+    return s;
+  });
   return asking;
 }
+
+// Someone else signed in (or nobody is): their Mealie, asked afresh.
+onUserChange(() => {
+  generation++;
+  known = undefined;
+  asking = null;
+});
 
 function tell(s: MealieStatus) {
   known = s;
@@ -98,22 +115,27 @@ export function MealieSettings() {
   );
 }
 
-/** The day's meal plan from Mealie, each planned meal added to its meal with one tap. */
+/**
+ * The day's meal plan from Mealie, each planned meal added to its meal with one tap. Food keys it
+ * by [date], so a card only ever shows, adds to and reloads its own day.
+ */
 export function MealPlanCard({ date, numbers, readOnly, onChanged }: { date: string; numbers: boolean; readOnly: boolean; onChanged: () => void }) {
-  const [plan, setPlan] = useState<MealiePlan | null>(null);
+  // useLoad drops an answer that comes after the day has changed.
+  const { data: plan, reload } = useLoad<MealiePlan>(
+    () => api.mealiePlan(date).catch(() => ({ date, entries: [], problem: "The meal plan isn't available just now" })),
+    [date],
+  );
   const [busy, setBusy] = useState<number | null>(null);
-  const load = () => api.mealiePlan(date).then(setPlan, () => setPlan({ date, entries: [], problem: "The meal plan isn't available just now" }));
-  useEffect(() => { setPlan(null); void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [date]);
-  if (!plan || (plan.entries.length === 0 && !plan.problem)) return null;
+  if (!plan || plan.date !== date || (plan.entries.length === 0 && !plan.problem)) return null;
   const add = async (i: number) => {
     const e = plan.entries[i];
     if (!e.recipe?.food) return;
     setBusy(i);
     try {
-      await api.logFood({ date, meal: e.meal, servings: 1, food: e.recipe.food });
+      await api.logFood({ date: plan.date, meal: e.meal, servings: 1, food: e.recipe.food });
       toast(`${e.title} added`);
       onChanged();
-      await load();
+      reload();
     } catch (err) { errorToast(err); }
     setBusy(null);
   };

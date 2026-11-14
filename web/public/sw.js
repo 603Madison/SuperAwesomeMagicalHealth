@@ -36,7 +36,24 @@ self.addEventListener("push", (event) => {
   event.waitUntil(show(message));
 });
 
+/**
+ * Whether the account signed in here is the one a reminder is for ([userId], from servers that
+ * say). Someone else may have signed in since it came: then it's marked in the app instead.
+ */
+async function signedInAs(userId) {
+  if (!userId) return true;
+  try {
+    const response = await fetch("/api/me", { credentials: "same-origin" });
+    if (!response.ok) return false;
+    const me = await response.json();
+    return !!me && !!me.user && me.user.id === userId;
+  } catch {
+    return false;
+  }
+}
+
 async function markDose(message, status) {
+  if (!(await signedInAs(message.userId))) throw new Error("signed in as someone else");
   const response = await fetch("/api/meds/doses", {
     method: "POST",
     credentials: "same-origin",

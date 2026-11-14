@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check, ClipboardList, FlaskConical, MoreHorizontal, Pencil, Pill, Plus, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, dayLabel, isoDate, num, shortDate, today } from "../lib/format";
+import { clock, dayLabel, isoDate, num, shortDate, today, useDayPicker } from "../lib/format";
 import type { DueDose, LabResult, MedForm, Medication, ScheduleKind } from "../lib/types";
 import { LineChart } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
@@ -24,7 +24,8 @@ const LABS = ["Estradiol", "Testosterone", "Progesterone", "Prolactin", "SHBG", 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function Meds() {
-  const [date, setDate] = useState(today());
+  // Today until another day is picked; left open overnight, it moves on.
+  const [date, setDate, now] = useDayPicker();
   const day = useLoad(() => api.medsDay(date), [date]);
   const meds = useLoad(() => api.meds(true), []);
   const labs = useLoad(() => api.labs(), []);
@@ -97,7 +98,7 @@ export function Meds() {
   return (
     <div className="page">
       <PageHeader title="Medications" subtitle="What you take, when, and how it's going" actions={<>
-        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
+        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={now} />
         {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> Add</Button>}
         {arranged.button}
       </>} />

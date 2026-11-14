@@ -1,9 +1,12 @@
 // Today's choices (src/lib/today.ts): Up next's doses and order, the next bladder-training trip,
-// the quick row and the meals logged (npm test).
+// the quick row, the meals logged, and days in the person's time zone (npm test).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { QUICK_ROW, appointmentsToday, dosesDue, dosesLater, mealsLogged, nextTrip, orderUpNext, quickRow, trainingMinutes, type UpNext } from "../src/lib/today.ts";
+import {
+  QUICK_ROW, appointmentsToday, dateIn, dosesDue, dosesLater, mealsLogged, nextTrip, orderUpNext, quickRow, startOfDayIn, todayIn, trainingMinutes, zonedTime,
+  type UpNext,
+} from "../src/lib/today.ts";
 import type { Appointment, BladderTraining, DueDose, SupplyStatus } from "../src/lib/types.ts";
 
 const DATE = "2026-11-13";
@@ -86,4 +89,61 @@ test("meals logged, in the day's order", () => {
   assert.equal(mealsLogged(["LUNCH", "BREAKFAST", "LUNCH"]), "Breakfast, lunch logged");
   assert.equal(mealsLogged(["SNACK"]), "Snacks logged");
   assert.equal(mealsLogged([]), null);
+});
+
+// ---- Days in the person's time zone (the server's days follow the profile's, not the browser's) ----
+
+const utc = (y: number, m: number, d: number, h = 0, min = 0) => Date.UTC(y, m - 1, d, h, min);
+
+test("today in a zone: the person's date, wherever the browser is", () => {
+  // 12:00 UTC on 13 November is already the 14th in Auckland (UTC+13 in summer), and still the morning of the 13th in Los Angeles.
+  const noonUtc = utc(2026, 11, 13, 12);
+  assert.equal(todayIn("Pacific/Auckland", noonUtc), "2026-11-14");
+  assert.equal(todayIn("America/Los_Angeles", noonUtc), "2026-11-13");
+  assert.equal(todayIn("Pacific/Kiritimati", utc(2026, 11, 13, 10)), "2026-11-14");
+  assert.equal(todayIn("Pacific/Pago_Pago", utc(2026, 11, 14, 10)), "2026-11-13");
+  // Midnight is where the zone's clock says it is.
+  assert.equal(dateIn(utc(2026, 11, 13, 23, 59), "Europe/London"), "2026-11-13");
+  assert.equal(dateIn(utc(2026, 11, 14, 0, 0), "Europe/London"), "2026-11-14");
+  assert.equal(dateIn(utc(2026, 11, 13, 10, 59), "Pacific/Auckland"), "2026-11-13");
+  assert.equal(dateIn(utc(2026, 11, 13, 11, 0), "Pacific/Auckland"), "2026-11-14");
+});
+
+test("today without a zone, or with one the browser doesn't know: the browser's own", () => {
+  const at = utc(2026, 11, 13, 23, 30);
+  const d = new Date(at);
+  const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  assert.equal(todayIn(undefined, at), local);
+  assert.equal(todayIn("", at), local);
+  assert.equal(todayIn(null, at), local);
+  assert.equal(todayIn("Mars/Olympus_Mons", at), local);
+  assert.match(todayIn("Europe/Paris"), /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test("a clock time on a day in a zone, through summer time", () => {
+  assert.equal(startOfDayIn("2026-11-14", "Pacific/Auckland"), utc(2026, 11, 13, 11));
+  assert.equal(zonedTime("2026-11-14", "08:00", "America/New_York"), utc(2026, 11, 14, 13));
+  // London's clocks went forward on 29 March 2026: midnight was still GMT, noon was BST.
+  assert.equal(startOfDayIn("2026-03-29", "Europe/London"), utc(2026, 3, 29, 0));
+  assert.equal(zonedTime("2026-03-29", "12:00", "Europe/London"), utc(2026, 3, 29, 11));
+  // New York's went back on 1 November 2026: that day had 25 hours.
+  assert.equal(startOfDayIn("2026-11-02", "America/New_York") - startOfDayIn("2026-11-01", "America/New_York"), 25 * 3_600_000);
+  assert.equal(startOfDayIn("2026-11-02", "America/New_York"), utc(2026, 11, 2, 5));
+  // Each day's start reads as that day, and the moment before as the day before.
+  for (const zone of ["Pacific/Auckland", "Asia/Kolkata", "America/St_Johns", "Australia/Lord_Howe"]) {
+    const start = startOfDayIn("2026-11-14", zone);
+    assert.equal(dateIn(start, zone), "2026-11-14", zone);
+    assert.equal(dateIn(start - 1, zone), "2026-11-13", zone);
+  }
+  assert.ok(Number.isNaN(zonedTime("14/11/2026", "08:00", "Europe/London")));
+  assert.ok(Number.isNaN(zonedTime("2026-11-14", "eight", "Europe/London")));
+});
+
+test("the next trip follows the clock in the person's zone", () => {
+  const zone = "Pacific/Auckland";
+  const nz = (hhmm: string) => zonedTime("2026-11-14", hhmm, zone);
+  // 07:00 there: training starts at 08:00 there.
+  assert.equal(nextTrip(training, "2026-11-14", [], nz("07:00"), zone), nz("08:00"));
+  assert.equal(nextTrip(training, "2026-11-14", [nz("10:05")], nz("11:20"), zone), nz("11:35"));
+  assert.equal(nextTrip(training, "2026-11-14", [], nz("21:30"), zone), null);
 });
