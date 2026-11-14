@@ -205,6 +205,34 @@ class ConditionsContinenceTest {
         assertEquals(1, s.modules.cycle.logged(me, today, today).size)
     }
 
+    @Test
+    fun `a deleted supply doesn't lock the entries and settings that name it`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)
+        val me = s.admin()
+        val pads = s.supplies.save(me, Supply("Pads", SupplyKind.PAD, onHand = 20, dryWeightG = 30.0))
+        val tampons = s.supplies.save(me, Supply("Tampons", SupplyKind.TAMPON, onHand = 10))
+        val leak = s.modules.continence.save(me, ContinenceEntry(now - 3_600_000, ContinenceKind.LEAK, supplyId = pads.id, padWeightG = 50.0))
+        val change = s.modules.continence.save(me, ContinenceEntry(now - 1_800_000, ContinenceKind.PAD_CHANGE, putOnSupplyId = pads.id))
+        val period = listOf(ProductUse(SupplyKind.TAMPON, 2, supplyId = tampons.id))
+        s.modules.cycle.put(me, CycleDay(today.toString(), flow = Flow.MEDIUM, products = period))
+        s.modules.continence.putSettings(me, ContinenceSettings(defaultSupplyId = pads.id))
+        s.supplies.delete(me, pads.id!!)
+        s.supplies.delete(me, tampons.id!!)
+
+        // Each can still be changed, and keeps what it names (and the loss worked out while the product was kept).
+        val edited = s.modules.continence.save(me, leak.copy(note = "On the bus"), leak.id)
+        assertEquals(pads.id, edited.supplyId)
+        assertEquals(20.0, edited.lossG!!, 0.01)
+        assertEquals("At home", s.modules.continence.save(me, change.copy(note = "At home"), change.id).note)
+        assertEquals(Flow.HEAVY, s.modules.cycle.put(me, CycleDay(today.toString(), flow = Flow.HEAVY, products = period)).flow)
+        assertEquals("22:00", s.modules.continence.putSettings(me, s.modules.continence.settings(me).copy(nightFrom = "22:00")).nightFrom)
+        // A product that's gone can't be named anew.
+        val error = runCatching { s.modules.continence.save(me, ContinenceEntry(now, ContinenceKind.LEAK, supplyId = pads.id)) }.exceptionOrNull()
+        assertEquals("No such supply", (error as ApiError).message)
+        val cycleError = runCatching { s.modules.cycle.put(me, CycleDay(today.minusDays(1).toString(), flow = Flow.LIGHT, products = period)) }.exceptionOrNull()
+        assertEquals("No such supply", (cycleError as ApiError).message)
+    }
+
     // ---- Bladder and bowel ----
 
     @Test

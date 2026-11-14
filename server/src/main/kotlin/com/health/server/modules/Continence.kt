@@ -75,15 +75,22 @@ class ContinenceService(
         entry.padWeightG?.let { check(it > 0 && it <= 5000, "Pad weight is in grams, up to 5,000") }
         check(entry.details.size <= 30, "Up to 30 of your own fields")
         fun words(list: List<String>, max: Int = 10) = list.map { it.trim().lowercase().take(40) }.filter { it.isNotEmpty() }.distinct().take(max)
-        val supply = entry.supplyId?.let { supplies?.get(userId, it) ?: throw ApiError.badRequest("No such supply") }
+        // Only a product new to the entry must still be kept: one since deleted doesn't lock an entry made with it.
+        val stored = id?.let { entries.get(userId, EntryKind.CONTINENCE, it, ContinenceEntry.serializer())?.value }
+        val supply = entry.supplyId?.let { supplyId ->
+            supplies?.get(userId, supplyId) ?: if (supplyId == stored?.supplyId) null else throw ApiError.badRequest("No such supply")
+        }
         val change = entry.kind == ContinenceKind.PAD_CHANGE
         if (change) {
             check(!(entry.nothingOn && entry.putOnSupplyId != null), "Something put on, or nothing for now: not both")
-            entry.putOnSupplyId?.let { id -> supplies?.let { check(it.get(userId, id) != null, "No such supply") } }
+            entry.putOnSupplyId?.takeIf { it != stored?.putOnSupplyId }?.let { putOn -> supplies?.let { check(it.get(userId, putOn) != null, "No such supply") } }
         }
-        val loss = if (entry.padWeightG != null && supply?.dryWeightG != null) {
-            ((entry.padWeightG!! - supply.dryWeightG!!).coerceAtLeast(0.0) * 10).roundToInt() / 10.0
-        } else null
+        val loss = when {
+            entry.padWeightG != null && supply?.dryWeightG != null -> ((entry.padWeightG!! - supply.dryWeightG!!).coerceAtLeast(0.0) * 10).roundToInt() / 10.0
+            // A product since deleted: the loss worked out while it was kept stays, if the weight is the same.
+            supply == null && entry.supplyId != null && entry.supplyId == stored?.supplyId && entry.padWeightG == stored?.padWeightG -> stored?.lossG
+            else -> null
+        }
         val clean = entry.copy(
             triggers = words(entry.triggers),
             activity = words(entry.activity),
@@ -204,7 +211,8 @@ class ContinenceService(
         bt.startedOn?.let { check(runCatching { LocalDate.parse(it) }.isSuccess, "Started on looks like 2026-01-31") }
         input.changeReminderHours?.let { check(it in 1..24, "A change reminder comes after 1 to 24 hours") }
         check(input.customFields.size <= 30, "Up to 30 of your own fields")
-        input.defaultSupplyId?.let { check(supplies?.get(userId, it) != null, "No such supply") }
+        // A default since deleted doesn't stop the rest from being saved.
+        input.defaultSupplyId?.takeIf { it != settings(userId).defaultSupplyId }?.let { check(supplies?.get(userId, it) != null, "No such supply") }
         fun words(list: List<String>) = list.map { it.trim().lowercase().take(40) }.filter { it.isNotEmpty() }.distinct().take(50)
         val clean = input.copy(
             quickButtons = input.quickButtons.distinct().take(8),

@@ -45,7 +45,9 @@ class CycleService(
         check(day.products.size <= 10 && day.products.all { it.count in 1..20 }, "Up to 10 products, 1 to 20 of each")
         check(day.details.size <= 30, "Up to 30 of your own fields")
         fun words(list: List<String>, max: Int = 30) = list.map { it.trim().lowercase().take(40) }.filter { it.isNotEmpty() }.distinct().take(max)
-        day.products.mapNotNull { it.supplyId }.forEach { id -> check(supplies == null || supplies!!.get(userId, id) != null, "No such supply") }
+        // Only products new to the day must still be kept: one since deleted doesn't lock the day.
+        val kept = entries.list(userId, EntryKind.CYCLE_DAY, date, date, CycleDay.serializer()).flatMap { it.value.products.mapNotNull { p -> p.supplyId } }.toSet()
+        day.products.mapNotNull { it.supplyId }.filter { it !in kept }.forEach { id -> check(supplies == null || supplies!!.get(userId, id) != null, "No such supply") }
         val clean = day.copy(
             date = date.toString(),
             symptoms = words(day.symptoms),
