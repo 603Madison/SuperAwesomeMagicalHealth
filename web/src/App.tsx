@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { loadFields } from "./lib/fields";
+import { useEffect, useState, type ReactNode } from "react";
+import { safeReturn } from "./lib/paths";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import { ArrowUpDown, Bot, ClipboardList, Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
@@ -62,7 +62,7 @@ function Root() {
   const here = `${location.pathname}${location.search}`;
 
   if (loading) return <div className="splash"><Spinner size={32} /></div>;
-  if (location.pathname === "/login") return user ? <Navigate to={new URLSearchParams(location.search).get("return") ?? "/"} replace /> : <Login />;
+  if (location.pathname === "/login") return user ? <Navigate to={safeReturn(new URLSearchParams(location.search).get("return"))} replace /> : <Login />;
   if (!user) return <Navigate to={`/login?return=${encodeURIComponent(here)}`} replace />;
   if (location.pathname === "/connect-app") return <ConnectApp />;
   if (location.pathname === "/watch-setup") return <WatchSetup />;
@@ -141,14 +141,7 @@ function Shell() {
   const items = useNavItems();
   const shown = useNavShown(items);
   const [arranging, setArranging] = useState(false);
-  // Which fields show is the shown person's: reload it when that changes.
-  const owner = viewing?.ownerId;
-  const firstOwner = useRef(owner);
-  useEffect(() => {
-    if (firstOwner.current === owner) return;
-    firstOwner.current = owner;
-    void loadFields(true);
-  }, [owner]);
+  // Which fields show is the shown person's: lib/fields.ts loads them afresh when that changes.
   const link = (i: NavItem) => (
     <NavLink key={i.id} to={i.to} className={`nav-link ${i.tab ? `nav-tab nav-${i.id.toLowerCase()}` : "nav-optional"}`} title={i.short === i.label ? undefined : i.label}>
       <i.icon size={20} /> <span>{i.short}</span>
@@ -191,7 +184,7 @@ function Shell() {
             <span className="sidebar-name">{user.displayName}</span>
             {pronouns && <span className="pronouns">{pronouns}</span>}
           </div>
-          <IconButton label="Sign out" onClick={() => { startViewing(null); void session.signOut(); }}><LogOut size={18} /></IconButton>
+          <IconButton label="Sign out" onClick={() => void session.signOut()}><LogOut size={18} /></IconButton>
         </div>
       </nav>
       {arranging && (

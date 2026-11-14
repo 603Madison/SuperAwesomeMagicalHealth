@@ -1,5 +1,8 @@
 import { create } from "zustand";
-import { api } from "./api";
+import { ApiError, api } from "./api";
+import { latestOnly, layoutAfterError, showsFoodNumbers } from "./fieldRules";
+import { onUserChange, useSession } from "./session";
+import { useViewing, viewingOwner } from "./viewing";
 import type { FieldLayout, Module } from "./types";
 
 /*
@@ -164,29 +167,97 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
 
 export const fieldLabel = (key: string) => ALL_FIELDS.find((f) => f.key === key)?.label ?? key;
 
-/** The person's field layout, loaded once and kept for every page; null until loaded. */
+/**
+ * The field layout, loaded once and kept for every page: the shown person's ([layout]: while
+ * viewing someone's share, theirs, filtered to what they shared) and the person's own ([own]: the
+ * same one when not viewing). Null until loaded, and while it can't be ([failed]): then it's asked
+ * again after a while, and when the tab comes back.
+ */
 interface FieldStore {
   layout: FieldLayout | null;
+  own: FieldLayout | null;
   loading: boolean;
+  failed: boolean;
 }
 
-export const useFieldStore = create<FieldStore>(() => ({ layout: null, loading: false }));
+export const useFieldStore = create<FieldStore>(() => ({ layout: null, own: null, loading: false, failed: false }));
 
 let pending: Promise<void> | null = null;
+const requests = latestOnly();
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+let failures = 0;
 
-/** Loads (or reloads) the layout; pages call it through [useFields]. */
+/** The shown person's layout and the person's own (one request when they're the same). */
+async function fetchLayouts(): Promise<{ layout: FieldLayout; own: FieldLayout }> {
+  // An older server without /api/fields (404): the defaults. Anything else goes on as a failure.
+  const orDefaults = (e: unknown): FieldLayout => {
+    const after = layoutAfterError(e instanceof ApiError ? e.status : undefined, DEFAULT_FIELDS);
+    if (after) return after;
+    throw e;
+  };
+  if (!viewingOwner()) {
+    const layout = await api.fields().catch(orDefaults);
+    return { layout, own: layout };
+  }
+  const [layout, own] = await Promise.all([api.fields().catch(orDefaults), api.ownFields().catch(orDefaults)]);
+  return { layout, own };
+}
+
+/** Loads (or reloads) the layout; pages call it through [useFields]. Only the latest answer counts. */
 export function loadFields(force = false): Promise<void> {
   if (pending && !force) return pending;
+  const mine = requests.next();
+  clearTimeout(retryTimer);
   useFieldStore.setState({ loading: true });
-  pending = api.fields()
-    .then((layout) => useFieldStore.setState({ layout, loading: false }))
-    // An older server without /api/fields: the defaults show, so nothing disappears.
-    .catch(() => useFieldStore.setState({ layout: { effective: DEFAULT_FIELDS, show: [], hide: [], because: {} }, loading: false }));
+  pending = fetchLayouts().then(
+    ({ layout, own }) => {
+      if (!requests.isLatest(mine)) return;
+      failures = 0;
+      useFieldStore.setState({ layout, own, loading: false, failed: false });
+    },
+    (e: unknown) => {
+      if (!requests.isLatest(mine)) return;
+      // Nothing to go on: the default fields and no amounts of food, until it's asked again.
+      useFieldStore.setState({ layout: null, own: null, loading: false, failed: true });
+      if (!(e instanceof ApiError && e.status === 401)) retryLater();
+    },
+  );
   return pending;
 }
 
+/** Asks again after a while: 5 seconds, then longer each time, up to a minute. */
+function retryLater() {
+  failures++;
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(retryNow, Math.min(60_000, 5_000 * 2 ** (failures - 1)));
+}
+
+function retryNow() {
+  if (useFieldStore.getState().failed && useSession.getState().user) void loadFields(true);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("focus", retryNow);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") retryNow(); });
+}
+
+/** Forgets the layout, so the next page to ask loads it afresh; nothing asked before counts. */
+function forget() {
+  requests.forget();
+  clearTimeout(retryTimer);
+  failures = 0;
+  pending = null;
+  useFieldStore.setState({ layout: null, own: null, loading: false, failed: false });
+}
+
+// Someone else signed in (or nobody is): theirs, not the last person's.
+onUserChange(forget);
+// Whose data shows changed: theirs, from the start (no amounts of food until it's known).
+useViewing.subscribe((s, before) => { if (s.share?.ownerId !== before.share?.ownerId) forget(); });
+
 export function setFieldLayout(layout: FieldLayout) {
-  useFieldStore.setState({ layout });
+  // Only ever the person's own (nothing of a share can be changed).
+  useFieldStore.setState(viewingOwner() ? { own: layout } : { layout, own: layout });
 }
 
 /** A check for whether a field shows: `has(F.CYCLE_CLOTS)`. Loads the layout the first time. */
@@ -211,13 +282,15 @@ export async function setField(key: string, on: boolean): Promise<void> {
 /**
  * Whether amounts of food show (FieldLayout.foodNumbers): calories, macros and targets. False for
  * people in eating disorder recovery: foods and meals show, and the numbers are still logged
- * quietly. False until the layout has loaded, so no number shows for a moment first; true from
- * older servers that don't say.
+ * quietly. False until the layout has loaded (so no number shows for a moment first), while it
+ * can't be loaded, and when the server doesn't say. While viewing someone's share, only when both
+ * their layout and the viewer's own allow them.
  */
 export function useFoodNumbers(): boolean {
   const layout = useFieldStore((s) => s.layout);
+  const own = useFieldStore((s) => s.own);
   if (!layout && !pending) void loadFields();
-  return layout != null && layout.foodNumbers !== false;
+  return showsFoodNumbers(layout, own);
 }
 
 /**

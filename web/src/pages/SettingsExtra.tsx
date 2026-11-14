@@ -96,14 +96,15 @@ function BrowserPush() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const browsers = useLoad(() => api.pushSubscriptions().catch(() => []), []);
-  const here = thisBrowserPushId();
-  useEffect(() => { void pushEnabledHere().then(setEnabled); }, []);
+  const userId = useSession((s) => s.user?.id) ?? "";
+  const here = thisBrowserPushId(userId);
+  useEffect(() => { void pushEnabledHere(userId).then(setEnabled); }, [userId]);
   const supported = pushSupported();
   const blocked = pushPermission() === "denied";
   const toggle = async (on: boolean) => {
     setBusy(true);
     try {
-      if (on) { await enablePush(); toast("Reminders on in this browser"); } else { await disablePush(); toast("Reminders off in this browser"); }
+      if (on) { await enablePush(userId); toast("Reminders on in this browser"); } else { await disablePush(userId); toast("Reminders off in this browser"); }
       setEnabled(on);
       browsers.reload();
     } catch (e) { errorToast(e); }
@@ -128,7 +129,7 @@ function BrowserPush() {
               </div>
               <IconButton label="Stop reminders there" onClick={async () => {
                 try {
-                  if (b.id === here) { await disablePush(); setEnabled(false); } else await api.deletePushSubscription(b.id);
+                  if (b.id === here) { await disablePush(userId); setEnabled(false); } else await api.deletePushSubscription(b.id);
                   browsers.reload();
                 } catch (e) { errorToast(e); }
               }}><Trash2 size={18} /></IconButton>

@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { create } from "zustand";
 import { AlertTriangle, Bot, Eraser, ExternalLink, FileSearch, KeyRound, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
+import { forgetConversations, loadConversation, saveConversation, type Conversation } from "../lib/assistant";
 import { when } from "../lib/format";
-import { useSession } from "../lib/session";
-import type { AiConsent, AiMessage, AiLook, AiSettings, AiStatus, Module } from "../lib/types";
+import { onUserChange, useSession } from "../lib/session";
+import type { AiConsent, AiMessage, AiSettings, AiStatus, Module } from "../lib/types";
 import { SENSITIVE } from "../lib/types";
 import { FEATURES, featureName } from "../components/features";
 import { Button, Card, Empty, Field, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
@@ -19,13 +20,37 @@ import { Button, Card, Empty, Field, Modal, PageHeader, Spinner, Toggle, errorTo
 
 const useAiStore = create<{ status: AiStatus | null; loaded: boolean }>(() => ({ status: null, loaded: false }));
 let loading: Promise<void> | null = null;
+let asked = 0;
 
 export function loadAiStatus(force = false): Promise<void> {
   if (loading && !force) return loading;
+  const mine = ++asked;
   loading = api.aiStatus()
-    .then((status) => useAiStore.setState({ status, loaded: true }))
-    .catch(() => useAiStore.setState({ status: null, loaded: true }));
+    .then((status) => {
+      if (mine !== asked) return;
+      // Off for this person (by them, or by the admin): their conversations go too.
+      if (!status.available || !status.consent?.acknowledged) forgetConversations();
+      useAiStore.setState({ status, loaded: true });
+    })
+    .catch(() => { if (mine === asked) useAiStore.setState({ status: null, loaded: true }); });
   return loading;
+}
+
+// Someone else signed in (or nobody is): their status, asked afresh.
+onUserChange(() => {
+  asked++;
+  loading = null;
+  useAiStore.setState({ status: null, loaded: false });
+});
+
+/** Turns the assistant off for this person, and forgets their conversations here. */
+async function turnOff() {
+  try {
+    await api.withdrawAiConsent();
+    forgetConversations();
+    toast("The assistant is off for you");
+    void loadAiStatus(true);
+  } catch (e) { errorToast(e); }
 }
 
 /** The status, loading it the first time it's asked for. */
@@ -93,7 +118,7 @@ function Consent({ status, onDone, onCancel }: { status: AiStatus; onDone: () =>
             <li>They're handled under {status.provider}'s <a href={status.termsUrl} target="_blank" rel="noreferrer">commercial terms <ExternalLink size={12} /></a> and <a href={status.privacyUrl} target="_blank" rel="noreferrer">privacy policy <ExternalLink size={12} /></a>, and the admin's account settings with them.</li>
             <li>It only looks at the features you tick below. It never sees your progress photos.</li>
             <li>With Food ticked, you can snap a photo of a meal to estimate what's in it: that photo goes to {status.provider} only when you take one, and isn't kept on this server.</li>
-            <li>Every reply shows what it looked at, and <Link to="/assistant/sent">What it's sent</Link> keeps a list. Your conversations stay in this browser.</li>
+            <li>Every reply shows what it looked at, and <Link to="/assistant/sent">What it's sent</Link> keeps a list. Your conversations stay in this browser tab, and go when you close it, sign out or turn the assistant off.</li>
             <li>It can be wrong. It isn't a doctor, and it isn't for emergencies.</li>
           </ul>
           {status.dataNotice && <p className="muted small">{status.dataNotice}</p>}
@@ -130,25 +155,15 @@ function Consent({ status, onDone, onCancel }: { status: AiStatus; onDone: () =>
   );
 }
 
-const storeKey = (userId: string) => `samh.assistant.${userId}`;
-
-function loadConversation(userId: string): { messages: AiMessage[]; looks: Record<number, AiLook[]> } {
-  try {
-    const raw = localStorage.getItem(storeKey(userId));
-    if (raw) return JSON.parse(raw);
-  } catch { /* private window or blocked storage: start fresh */ }
-  return { messages: [], looks: {} };
-}
-
 function Chat({ status, onChangeConsent }: { status: AiStatus; onChangeConsent: () => void }) {
   const user = useSession((s) => s.user)!;
-  const [conversation, setConversation] = useState(() => loadConversation(user.id));
+  const [conversation, setConversation] = useState<Conversation>(() => loadConversation(user.id));
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [used, setUsed] = useState(status.usedToday);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    try { localStorage.setItem(storeKey(user.id), JSON.stringify(conversation)); } catch { /* fine */ }
+    saveConversation(user.id, conversation);
     end.current?.scrollIntoView({ block: "end" });
   }, [conversation, user.id]);
   const send = async () => {
@@ -167,9 +182,6 @@ function Chat({ status, onChangeConsent }: { status: AiStatus; onChangeConsent: 
       errorToast(e);
       setConversation({ ...conversation, messages });
     } finally { setBusy(false); }
-  };
-  const withdraw = async () => {
-    try { await api.withdrawAiConsent(); localStorage.removeItem(storeKey(user.id)); toast("The assistant is off for you"); void loadAiStatus(true); } catch (e) { errorToast(e); }
   };
   const left = Math.max(0, status.dailyLimit - used);
   return (
@@ -206,7 +218,7 @@ function Chat({ status, onChangeConsent }: { status: AiStatus; onChangeConsent: 
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} disabled={left === 0} />
         <Button variant="primary" type="submit" busy={busy} disabled={!text.trim() || left === 0} aria-label="Send"><Send size={18} /></Button>
       </form>
-      <p className="muted small">It can be wrong, and it isn't a doctor. In an emergency, call your local emergency number. <button className="link-btn" onClick={withdraw}>Turn the assistant off for me</button></p>
+      <p className="muted small">It can be wrong, and it isn't a doctor. In an emergency, call your local emergency number. <button className="link-btn" onClick={() => void turnOff()}>Turn the assistant off for me</button></p>
     </div>
   );
 }
@@ -316,7 +328,7 @@ export function AssistantSettingsCard() {
           <div className="button-row">
             <Link className="btn btn-tonal" to="/assistant">Open</Link>
             <Link className="btn btn-ghost" to="/assistant/sent">What it's sent</Link>
-            <Button variant="ghost" onClick={async () => { try { await api.withdrawAiConsent(); toast("The assistant is off for you"); void loadAiStatus(true); } catch (e) { errorToast(e); } }}>Turn off for me</Button>
+            <Button variant="ghost" onClick={() => void turnOff()}>Turn off for me</Button>
           </div>
         </>
       ) : (

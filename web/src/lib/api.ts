@@ -55,16 +55,22 @@ export async function sharedPhotoBlobUrl(id: string, thumb: boolean): Promise<st
   return URL.createObjectURL(await response.blob());
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+/**
+ * Whose data a GET is for while viewing a share: "auto" goes by the path (SHARED_PATHS are the
+ * owner's); "own" is always the person's own; "shown" is always the owner's.
+ */
+type Whose = "auto" | "own" | "shown";
+
+async function request<T>(method: string, path: string, body?: unknown, whose: Whose = "auto"): Promise<T> {
   const headers: Record<string, string> = {};
   // Every change carries this header, which other sites' pages can't send.
   if (method !== "GET") headers["X-SAMH"] = "1";
   // Viewing someone's shared data: reads of their data say whose, and nothing of theirs can change.
-  const owner = viewingOwner();
+  const owner = whose === "own" && method === "GET" ? null : viewingOwner();
   if (owner && method !== "GET" && OWN_PATHS.some((p) => path.startsWith(p))) {
     throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
   }
-  if (owner && SHARED_PATHS.some((p) => path.startsWith(p)) && !OWN_PATHS.some((p) => path.startsWith(p))) {
+  if (owner && (whose === "shown" || SHARED_PATHS.some((p) => path.startsWith(p))) && !OWN_PATHS.some((p) => path.startsWith(p))) {
     if (method !== "GET") throw new ApiError(403, "You're looking at someone else's data, so nothing can be changed here.");
     headers["X-SAMH-View"] = owner;
   }
@@ -110,7 +116,15 @@ async function download(path: string, name: string): Promise<void> {
     const message = (data && typeof data === "object" && "error" in data && typeof data.error === "string") ? data.error : `The server answered ${response.status}`;
     throw new ApiError(response.status, message);
   }
-  const url = URL.createObjectURL(await response.blob());
+  saveFile(await response.blob(), name);
+}
+
+/**
+ * Hands [blob] to the browser to save as [name]. The link is on the page while it's clicked
+ * (some browsers ignore one that isn't), and its address lasts long enough for the download.
+ */
+export function saveFile(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -142,6 +156,8 @@ export const api = {
     post<{ url: string; token: string }>("/api/me/connectors", { allowLogging, allAccounts, modules }),
 
   profile: () => get<Profile>("/api/profile"),
+  /** While viewing a share, the owner's profile as shared (their time zone, for their days). */
+  viewedProfile: () => request<Profile>("GET", "/api/profile", undefined, "shown"),
   saveProfile: (profile: Profile) => put<Profile>("/api/profile", profile),
   day: (date: string) => get<DaySummary>(`/api/day/${q(date)}`),
   trends: (days: number) => get<Trends>(`/api/trends?days=${days}`),
@@ -331,6 +347,8 @@ export const api = {
   conditions: () => get<MyConditions>("/api/conditions"),
   saveConditions: (c: MyConditions) => put<MyConditions>("/api/conditions", c),
   fields: () => get<FieldLayout>("/api/fields"),
+  /** The person's own field layout, also while viewing someone's share. */
+  ownFields: () => request<FieldLayout>("GET", "/api/fields", undefined, "own"),
   saveFields: (c: FieldChoices) => put<FieldLayout>("/api/fields", c),
 
   // How the person has arranged each screen (always their own: never sent with X-SAMH-View)

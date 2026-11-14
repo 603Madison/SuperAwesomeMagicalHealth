@@ -143,7 +143,7 @@ function Notice({ onBack, onClose, onDone }: { onBack: () => void; onClose: () =
       <Button variant="primary" disabled={!understood} onClick={onDone}>Carry on</Button>
     </>}>
       <div className="form-stack" style={{ gap: 12 }}>
-        <p>The photo is sent to {status?.provider ?? "Anthropic"} to estimate what's in it. It isn't kept on this server or on {status?.provider ?? "Anthropic"}'s side by this app, and you can check and change everything before it's logged.</p>
+        <p>The photo is sent to {status?.provider ?? "Anthropic"} to estimate what's in it. It isn't kept on this server, and you can check and change everything before it's logged.</p>
         {status && (
           <p className="muted small photo-links">
             {status.provider} handles it under its <a href={status.termsUrl} target="_blank" rel="noreferrer">commercial terms <ExternalLink size={12} /></a> and <a href={status.privacyUrl} target="_blank" rel="noreferrer">privacy policy <ExternalLink size={12} /></a>.
