@@ -27,6 +27,7 @@ import com.health.server.insights.Combine.withReading
 import com.health.server.util.Days
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
 /** One day's numbers, worked out from everything recorded and entered; kept until something for that day changes. */
@@ -196,22 +197,41 @@ class DayService(
 
     // ---- Keeping days up to date ----
 
+    /**
+     * How many times each person's kept days have been cleared. A day is worked out over several
+     * transactions; one cleared while it was being worked out may have missed the change, so it
+     * isn't kept (see [kept]). Bumped in the same transaction as the clearing, and checked in the
+     * same one as the keeping (transactions run one at a time).
+     */
+    private val generations = ConcurrentHashMap<String, Long>()
+
+    private fun generation(userId: String): Long = generations[userId] ?: 0L
+
+    private fun bump(userId: String) {
+        generations.merge(userId, 1L, Long::plus)
+    }
+
     /** Something recorded between [from] and [to] changed: those days (and the next, for nights) are worked out again. */
     suspend fun changed(userId: String, from: Long, to: Long) {
         val days = profiles.days(userId)
         val first = days.dateOf(minOf(from, to))
         val last = days.dateOf(maxOf(from, to)).plusDays(1)
         db.tx {
+            bump(userId)
             if (first.plusDays(800).isBefore(last)) update("DELETE FROM day_cache WHERE user_id = ?", userId)
             else update("DELETE FROM day_cache WHERE user_id = ? AND date >= ? AND date <= ?", userId, first.toString(), last.toString())
         }
     }
 
     suspend fun changedDate(userId: String, date: LocalDate) = db.tx {
+        bump(userId)
         update("DELETE FROM day_cache WHERE user_id = ? AND date = ?", userId, date.toString())
     }
 
-    suspend fun changedAll(userId: String) = db.tx { update("DELETE FROM day_cache WHERE user_id = ?", userId) }
+    suspend fun changedAll(userId: String) = db.tx {
+        bump(userId)
+        update("DELETE FROM day_cache WHERE user_id = ?", userId)
+    }
 
     // ---- Stats ----
 
@@ -245,8 +265,15 @@ class DayService(
         val result = mutableListOf<DayStats>()
         var date = from
         while (!date.isAfter(to)) {
-            val stats = kept[date.toString()] ?: compute(userId, date, days, ctx()).also { fresh ->
-                db.tx { update("INSERT OR REPLACE INTO day_cache (user_id, date, data) VALUES (?, ?, ?)", userId, fresh.date, ApiJson.encodeToString(DayStats.serializer(), fresh)) }
+            val stats = kept[date.toString()] ?: run {
+                val before = generation(userId)
+                compute(userId, date, days, ctx()).also { fresh ->
+                    // Kept only if nothing changed while it was worked out; otherwise it's used this once.
+                    val data = ApiJson.encodeToString(DayStats.serializer(), fresh)
+                    db.tx {
+                        if (generation(userId) == before) update("INSERT OR REPLACE INTO day_cache (user_id, date, data) VALUES (?, ?, ?)", userId, fresh.date, data)
+                    }
+                }
             }
             result += stats
             date = date.plusDays(1)

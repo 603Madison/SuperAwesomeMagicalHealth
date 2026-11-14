@@ -3,14 +3,18 @@ package com.health.server
 import com.health.api.DeviceInfo
 import com.health.api.DeviceKind
 import com.health.api.EnergyProfile
+import com.health.api.FoodEntryInput
 import com.health.api.Goals
 import com.health.api.IngestBatch
+import com.health.api.Meal
 import com.health.api.Metric
+import com.health.api.Nutrients
 import com.health.api.Profile
 import com.health.api.Sample
 import com.health.api.SleepSession
 import com.health.api.SleepStage
 import com.health.api.StageSpan
+import com.health.server.insights.DayService
 import com.health.server.insights.DayStats
 import com.health.server.insights.Energy
 import com.health.server.insights.Scoring
@@ -21,6 +25,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -188,6 +193,35 @@ class InsightsTest {
         assertTrue(day.nutritionTarget!!.basis.startsWith("About"))
         s.ingest.deleteSample(user.id, weight.id!!)
         assertNull(s.days.summary(user.id, "2026-03-09").weightKg)
+    }
+
+    @Test
+    fun `a day changed while it's being worked out isn't kept stale`() = runBlocking {
+        val date = LocalDate.of(2026, 3, 10)
+        var armed = false
+        var userId = ""
+        lateinit var s: Services
+        s = testServices(clock = {
+            // Partway through working the day out (its food already read), a meal is logged, as the food diary does it.
+            if (armed && Thread.currentThread().stackTrace.any { it.className == DayService::class.java.name && it.methodName == "compute" }) {
+                armed = false
+                runBlocking {
+                    s.foods.log(userId, FoodEntryInput(date.toString(), Meal.LUNCH, 1.0, name = "Soup", nutrients = Nutrients(500.0, 20.0, 50.0, 10.0)))
+                    s.days.changedDate(userId, date)
+                }
+            }
+            now
+        })
+        s.bootstrap()
+        userId = s.users.byUsername("admin")!!.id
+        s.profiles.put(userId, Profile(timezone = "America/New_York"))
+        s.days.summary(userId, date.toString())
+        s.days.changedDate(userId, date)
+        armed = true
+        // Worked out from before the meal: right for that moment, but not kept.
+        assertEquals(0.0, s.days.summary(userId, date.toString()).nutrition.calories, 0.0)
+        assertFalse(armed)
+        assertEquals(500.0, s.days.summary(userId, date.toString()).nutrition.calories, 0.01)
     }
 
     @Test
