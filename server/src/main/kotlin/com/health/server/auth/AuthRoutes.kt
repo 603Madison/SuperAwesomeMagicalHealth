@@ -69,7 +69,7 @@ fun Route.authRoutes(services: Services) {
                 services.throttle.failed(address, account)
                 throw ApiError.unauthorized("Wrong username or password")
             }
-            services.throttle.succeeded(account)
+            services.throttle.succeeded(address, account)
             if (user.disabled) throw ApiError.forbidden("This account is turned off")
             val settings = services.settings.get()
             if (!settings.localLogin && settings.oidc.enabled && !user.breakGlass) {
@@ -83,7 +83,7 @@ fun Route.authRoutes(services: Services) {
                 ?: call.request.cookies[SESSION_COOKIE]
             call.principal(services) // checks the CSRF header for cookie sign-ins
             token?.let { services.sessions.revokeToken(it) }
-            call.response.cookies.append(call.clearedSessionCookie())
+            call.response.cookies.append(call.clearedSessionCookie(call.onHttps(services)))
             call.respond(mapOf("ok" to true))
         }
 
@@ -125,7 +125,7 @@ fun Route.authRoutes(services: Services) {
                 val user = oidcUser(services, call, code, pending)
                 services.users.touchLogin(user.id)
                 val token = services.sessions.create(user.id, SessionKind.WEB, deviceName(call))
-                call.response.cookies.append(call.sessionCookie(token, SessionStore.WEB_LIFETIME_MS / 1000))
+                call.response.cookies.append(call.sessionCookie(token, SessionStore.WEB_LIFETIME_MS / 1000, call.onHttps(services)))
                 pending.returnTo
             } catch (e: ApiError) {
                 log.warn("Single sign-on failed: {}", e.message)
@@ -215,7 +215,7 @@ private suspend fun signIn(services: Services, call: ApplicationCall, user: User
         SignedIn(user, token)
     } else {
         val token = services.sessions.create(user.id, SessionKind.WEB, deviceName(call))
-        call.response.cookies.append(call.sessionCookie(token, SessionStore.WEB_LIFETIME_MS / 1000))
+        call.response.cookies.append(call.sessionCookie(token, SessionStore.WEB_LIFETIME_MS / 1000, call.onHttps(services)))
         SignedIn(user)
     }
 }
@@ -263,8 +263,11 @@ suspend fun publicBase(services: Services, call: ApplicationCall): String {
 }
 
 /** Only places on this server: never another site (an open redirect). */
-private fun safeReturn(path: String?): String =
-    path?.takeIf { it.startsWith("/") && !it.startsWith("//") && !it.startsWith("/\\") && !it.contains('\n') && !it.contains('\r') } ?: "/"
+/** A path on this site to go back to after signing in: never another site ("//x", "/\\x"), and no spaces, tabs or other controls a browser might drop. */
+internal fun safeReturn(path: String?): String =
+    path?.takeIf { p ->
+        p.startsWith("/") && (p.length == 1 || (p[1] != '/' && p[1] != '\\')) && p.none { it.code < 0x21 || it.code == 0x7F } && p.length <= 2000
+    } ?: "/"
 
 /** "Firefox on Windows" and the like, to tell sign-ins apart. */
 fun deviceName(call: ApplicationCall): String {

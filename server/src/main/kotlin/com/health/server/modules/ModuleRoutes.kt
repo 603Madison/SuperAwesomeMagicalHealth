@@ -12,6 +12,8 @@ import com.health.api.ScreenerResult
 import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.auth.requireUser
+import com.health.server.care.SharedView
+import com.health.server.care.viewScope
 import com.health.server.util.parseDate
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
@@ -114,7 +116,18 @@ fun Route.moduleRoutes(services: Services) {
     }
 
     route("/api/labs") {
-        get { call.respond(m.meds.labs(call.requireUser(services).id, call.days(3650))) }
+        get {
+            val user = call.requireUser(services)
+            val labs = m.meds.labs(user.id, call.days(3650))
+            // Through a share: all of them with Medications shared, only the hormone ones with Hormones alone.
+            val scope = call.viewScope
+            call.respond(
+                if (scope == null) labs else {
+                    val targets = runCatching { services.hormones.settings(user.id).targets.map { it.name } }.getOrDefault(emptyList())
+                    labs.filter { SharedView.showsLab(it.name, scope.modules, targets) }
+                },
+            )
+        }
         post { call.respond(m.meds.saveLab(call.requireUser(services).id, call.receive<LabResult>())) }
         delete("/{id}") { m.meds.deleteLab(call.requireUser(services).id, call.id()); call.respond(ok) }
     }

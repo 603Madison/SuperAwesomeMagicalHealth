@@ -22,16 +22,16 @@ data class Share(
     val ownerName: String,
     val viewerId: String,
     val viewerName: String,
-    val modules: Set<Module>,
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module>,
     val createdAt: Long,
     val lastViewedAt: Long? = null,
 )
 
 @Serializable
-data class ShareRequest(val username: String, val modules: Set<Module>)
+data class ShareRequest(val username: String, @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module>)
 
 @Serializable
-data class ShareChange(val modules: Set<Module>)
+data class ShareChange(@Serializable(with = ModuleSetSerializer::class) val modules: Set<Module>)
 
 @Serializable
 data class Shares(
@@ -78,7 +78,7 @@ data class DigestPrefs(
     val email: String? = null,
     val emailEnabled: Boolean = false,
     /** Sensitive features whose lines may go in the email (the app always shows them all). */
-    val emailModules: Set<Module> = emptySet(),
+    @Serializable(with = ModuleSetSerializer::class) val emailModules: Set<Module> = emptySet(),
 )
 
 @Serializable
@@ -243,7 +243,7 @@ data class WatchToday(
     val stepGoal: Int = 0,
     val waterMl: Int = 0,
     val waterGoal: Int = 0,
-    val modules: Set<Module> = emptySet(),
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = emptySet(),
     val doses: List<WatchDose> = emptyList(),
     val habits: List<WatchHabit> = emptyList(),
     val stress: StressState? = null,

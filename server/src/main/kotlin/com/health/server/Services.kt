@@ -101,7 +101,7 @@ class Services(
 
     /** Each person's own settings, sealed one row per key (conditions, a feature's diary settings, Autism & ADHD, transition). */
     val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
-    val mealie = com.health.server.food.MealieService(http, userSettings, foods, { settings.get().webhooksPrivateNetworks }, clock)
+    val mealie = com.health.server.food.MealieService(http, userSettings, foods, { settings.get().webhooksPrivateNetworks }, clock, loopback = { config.outboundLoopback })
 
     /** How each person arranges the apps' screens. */
     val layouts = com.health.server.platform.LayoutService(userSettings)
@@ -196,11 +196,12 @@ class Services(
             val password = config.adminPassword ?: Random.password()
             users.create(config.adminUsername, "Administrator", Role.ADMIN, password, breakGlass = true)
             if (config.adminPassword == null) {
-                log.warn(
-                    "\n\n  Created the break-glass admin account.\n  Username: {}\n  Password: {}\n" +
+                // Straight to the console, never through the log: the log is kept in memory, and admins can read it.
+                System.err.println(
+                    "\n\n  Created the break-glass admin account.\n  Username: ${config.adminUsername}\n  Password: $password\n" +
                         "  This is shown once. Sign in and keep it somewhere safe; reset it with `samh-server reset-admin-password`.\n",
-                    config.adminUsername, password,
                 )
+                log.warn("Created the break-glass admin account {}; its password was printed once on the console", config.adminUsername)
             } else {
                 log.info("Created the break-glass admin account {} with the password from SAMH_ADMIN_PASSWORD", config.adminUsername)
             }

@@ -35,7 +35,7 @@ data class AiKey(val apiKey: String)
 @Serializable
 data class AiConsent(
     /** The features the assistant may look at. Sensitive ones need [sensitiveAcknowledged]. */
-    val modules: Set<Module> = emptySet(),
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = emptySet(),
     val allowLogging: Boolean = false,
     /** Ticked by the person after reading the warning; consent lapses if the admin changes the model's provider. */
     val acknowledged: Boolean = false,
@@ -72,7 +72,7 @@ data class AiChatRequest(val messages: List<AiMessage>)
 data class AiLook(val tool: String, val module: Module? = null, val summary: String)
 
 @Serializable
-data class AiChatReply(val text: String, val looked: List<AiLook> = emptyList(), val modules: Set<Module> = emptySet(), val usedToday: Int = 0)
+data class AiChatReply(val text: String, val looked: List<AiLook> = emptyList(), @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = emptySet(), val usedToday: Int = 0)
 
 /** POST /api/ai/breakdown: a task in, small steps out (sends only the task's text, no health data). */
 @Serializable
@@ -83,7 +83,7 @@ data class AiBreakdownReply(val steps: List<RoutineStep>)
 
 /** One request, as logged (GET /api/ai/audit?days=30). */
 @Serializable
-data class AiAuditEntry(val at: Long, val kind: String, val modules: Set<Module>, val tools: List<String>, val model: String, val inputTokens: Int = 0, val outputTokens: Int = 0)
+data class AiAuditEntry(val at: Long, val kind: String, @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module>, val tools: List<String>, val model: String, val inputTokens: Int = 0, val outputTokens: Int = 0)
 
 /** How close a food photo's estimate is likely to be. */
 @Serializable

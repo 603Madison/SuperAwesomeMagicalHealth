@@ -247,7 +247,7 @@ class PlatformTest {
         services.settings.update { it.copy(webhooksPrivateNetworks = false) }
         val refused = platform.webhooks.deliver(userId, hook, WebhookEvent.TEST, payload)
         assertFalse(refused.ok)
-        assertTrue(refused.error!!.contains("private addresses are turned off"))
+        assertTrue(refused.error, refused.error!!.contains("private addresses"))
         assertEquals(4, hooked.size)
     }
 
@@ -286,7 +286,8 @@ class PlatformTest {
         assertEquals(250, services.days.summary(services.users.byUsername("admin")!!.id, "today").waterMl)
         assertEquals(HttpStatusCode.NotFound, client.post("/api/watch/log") { bearerAuth(watch.str("token")); json("""{"kind":"HABIT","ref":"x"}""") }.status)
         val batch = """{"device":{"kind":"PEBBLE","identifier":"pebble-1","name":"Pebble Time 2"},"samples":[{"metric":"STEPS","start":1794470400000,"end":1794471300000,"value":120}]}"""
-        assertEquals(HttpStatusCode.OK, client.post("/api/ingest") { bearerAuth(watch.str("token")); json(batch) }.status)
+        // A watch's key logs from the watch, and uploads nothing else: that takes an upload key.
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/api/ingest") { bearerAuth(watch.str("token")); json(batch) }.status)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/me") { bearerAuth(watch.str("token")) }.status)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/integrations/state") { bearerAuth(watch.str("token")) }.status)
 

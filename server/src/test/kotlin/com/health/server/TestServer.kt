@@ -29,7 +29,7 @@ import java.nio.file.Files
 
 /** A server with an in-memory database and quick password hashing, for tests. */
 fun testServices(
-    config: ServerConfig = ServerConfig(dataDir = Files.createTempDirectory("samh-test").toFile(), adminPassword = "break-glass-pw"),
+    config: ServerConfig = ServerConfig(dataDir = Files.createTempDirectory("samh-test").toFile(), adminPassword = "break-glass-pw", outboundLoopback = true),
     clock: () -> Long = System::currentTimeMillis,
     foodUrls: OpenFoodFacts.Urls = OpenFoodFacts.Urls("http://127.0.0.1:9/search", "http://127.0.0.1:9/product/"),
 ): Services {

@@ -51,7 +51,7 @@ data class ConnectorRequest(
     val allAccounts: Boolean = false,
     val name: String = "",
     /** The sensitive modules (mind, cycle, bladder and bowel, medications, symptoms, hormones, appointments) it may read. */
-    val modules: Set<Module> = emptySet(),
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = emptySet(),
 )
 
 @Serializable
@@ -68,7 +68,7 @@ data class SessionInfo(
     val expiresAt: Long,
     val current: Boolean = false,
     /** For connector links: the sensitive modules it may read. */
-    val scope: List<Module> = emptyList(),
+    @Serializable(with = ModuleListSerializer::class) val scope: List<Module> = emptyList(),
 )
 
 @Serializable

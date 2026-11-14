@@ -4,6 +4,7 @@ import com.health.api.ApiJson
 import com.health.api.ErrorBody
 import com.health.server.admin.adminRoutes
 import com.health.server.auth.authRoutes
+import com.health.server.auth.onHttps
 import com.health.server.food.foodRoutes
 import com.health.server.health.deviceRoutes
 import com.health.server.health.healthRoutes
@@ -34,6 +35,7 @@ import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.forwardedheaders.XForwardedHeaders
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
@@ -49,12 +51,26 @@ data class Health(val ok: Boolean, val version: String)
 
 private val log = LoggerFactory.getLogger("samh")
 
+/** The most a request to [path] may send, in bytes. */
+fun bodyLimitFor(path: String): Long = when {
+    path == "/api/import/fit" -> 101L * 1024 * 1024
+    path == "/api/photos" || path == "/api/ai/food-photo" -> com.health.server.photos.Images.MAX_BYTES + 1024L * 1024
+    path == "/api/ingest" -> 32L * 1024 * 1024
+    else -> 4L * 1024 * 1024
+}
+
 /** The server's web app: the API under /api, and the web pages everywhere else. */
 fun Application.module(services: Services) {
     install(ContentNegotiation) { json(ApiJson) }
     install(Compression) {
+        // Answers only: a compressed request could unpack to gigabytes before anything else looks at it.
+        mode = io.ktor.server.plugins.compression.CompressionConfig.Mode.CompressResponse
         gzip { minimumSize(1024) }
         deflate { minimumSize(1024) }
+    }
+    // How much any request may send: a little for most, more for photos, device data and FIT files.
+    install(io.ktor.server.plugins.bodylimit.RequestBodyLimit) {
+        bodyLimit { call -> bodyLimitFor(call.request.path()) }
     }
     if (services.config.trustProxy) install(XForwardedHeaders)
     install(DefaultHeaders) {
@@ -68,6 +84,12 @@ fun Application.module(services: Services) {
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
     }
+    // On HTTPS, browsers keep to it for a year (they ignore this header over plain http).
+    install(
+        io.ktor.server.application.createApplicationPlugin("Hsts") {
+            onCall { call -> if (call.onHttps(services)) call.response.header("Strict-Transport-Security", "max-age=31536000") }
+        },
+    )
     install(CallLogging) {
         level = Level.INFO
         // The connector's own requests carry its key in the path, so they're logged by the connector instead.
@@ -75,6 +97,9 @@ fun Application.module(services: Services) {
     }
     install(StatusPages) {
         exception<ApiError> { call, error -> call.respond(error.status, ErrorBody(error.message ?: "Error")) }
+        exception<io.ktor.server.plugins.PayloadTooLargeException> { call, _ ->
+            call.respond(HttpStatusCode.PayloadTooLarge, ErrorBody("That's more than this server takes at once"))
+        }
         exception<BadRequestException> { call, error ->
             val cause = generateSequence(error as Throwable) { it.cause }.firstOrNull { it is SerializationException }
             call.respond(HttpStatusCode.BadRequest, ErrorBody(cause?.message?.substringBefore('\n')?.let { "That request isn't right: $it" } ?: "That request isn't right"))

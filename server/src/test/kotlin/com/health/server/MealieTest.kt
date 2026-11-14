@@ -89,6 +89,12 @@ class MealieTest {
         assertEquals(239.0, MealieService.nutrients(ApiJson.parseToJsonElement("""{"calories":"1000 kJ"}""").jsonObject)!!.calories, 0.0)
         assertEquals(4 * 10 + 4 * 20 + 9 * 5.0, MealieService.nutrients(ApiJson.parseToJsonElement("""{"proteinContent":"10","carbohydrateContent":"20","fatContent":"5"}""").jsonObject)!!.calories, 0.0)
         assertNull(MealieService.nutrients(ApiJson.parseToJsonElement("""{"calories":null,"fiberContent":""}""").jsonObject))
+        // Both units given: the kilocalories. European thousands, for calories and milligrams.
+        assertEquals(250.0, MealieService.nutrients(ApiJson.parseToJsonElement("""{"calories":"1046 kJ / 250 kcal"}""").jsonObject)!!.calories, 0.0)
+        assertEquals(1234.0, MealieService.nutrients(ApiJson.parseToJsonElement("""{"calories":"1.234 kcal","sodiumContent":"1.200 mg"}""").jsonObject)!!.calories, 0.0)
+        assertEquals(1200.0, MealieService.nutrients(ApiJson.parseToJsonElement("""{"calories":"300","sodiumContent":"1.200 mg"}""").jsonObject)!!.sodiumMg!!, 0.0)
+        // A decimal stays a decimal (calories are whole).
+        assertEquals(13.0, MealieService.nutrients(ApiJson.parseToJsonElement("""{"calories":"12.5 kcal"}""").jsonObject)!!.calories, 0.0)
         // However it's pasted, it's the site.
         assertEquals("http://mealie.home:9000", MealieService.site("mealie.home:9000/"))
         assertEquals("https://food.example.org/mealie", MealieService.site("https://food.example.org/mealie/g/home/r/lentil-soup?x=1"))
@@ -116,8 +122,12 @@ class MealieTest {
         val status = browser.get("/api/mealie").obj().toString()
         assertFalse(status.contains(token))
         assertFalse(status.contains("example.com"))
-        // Changing the address alone keeps the token.
-        assertEquals(HttpStatusCode.OK, browser.putJson("/api/mealie", """{"url":"$site"}""").status)
+        // Changing the address alone keeps the token, at the same Mealie.
+        assertEquals(HttpStatusCode.OK, browser.putJson("/api/mealie", """{"url":"$site/g/home"}""").status)
+        // A different Mealie needs the token again: the saved one never goes anywhere new.
+        val elsewhere = browser.putJson("/api/mealie", """{"url":"http://localhost:${mealie.port + 1}"}""")
+        assertEquals(HttpStatusCode.BadRequest, elsewhere.status)
+        assertTrue(elsewhere.obj().str("error").contains("again"))
 
         val found = browser.get("/api/mealie/recipes?q=soup").obj()["items"]!!.jsonArray.map { it.jsonObject }
         assertEquals(listOf("Lentil soup"), found.map { it.str("name") })

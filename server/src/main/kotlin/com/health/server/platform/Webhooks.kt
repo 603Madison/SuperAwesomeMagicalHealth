@@ -36,6 +36,8 @@ class WebhookService(
     http: OkHttpClient,
     private val allowPrivate: suspend () -> Boolean,
     private val clock: () -> Long,
+    /** Tests only: let hooks reach this machine. */
+    private val loopback: () -> Boolean = { false },
     /** How long to wait before try [n] (2, 3): a second, then four. Tests make it instant. */
     var backoff: (Int) -> Long = { n -> if (n == 2) 1_000L else 4_000L },
 ) {
@@ -43,6 +45,7 @@ class WebhookService(
 
     // Redirects aren't followed: a hook goes where it says, and only there.
     private val client = http.newBuilder()
+        .dns(com.health.server.util.OutboundDns({ kotlinx.coroutines.runBlocking { allowPrivate() } }, loopback))
         .followRedirects(false).followSslRedirects(false)
         .callTimeout(10, TimeUnit.SECONDS).connectTimeout(10, TimeUnit.SECONDS).readTimeout(10, TimeUnit.SECONDS)
         .build()
@@ -161,7 +164,15 @@ class WebhookService(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             log.warn("Webhook {} failed: {}", hook.name, e.message ?: e.javaClass.simpleName)
-            record(userId, hook.id!!, event, false, null, (e.message ?: e.javaClass.simpleName).take(200))
+            // What kind of failure, never the network's own words (they'd make the test button a port scanner).
+            val said = when (e) {
+                is com.health.server.util.OutboundDns.Refused -> "Refused: ${e.message}"
+                is java.net.UnknownHostException -> "Couldn't find that address"
+                is java.net.SocketTimeoutException, is java.io.InterruptedIOException -> "No answer in time"
+                is javax.net.ssl.SSLException -> "Its secure connection didn't check out"
+                else -> "Couldn't connect"
+            }
+            record(userId, hook.id!!, event, false, null, said)
         }
     }
 
@@ -169,10 +180,8 @@ class WebhookService(
     private suspend fun refusal(url: HttpUrl): String? {
         val addresses = withContext(Dispatchers.IO) { runCatching { InetAddress.getAllByName(url.host).toList() }.getOrNull() }
             ?: return "can't find ${url.host}"
-        // Cloud metadata services and "any address" are never a webhook's place.
-        if (addresses.any { it.isAnyLocalAddress || (it.isLinkLocalAddress && it !is Inet6Address) }) return "that address isn't allowed"
-        if (!allowPrivate() && addresses.any { isPrivate(it) }) return "webhooks to private addresses are turned off on this server"
-        return null
+        val private = allowPrivate()
+        return addresses.firstNotNullOfOrNull { com.health.server.util.OutboundDns.refusal(it, private, loopback()) }?.replaceFirstChar { it.lowercase() }
     }
 
     private suspend fun record(userId: String, webhookId: String, event: WebhookEvent, ok: Boolean, status: Int?, error: String?): WebhookDelivery {
@@ -199,13 +208,7 @@ class WebhookService(
             doFinal(body.toByteArray())
         }.hex()
 
-        fun isPrivate(address: InetAddress): Boolean {
-            if (address.isLoopbackAddress || address.isSiteLocalAddress || address.isLinkLocalAddress) return true
-            val bytes = address.address
-            // IPv6 unique local (fc00::/7) and IPv4 carrier-grade NAT (100.64.0.0/10, e.g. Tailscale).
-            if (address is Inet6Address) return (bytes[0].toInt() and 0xFE) == 0xFC
-            return (bytes[0].toInt() and 0xFF) == 100 && (bytes[1].toInt() and 0xC0) == 64
-        }
+        fun isPrivate(address: InetAddress): Boolean = com.health.server.util.OutboundDns.isPrivate(address)
 
         fun eventsText(events: Set<WebhookEvent>) = events.joinToString(",") { it.name }
 

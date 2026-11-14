@@ -14,7 +14,6 @@ import com.health.api.Micronutrient
 import com.health.api.Nutrients
 import com.health.server.ApiError
 import com.health.server.modules.UserSettingsStore
-import com.health.server.platform.WebhookService
 import com.health.server.util.HttpException
 import com.health.server.util.fetchString
 import kotlinx.coroutines.Dispatchers
@@ -56,8 +55,12 @@ class MealieService(
     private val foods: FoodStore,
     private val allowPrivate: suspend () -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Tests only: let it reach this machine. */
+    private val loopback: () -> Boolean = { false },
 ) {
+    // Only the addresses that passed the check are connected to, and redirects never followed.
     private val client = http.newBuilder()
+        .dns(com.health.server.util.OutboundDns({ kotlinx.coroutines.runBlocking { allowPrivate() } }, loopback))
         .followRedirects(false).followSslRedirects(false)
         .connectTimeout(6, TimeUnit.SECONDS).readTimeout(12, TimeUnit.SECONDS).callTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -81,8 +84,10 @@ class MealieService(
     suspend fun connect(userId: String, input: MealieConnect): MealieStatus {
         val base = site(input.url)
         val old = saved(userId)
-        val token = input.token?.trim()?.ifBlank { null } ?: old?.token
-            ?: throw ApiError.badRequest("Add an API token from Mealie: your profile, then API tokens")
+        // The saved token only goes back to the Mealie it came from: a new address needs it again.
+        val same = old?.let { o -> o.url.toHttpUrl().let { a -> base.toHttpUrl().let { b -> a.scheme == b.scheme && a.host == b.host && a.port == b.port } } } == true
+        val token = input.token?.trim()?.ifBlank { null } ?: old?.token?.takeIf { same }
+            ?: throw ApiError.badRequest(if (old != null && !same) "Add the API token again for the new address" else "Add an API token from Mealie: your profile, then API tokens")
         if (token.length > 4000 || token.any { it.isWhitespace() }) throw ApiError.badRequest("That token doesn't look right: copy it again from Mealie")
         val trial = Saved(base, token)
         val checked = try {
@@ -220,9 +225,8 @@ class MealieService(
     private suspend fun refusal(url: HttpUrl): String? {
         val addresses = withContext(Dispatchers.IO) { runCatching { InetAddress.getAllByName(url.host).toList() }.getOrNull() }
             ?: return "Can't find ${url.host}. Check the address"
-        if (addresses.any { it.isAnyLocalAddress || (it.isLinkLocalAddress && it !is Inet6Address) }) return "That address isn't allowed"
-        if (!allowPrivate() && addresses.any { WebhookService.isPrivate(it) }) return "This server doesn't connect to private addresses (an admin can allow it)"
-        return null
+        val private = allowPrivate()
+        return addresses.firstNotNullOfOrNull { com.health.server.util.OutboundDns.refusal(it, private, loopback()) }
     }
 
     private suspend fun <T> optional(block: suspend () -> T?): T? = try { block() } catch (e: Problem) { null }
@@ -306,10 +310,19 @@ class MealieService(
             return plain.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
         }
 
+        /** "1046 kJ / 250 kcal" is 250; "1046 kJ" is 250 too; "1.234 kcal" is twelve hundred and thirty-four. */
         private fun calories(text: String?): Double? {
-            val v = number(text) ?: return null
-            val t = text!!.lowercase()
-            return if ("kj" in t && "kcal" !in t) v / 4.184 else v
+            text ?: return null
+            val t = text.lowercase()
+            Regex("""(\d[\d.,]*)\s*(kcal|cal\b|calories)""").find(t)?.let { m -> return thousands(m.groupValues[1]) ?: number(m.groupValues[1]) }
+            Regex("""(\d[\d.,]*)\s*kj""").find(t)?.let { m -> return (thousands(m.groupValues[1]) ?: number(m.groupValues[1]))?.div(4.184) }
+            return thousands(t.trim()) ?: number(t)
+        }
+
+        /** "1.234" or "1.234,5" written the European way: thousands, for calories and milligrams (a three-place decimal never is). */
+        private fun thousands(text: String): Double? {
+            val m = Regex("""^(\d{1,3}(\.\d{3})+)(,\d+)?$""").matchEntire(text.trim().trimEnd('.', ',')) ?: return null
+            return (m.groupValues[1].replace(".", "") + m.groupValues[3].replace(',', '.')).toDoubleOrNull()
         }
 
         private fun grams(text: String?): Double? {
@@ -324,7 +337,7 @@ class MealieService(
 
         /** Sodium and cholesterol: Mealie asks for milligrams, so a bare number is that. */
         private fun milligrams(text: String?): Double? {
-            val v = number(text) ?: return null
+            val v = text?.let { Regex("""\d[\d.,]*""").find(it)?.value?.let(::thousands) } ?: number(text) ?: return null
             val t = text!!.lowercase()
             return when {
                 "mg" in t -> v

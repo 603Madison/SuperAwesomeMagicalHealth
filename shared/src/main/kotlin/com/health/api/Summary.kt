@@ -40,7 +40,7 @@ data class Profile(
     val timezone: String = "",
     val goals: Goals = Goals(),
     /** The parts of the app this person uses (see [Module]). */
-    val modules: Set<Module> = Module.DEFAULT,
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = Module.DEFAULT,
     val reminders: ReminderPrefs = ReminderPrefs(),
     val digest: DigestPrefs = DigestPrefs(),
     /** Roughly where the person is, for the weather (optional). */

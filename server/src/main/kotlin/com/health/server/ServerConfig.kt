@@ -18,6 +18,8 @@ data class ServerConfig(
     val adminPassword: String? = null,
     /** Settings applied at every start, overriding the admin page (for configuration as code). */
     val overrides: Map<String, String> = emptyMap(),
+    /** Lets webhooks, Mealie and push reach the server's own loopback: for tests only (never from the environment). */
+    val outboundLoopback: Boolean = false,
 ) {
     val databaseFile: File get() = File(dataDir, "samh.db")
     val secretKeyFile: File get() = File(dataDir, "secret.key")

@@ -76,7 +76,8 @@ fun Route.careRoutes(services: Services) {
         }
         post { call.respond(appointments.save(call.requireUser(services).id, call.receive<Appointment>())) }
         get("/{id}") { call.respond(appointments.get(call.requireUser(services).id, call.id())) }
-        get("/{id}/suggestions") { call.respond(appointments.suggestions(call.requireUser(services).id, call.id())) }
+        // Through a share: only questions from the features shared.
+        get("/{id}/suggestions") { call.respond(appointments.suggestions(call.requireUser(services).id, call.id(), call.viewScope?.modules)) }
         put("/{id}") { call.respond(appointments.save(call.requireUser(services).id, call.receive<Appointment>(), call.id())) }
         delete("/{id}") { appointments.delete(call.requireUser(services).id, call.id()); call.respond(ok) }
     }

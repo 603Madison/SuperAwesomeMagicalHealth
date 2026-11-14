@@ -162,8 +162,16 @@ class PushService(
     private val http: OkHttpClient,
     private val subject: suspend () -> String,
     private val clock: () -> Long,
+    /** Tests only: let pushes reach this machine. */
+    private val loopback: () -> Boolean = { false },
 ) {
     private val log = LoggerFactory.getLogger("samh.push")
+
+    // Browsers' push services are on the internet: never a private address, never a redirect.
+    private val client = http.newBuilder()
+        .dns(com.health.server.util.OutboundDns(loopback, loopback))
+        .followRedirects(false).followSslRedirects(false)
+        .build()
 
     @Volatile
     private var cachedKeys: KeyPair? = null
@@ -188,7 +196,7 @@ class PushService(
 
     suspend fun subscribe(userId: String, input: PushSubscriptionInput): PushSubscriptionInfo {
         val url = input.endpoint.trim().toHttpUrlOrNull()
-        if (url == null || url.scheme != "https" && !url.host.let { it == "127.0.0.1" || it == "localhost" }) {
+        if (url == null || (url.scheme != "https" && !loopback()) || url.username.isNotEmpty() || input.endpoint.length > 2000) {
             throw ApiError.badRequest("That isn't a push address a browser would give")
         }
         val p256dh = runCatching { WebPushCrypto.decode(input.p256dh) }.getOrNull()
@@ -250,7 +258,7 @@ class PushService(
                     .header("Urgency", if (urgent) "high" else "normal")
                     .header("Authorization", WebPushCrypto.vapid(target.endpoint, keys, subject, clock()))
                     .build()
-                http.call(request) { it.code }
+                client.call(request) { it.code }
             }.getOrElse { e ->
                 log.warn("Push to a browser failed: {}", e.message)
                 -1

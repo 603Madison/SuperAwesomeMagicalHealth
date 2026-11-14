@@ -8,6 +8,27 @@ import kotlinx.serialization.Serializable
  * connector link sees them only when the person says so when making it.
  */
 
+/**
+ * A set of features that skips names this version doesn't know (a newer server's, or an older
+ * app's), instead of failing the whole answer. Every `Set<Module>` in the API uses it.
+ */
+object ModuleSetSerializer : kotlinx.serialization.KSerializer<Set<Module>> {
+    private val names = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>())
+    override val descriptor = names.descriptor
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Set<Module>) = names.serialize(encoder, value.map { it.name })
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Set<Module> =
+        names.deserialize(decoder).mapNotNullTo(LinkedHashSet()) { n -> Module.entries.firstOrNull { it.name == n } }
+}
+
+/** The same, for a list of features. */
+object ModuleListSerializer : kotlinx.serialization.KSerializer<List<Module>> {
+    private val names = kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>())
+    override val descriptor = names.descriptor
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: List<Module>) = names.serialize(encoder, value.map { it.name })
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): List<Module> =
+        names.deserialize(decoder).mapNotNull { n -> Module.entries.firstOrNull { it.name == n } }.distinct()
+}
+
 @Serializable
 enum class Module(val label: String, val sensitive: Boolean) {
     ACTIVITY("Activity", false),

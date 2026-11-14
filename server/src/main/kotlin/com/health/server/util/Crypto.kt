@@ -140,8 +140,14 @@ class SecretBox(private val key: ByteArray) {
         fun fromFile(file: File): SecretBox {
             if (!file.exists()) {
                 file.parentFile?.mkdirs()
+                // Made readable only by the server before the key goes in, never after.
+                val path = file.toPath()
+                val created = runCatching {
+                    Files.createFile(path, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+                }.isSuccess
+                if (!created && !file.exists()) file.createNewFile()
                 file.writeBytes(Random.bytes(32))
-                runCatching { Files.setPosixFilePermissions(file.toPath(), PosixFilePermissions.fromString("rw-------")) }
+                runCatching { Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-------")) }
             }
             return SecretBox(file.readBytes())
         }

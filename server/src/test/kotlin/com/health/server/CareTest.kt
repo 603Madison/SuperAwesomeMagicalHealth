@@ -257,6 +257,10 @@ class CareTest {
         assertTrue(suggestions.toString(), Module.HORMONES in modules)
         assertTrue(suggestions.any { it.text.startsWith("I've missed") && it.text.contains("Vitamin D") })
         assertTrue(suggestions.none { it.text == "Can I have a new prescription for Vitamin D?" })
+        // Someone it's shared with sees questions only from what's shared with them: never mind or medications.
+        assertTrue(s.appointments.suggestions(id, appointment.id!!, visible = setOf(Module.APPOINTMENTS)).isEmpty())
+        val hormonesOnly = s.appointments.suggestions(id, appointment.id!!, visible = setOf(Module.APPOINTMENTS, Module.HORMONES))
+        assertTrue(hormonesOnly.toString(), hormonesOnly.isNotEmpty() && hormonesOnly.all { it.module == Module.HORMONES })
         // Turned-off features don't add any.
         s.profiles.put(id, s.profile().copy(modules = Module.entries.toSet() - Module.MIND))
         assertTrue(s.appointments.suggestions(id, appointment.id!!).none { it.module == Module.MIND })

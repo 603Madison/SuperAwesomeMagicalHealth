@@ -224,6 +224,12 @@ fun Route.platformRoutes(services: Services) {
             if (clean.enabled && (clean.host.isBlank() || !SmtpMailer.validAddress(clean.from.substringAfter('<').substringBefore('>')))) {
                 throw ApiError.badRequest("Mail needs a server and a sender address")
             }
+            // The saved password only goes to the mail server it was given for: a new one needs it again.
+            val before = services.settings.get().smtp
+            val moved = before.host.isNotBlank() && (!before.host.equals(clean.host, ignoreCase = true) || before.port != clean.port)
+            if (moved && change.password == null && platform.smtpPassword.get().isNotEmpty()) {
+                throw ApiError.badRequest("Enter the password again for the new mail server")
+            }
             services.settings.update { it.copy(smtp = clean) }
             change.password?.let { platform.smtpPassword.set(it) }
             call.respond(SmtpAdmin(clean, platform.smtpPassword.get().isNotEmpty()))

@@ -10,6 +10,7 @@ import com.health.api.SupplyAdjustment
 import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.auth.requireUser
+import com.health.server.care.SharedView
 import com.health.server.care.viewScope
 import com.health.server.conditions.ConditionCatalog
 import com.health.api.Fields
@@ -69,13 +70,29 @@ fun Route.diaryRoutes(services: Services) {
     }
 
     route("/api/supplies") {
-        get { call.respond(supplies.list(call.requireUser(services).id, call.request.queryParameters["all"] == "true")) }
+        // Through a share: only the supplies of the features shared (bladder and bowel, or periods).
+        get {
+            val list = supplies.list(call.requireUser(services).id, call.request.queryParameters["all"] == "true")
+            val scope = call.viewScope
+            call.respond(if (scope == null) list else list.filter { SharedView.showsSupply(it.kind, scope.modules) })
+        }
         post { call.respond(supplies.save(call.requireUser(services).id, call.receive<Supply>())) }
-        get("/status") { call.respond(supplies.status(call.requireUser(services).id)) }
+        get("/status") {
+            val list = supplies.status(call.requireUser(services).id)
+            val scope = call.viewScope
+            call.respond(if (scope == null) list else list.filter { SharedView.showsSupply(it.supply.kind, scope.modules) })
+        }
         put("/{id}") { call.respond(supplies.save(call.requireUser(services).id, call.receive<Supply>(), call.id())) }
         delete("/{id}") { supplies.delete(call.requireUser(services).id, call.id()); call.respond(ok) }
         post("/{id}/adjust") { call.respond(supplies.adjust(call.requireUser(services).id, call.id(), call.receive<SupplyAdjustment>())) }
-        get("/{id}/log") { call.respond(supplies.log(call.requireUser(services).id, call.id(), call.days(90))) }
+        get("/{id}/log") {
+            val user = call.requireUser(services)
+            call.viewScope?.let { scope ->
+                val supply = supplies.get(user.id, call.id())
+                if (supply == null || !SharedView.showsSupply(supply.kind, scope.modules)) throw ApiError.notFound("No such supply")
+            }
+            call.respond(supplies.log(user.id, call.id(), call.days(90)))
+        }
     }
 
     route("/api/cycle/settings") {

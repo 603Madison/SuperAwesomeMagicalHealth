@@ -109,6 +109,12 @@ fun Route.adminRoutes(services: Services) {
             call.requireAdmin(services)
             val change = call.receive<SettingsChange>()
             val next = validated(change.settings)
+            // The saved client secret only goes to the identity provider it was given for: a new one needs it again.
+            val before = services.settings.get().oidc
+            val moved = before.issuer.isNotBlank() && before.issuer.trimEnd('/') != next.oidc.issuer.trimEnd('/')
+            if (moved && change.oidcClientSecret == null && services.settings.oidcClientSecret().isNotEmpty()) {
+                throw ApiError.badRequest("Enter the client secret again for the new identity provider")
+            }
             services.settings.update { next }
             change.oidcClientSecret?.let { services.settings.setOidcClientSecret(it.trim()) }
             call.respond(adminSettings(services, call))

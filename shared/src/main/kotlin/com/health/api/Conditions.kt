@@ -22,7 +22,7 @@ data class ConditionDefinition(
     val group: String,
     val about: String,
     /** Features it turns on. */
-    val modules: Set<Module> = emptySet(),
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = emptySet(),
     /** Fields it shows ([Fields]). */
     val fields: Set<String> = emptySet(),
     /** Symptoms and triggers worth offering first in pickers. */
@@ -48,7 +48,7 @@ data class MyCondition(
     val since: String? = null,
     val notes: String? = null,
     /** For their own: the features and fields it should turn on. */
-    val modules: Set<Module> = emptySet(),
+    @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module> = emptySet(),
     val fields: Set<String> = emptySet(),
 )
 

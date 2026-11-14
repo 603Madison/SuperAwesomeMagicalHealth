@@ -45,6 +45,7 @@ dependencies {
     implementation(libs.ktor.server.forwarded.header)
     implementation(libs.ktor.server.default.headers)
     implementation(libs.ktor.server.compression)
+    implementation(libs.ktor.server.body.limit)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.okhttp)

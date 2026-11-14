@@ -73,8 +73,10 @@ class AppointmentsService(
     /**
      * Questions worth asking at [id], from what was logged since the last appointment before it
      * (or the last 30 days), by every feature the person has on. Ones already on the list are left out.
+     * Someone viewing a share ([visible]: the features shared with them) gets only questions from
+     * those features: never ones built from anything else.
      */
-    suspend fun suggestions(userId: String, id: String): List<SuggestedQuestion> {
+    suspend fun suggestions(userId: String, id: String, visible: Set<com.health.api.Module>? = null): List<SuggestedQuestion> {
         val appointment = get(userId, id)
         val profile = profiles.get(userId)
         val zone = Days(Days.zoneOf(profile.timezone))
@@ -84,8 +86,10 @@ class AppointmentsService(
         val previous = between(userId, to.minusYears(2), day).filter { it.at < appointment.at && it.id != id && it.at < clock() }.maxByOrNull { it.at }
         val since = previous?.date?.let(LocalDate::parse)?.takeIf { it.isBefore(to) } ?: to.minusDays(30)
         val asked = appointment.questions.map { it.text.lowercase() }.toSet()
-        return hooks().filter { it.module == null || it.module in profile.modules }
+        fun shown(module: com.health.api.Module?) = if (visible == null) module == null || module in profile.modules else module != null && module in visible
+        return hooks().filter { shown(it.module) }
             .flatMap { hook -> runCatching { hook.questions(userId, profile, since, to) }.getOrDefault(emptyList()) }
+            .filter { visible == null || shown(it.module) }
             .distinctBy { it.text.lowercase() }
             .filter { it.text.lowercase() !in asked }
             .take(20)

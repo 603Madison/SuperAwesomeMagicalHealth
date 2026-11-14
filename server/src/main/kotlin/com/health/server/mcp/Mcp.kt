@@ -210,7 +210,7 @@ class McpServer(private val services: Services) {
     /** Runs one for the in-app assistant: its text (failures throw, and become error results). */
     suspend fun runAssistantTool(caller: Caller, name: String, arguments: JsonObject): String {
         val tool = toolsFor(caller).firstOrNull { it.name == name } ?: throw IllegalArgumentException("No tool named $name")
-        log.info("Assistant of {}: {}", caller.user.username, name)
+        log.info("Assistant of {}: {}", caller.user.username, logged(tool.name, tool.module))
         return tool.run(caller, arguments).take(MAX_TEXT)
     }
 
@@ -256,7 +256,8 @@ class McpServer(private val services: Services) {
                 },
             )
         val arguments = params["arguments"] as? JsonObject ?: JsonObject(emptyMap())
-        log.info("AI connector of {}{}: {} {}", caller.user.username, if (caller.everyone) " (every account)" else "", name, arguments)
+        // What was asked, never what was said: argument names only, and a private feature's tool not by name.
+        log.info("AI connector of {}{}: {} {}", caller.user.username, if (caller.everyone) " (every account)" else "", logged(tool.name, tool.module), arguments.keys.sorted())
         val (text, failed) = try {
             tool.run(caller, arguments) to false
         } catch (e: CancellationException) {
@@ -1768,6 +1769,9 @@ class McpServer(private val services: Services) {
         val d = services.clock() - ms
         return if (d < 0) "in ${span(-d)}" else if (d < 60_000) "just now" else "${span(d)} ago"
     }
+
+    /** A tool as the log names it: a private feature's (mind, cycle, transition…) only as "a private tool", so the log never says who uses what. */
+    private fun logged(name: String, module: Module?): String = if (module?.sensitive == true) "a private feature's tool" else name
 
     companion object {
         private val log = LoggerFactory.getLogger("Connector")

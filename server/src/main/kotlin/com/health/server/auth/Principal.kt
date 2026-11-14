@@ -11,11 +11,13 @@ import io.ktor.http.HttpMethod
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.header
+import io.ktor.server.request.host
 import io.ktor.util.AttributeKey
 import com.health.api.SessionInfo
 import com.health.api.SessionKind
 import com.health.api.User
 import java.util.concurrent.ConcurrentHashMap
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The signed-in person making a request, and the sign-in they used. */
 data class Principal(val user: User, val session: SessionInfo, val viaCookie: Boolean)
@@ -55,8 +57,9 @@ suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean =
     return found?.takeIf { it.session.kind.opensApi(allowUpload) }
 }
 
+/** Upload routes take upload keys too; a watch's key only ever opens the watch's own routes. */
 private fun SessionKind.opensApi(allowUpload: Boolean) =
-    this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && (this == SessionKind.UPLOAD || this == SessionKind.WATCH))
+    this == SessionKind.WEB || this == SessionKind.APP || (allowUpload && this == SessionKind.UPLOAD)
 
 /**
  * The account a request is about: the signed-in person's own, or, with `X-SAMH-View: <ownerId>`,
@@ -76,24 +79,35 @@ private val SAFE_METHODS = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Opt
 /** Whether the person reached the server over HTTPS (directly, or through a trusted proxy). */
 val ApplicationCall.isHttps: Boolean get() = request.origin.scheme == "https"
 
-fun ApplicationCall.sessionCookie(token: String, maxAgeSeconds: Long) = Cookie(
+/**
+ * Whether the browser is on HTTPS: directly or through a trusted proxy, or at the server's public
+ * address when that's https (a TLS proxy the server wasn't told to trust). A plain-http address on
+ * the home network still works, so its cookie can't be Secure.
+ */
+suspend fun ApplicationCall.onHttps(services: Services): Boolean {
+    if (isHttps) return true
+    val public = services.settings.get().publicUrl.toHttpUrlOrNull() ?: return false
+    return public.scheme == "https" && public.host.equals(request.host(), ignoreCase = true)
+}
+
+fun ApplicationCall.sessionCookie(token: String, maxAgeSeconds: Long, secure: Boolean = isHttps) = Cookie(
     name = SESSION_COOKIE,
     value = token,
     encoding = CookieEncoding.RAW,
     maxAge = maxAgeSeconds.toInt(),
     path = "/",
-    secure = isHttps,
+    secure = secure,
     httpOnly = true,
     extensions = mapOf("SameSite" to "Strict"),
 )
 
-fun ApplicationCall.clearedSessionCookie() = Cookie(
+fun ApplicationCall.clearedSessionCookie(secure: Boolean = isHttps) = Cookie(
     name = SESSION_COOKIE,
     value = "",
     encoding = CookieEncoding.RAW,
     maxAge = 0,
     path = "/",
-    secure = isHttps,
+    secure = secure,
     httpOnly = true,
     extensions = mapOf("SameSite" to "Strict"),
 )
@@ -113,32 +127,41 @@ fun clientAddress(direct: String, headers: Headers, config: ServerConfig): Strin
 }
 
 /**
- * Slows down password guessing: after [maxFailures] wrong passwords for an account, or
- * [maxFailuresPerAddress] from one address (a reverse proxy can make everyone one address),
- * within [windowMs], more attempts are refused until the window passes.
+ * Slows down password guessing, without letting anyone lock someone else out: after
+ * [maxFailures] wrong passwords for an account from one address, [maxFailuresPerAddress] from one
+ * address (a reverse proxy can make everyone one address), or [maxFailuresPerAccount] for an
+ * account from everywhere (guessing spread across many addresses), within [windowMs], more
+ * attempts are refused until the window passes. A stranger failing on purpose only blocks
+ * themselves, short of the account-wide limit.
  */
 class LoginThrottle(
     private val maxFailures: Int = 10,
     private val maxFailuresPerAddress: Int = 50,
+    private val maxFailuresPerAccount: Int = 200,
     private val windowMs: Long = 15L * 60 * 1000,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val failures = ConcurrentHashMap<String, List<Long>>()
 
-    fun check(vararg keys: String) {
+    private fun keys(address: String, account: String) = listOf(address to maxFailuresPerAddress, "pair:$address|$account" to maxFailures, account to maxFailuresPerAccount)
+
+    fun check(address: String, account: String) {
         val now = clock()
-        if (keys.any { key -> recent(key, now) >= if (key.startsWith("ip:")) maxFailuresPerAddress else maxFailures }) {
+        if (keys(address, account).any { (key, max) -> recent(key, now) >= max }) {
             throw ApiError.tooMany("Too many wrong passwords. Try again in a few minutes.")
         }
     }
 
-    fun failed(vararg keys: String) {
+    fun failed(address: String, account: String) {
         val now = clock()
-        keys.forEach { key -> failures.compute(key) { _, list -> list.orEmpty().filter { now - it <= windowMs } + now } }
-        if (failures.size > 10_000) failures.entries.removeIf { (_, list) -> list.all { now - it > windowMs } }
+        keys(address, account).forEach { (key, _) -> failures.compute(key) { _, list -> list.orEmpty().filter { now - it <= windowMs } + now } }
+        if (failures.size > 30_000) failures.entries.removeIf { (_, list) -> list.all { now - it > windowMs } }
     }
 
-    fun succeeded(vararg keys: String) = keys.forEach { failures.remove(it) }
+    /** The right password: this address's count for the account starts again. */
+    fun succeeded(address: String, account: String) {
+        failures.remove("pair:$address|$account")
+    }
 
     private fun recent(key: String, now: Long): Int = failures[key]?.count { now - it <= windowMs } ?: 0
 }

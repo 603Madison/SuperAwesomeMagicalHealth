@@ -13,8 +13,8 @@ import kotlinx.serialization.json.JsonObject
 
 /** Reminders, push, webhooks, digests, reports, exports and the watch: built once, on first use. */
 class Platform(private val services: Services) {
-    val push = PushService(services.db, services.box, services.http, { pushSubject() }, services.clock)
-    val webhooks = WebhookService(services.db, services.box, services.http, { services.settings.get().webhooksPrivateNetworks }, services.clock)
+    val push = PushService(services.db, services.box, services.http, { pushSubject() }, services.clock, loopback = { services.config.outboundLoopback })
+    val webhooks = WebhookService(services.db, services.box, services.http, { services.settings.get().webhooksPrivateNetworks }, services.clock, loopback = { services.config.outboundLoopback })
     val smtpPassword = SmtpPassword(services.db, services.box)
 
     /** Sends email; tests swap in one that only remembers. */

@@ -39,7 +39,7 @@ object Images {
     fun process(bytes: ByteArray): Processed {
         if (bytes.size > MAX_BYTES) throw ApiError(io.ktor.http.HttpStatusCode.PayloadTooLarge, "Photos can be up to 20 MB")
         val format = sniff(bytes) ?: throw ApiError.badRequest("Photos can be JPEG, PNG or WebP")
-        val decoded = decode(bytes)
+        val decoded = decode(bytes, MAX_SIDE)
         val upright = if (format == Format.JPEG) orient(decoded, exifOrientation(bytes)) else flatten(decoded)
         val kept = scaled(upright, MAX_SIDE)
         return Processed(jpeg(kept, 0.9f), jpeg(scaled(kept, THUMB_SIDE), 0.82f), kept.width, kept.height)
@@ -53,13 +53,29 @@ object Images {
     fun shrunk(bytes: ByteArray, side: Int, quality: Float = 0.85f): ByteArray {
         if (bytes.size > MAX_BYTES) throw ApiError(io.ktor.http.HttpStatusCode.PayloadTooLarge, "Photos can be up to 20 MB")
         val format = sniff(bytes) ?: throw ApiError.badRequest("Photos can be JPEG, PNG or WebP")
-        val decoded = decode(bytes)
+        val decoded = decode(bytes, side)
         val upright = if (format == Format.JPEG) orient(decoded, exifOrientation(bytes)) else flatten(decoded)
         return jpeg(scaled(upright, side), quality)
     }
 
-    /** Decodes, refusing pictures too big to be a photo (a decompression bomb) before reading their pixels. */
-    private fun decode(bytes: ByteArray): BufferedImage {
+    /** Pictures decoded at once: each can take a lot of memory for a moment. */
+    private val decoding = java.util.concurrent.Semaphore(2)
+
+    /**
+     * Decodes, refusing pictures too big to be a photo (a decompression bomb) before reading their
+     * pixels, and reading a big one at a fraction of its size straight away (every 2nd, 3rd…
+     * pixel), so it's never held at full size when only [side] pixels are wanted.
+     */
+    private fun decode(bytes: ByteArray, side: Int): BufferedImage {
+        decoding.acquire()
+        try {
+            return decodeNow(bytes, side)
+        } finally {
+            decoding.release()
+        }
+    }
+
+    private fun decodeNow(bytes: ByteArray, side: Int): BufferedImage {
         val input = ImageIO.createImageInputStream(ByteArrayInputStream(bytes)) ?: throw ApiError.badRequest("That picture couldn't be read")
         input.use { stream ->
             val reader = ImageIO.getImageReaders(stream).asSequence().firstOrNull() ?: throw ApiError.badRequest("That picture couldn't be read")
@@ -68,7 +84,9 @@ object Images {
                 val w = reader.getWidth(0).toLong()
                 val h = reader.getHeight(0).toLong()
                 if (w <= 0 || h <= 0 || w * h > MAX_PIXELS) throw ApiError.badRequest("That picture is too big (60 megapixels at most)")
-                return reader.read(0) ?: throw ApiError.badRequest("That picture couldn't be read")
+                val step = (maxOf(w, h) / side.coerceAtLeast(1)).toInt().coerceAtLeast(1)
+                val param = reader.defaultReadParam.apply { if (step > 1) setSourceSubsampling(step, step, 0, 0) }
+                return reader.read(0, param) ?: throw ApiError.badRequest("That picture couldn't be read")
             } catch (e: ApiError) {
                 throw e
             } catch (e: Exception) {

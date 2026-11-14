@@ -218,6 +218,51 @@ object SharedView {
     }
 
     /** The day, with only what [modules] cover. */
+    /** Goals of only the features shared; the rest as anyone's defaults. */
+    fun limit(g: com.health.api.Goals, modules: Set<Module>): com.health.api.Goals {
+        val none = com.health.api.Goals()
+        return com.health.api.Goals(
+            steps = if (Module.ACTIVITY in modules) g.steps else none.steps,
+            activeCalories = if (Module.ACTIVITY in modules) g.activeCalories else none.activeCalories,
+            workoutsPerWeek = if (Module.ACTIVITY in modules) g.workoutsPerWeek else none.workoutsPerWeek,
+            sleepMinutes = if (Module.SLEEP in modules) g.sleepMinutes else none.sleepMinutes,
+            calories = g.calories.takeIf { Module.NUTRITION in modules },
+            protein = g.protein.takeIf { Module.NUTRITION in modules },
+            carbs = g.carbs.takeIf { Module.NUTRITION in modules },
+            fat = g.fat.takeIf { Module.NUTRITION in modules },
+            waterMl = if (Module.NUTRITION in modules) g.waterMl else none.waterMl,
+            targetWeightKg = g.targetWeightKg.takeIf { Module.BODY in modules },
+            weeklyChangeKg = if (Module.BODY in modules || Module.NUTRITION in modules) g.weeklyChangeKg else none.weeklyChangeKg,
+        )
+    }
+
+    /** A photo as a viewer sees it: weight only with Body shared, time on hormones only with Hormones or Transition. */
+    fun limit(p: com.health.api.Photo, modules: Set<Module>): com.health.api.Photo = p.copy(
+        weightKg = p.weightKg.takeIf { Module.BODY in modules },
+        onHormones = p.onHormones.takeIf { Module.HORMONES in modules || Module.TRANSITION in modules },
+    )
+
+    /** Which supplies a viewer sees: bladder and bowel ones with that shared, period products with the cycle. */
+    fun showsSupply(kind: com.health.api.SupplyKind, modules: Set<Module>): Boolean = when (kind.category) {
+        com.health.api.SupplyCategory.CONTINENCE -> Module.CONTINENCE in modules
+        com.health.api.SupplyCategory.PERIOD -> Module.CYCLE in modules
+        com.health.api.SupplyCategory.OTHER -> false
+    }
+
+    /** Labs commonly checked on hormone therapy, besides the person's own hormone targets. */
+    private val HORMONE_LABS = listOf(
+        "estradiol", "oestradiol", "testosterone", "progesterone", "prolactin", "lh", "fsh", "shbg", "dht", "dihydrotestosterone",
+        "potassium", "hematocrit", "haematocrit", "hemoglobin", "haemoglobin",
+    )
+
+    /** Labs a viewer sees: all with Medications shared; with Hormones only, the hormone ones (by the person's targets, or common names). */
+    fun showsLab(name: String, modules: Set<Module>, hormoneTargets: Collection<String>): Boolean {
+        if (Module.MEDICATIONS in modules) return true
+        if (Module.HORMONES !in modules) return false
+        val n = name.trim().lowercase()
+        return hormoneTargets.any { it.trim().lowercase() == n } || HORMONE_LABS.any { n == it || n.startsWith("$it ") || n.startsWith("free $it") || n.startsWith("total $it") }
+    }
+
     fun limit(d: DaySummary, modules: Set<Module>): DaySummary {
         fun on(m: Module) = m in modules
         val activity = on(Module.ACTIVITY)
@@ -226,6 +271,7 @@ object SharedView {
         val body = on(Module.BODY)
         val m = d.modules
         return d.copy(
+            goals = limit(d.goals, modules),
             readiness = d.readiness.takeIf { sleep },
             sleep = d.sleep.takeIf { sleep },
             activity = d.activity.takeIf { activity },
@@ -347,10 +393,11 @@ object SharedView {
     fun limit(p: Profile, modules: Set<Module>): Profile = Profile(
         birthYear = null,
         heightCm = p.heightCm.takeIf { Module.BODY in modules },
-        energyProfile = p.energyProfile,
+        // The calorie formula the person chose says something about their body: only with Food shared.
+        energyProfile = if (Module.NUTRITION in modules) p.energyProfile else Profile().energyProfile,
         units = p.units,
         timezone = p.timezone,
-        goals = p.goals,
+        goals = limit(p.goals, modules),
         modules = p.modules intersect modules,
         vitalsTargets = p.vitalsTargets,
     )

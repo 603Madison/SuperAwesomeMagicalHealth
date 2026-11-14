@@ -198,10 +198,28 @@ class AiService(private val services: Services) {
 
     private class Ready(val settings: AiSettings, val key: String, val consent: AiConsent, val used: Int)
 
+    /** Requests being answered now, by person: they count against the day's limit before they're done. */
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /**
+     * Runs one request in a slot of its own: counted against the day's limit from the start (so a
+     * burst of them can't slip past it), and at most [AT_ONCE] at a time for a person.
+     */
+    private suspend inline fun <T> withSlot(user: User, block: (Ready) -> T): T {
+        val ready = ready(user)
+        val taken = inFlight.compute(user.id) { _, n -> (n ?: 0) + 1 }!!
+        try {
+            if (taken > AT_ONCE) throw ApiError.tooMany("One question at a time: the last one is still being answered")
+            if (ready.used + taken > ready.settings.dailyLimit) throw ApiError.tooMany("That's today's ${ready.settings.dailyLimit} questions; the assistant is back tomorrow")
+            return block(ready)
+        } finally {
+            inFlight.compute(user.id) { _, n -> if (n == null || n <= 1) null else n - 1 }
+        }
+    }
+
     // ---------------------------------------------------------------- Chat
 
-    suspend fun chat(user: User, request: AiChatRequest): AiChatReply {
-        val ready = ready(user)
+    suspend fun chat(user: User, request: AiChatRequest): AiChatReply = withSlot(user) { ready ->
         val history = conversation(request)
         val modules = ready.consent.modules - AiTools.NEVER
         val caller = McpServer.Caller(
@@ -368,7 +386,10 @@ class AiService(private val services: Services) {
             append("Today is ${today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} $today in the person's time zone (${zone.zone.id}). ")
             append("The person goes by ${user.displayName}. ")
             append("You may look at: ${modules.filter { it !in AiTools.NEVER }.joinToString { it.label }.ifEmpty { "nothing yet beyond their account" }}. ")
-            if (hidden.isNotEmpty()) append("They use, but haven't let you see: ${hidden.joinToString { it.label }}. ")
+            // Private features they haven't allowed aren't named: that they use them is theirs to tell.
+            val named = hidden.filter { !it.sensitive }
+            if (named.isNotEmpty()) append("They use, but haven't let you see: ${named.joinToString { it.label }}. ")
+            if (hidden.any { it.sensitive }) append("Some of what they track isn't shared with you; they can allow more in Settings. ")
             append(if (canLog) "You may log entries for them when they ask. " else "You can't log entries; tell them where in the app to do it. ")
             append("Their units are ${profile.units.name.lowercase()}. ")
             if (support.isNotBlank()) append("Support lines on this server: $support.")
@@ -381,8 +402,7 @@ class AiService(private val services: Services) {
 
     // ---------------------------------------------------------------- Task breakdown
 
-    suspend fun breakdown(user: User, request: AiBreakdownRequest): AiBreakdownReply {
-        val ready = ready(user)
+    suspend fun breakdown(user: User, request: AiBreakdownRequest): AiBreakdownReply = withSlot(user) { ready ->
         val task = request.task.trim().take(500).ifEmpty { throw ApiError.badRequest("What's the task?") }
         val detail = request.detail?.trim()?.take(2000)?.ifEmpty { null }
         val response = call(ready.key) {
@@ -425,8 +445,7 @@ class AiService(private val services: Services) {
      * this one request, and never written anywhere: not to disk, the database or the log. The
      * audit row says only that a food photo was looked at (Food), with the model and tokens.
      */
-    suspend fun foodPhoto(user: User, photo: ByteArray, meal: Meal?, note: String?): FoodPhotoEstimate {
-        val ready = ready(user)
+    suspend fun foodPhoto(user: User, photo: ByteArray, meal: Meal?, note: String?): FoodPhotoEstimate = withSlot(user) { ready ->
         if (Module.NUTRITION !in ready.consent.modules - AiTools.NEVER) {
             throw ApiError.forbidden("Let the assistant see Food first, in Settings › AI assistant")
         }
@@ -515,6 +534,8 @@ class AiService(private val services: Services) {
     }
 
     companion object {
+        /** How many of a person's requests may be answered at once. */
+        const val AT_ONCE = 2
         const val PROVIDER = "Anthropic"
         private const val MAX_ROUNDS = 8
         private const val MAX_MESSAGES = 40

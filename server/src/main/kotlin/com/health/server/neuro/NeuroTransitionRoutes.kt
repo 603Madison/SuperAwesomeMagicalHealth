@@ -22,6 +22,7 @@ import com.health.api.VoiceSession
 import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.auth.requireUser
+import com.health.server.care.viewScope
 import com.health.server.health.FitExport
 import com.health.server.modules.EntryKind
 import com.health.server.photos.Images
@@ -136,7 +137,10 @@ fun Route.neuroTransitionRoutes(services: Services) {
     route("/api/photos") {
         get {
             val user = call.requireUser(services)
-            call.respond(photos.list(user.id, call.request.queryParameters["album"]?.takeIf { it.isNotBlank() }, call.request.queryParameters["days"]?.toIntOrNull()))
+            val list = photos.list(user.id, call.request.queryParameters["album"]?.takeIf { it.isNotBlank() }, call.request.queryParameters["days"]?.toIntOrNull())
+            // Through a share: weight and time on hormones only with what they come from shared.
+            val scope = call.viewScope
+            call.respond(if (scope == null) list else list.map { com.health.server.care.SharedView.limit(it, scope.modules) })
         }
         get("/albums") { call.respond(photos.albums(call.requireUser(services).id)) }
         post {
