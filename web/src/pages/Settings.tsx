@@ -14,6 +14,7 @@ import { Button, Field, IconButton, PageHeader, Spinner, Toggle, errorToast, toa
 import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
 import { useArrange, type Section } from "../components/Arrange";
+import { MealieSettings } from "./Mealie";
 import { DigestSettings, IntegrationSettings, NotificationSettings, SharingSettings } from "./SettingsExtra";
 import { AssistantSettingsCard, useAiStatus } from "./Assistant";
 import { FieldsEditor } from "../components/FieldKit";
@@ -128,6 +129,9 @@ export function Settings() {
         <p className="muted">Rings, watches, the phone app, FIT files and upload keys.</p>
         <div><Link className="btn btn-tonal" to="/devices"><Watch size={18} /> Devices</Link></div>
       </Panel>
+    ) },
+    { id: "mealie", group: label("connections"), label: "Mealie", when: on.includes("NUTRITION"), node: (
+      <Panel id="mealie" title="Mealie"><MealieSettings /></Panel>
     ) },
     { id: "assistant", group: label("connections"), label: "AI assistant", when: !!ai?.available, node: <AssistantSettingsCard /> },
     { id: "connector", group: label("connections"), label: "AI connector (MCP)", node: (

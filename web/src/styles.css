@@ -1759,3 +1759,13 @@ button.score-item:hover { background: var(--surface-2); }
   .wearing-actions .btn { flex: 1 1 0; }
   .change-toggles, .change-when { grid-template-columns: 1fr; }
 }
+
+/* ---------- Mealie ---------- */
+.mealie-connected { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-weight: var(--w-medium); overflow-wrap: anywhere; }
+.mealie-connected svg { color: var(--c2); flex: none; }
+.mealie-form { display: flex; flex-direction: column; gap: 4px; max-width: 520px; }
+.mealie-form .button-row { margin-top: 8px; }
+.mealplan-logged { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 0.85rem; color: var(--muted); }
+.mealplan-logged svg { color: var(--c2); }
+.row.is-quiet .row-title { color: var(--muted); }
+.row.is-quiet .row-sub a { color: var(--primary); }

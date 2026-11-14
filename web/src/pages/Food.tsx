@@ -7,6 +7,7 @@ import type { Food as FoodItem, FoodDay, FoodEntry, Meal } from "../lib/types";
 import { Meter } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
+import { MealPlanCard, MealieResults, useMealie } from "./Mealie";
 import { layoutKey } from "../lib/types";
 import { useFoodNumbers, useMicros, useWater } from "../lib/fields";
 import { useModules } from "../App";
@@ -39,11 +40,14 @@ export function Food() {
   const micros = useMicros(modules);
   const [adding, setAdding] = useState<Meal | null>(null);
   const [editing, setEditing] = useState<FoodEntry | null>(null);
+  const mealie = useMealie();
   useHashScroll(!!data);
 
   const sections: Section[] = [
     // Ideas from what's been eaten before, for the meal it is now: today only.
     { id: "ideas", label: "Ideas", when: date === today(), node: data && <Ideas date={date} readOnly={readOnly} numbers={numbers} onChanged={reload} /> },
+    // What's planned in Mealie for the day, when it's connected.
+    { id: "mealplan", label: "Meal plan", when: !!mealie?.connected, node: <MealPlanCard date={date} numbers={numbers} readOnly={readOnly} onChanged={reload} /> },
     { id: "totals", label: "Totals", when: numbers, node: data && <Totals day={data} /> },
     { id: "micros", label: "Vitamins & minerals", when: micros, node: data && <MicrosCard day={data} /> },
     { id: "water", label: "Water", when: water, node: data && <WaterCard day={data} readOnly={readOnly} onChanged={reload} /> },
@@ -268,6 +272,7 @@ function AddFood({ date, meal, numbers, micros, onClose, onAdded }: { date: stri
 function SearchFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: boolean; onChoose: (f: FoodItem) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ mine: FoodItem[]; online: FoodItem[]; onlineError?: string } | null>(null);
+  const [fromMealie, setFromMealie] = useState(false);
   const [busy, setBusy] = useState(false);
   const isBarcode = /^\d{8,14}$/.test(query.trim());
   useEffect(() => {
@@ -293,14 +298,16 @@ function SearchFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: 
         {busy && <Spinner size={18} />}
       </form>
       {isBarcode && <Button variant="primary" onClick={lookUp} busy={busy}><Barcode size={18} /> Look up barcode {query.trim()}</Button>}
-      {results && (
+      {(results || (query.trim().length >= 2 && !isBarcode)) && (
         <div className="search-results">
-          {results.mine.length > 0 && <div className="result-group-title">Your foods</div>}
-          {results.mine.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
-          {results.online.length > 0 && <div className="result-group-title">Open Food Facts</div>}
-          {results.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
-          {results.onlineError && <p className="muted small">{results.onlineError}</p>}
-          {results.mine.length === 0 && results.online.length === 0 && !results.onlineError && <p className="muted">Nothing found. Try other words, or add it as a new food.</p>}
+          {results && results.mine.length > 0 && <div className="result-group-title">Your foods</div>}
+          {results?.mine.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
+          {/* Mealie answers on its own, alongside the food database. */}
+          <MealieResults query={isBarcode ? "" : query} numbers={numbers} onChoose={onChoose} onFound={setFromMealie} />
+          {results && results.online.length > 0 && <div className="result-group-title">Open Food Facts</div>}
+          {results?.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
+          {results?.onlineError && <p className="muted small">{results.onlineError}</p>}
+          {results && results.mine.length === 0 && results.online.length === 0 && !results.onlineError && !fromMealie && <p className="muted">Nothing found. Try other words, or add it as a new food.</p>}
         </div>
       )}
     </>
@@ -320,7 +327,7 @@ function FoodRow({ food, numbers, micros, onChoose }: { food: FoodItem; numbers:
     <button className="row" onClick={() => onChoose(food)}>
       <div className="row-main">
         <div className="row-title">{food.name}</div>
-        <div className="row-sub">{food.brand ? `${food.brand} · ` : ""}{food.serving}{numbers ? ` · P ${num(food.nutrients.protein)} · C ${num(food.nutrients.carbs)} · F ${num(food.nutrients.fat)}` : ""}</div>
+        <div className="row-sub">{food.source === "MEALIE" ? "Mealie · " : ""}{food.brand ? `${food.brand} · ` : ""}{food.serving}{numbers ? ` · P ${num(food.nutrients.protein)} · C ${num(food.nutrients.carbs)} · F ${num(food.nutrients.fat)}` : ""}</div>
         {micros && <CarriedLine nutrients={food.nutrients} />}
       </div>
       {numbers && <div className="row-end">{num(food.nutrients.calories)}<div className="muted">kcal</div></div>}

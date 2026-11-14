@@ -233,9 +233,13 @@ export interface Food {
   servingGrams?: number;
   brand?: string;
   barcode?: string;
-  source: "CUSTOM" | "OPEN_FOOD_FACTS";
+  source: "CUSTOM" | "OPEN_FOOD_FACTS" | "MEALIE";
   id?: string;
   uses: number;
+  /** Where it came from, to know it again: "mealie:<recipe id>". */
+  ref?: string;
+  /** Its page there (a Mealie recipe). */
+  link?: string;
 }
 
 export interface FoodEntry {
@@ -2369,4 +2373,37 @@ export function arrange<T>(defaults: T[], id: (t: T) => string, layout?: ScreenL
 export function visible<T>(defaults: T[], id: (t: T) => string, layout?: ScreenLayout): T[] {
   const hidden = new Set(layout?.hidden ?? []);
   return arrange(defaults, id, layout).filter((d) => !hidden.has(id(d)));
+}
+
+// ---------------------------------------------------------------- Mealie
+
+/** The person's Mealie (GET /api/mealie): connected or not, as of connecting. The token never comes back. */
+export interface MealieStatus {
+  connected: boolean;
+  url?: string;
+  user?: string;
+  version?: string;
+}
+
+/** A recipe in Mealie: [food] is one serving, ready to log; missing when it has no nutrition there. */
+export interface MealieRecipe {
+  slug: string;
+  name: string;
+  food?: Food;
+  servings?: number;
+  link?: string;
+}
+
+export interface MealieRecipes { items: MealieRecipe[]; problem?: string }
+
+/** A day's meal plan in Mealie, in the day's meal order. */
+export interface MealiePlan { date: string; entries: MealiePlanEntry[]; problem?: string }
+
+export interface MealiePlanEntry {
+  meal: Meal;
+  title: string;
+  recipe?: MealieRecipe;
+  note?: string;
+  /** Already in the diary that day. */
+  logged?: boolean;
 }
