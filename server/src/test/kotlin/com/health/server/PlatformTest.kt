@@ -1,10 +1,13 @@
 package com.health.server
 
 import com.health.api.ApiJson
+import com.health.api.BloodPressure
 import com.health.api.DeviceInfo
 import com.health.api.DeviceKind
 import com.health.api.DigestPrefs
 import com.health.api.DoseLog
+import com.health.api.GlucoseContext
+import com.health.api.GlucoseReading
 import com.health.api.IngestBatch
 import com.health.api.LabResult
 import com.health.api.MedSchedule
@@ -194,6 +197,20 @@ class PlatformTest {
         assertTrue(Scheduler.quiet(prefs, 6 * 60 + 59))
         assertFalse(Scheduler.quiet(prefs, 7 * 60))
         assertFalse(Scheduler.quiet(ReminderPrefs(quietFrom = null), 23 * 60))
+    }
+
+    @Test
+    fun `low and high glucose and high blood pressure reach webhooks through the scheduler, once each`() = runBlocking {
+        var now = at("2026-11-14T12:00:00Z")
+        val (services, userId) = setUp({ now }, modules = Module.DEFAULT + Module.VITALS)
+        val platform = services.platform
+        platform.webhooks.create(userId, Webhook("Home Assistant", web.url("/hook").toString(), setOf(WebhookEvent.GLUCOSE_LOW, WebhookEvent.GLUCOSE_HIGH, WebhookEvent.BP_HIGH)))
+        services.tracking.vitals.saveGlucose(userId, GlucoseReading(now - 60_000, 3.0, GlucoseContext.OTHER))
+        services.tracking.vitals.saveGlucose(userId, GlucoseReading(now - 30_000, 15.0, GlucoseContext.OTHER))
+        services.tracking.vitals.saveBloodPressure(userId, BloodPressure(now - 60_000, 170, 105))
+        repeat(5) { now += 60_000; platform.scheduler.tick(now) }
+        val events = hooked.map { Regex("\"event\":\"([a-z.]+)\"").find(it.body.readUtf8())?.groupValues?.get(1) }
+        assertEquals(listOf("bp.high", "glucose.high", "glucose.low"), events.map { it.orEmpty() }.sorted())
     }
 
     @Test
