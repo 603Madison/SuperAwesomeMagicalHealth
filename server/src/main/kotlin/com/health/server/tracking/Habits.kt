@@ -14,7 +14,6 @@ import com.health.server.db.Database
 import com.health.server.health.ProfileStore
 import com.health.server.insights.DayService
 import com.health.server.modules.ModuleService
-import com.health.server.modules.Schedules
 import com.health.server.util.Days
 import com.health.server.util.Random
 import java.time.LocalDate
@@ -174,10 +173,10 @@ class HabitsService(
             out[HabitSource.PELVIC_FLOOR] = modules.continence.daysOf(userId, from, to).filterValues { it.pelvicFloor > 0 }.keys
         }
         if (HabitSource.MEDS_TAKEN in sources) {
-            val meds = modules.meds.list(userId)
+            val meds = modules.meds.scheduled(userId)
             val logs = modules.meds.doses(userId, from, to.plusDays(1))
             out[HabitSource.MEDS_TAKEN] = range.filter { d ->
-                val slots = meds.flatMap { m -> Schedules.times(m.schedule, d, zone).map { m.id to it } }
+                val slots = meds.flatMap { s -> s.times(d, zone).map { s.med.id to it } }
                 slots.all { (id, slot) -> logs.any { it.medicationId == id && it.scheduledFor == slot && it.status == DoseStatus.TAKEN } }
             }.toSet()
         }

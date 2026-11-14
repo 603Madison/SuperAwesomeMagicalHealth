@@ -162,13 +162,13 @@ class ModuleService(
             }
         }
         if (Module.MEDICATIONS in on) {
-            val list = meds.list(userId)
+            val list = meds.scheduled(userId)
             if (list.isNotEmpty()) {
                 val logs = meds.doses(userId, from, to.plusDays(1))
                 val now = clock()
                 var date = from
                 while (!date.isAfter(to)) {
-                    val slots = list.flatMap { m -> Schedules.times(m.schedule, date, days).filter { it <= now }.map { m.id to it } }
+                    val slots = list.flatMap { s -> s.times(date, days).filter { it <= now }.map { s.med.id to it } }
                     if (slots.isNotEmpty()) {
                         val taken = slots.count { (id, slot) -> logs.any { it.medicationId == id && it.scheduledFor == slot && it.status == DoseStatus.TAKEN } }
                         out[date.toString()] = at(date).copy(dosesDue = slots.size, dosesTaken = taken)

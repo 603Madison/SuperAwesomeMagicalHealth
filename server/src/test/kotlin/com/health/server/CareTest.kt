@@ -243,6 +243,8 @@ class CareTest {
         val id = s.admin()
         for (d in 1L..6L) s.modules.mind.saveMood(id, MoodEntry(at(today.minusDays(d), 12), mood = 2))
         val vitaminD = s.modules.meds.save(id, Medication("Vitamin D", "1000 IU", schedule = MedSchedule(times = listOf("08:00"), startDate = today.minusDays(10).toString()), stock = 2))
+        // Added when it was started (doses from before a medication was added don't count as missed).
+        s.db.tx { update("UPDATE medications SET created_at = ? WHERE id = ?", at(today.minusDays(10), 7), vitaminD.id) }
         s.modules.meds.save(id, Medication("Estradiol", "2 mg", hormone = true))
         s.hormones.saveSettings(id, HormoneSettings(targets = listOf(LabTarget("Estradiol", "pmol/L", 100.0, 200.0))))
         s.modules.meds.saveLab(id, LabResult("Estradiol", 90.0, "pmol/L", at(today.minusDays(5), 9)))

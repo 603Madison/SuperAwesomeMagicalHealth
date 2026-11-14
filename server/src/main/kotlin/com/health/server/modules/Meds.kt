@@ -12,6 +12,7 @@ import com.health.api.MedsDay
 import com.health.api.ScheduleKind
 import com.health.server.ApiError
 import com.health.server.db.Database
+import com.health.server.db.Tx
 import com.health.server.health.ProfileStore
 import com.health.server.util.Days
 import com.health.server.util.Random
@@ -34,18 +35,40 @@ class MedsService(
     /** Told of every saved medication, with how it was before (null for a new one): hormone therapy keeps a dose history. */
     var onChanged: (suspend (userId: String, before: Medication?, after: Medication) -> Unit)? = null
 
-    suspend fun list(userId: String, all: Boolean = false): List<Medication> = db.tx {
-        query("SELECT id, data FROM medications WHERE user_id = ?${if (all) "" else " AND active = 1"} ORDER BY created_at", userId) { it.string("id") to it.string("data") }
-    }.mapNotNull { (id, data) ->
+    /** A medication as kept, with when it was added. */
+    private class Row(val med: Medication, val created: Long)
+
+    private fun open(userId: String, id: String, data: String): Medication? =
         runCatching { ApiJson.decodeFromString(Medication.serializer(), box.open(data, context(userId, id))).copy(id = id) }.getOrNull()
+
+    private suspend fun rows(userId: String, all: Boolean): List<Row> = db.tx {
+        query("SELECT id, data, created_at FROM medications WHERE user_id = ?${if (all) "" else " AND active = 1"} ORDER BY created_at", userId) {
+            Triple(it.string("id"), it.string("data"), it.long("created_at"))
+        }
+    }.mapNotNull { (id, data, created) -> open(userId, id, data)?.let { Row(it, created) } }
+
+    suspend fun list(userId: String, all: Boolean = false): List<Medication> = rows(userId, all).map { it.med }
+
+    /** Each medication with the first day its doses count (see [Schedules.firstDay]): for what's due, adherence and reminders. */
+    suspend fun scheduled(userId: String, all: Boolean = false): List<ScheduledMed> {
+        val zone = profiles.days(userId)
+        return rows(userId, all).map { ScheduledMed(it.med, Schedules.firstDay(it.med, zone.dateOf(it.created))) }
     }
 
     suspend fun get(userId: String, id: String): Medication = list(userId, all = true).firstOrNull { it.id == id } ?: throw ApiError.notFound("No such medication")
 
     suspend fun save(userId: String, med: Medication, id: String? = null): Medication {
-        val clean = validated(med)
+        var clean = validated(med)
         val medId = id ?: Random.id()
-        val before = if (id != null && onChanged != null) list(userId, all = true).firstOrNull { it.id == id } else null
+        val zone = profiles.days(userId)
+        val existing = if (id != null) rows(userId, all = true).firstOrNull { it.med.id == id } else null
+        val before = existing?.med
+        // Every few days needs a day to count from: the one it already counted from, or today.
+        if (clean.schedule.kind == ScheduleKind.EVERY_N_DAYS && clean.schedule.startDate == null) {
+            val counted = existing?.takeIf { it.med.schedule.kind == ScheduleKind.EVERY_N_DAYS && it.med.schedule.startDate == null }
+                ?.let { Schedules.firstDay(it.med, zone.dateOf(it.created)) }
+            clean = clean.copy(schedule = clean.schedule.copy(startDate = (counted ?: zone.today(clock())).toString()))
+        }
         val sealed = box.seal(ApiJson.encodeToString(Medication.serializer(), clean.copy(id = null)), context(userId, medId))
         db.tx {
             if (id != null) {
@@ -69,41 +92,66 @@ class MedsService(
     suspend fun doses(userId: String, from: LocalDate, to: LocalDate): List<DoseLog> =
         entries.list(userId, EntryKind.DOSE, from, to, DoseLog.serializer()).map { it.value.copy(id = it.id, date = it.date.toString()) }
 
+    /**
+     * Marks a dose. The mark, any earlier mark it replaces, and the stock count change together in
+     * one transaction, so doses marked at the same moment (from a watch and a phone) all count.
+     */
     suspend fun logDose(userId: String, dose: DoseLog): DoseLog {
-        val med = get(userId, dose.medicationId)
         val clean = dose.copy(site = dose.site?.trim()?.take(60)?.ifBlank { null }, note = dose.note?.trim()?.take(1000)?.ifBlank { null }, id = null, date = null)
         val date = profiles.days(userId).dateOf(clean.scheduledFor ?: clean.at)
-        // Marking a scheduled dose again replaces the earlier mark.
-        clean.scheduledFor?.let { slot ->
-            doses(userId, date.minusDays(1), date.plusDays(1)).filter { it.medicationId == clean.medicationId && it.scheduledFor == slot }.forEach { old ->
-                entries.delete(userId, EntryKind.DOSE, old.id!!)
-                if (old.status == DoseStatus.TAKEN) adjustStock(userId, med, +1)
+        val id = db.tx {
+            val med = medication(this, userId, clean.medicationId) ?: throw ApiError.notFound("No such medication")
+            var stockBy = 0
+            // Marking a scheduled dose again replaces the earlier mark.
+            clean.scheduledFor?.let { slot ->
+                entries.list(this, userId, EntryKind.DOSE, date.minusDays(1), date.plusDays(1), DoseLog.serializer())
+                    .filter { it.value.medicationId == clean.medicationId && it.value.scheduledFor == slot }
+                    .forEach { old ->
+                        entries.delete(this, userId, EntryKind.DOSE, old.id)
+                        if (old.value.status == DoseStatus.TAKEN) stockBy++
+                    }
             }
+            val saved = entries.put(this, userId, EntryKind.DOSE, null, date, clean.at, clean, DoseLog.serializer())
+            if (clean.status == DoseStatus.TAKEN) stockBy--
+            adjustStock(this, userId, med, stockBy)
+            saved
         }
-        val id = entries.put(userId, EntryKind.DOSE, null, date, clean.at, clean, DoseLog.serializer())
-        if (clean.status == DoseStatus.TAKEN) adjustStock(userId, get(userId, med.id!!), -1)
         return clean.copy(id = id, date = date.toString())
     }
 
     suspend fun deleteDose(userId: String, id: String) {
-        val dose = entries.get(userId, EntryKind.DOSE, id, DoseLog.serializer()) ?: throw ApiError.notFound("No such dose")
-        entries.delete(userId, EntryKind.DOSE, id)
-        if (dose.value.status == DoseStatus.TAKEN) runCatching { adjustStock(userId, get(userId, dose.value.medicationId), +1) }
+        db.tx {
+            val dose = entries.get(this, userId, EntryKind.DOSE, id, DoseLog.serializer()) ?: throw ApiError.notFound("No such dose")
+            entries.delete(this, userId, EntryKind.DOSE, id)
+            if (dose.value.status == DoseStatus.TAKEN) medication(this, userId, dose.value.medicationId)?.let { adjustStock(this, userId, it, +1) }
+        }
     }
 
-    private suspend fun adjustStock(userId: String, med: Medication, by: Int) {
+    /** A medication, read inside a transaction (null if there's none, or it can't be opened). */
+    private fun medication(tx: Tx, userId: String, id: String): Medication? =
+        tx.one("SELECT data FROM medications WHERE id = ? AND user_id = ?", id, userId) { it.string("data") }?.let { open(userId, id, it) }
+
+    /** Changes a counted medication's stock, inside the transaction that read [med]. */
+    private fun adjustStock(tx: Tx, userId: String, med: Medication, by: Int) {
         val stock = med.stock ?: return
-        save(userId, med.copy(stock = (stock + by).coerceAtLeast(0)), med.id)
+        if (by == 0) return
+        val next = med.copy(stock = (stock + by).coerceAtLeast(0), id = null)
+        tx.update(
+            "UPDATE medications SET data = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+            box.seal(ApiJson.encodeToString(Medication.serializer(), next), context(userId, med.id!!)), clock(), med.id, userId,
+        )
     }
 
     /** The day's scheduled doses, what happened to each, and the next site for injections and patches. */
     suspend fun day(userId: String, date: LocalDate): MedsDay {
         val zone = profiles.days(userId)
-        val meds = list(userId)
+        val scheduled = scheduled(userId)
+        val meds = scheduled.map { it.med }
         val logs = doses(userId, date.minusDays(120), date.plusDays(1))
         val today = logs.filter { it.date == date.toString() }
-        val due = meds.flatMap { med ->
-            Schedules.times(med.schedule, date, zone).map { slot ->
+        val due = scheduled.flatMap { s ->
+            val med = s.med
+            s.times(date, zone).map { slot ->
                 DueDose(
                     medicationId = med.id!!, name = med.name, dose = med.dose, form = med.form, scheduledFor = slot,
                     log = today.firstOrNull { it.medicationId == med.id && it.scheduledFor == slot },
@@ -117,21 +165,21 @@ class MedsService(
             due = due,
             asNeeded = meds.filter { it.schedule.kind == ScheduleKind.AS_NEEDED },
             extra = today.filter { it.id !in scheduledIds },
-            adherence7d = adherence(meds, logs, date, zone),
+            adherence7d = adherence(scheduled, logs, date, zone),
             lowStock = meds.filter { m -> m.stock != null && m.stock!! <= maxOf(5, Schedules.perWeek(m.schedule)) },
         )
     }
 
-    private fun adherence(meds: List<Medication>, logs: List<DoseLog>, date: LocalDate, zone: Days): Int? {
+    private fun adherence(meds: List<ScheduledMed>, logs: List<DoseLog>, date: LocalDate, zone: Days): Int? {
         val now = clock()
         var due = 0
         var taken = 0
         for (back in 0L until 7L) {
             val day = date.minusDays(back)
-            meds.forEach { med ->
-                Schedules.times(med.schedule, day, zone).filter { it <= now }.forEach { slot ->
+            meds.forEach { s ->
+                s.times(day, zone).filter { it <= now }.forEach { slot ->
                     due++
-                    if (logs.any { it.medicationId == med.id && it.scheduledFor == slot && it.status == DoseStatus.TAKEN }) taken++
+                    if (logs.any { it.medicationId == s.med.id && it.scheduledFor == slot && it.status == DoseStatus.TAKEN }) taken++
                 }
             }
         }
@@ -169,7 +217,8 @@ class MedsService(
             if (s.kind != ScheduleKind.AS_NEEDED && times.isEmpty()) throw ApiError.badRequest("Give at least one time to take it")
             if (s.kind == ScheduleKind.EVERY_N_DAYS && s.everyDays !in 1..90) throw ApiError.badRequest("Every 1 to 90 days")
             if (s.kind == ScheduleKind.WEEKLY && s.weekdays.any { it !in 1..7 }) throw ApiError.badRequest("Weekdays are 1 (Monday) to 7 (Sunday)")
-            s.startDate?.let { runCatching { LocalDate.parse(it) }.getOrElse { throw ApiError.badRequest("Dates look like 2026-01-31") } }
+            val startDate = s.startDate?.trim()?.ifBlank { null }
+            startDate?.let { runCatching { LocalDate.parse(it) }.getOrElse { throw ApiError.badRequest("Dates look like 2026-01-31") } }
             return med.copy(
                 name = name,
                 dose = med.dose?.trim()?.take(80)?.ifBlank { null },
@@ -177,7 +226,7 @@ class MedsService(
                 notes = med.notes?.trim()?.take(2000)?.ifBlank { null },
                 sites = med.sites.map { it.trim().take(60) }.filter { it.isNotEmpty() }.distinct().take(20),
                 stock = med.stock?.coerceIn(0, 100_000),
-                schedule = s.copy(times = times, weekdays = s.weekdays.distinct().sorted()),
+                schedule = s.copy(times = times, weekdays = s.weekdays.distinct().sorted(), startDate = startDate),
                 startedOn = med.startedOn?.trim()?.ifBlank { null }?.also {
                     runCatching { LocalDate.parse(it) }.getOrElse { throw ApiError.badRequest("Dates look like 2026-01-31") }
                 },
@@ -195,24 +244,40 @@ class MedsService(
     }
 }
 
+/** A medication and the first day its doses count (see [Schedules.firstDay]). */
+class ScheduledMed(val med: Medication, val since: LocalDate) {
+    fun times(date: LocalDate, zone: Days): List<Long> = Schedules.times(med.schedule, date, zone, since)
+}
+
 /** When a schedule's doses fall on a day. Pure, so reminders and the server agree. */
 object Schedules {
-    fun times(schedule: MedSchedule, date: LocalDate, zone: Days): List<Long> {
+    /**
+     * The doses on [date]. None before the schedule's start date or [since] (the first day the
+     * medication's doses count); every few days counts from the start date, or else from [since].
+     */
+    fun times(schedule: MedSchedule, date: LocalDate, zone: Days, since: LocalDate? = null): List<Long> {
+        val start = startOf(schedule)
         val on = when (schedule.kind) {
             ScheduleKind.AS_NEEDED -> false
             ScheduleKind.DAILY -> true
-            ScheduleKind.WEEKLY -> schedule.weekdays.ifEmpty { listOf(startOf(schedule)?.dayOfWeek?.value ?: 1) }.contains(date.dayOfWeek.value)
+            ScheduleKind.WEEKLY -> schedule.weekdays.ifEmpty { listOf(start?.dayOfWeek?.value ?: 1) }.contains(date.dayOfWeek.value)
             ScheduleKind.EVERY_N_DAYS -> {
-                val start = startOf(schedule) ?: date
-                val between = ChronoUnit.DAYS.between(start, date)
+                val from = start ?: since ?: date
+                val between = ChronoUnit.DAYS.between(from, date)
                 between >= 0 && between % schedule.everyDays.coerceAtLeast(1) == 0L
             }
         }
-        val start = startOf(schedule)
-        if (!on || (start != null && date.isBefore(start))) return emptyList()
+        if (!on || (start != null && date.isBefore(start)) || (since != null && date.isBefore(since))) return emptyList()
         return schedule.times.mapNotNull { t -> runCatching { LocalTime.parse(t) }.getOrNull() }
             .map { date.atTime(it).atZone(zone.zone).toInstant().toEpochMilli() }
     }
+
+    /**
+     * The first day a medication's doses count: the latest of its schedule's start date, the day
+     * it was started and the day it was [added], so nothing before it existed counts as missed.
+     */
+    fun firstDay(med: Medication, added: LocalDate): LocalDate =
+        listOfNotNull(startOf(med.schedule), med.startedOn?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, added).max()
 
     fun perWeek(schedule: MedSchedule): Int = when (schedule.kind) {
         ScheduleKind.AS_NEEDED -> 0

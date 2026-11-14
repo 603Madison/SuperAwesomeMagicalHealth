@@ -785,17 +785,18 @@ private class MedsHooks(private val services: Services) : FeatureHooks {
     override suspend fun reminders(userId: String, profile: Profile, from: Long, to: Long): List<Reminder> {
         val prefs = profile.reminders
         val zone = zoneOf(profile)
-        val meds = services.modules.meds.list(userId).filter { it.reminders }
+        val meds = services.modules.meds.scheduled(userId).filter { it.med.reminders }
         if (meds.isEmpty()) return emptyList()
         val lookback = maxOf(prefs.missedAfterMinutes, prefs.remindAgainMinutes * prefs.remindAgainTimes).toLong() * 60_000
         val firstDay = zone.dateOf(from - lookback)
         val lastDay = zone.dateOf(to)
         val logs = services.modules.meds.doses(userId, firstDay.minusDays(1), lastDay.plusDays(1))
         val out = mutableListOf<Reminder>()
-        for (med in meds) {
+        for (scheduled in meds) {
+            val med = scheduled.med
             if (med.schedule.kind == ScheduleKind.AS_NEEDED) continue
             for (day in dates(firstDay, lastDay)) {
-                for (slot in Schedules.times(med.schedule, day, zone)) {
+                for (slot in scheduled.times(day, zone)) {
                     val marked = logs.any { it.medicationId == med.id && it.scheduledFor == slot }
                     if (marked) continue
                     val time = Say.time(slot, zone.zone)
@@ -852,7 +853,7 @@ private class MedsHooks(private val services: Services) : FeatureHooks {
         }
         // Taken: a webhook when a dose is marked taken (within the window it was marked for).
         logs.filter { it.status == DoseStatus.TAKEN && it.at in from until to }.forEach { log ->
-            val med = meds.firstOrNull { it.id == log.medicationId } ?: return@forEach
+            val med = meds.firstOrNull { it.med.id == log.medicationId }?.med ?: return@forEach
             out += Reminder(
                 "taken:${log.id}", log.at.coerceAtMost(to - 60_000), WebhookEvent.DOSE_TAKEN, "${med.name} taken", "", "A medication was taken", "",
                 data = json("at" to Csv.iso(log.at, zone.zone)), detailedData = json("medication" to med.name, "dose" to med.dose, "at" to Csv.iso(log.at, zone.zone)),
