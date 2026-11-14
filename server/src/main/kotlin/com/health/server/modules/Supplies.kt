@@ -8,6 +8,7 @@ import com.health.api.SupplyReason
 import com.health.api.SupplyStatus
 import com.health.server.ApiError
 import com.health.server.db.Database
+import com.health.server.db.Tx
 import com.health.server.health.ProfileStore
 import com.health.server.util.Random
 import com.health.server.util.SecretBox
@@ -43,10 +44,21 @@ class SuppliesService(
         one("SELECT data FROM supplies WHERE id = ? AND user_id = ?", id, userId) { it.string("data") }
     }?.let { open(userId, id, it) }
 
+    /** [get], inside a transaction already open. */
+    private fun get(tx: Tx, userId: String, id: String): Supply? =
+        tx.one("SELECT data FROM supplies WHERE id = ? AND user_id = ?", id, userId) { it.string("data") }?.let { open(userId, id, it) }
+
+    /** A new count on hand, inside the transaction that read [supply]. */
+    private fun putCount(tx: Tx, userId: String, supply: Supply, onHand: Int) {
+        val id = supply.id!!
+        val sealed = box.seal(ApiJson.encodeToString(Supply.serializer(), supply.copy(onHand = onHand, id = null)), context(userId, id))
+        tx.update("UPDATE supplies SET data = ?, updated_at = ? WHERE id = ? AND user_id = ?", sealed, clock(), id, userId)
+    }
+
     suspend fun save(userId: String, input: Supply, id: String? = null): Supply {
         fun check(ok: Boolean, message: String) { if (!ok) throw ApiError.badRequest(message) }
         check(input.name.isNotBlank(), "Give it a name")
-        check(input.onHand in 0..100_000, "On hand is 0 to 100,000")
+        check(input.onHand in 0..MAX_ON_HAND, "On hand is 0 to 100,000")
         input.perPack?.let { check(it in 1..10_000, "A pack holds 1 to 10,000") }
         input.lowAt?.let { check(it in 0..10_000, "Warn at 0 to 10,000") }
         input.dryWeightG?.let { check(it > 0 && it <= 2000, "Dry weight is in grams, up to 2,000") }
@@ -76,46 +88,59 @@ class SuppliesService(
         if (db.tx { update("DELETE FROM supplies WHERE id = ? AND user_id = ?", id, userId) } == 0) throw ApiError.notFound("No such supply")
     }
 
-    /** A change made by hand: restocked, counted (sets the count), or given away. */
+    /**
+     * A change made by hand: restocked, counted (sets the count), or given away. Read, logged and
+     * counted in one transaction, so changes made at the same moment all count.
+     */
     suspend fun adjust(userId: String, id: String, input: SupplyAdjustment): Supply {
-        val supply = get(userId, id) ?: throw ApiError.notFound("No such supply")
         if (input.delta !in -100_000..100_000) throw ApiError.badRequest("That's a lot: up to 100,000")
         val at = input.at.takeIf { it > 0 } ?: clock()
-        val (newCount, delta) = when (input.reason) {
-            SupplyReason.COUNTED -> {
-                if (input.delta < 0) throw ApiError.badRequest("A count can't be below 0")
-                input.delta to (input.delta - supply.onHand)
+        val date = profiles.days(userId).dateOf(at)
+        val note = input.note?.trim()?.take(500)?.ifBlank { null }
+        return db.tx {
+            val supply = get(this, userId, id) ?: throw ApiError.notFound("No such supply")
+            val (newCount, delta) = when (input.reason) {
+                SupplyReason.COUNTED -> {
+                    if (input.delta < 0) throw ApiError.badRequest("A count can't be below 0")
+                    input.delta to (input.delta - supply.onHand)
+                }
+                SupplyReason.RESTOCKED -> (supply.onHand + input.delta.coerceAtLeast(0)) to input.delta.coerceAtLeast(0)
+                SupplyReason.GAVE_AWAY, SupplyReason.USED -> {
+                    val used = -kotlin.math.abs(input.delta)
+                    (supply.onHand + used).coerceAtLeast(0) to used
+                }
             }
-            SupplyReason.RESTOCKED -> (supply.onHand + input.delta.coerceAtLeast(0)) to input.delta.coerceAtLeast(0)
-            SupplyReason.GAVE_AWAY, SupplyReason.USED -> {
-                val used = -kotlin.math.abs(input.delta)
-                (supply.onHand + used).coerceAtLeast(0) to used
-            }
+            // Checked before anything is logged.
+            if (newCount > MAX_ON_HAND) throw ApiError.badRequest("That would make more than 100,000 on hand")
+            entries.put(this, userId, EntryKind.SUPPLY_LOG, null, date, at, Logged(SupplyAdjustment(at, delta, input.reason, note, supplyId = id), null), Logged.serializer())
+            putCount(this, userId, supply, newCount)
+            supply.copy(onHand = newCount)
         }
-        record(userId, SupplyAdjustment(at, delta, input.reason, input.note?.trim()?.take(500)?.ifBlank { null }, supplyId = id), null)
-        return save(userId, supply.copy(onHand = newCount), id)
     }
 
     /**
      * Brings the counts in line with what a diary entry ([source]) used: [uses] is supply id to
      * how many. What the entry used before is given back first, so editing or deleting an entry
-     * (an empty [uses]) puts things right.
+     * (an empty [uses]) puts things right. All in one transaction, so entries saved at the same
+     * moment each take their own off.
      */
     suspend fun syncUse(userId: String, source: String, uses: Map<String, Int>, at: Long) {
-        val zone = profiles.days(userId)
-        val previous = entries.list(userId, EntryKind.SUPPLY_LOG, LocalDate.of(2000, 1, 1), LocalDate.of(2999, 1, 1), Logged.serializer())
-            .filter { it.value.source == source }
-        val before = previous.groupBy { it.value.adjustment.supplyId!! }.mapValues { (_, l) -> -l.sumOf { it.value.adjustment.delta } }
-        if (before == uses.filterValues { it > 0 }) return
-        previous.forEach { entries.delete(userId, EntryKind.SUPPLY_LOG, it.id) }
-        (before.keys + uses.keys).forEach { supplyId ->
-            val change = (before[supplyId] ?: 0) - (uses[supplyId] ?: 0)
-            val supply = get(userId, supplyId) ?: return@forEach
-            if (!supply.reusable && change != 0) save(userId, supply.copy(onHand = (supply.onHand + change).coerceAtLeast(0)), supplyId)
-        }
-        uses.filterValues { it > 0 }.forEach { (supplyId, count) ->
-            if (get(userId, supplyId)?.reusable == false) {
-                entries.put(userId, EntryKind.SUPPLY_LOG, null, zone.dateOf(at), at, Logged(SupplyAdjustment(at, -count, SupplyReason.USED, supplyId = supplyId), source), Logged.serializer())
+        val date = profiles.days(userId).dateOf(at)
+        db.tx {
+            val previous = entries.list(this, userId, EntryKind.SUPPLY_LOG, LocalDate.of(2000, 1, 1), LocalDate.of(2999, 1, 1), Logged.serializer())
+                .filter { it.value.source == source }
+            val before = previous.groupBy { it.value.adjustment.supplyId!! }.mapValues { (_, l) -> -l.sumOf { it.value.adjustment.delta } }
+            if (before == uses.filterValues { it > 0 }) return@tx
+            previous.forEach { entries.delete(this, userId, EntryKind.SUPPLY_LOG, it.id) }
+            (before.keys + uses.keys).forEach { supplyId ->
+                val change = (before[supplyId] ?: 0) - (uses[supplyId] ?: 0)
+                val supply = get(this, userId, supplyId) ?: return@forEach
+                if (!supply.reusable && change != 0) putCount(this, userId, supply, (supply.onHand + change).coerceIn(0, MAX_ON_HAND))
+            }
+            uses.filterValues { it > 0 }.forEach { (supplyId, count) ->
+                if (get(this, userId, supplyId)?.reusable == false) {
+                    entries.put(this, userId, EntryKind.SUPPLY_LOG, null, date, at, Logged(SupplyAdjustment(at, -count, SupplyReason.USED, supplyId = supplyId), source), Logged.serializer())
+                }
             }
         }
     }
@@ -153,12 +178,10 @@ class SuppliesService(
     private fun open(userId: String, id: String, data: String): Supply? =
         runCatching { ApiJson.decodeFromString(Supply.serializer(), box.open(data, context(userId, id))).copy(id = id) }.getOrNull()
 
-    private suspend fun record(userId: String, adjustment: SupplyAdjustment, source: String?) {
-        val zone = profiles.days(userId)
-        entries.put(userId, EntryKind.SUPPLY_LOG, null, zone.dateOf(adjustment.at), adjustment.at, Logged(adjustment, source), Logged.serializer())
-    }
-
     companion object {
+        /** The most of anything kept on hand. */
+        const val MAX_ON_HAND = 100_000
+
         /** Low: at the person's own mark, or with about a week (or less) left; never for reusable things. */
         fun statusOf(s: Supply, perDay: Double?, daysLeft: Int?, lastRestocked: String?): SupplyStatus {
             val low = !s.reusable && when {

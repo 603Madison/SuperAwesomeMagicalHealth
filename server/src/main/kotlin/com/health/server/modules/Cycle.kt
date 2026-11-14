@@ -59,12 +59,10 @@ class CycleService(
             sex = day.sex?.let { it.copy(note = it.note?.trim()?.take(500)?.ifBlank { null }) },
             details = day.details.entries.associate { (k, v) -> k.trim().take(40) to v.trim().take(500) }.filterKeys { it.isNotEmpty() },
         )
-        entries.deleteDay(userId, EntryKind.CYCLE_DAY, date)
         val empty = clean == CycleDay(date = clean.date)
         val noon = profiles.days(userId).let { it.start(date) + 12 * 3_600_000L }
-        if (!empty) {
-            entries.put(userId, EntryKind.CYCLE_DAY, null, date, noon, clean, CycleDay.serializer())
-        }
+        // The day's entry replaced (or cleared) all at once, so two saves at once leave one day, not two.
+        entries.replaceDay(userId, EntryKind.CYCLE_DAY, date, noon, clean.takeIf { !empty }, CycleDay.serializer())
         supplies?.syncUse(userId, source(date), usesOf(clean), noon)
         return clean
     }

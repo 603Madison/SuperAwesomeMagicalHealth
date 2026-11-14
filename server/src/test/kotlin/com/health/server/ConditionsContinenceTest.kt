@@ -32,7 +32,11 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -172,6 +176,30 @@ class ConditionsContinenceTest {
         val refill = at(today, 10)
         assertEquals("supplies:$today", hooks.reminders(me, profile, refill - 60_000, refill + 60_000).single().key)
         assertTrue(hooks.reminders(me, profile, at(today, 12), at(today, 12, 15)).isEmpty())
+    }
+
+    @Test
+    fun `supplies used and restocked at the same moment all count, and too big a restock logs nothing`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)
+        val me = s.admin()
+        val pads = s.supplies.save(me, Supply("Night pads", SupplyKind.PAD, onHand = 100))
+        withContext(Dispatchers.Default) {
+            (1..20).map { i -> async { s.modules.continence.save(me, ContinenceEntry(now - i * 60_000L, ContinenceKind.PAD_CHANGE, putOnSupplyId = pads.id)) } }.awaitAll()
+            (1..10).map { async { s.supplies.adjust(me, pads.id!!, SupplyAdjustment(now, 5, SupplyReason.RESTOCKED)) } }.awaitAll()
+        }
+        assertEquals(100 - 20 + 50, s.supplies.get(me, pads.id!!)!!.onHand)
+        val logged = s.supplies.log(me, pads.id!!, 30).size
+        assertEquals(30, logged)
+        val error = runCatching { s.supplies.adjust(me, pads.id!!, SupplyAdjustment(now, 100_000, SupplyReason.RESTOCKED)) }.exceptionOrNull()
+        assertEquals(HttpStatusCode.BadRequest, (error as ApiError).status)
+        assertEquals(logged, s.supplies.log(me, pads.id!!, 30).size)
+        assertEquals(130, s.supplies.get(me, pads.id!!)!!.onHand)
+
+        // A cycle day saved twice at once is still one day.
+        withContext(Dispatchers.Default) {
+            (1..10).map { n -> async { s.modules.cycle.put(me, CycleDay(today.toString(), flow = Flow.LIGHT, pain = n)) } }.awaitAll()
+        }
+        assertEquals(1, s.modules.cycle.logged(me, today, today).size)
     }
 
     // ---- Bladder and bowel ----
