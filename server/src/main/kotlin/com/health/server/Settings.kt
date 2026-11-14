@@ -41,7 +41,7 @@ data class ServerSettings(
     val oidc: OidcSettings = OidcSettings(),
     /** Mail for weekly digests (the password is set apart, at /api/admin/smtp). */
     val smtp: com.health.server.platform.SmtpSettings = com.health.server.platform.SmtpSettings(),
-    /** Let webhooks call addresses on private networks (Home Assistant usually lives on one). */
+    /** Let webhooks and Mealie reach addresses on private networks (Home Assistant and Mealie usually live on one). */
     val webhooksPrivateNetworks: Boolean = true,
 )
 

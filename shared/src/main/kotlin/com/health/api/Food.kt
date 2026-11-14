@@ -155,7 +155,7 @@ data class NutrientTargets(val items: List<NutrientTargetSetting>, val basis: St
 data class NutrientTargetsChange(val own: Map<String, Double> = emptyMap())
 
 @Serializable
-enum class FoodSource { CUSTOM, OPEN_FOOD_FACTS }
+enum class FoodSource { CUSTOM, OPEN_FOOD_FACTS, MEALIE }
 
 /** A food that can be logged: [nutrients] are for one [serving] (which weighs [servingGrams], if known). */
 @Serializable
@@ -171,6 +171,10 @@ data class Food(
     val id: String? = null,
     /** How many times the person has logged it. */
     val uses: Int = 0,
+    /** Where it came from, to know it again: "mealie:<recipe id>" for a Mealie recipe. */
+    val ref: String? = null,
+    /** Where to see it there (a Mealie recipe's page); not kept with the person's foods. */
+    val link: String? = null,
 )
 
 /** One thing eaten: [servings] of a food, with the nutrients that amount holds. */
@@ -288,3 +292,60 @@ fun FoodEntry.toInput(date: String, meal: Meal): FoodEntryInput {
         FoodEntryInput(date, meal, servings, name = name, nutrients = each)
     }
 }
+
+// ---------------------------------------------------------------- Mealie
+
+/**
+ * The person's Mealie, the self-hosted recipe manager (GET /api/mealie): whether it's connected,
+ * who the token belongs to there and its version, as of connecting. The token never comes back.
+ */
+@Serializable
+data class MealieStatus(
+    val connected: Boolean = false,
+    val url: String? = null,
+    val user: String? = null,
+    val version: String? = null,
+)
+
+/**
+ * Connecting Mealie (PUT /api/mealie): its address, and an API token from Mealie's profile ›
+ * API tokens. Without a token, the one already saved is kept (the address can change).
+ */
+@Serializable
+data class MealieConnect(val url: String, val token: String? = null)
+
+/**
+ * A recipe in Mealie: [food] is one serving, ready for POST /api/food/entries, from the
+ * nutrition the recipe has in Mealie (per serving); null when it has none there.
+ */
+@Serializable
+data class MealieRecipe(
+    val slug: String,
+    val name: String,
+    val food: Food? = null,
+    /** How many servings the recipe makes, when Mealie says. */
+    val servings: Double? = null,
+    /** Its page in Mealie. */
+    val link: String? = null,
+)
+
+/** Recipes found in Mealie (GET /api/mealie/recipes?q=); [problem] says why none could be, in plain words. */
+@Serializable
+data class MealieRecipes(val items: List<MealieRecipe> = emptyList(), val problem: String? = null)
+
+/** A day's meal plan in Mealie (GET /api/mealie/plan?date=), in the order of the day's meals. */
+@Serializable
+data class MealiePlan(val date: String, val entries: List<MealiePlanEntry> = emptyList(), val problem: String? = null)
+
+/**
+ * One thing planned: [meal] is the diary's meal for it (Mealie's sides and desserts go with dinner
+ * and snacks). A note on its own has no [recipe]. [logged]: already in the diary that day.
+ */
+@Serializable
+data class MealiePlanEntry(
+    val meal: Meal,
+    val title: String,
+    val recipe: MealieRecipe? = null,
+    val note: String? = null,
+    val logged: Boolean = false,
+)

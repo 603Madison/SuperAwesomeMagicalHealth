@@ -101,6 +101,7 @@ class Services(
 
     /** Each person's own settings, sealed one row per key (conditions, a feature's diary settings, Autism & ADHD, transition). */
     val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
+    val mealie = com.health.server.food.MealieService(http, userSettings, foods, { settings.get().webhooksPrivateNetworks }, clock)
 
     /** How each person arranges the apps' screens. */
     val layouts = com.health.server.platform.LayoutService(userSettings)

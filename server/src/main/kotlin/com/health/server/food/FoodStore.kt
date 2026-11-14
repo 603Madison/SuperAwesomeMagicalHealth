@@ -42,15 +42,26 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
         db.tx {
             if (id != null && one("SELECT 1 FROM foods WHERE id = ? AND user_id = ?", id, userId) { true } == null) throw ApiError.notFound("No such food")
             update(
-                """INSERT INTO foods (id, user_id, name, brand, barcode, serving, serving_grams, nutrients, source, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO foods (id, user_id, name, brand, barcode, serving, serving_grams, nutrients, source, created_at, ref)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT (id) DO UPDATE SET name = excluded.name, brand = excluded.brand, barcode = excluded.barcode,
                      serving = excluded.serving, serving_grams = excluded.serving_grams, nutrients = excluded.nutrients""",
                 foodId, userId, clean.name, clean.brand, clean.barcode, clean.serving, clean.servingGrams,
-                ApiJson.encodeToString(Nutrients.serializer(), clean.nutrients), clean.source, clock(),
+                ApiJson.encodeToString(Nutrients.serializer(), clean.nutrients), clean.source, clock(), clean.ref,
             )
         }
         return db.tx { one("SELECT * FROM foods WHERE id = ?", foodId, map = ::toFood)!! }
+    }
+
+    /** The refs of the person's foods [ids] (those with one), by food id. */
+    suspend fun refs(userId: String, ids: Collection<String>): Map<String, String> {
+        if (ids.isEmpty()) return emptyMap()
+        val list = ids.distinct().take(500)
+        return db.tx {
+            query("SELECT id, ref FROM foods WHERE user_id = ? AND ref IS NOT NULL AND id IN (${list.joinToString(",") { "?" }})", userId, *list.toTypedArray()) {
+                it.string("id") to it.string("ref")
+            }.toMap()
+        }
     }
 
     suspend fun delete(userId: String, id: String) {
@@ -104,16 +115,27 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
 
     private data class Logged(val foodId: String?, val name: String, val brand: String?, val serving: String, val nutrients: Nutrients)
 
-    /** The person's copy of [food]: theirs already (by id or barcode), or a new one; counts the use. */
+    /**
+     * The person's copy of [food]: theirs already (by id, barcode or [Food.ref]), or a new one;
+     * counts the use. A copy known by its ref (a Mealie recipe) takes the recipe as it is now.
+     */
     private fun remember(tx: Tx, userId: String, food: Food): String = with(tx) {
-        val existing = food.id?.let { id -> one("SELECT id FROM foods WHERE id = ? AND user_id = ?", id, userId) { it.string("id") } }
+        val byRef = food.ref?.let { ref -> one("SELECT id FROM foods WHERE user_id = ? AND ref = ? ORDER BY uses DESC", userId, ref) { it.string("id") } }
+        byRef?.let { id ->
+            update(
+                "UPDATE foods SET name = ?, serving = ?, nutrients = ? WHERE id = ?",
+                food.name, food.serving, ApiJson.encodeToString(Nutrients.serializer(), food.nutrients), id,
+            )
+        }
+        val existing = byRef
+            ?: food.id?.let { id -> one("SELECT id FROM foods WHERE id = ? AND user_id = ?", id, userId) { it.string("id") } }
             ?: food.barcode?.let { code -> one("SELECT id FROM foods WHERE user_id = ? AND barcode = ? AND serving = ?", userId, code, food.serving) { it.string("id") } }
         val id = existing ?: Random.id().also { id ->
             update(
-                """INSERT INTO foods (id, user_id, name, brand, barcode, serving, serving_grams, nutrients, source, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO foods (id, user_id, name, brand, barcode, serving, serving_grams, nutrients, source, created_at, ref)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 id, userId, food.name, food.brand, food.barcode, food.serving, food.servingGrams,
-                ApiJson.encodeToString(Nutrients.serializer(), food.nutrients), food.source, clock(),
+                ApiJson.encodeToString(Nutrients.serializer(), food.nutrients), food.source, clock(), food.ref,
             )
         }
         update("UPDATE foods SET uses = uses + 1, last_used_at = ? WHERE id = ?", clock(), id)
@@ -188,6 +210,7 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
         source = runCatching { FoodSource.valueOf(row.string("source")) }.getOrDefault(FoodSource.CUSTOM),
         id = row.string("id"),
         uses = row.int("uses"),
+        ref = row.stringOrNull("ref"),
     )
 
     private fun toEntry(row: Row) = FoodEntry(
@@ -211,6 +234,8 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
                 brand = food.brand?.trim()?.take(120)?.ifBlank { null },
                 barcode = food.barcode?.trim()?.filter { it.isDigit() }?.take(20)?.ifBlank { null },
                 serving = food.serving.trim().take(80).ifBlank { "1 serving" },
+                ref = food.ref?.trim()?.take(120)?.ifBlank { null },
+                link = null,
                 servingGrams = food.servingGrams?.takeIf { it.isFinite() && it > 0 && it < 10_000 },
                 // What the person typed must make sense; a food database's odd values are left out.
                 nutrients = checked(food.nutrients, strict = food.source == FoodSource.CUSTOM),

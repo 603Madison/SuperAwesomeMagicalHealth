@@ -334,6 +334,11 @@ object Schema {
         );
         CREATE INDEX ai_audit_user ON ai_audit(user_id, at);
         """,
+        // Where a food came from, to know it again: "mealie:<recipe id>".
+        """
+        ALTER TABLE foods ADD COLUMN ref TEXT;
+        CREATE INDEX foods_ref ON foods(user_id, ref);
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

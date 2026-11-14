@@ -6,6 +6,7 @@ import com.health.api.FoodEntryChange
 import com.health.api.FoodEntryInput
 import com.health.api.FoodSearch
 import com.health.api.Meal
+import com.health.api.MealieConnect
 import com.health.api.NutrientTargetsChange
 import com.health.api.Nutrients
 import com.health.api.WaterEntry
@@ -138,6 +139,23 @@ fun Route.foodRoutes(services: Services) {
             val user = call.requireUser(services)
             services.foods.delete(user.id, call.parameters["id"].orEmpty())
             call.respond(mapOf("ok" to true))
+        }
+    }
+
+    // Mealie: never through a share (its path isn't among what a viewer may ask for).
+    route("/api/mealie") {
+        get { call.respond(services.mealie.status(call.requireUser(services).id)) }
+        put { call.respond(services.mealie.connect(call.requireUser(services).id, call.receive<MealieConnect>())) }
+        delete {
+            services.mealie.disconnect(call.requireUser(services).id)
+            call.respond(mapOf("ok" to true))
+        }
+        get("/recipes") { call.respond(services.mealie.recipes(call.requireUser(services).id, call.request.queryParameters["q"].orEmpty())) }
+        get("/recipes/{slug}") { call.respond(services.mealie.recipe(call.requireUser(services).id, call.parameters["slug"].orEmpty())) }
+        get("/plan") {
+            val user = call.requireUser(services)
+            val date = services.profiles.days(user.id).parse(call.request.queryParameters["date"]?.ifBlank { null } ?: "today", services.clock())
+            call.respond(services.mealie.plan(user.id, date))
         }
     }
 
