@@ -3,14 +3,18 @@
 package com.health.app.ui.modules.continence
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.EventNote
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.Bed
 import androidx.compose.material.icons.rounded.Insights
@@ -66,6 +71,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -82,6 +88,7 @@ import com.health.api.SupplyCategory
 import com.health.api.SupplyStatus
 import com.health.api.Verdict
 import com.health.app.Container
+import com.health.app.net.continenceDiary
 import com.health.app.net.continenceProducts
 import com.health.app.net.continenceProgress
 import com.health.app.net.continenceWearing
@@ -143,6 +150,8 @@ data class ContinenceState(
     val wearing: ContinenceWearing? = null,
     /** How each product goes, over 90 days. */
     val products: List<ProductStats> = emptyList(),
+    /** Today, grouped: each product worn with its accidents (null from an older server: Today lists each entry on its own). */
+    val diary: com.health.api.ContinenceDiary? = null,
 ) {
     /** The products put on lately, newest first: offered first in a change. */
     val recent: List<String> get() = WearText.recentPutOns(entries)
@@ -161,7 +170,8 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
     }
 
     fun load(quiet: Boolean = false) {
-        _state.update { it.copy(loading = !quiet || it.summary == null, error = null, today = LocalDate.now(c.zone())) }
+        val today = LocalDate.now(c.zone())
+        _state.update { it.copy(loading = !quiet || it.summary == null, error = null, today = today) }
         viewModelScope.launch {
             try {
                 val entries = async { c.ui.continence(3) }
@@ -172,11 +182,13 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
                 val progress = async { runCatching { c.ui.continenceProgress(12) }.getOrNull() }
                 val wearing = async { runCatching { c.ui.continenceWearing() }.getOrNull() }
                 val products = async { runCatching { c.ui.continenceProducts(90) }.getOrNull() }
+                // Today, grouped. Missing (an older server), Today lists each entry on its own, from the fresh entries.
+                val diary = async { runCatching { c.ui.continenceDiary(today.toString()) }.getOrNull() }
                 _state.update {
                     it.copy(
                         entries = entries.await(), summary = summary.await(), loading = false,
                         settings = settings.await() ?: it.settings, supplies = supplies.await() ?: it.supplies, progress = progress.await() ?: it.progress,
-                        wearing = wearing.await() ?: it.wearing, products = products.await() ?: it.products,
+                        wearing = wearing.await() ?: it.wearing, products = products.await() ?: it.products, diary = diary.await(),
                     )
                 }
             } catch (e: Exception) {
@@ -258,11 +270,11 @@ fun kindIcon(kind: ContinenceKind): ImageVector = when (kind) {
 /** The quick logs to start with, in order (the person can choose their own in the diary's settings). */
 val QUICK_KINDS = listOf(ContinenceKind.URINATION, ContinenceKind.LEAK, ContinenceKind.BOWEL, ContinenceKind.PAD_CHANGE)
 
-/** A quick log: now, of [kind], with the usual product for a change. */
-fun quickEntry(kind: ContinenceKind, settings: ContinenceSettings, supplies: List<SupplyStatus>, now: Long = System.currentTimeMillis()): ContinenceEntry {
+/** A quick log: now, of [kind], with the usual product for a change, and an accident in what's on ([wearing]). */
+fun quickEntry(kind: ContinenceKind, settings: ContinenceSettings, supplies: List<SupplyStatus>, now: Long = System.currentTimeMillis(), wearing: ContinenceWearing? = null): ContinenceEntry {
     val usual = settings.defaultSupplyId?.takeIf { id -> ContinenceText.suppliesFor(kind, supplies.map { it.supply }).any { it.id == id } }
     // A change puts the usual on (the one taken off was counted when it went on).
-    return ContinenceEntry(now, kind, putOnSupplyId = usual.takeIf { kind == ContinenceKind.PAD_CHANGE })
+    return ContinenceEntry(now, kind, putOnSupplyId = usual.takeIf { kind == ContinenceKind.PAD_CHANGE }, supplyId = WearText.quickSupply(kind, wearing))
 }
 
 /**
@@ -287,6 +299,8 @@ fun continenceSections(fields: Set<String> = Fields.DEFAULTS, readOnly: Boolean 
 fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceActions, fields: Set<String> = Fields.DEFAULTS, now: Long = System.currentTimeMillis()) {
     var editing by remember { mutableStateOf<ContinenceEntry?>(null) }
     var changing by remember { mutableStateOf<ContinenceEntry?>(null) }
+    // The accident just saved with "Save and change": counted in what comes off until the diary reloads with it.
+    var justLogged by remember { mutableStateOf<ContinenceEntry?>(null) }
     val readOnly = com.health.app.ui.care.LocalReadOnly.current
     val supplies = state.supplies.map { it.supply }
     val sections = continenceSections(fields, readOnly)
@@ -300,12 +314,17 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val shown = arrangedIn(FeatureScreens.CONTINENCE, sections)
+            // What's on shows in the Wearing now card, with its own Change: Today and the quick buttons leave it out.
+            val onAbove = "wearing" in shown && state.wearing?.supplyId != null && WearText.tracksProducts(fields, state.wearing)
             val log: @Composable () -> Unit = {
                 InfoCard("Log", icon = Icons.Rounded.AddCircle, trailing = {
                     TitleAction(Icons.Rounded.EditNote, "Log with details") { editing = ContinenceEntry(System.currentTimeMillis(), ContinenceKind.URINATION) }
                 }) {
                     // A change is one step with what came off and what went on: its sheet, quick to finish.
-                    QuickButtons({ kind -> if (kind == ContinenceKind.PAD_CHANGE) change() else actions.save(quickEntry(kind, state.settings, state.supplies)) }, quickButtonsFor(state.settings, fields))
+                    QuickButtons(
+                        { kind -> if (kind == ContinenceKind.PAD_CHANGE) change() else actions.save(quickEntry(kind, state.settings, state.supplies, wearing = state.wearing)) },
+                        WearText.quickKinds(quickButtonsFor(state.settings, fields), changeAbove = onAbove),
+                    )
                     Hint("One tap logs it now; tap an entry to add details.", Modifier.padding(top = 8.dp))
                 }
             }
@@ -324,10 +343,18 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
                     Sections(shown) { id ->
                         when (id) {
                             "wearing" -> if (WearText.tracksProducts(fields, state.wearing)) {
-                                WearingCard(state.wearing, supplies, state.settings, state.recent, zone, readOnly, onChange = { change() }, onPutOn = actions.putOn, onSupplies = { actions.open("supplies/continence") }, now = now)
+                                WearingCard(
+                                    state.wearing, supplies, state.settings, state.recent, zone, readOnly,
+                                    onChange = { change() }, onPutOn = actions.putOn, onSupplies = { actions.open("supplies/continence") }, now = now,
+                                    onAccident = { editing = ContinenceEntry(System.currentTimeMillis(), ContinenceKind.LEAK, supplyId = state.wearing?.supplyId) },
+                                    onOpen = { if (!readOnly) open(it) },
+                                )
                             }
                             "log" -> log()
-                            "today" -> TodayTimeline(state.todays(zone), zone, supplies) { if (!readOnly) open(it) }
+                            "today" -> {
+                                val todays = state.todays(zone)
+                                TodayTimeline(todays, WearTimeline.rows(state.diary, state.today, todays, currentAbove = onAbove), zone, state.today, supplies, readOnly) { if (!readOnly) open(it) }
+                            }
                             "lowsupplies" -> {
                                 val low = ContinenceText.lowFor(state.supplies, setOf(SupplyCategory.CONTINENCE, SupplyCategory.OTHER))
                                 if (low.isNotEmpty()) LowSuppliesCard(low) { actions.open("supplies/continence") }
@@ -365,19 +392,27 @@ fun ContinenceScreen(state: ContinenceState, zone: ZoneId, actions: ContinenceAc
     editing?.let { entry ->
         ModalBottomSheet(onDismissRequest = { editing = null }) {
             EntryForm(
-                entry, FormContext(fields, state.settings, supplies),
+                entry, FormContext(fields, state.settings, supplies, state.wearing),
                 onSave = { actions.save(it); editing = null },
                 onDelete = entry.id?.let { id -> { actions.delete(id); editing = null } },
                 onPadChange = { editing = null; change() },
+                // Saved, then the Change sheet takes off what it was in, as it left it.
+                onSaveAndChange = { saved ->
+                    actions.save(saved)
+                    editing = null
+                    justLogged = saved
+                    changing = WearText.changeAfter(saved, state.wearing, state.settings, supplies, state.recent, System.currentTimeMillis())
+                },
             )
         }
     }
     changing?.let { entry ->
-        ModalBottomSheet(onDismissRequest = { changing = null }) {
+        val done = { changing = null; justLogged = null }
+        ModalBottomSheet(onDismissRequest = done) {
             ChangeForm(
-                entry, FormContext(fields, state.settings, supplies), state.recent,
-                onSave = { actions.save(it); changing = null },
-                onDelete = entry.id?.let { id -> { actions.delete(id); changing = null } },
+                entry, FormContext(fields, state.settings, supplies, WearText.withAccident(state.wearing, justLogged)), state.recent,
+                onSave = { actions.save(it); done() },
+                onDelete = entry.id?.let { id -> { actions.delete(id); done() } },
             )
         }
     }
@@ -399,51 +434,120 @@ fun QuickButtons(onLog: (ContinenceKind) -> Unit, kinds: List<ContinenceKind> = 
 /** "Urgency strong · 250 ml", "Small · cough, sneeze", "Type 4". */
 fun entryDetail(e: ContinenceEntry): String = ContinenceText.detail(e)
 
+/**
+ * Today: the counts, then what happened, newest first ([rows]). Each product worn is one row (its
+ * name, how it was when it came off, and what went on next) with the accidents while it was on
+ * beneath it; everything else is a row of its own.
+ */
 @Composable
-private fun TodayTimeline(entries: List<ContinenceEntry>, zone: ZoneId, supplies: List<com.health.api.Supply>, onOpen: (ContinenceEntry) -> Unit) {
+private fun TodayTimeline(
+    entries: List<ContinenceEntry>,
+    rows: List<WearTimeline.Row>,
+    zone: ZoneId,
+    today: LocalDate,
+    supplies: List<com.health.api.Supply>,
+    readOnly: Boolean,
+    onOpen: (ContinenceEntry) -> Unit,
+) {
     InfoCard("Today", icon = Icons.Rounded.Today) {
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && rows.isEmpty()) {
             Hint("Nothing logged today yet.")
             return@InfoCard
         }
+        val counts = WearTimeline.counts(entries)
         Row(Modifier.fillMaxWidth()) {
-            val trips = entries.count { it.kind == ContinenceKind.URINATION }
-            val leaks = entries.count { it.kind == ContinenceKind.LEAK || it.kind == ContinenceKind.BEDWETTING }
-            val bowel = entries.count { it.kind == ContinenceKind.BOWEL }
-            Stat("$trips", if (trips == 1) "toilet trip" else "toilet trips", Modifier.weight(1f))
-            Stat("$leaks", if (leaks == 1) "leak" else "leaks", Modifier.weight(1f))
-            Stat("$bowel", if (bowel == 1) "bowel movement" else "bowel movements", Modifier.weight(1f))
+            Stat("${counts.trips}", if (counts.trips == 1) "toilet trip" else "toilet trips", Modifier.weight(1f))
+            Stat("${counts.leaks}", if (counts.leaks == 1) "leak" else "leaks", Modifier.weight(1f))
+            Stat("${counts.bowel}", if (counts.bowel == 1) "bowel movement" else "bowel movements", Modifier.weight(1f))
         }
-        val bowelLeaks = entries.count { it.kind == ContinenceKind.BOWEL_LEAK }
-        val changes = entries.count { it.kind == ContinenceKind.PAD_CHANGE }
-        val catheters = entries.count { it.kind == ContinenceKind.CATHETER }
-        val more = listOfNotNull(
-            bowelLeaks.takeIf { it > 0 }?.let { "$it ${if (it == 1) "bowel accident" else "bowel accidents"}" },
-            changes.takeIf { it > 0 }?.let { "$it ${if (it == 1) "change" else "changes"}" },
-            catheters.takeIf { it > 0 }?.let { "$it ${if (it == 1) "catheter" else "catheters"}" },
-        )
-        if (more.isNotEmpty()) Hint(more.joinToString(" · "), Modifier.padding(top = 4.dp))
+        val more = WearTimeline.moreCounts(counts)
+        if (more.isNotEmpty()) Hint(more, Modifier.padding(top = 4.dp))
         Spacer(Modifier.height(8.dp))
-        entries.forEachIndexed { i, e ->
+        // Everything today is with what's on, in the card above.
+        if (rows.isEmpty()) Hint("Nothing else logged today yet.")
+        rows.forEachIndexed { i, row ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onOpen(e) }.padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconTile(kindIcon(e.kind), size = 36.dp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    val change = e.kind == ContinenceKind.PAD_CHANGE
-                    // A change reads as what came off and what went on: "Night briefs → Day pants", then "worn 7 h".
-                    Text(if (change) WearText.changeTitle(e, supplies) else e.kind.label, style = MaterialTheme.typography.bodyLarge)
-                    val detail = if (change) {
-                        (WearText.changeDetail(e.copy(fullness = null)) + ContinenceText.detail(e.copy(supplyId = null, count = null, fullness = null, leakedThrough = false), supplies).takeIf { it.isNotEmpty() })
-                            .filterNotNull().joinToString(" · ")
-                    } else ContinenceText.detail(e.copy(fullness = null, leakedThrough = e.leakedThrough && e.fullness != com.health.api.Fullness.LEAKED), supplies)
-                    if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    e.fullness?.let { FullnessMeter(it, Modifier.padding(top = 4.dp)) }
+            when (row) {
+                is WearTimeline.Single -> EntryRow(row.entry, zone, supplies, onOpen)
+                is WearTimeline.Worn -> WornRow(row, zone, today, onOpen.takeIf { !readOnly })
+            }
+        }
+    }
+}
+
+/** An entry on its own: a toilet trip, a bowel movement, a change… */
+@Composable
+private fun EntryRow(e: ContinenceEntry, zone: ZoneId, supplies: List<com.health.api.Supply>, onOpen: (ContinenceEntry) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onOpen(e) }.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconTile(kindIcon(e.kind), size = 36.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            val change = e.kind == ContinenceKind.PAD_CHANGE
+            // A change reads as what came off and what went on: "Night briefs → Day pants", then "worn 7 h".
+            Text(if (change) WearText.changeTitle(e, supplies) else e.kind.label, style = MaterialTheme.typography.bodyLarge)
+            val detail = if (change) {
+                (WearText.changeDetail(e.copy(fullness = null)) + ContinenceText.detail(e.copy(supplyId = null, count = null, fullness = null, leakedThrough = false), supplies).takeIf { it.isNotEmpty() })
+                    .filterNotNull().joinToString(" · ")
+            } else ContinenceText.detail(e.copy(fullness = null, leakedThrough = e.leakedThrough && e.fullness != com.health.api.Fullness.LEAKED), supplies)
+            if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            e.fullness?.let { FullnessMeter(it, Modifier.padding(top = 4.dp)) }
+        }
+        Text(Format.timeOfDay(e.at, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * A product worn, as one row: its name, "Worn 3 h 12 min · then Day pants" and how full it was,
+ * when it came off on the right (a tap opens that change); beneath, on a thin line, the accidents
+ * while it was on (each opens to edit), and "Put on at 7:48 PM" when that took nothing off.
+ * What's on now shows here only when the Wearing now card is hidden, marked "On now".
+ */
+@Composable
+private fun WornRow(row: WearTimeline.Worn, zone: ZoneId, today: LocalDate, onOpen: ((ContinenceEntry) -> Unit)?) {
+    val w = row.wear
+    val opens = row.opens
+    val putOn = row.putOnAlone
+    val beneath = w.accidents.isNotEmpty() || putOn != null
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+            .then(if (onOpen != null && opens != null) Modifier.clickable { onOpen(opens) } else Modifier.semantics(mergeDescendants = true) {})
+            .padding(top = 6.dp, bottom = if (beneath) 2.dp else 6.dp),
+        // With accidents beneath, the icon heads the line down to them.
+        verticalAlignment = if (beneath) Alignment.Top else Alignment.CenterVertically,
+    ) {
+        IconTile(Icons.Rounded.Layers, size = 36.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(WearTimeline.title(w), style = MaterialTheme.typography.bodyLarge)
+            Text(WearTimeline.subtitle(w) { Format.timeOfDay(it, zone) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            WearTimeline.fullness(w)?.let { (f, word) -> FullnessMeter(f, Modifier.padding(top = 4.dp), label = word) }
+        }
+        if (row.onNow) Pill("On now", MaterialTheme.colorScheme.primary, Modifier.padding(start = 8.dp))
+        else TimeStamp(row.at, zone, today, Modifier.padding(start = 8.dp))
+    }
+    if (!beneath) return
+    // Beneath it, on a thin line from its icon: what happened while it was on.
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Box(Modifier.width(36.dp).fillMaxHeight().padding(top = 2.dp, bottom = 10.dp), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.width(2.dp).fillMaxHeight().clip(RoundedCornerShape(1.dp)).background(MaterialTheme.colorScheme.outlineVariant))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            w.accidents.forEach { a -> AccidentRow(a, zone, today, onOpen?.let { open -> { open(a) } }) }
+            if (putOn != null) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .then(if (onOpen != null) Modifier.clickable(onClickLabel = "Edit") { onOpen(putOn) } else Modifier)
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.Add, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(WearTimeline.putOnLine(putOn.at, zone, today), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(Format.timeOfDay(e.at, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

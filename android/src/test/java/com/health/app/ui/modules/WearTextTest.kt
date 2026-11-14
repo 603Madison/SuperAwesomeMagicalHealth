@@ -4,6 +4,7 @@ import com.health.api.ContinenceDay
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
 import com.health.api.ContinenceSettings
+import com.health.api.ContinenceWear
 import com.health.api.ContinenceWearing
 import com.health.api.DaySummary
 import com.health.api.Fields
@@ -96,6 +97,124 @@ class WearTextTest {
         // Something put away since isn't picked.
         assertNull(WearText.changeDraft(ContinenceWearing("o", since = 1), ContinenceSettings(), all, emptyList(), now).supplyId)
         assertEquals(ContinenceEntry(now, ContinenceKind.PAD_CHANGE, putOnSupplyId = "d"), WearText.putOnEntry("d", now))
+    }
+
+    // What's on now, with how it is so far: night briefs, damp after a leak.
+    private val leak = ContinenceEntry(at(1, 10), ContinenceKind.LEAK, supplyId = "n", fullness = Fullness.DAMP, id = "a1")
+    private val wear = ContinenceWear("n", "Night briefs", SupplyKind.BRIEF, start = at(23, 20, today.minusDays(1)), current = true, fullness = Fullness.DAMP, accidents = listOf(leak))
+    private val onNow = ContinenceWearing("n", "Night briefs", SupplyKind.BRIEF, at(23, 20, today.minusDays(1)), wear = wear)
+
+    @Test
+    fun `the Change sheet starts from how what's on is so far`() {
+        val now = at(6, 30)
+        val d = WearText.changeDraft(onNow, ContinenceSettings(), all, emptyList(), now)
+        assertEquals("n", d.supplyId)
+        assertEquals(Fullness.DAMP, d.fullness)
+        assertFalse(d.leakedThrough)
+        // It leaked through in an accident: so it starts.
+        assertTrue(WearText.changeDraft(onNow.copy(wear = wear.copy(leakedThrough = true)), ContinenceSettings(), all, emptyList(), now).leakedThrough)
+        val over = WearText.changeDraft(onNow.copy(wear = wear.copy(fullness = Fullness.LEAKED)), ContinenceSettings(), all, emptyList(), now)
+        assertEquals(Fullness.LEAKED, over.fullness)
+        assertTrue(over.leakedThrough)
+        // Dry so far, or nothing known about it: not noted.
+        assertNull(WearText.changeDraft(onNow.copy(wear = wear.copy(fullness = null, accidents = emptyList())), ContinenceSettings(), all, emptyList(), now).fullness)
+        assertNull(WearText.changeDraft(onNow.copy(wear = null), ContinenceSettings(), all, emptyList(), now).fullness)
+        // A wear of something else never sets how this was.
+        assertNull(WearText.changeDraft(onNow.copy(wear = wear.copy(supplyId = "d")), ContinenceSettings(), all, emptyList(), now).fullness)
+        // "2 accidents while you wore it".
+        assertEquals("1 accident while you wore it", WearText.whileWorn(wear))
+        assertEquals("2 accidents while you wore it", WearText.whileWorn(wear.copy(accidents = listOf(leak, leak.copy(at = at(3))))))
+        assertNull(WearText.whileWorn(wear.copy(accidents = emptyList())))
+        assertNull(WearText.whileWorn(null))
+    }
+
+    @Test
+    fun `a new accident is in what's on, as full as it is so far`() {
+        val new = ContinenceEntry(at(5), ContinenceKind.LEAK)
+        val draft = WearText.entryDraft(new, onNow, usual = "d")
+        assertEquals("n", draft.supplyId)
+        assertEquals(Fullness.DAMP, draft.fullness)
+        assertTrue(WearText.inWhatsOn(draft, onNow))
+        // A wet night and a bowel accident too; a fullness already picked stays.
+        assertEquals("n", WearText.entryDraft(new.copy(kind = ContinenceKind.BEDWETTING), onNow, "d").supplyId)
+        assertEquals(Fullness.FULL, WearText.entryDraft(new.copy(kind = ContinenceKind.BOWEL_LEAK, fullness = Fullness.FULL), onNow, "d").fullness)
+        // At "leaked through" so far, it starts leaked through.
+        assertTrue(WearText.entryDraft(new, onNow.copy(wear = wear.copy(fullness = Fullness.LEAKED)), "d").leakedThrough)
+        // Picked something else ("Not this"): no longer in what's on.
+        assertFalse(WearText.inWhatsOn(draft.copy(supplyId = "d"), onNow))
+        assertFalse(WearText.inWhatsOn(draft.copy(supplyId = null), onNow))
+        // Editing an accident keeps its own product, and isn't "now".
+        val saved = ContinenceEntry(at(1, 10), ContinenceKind.LEAK, supplyId = "d", id = "x")
+        assertEquals(saved, WearText.entryDraft(saved, onNow, "d"))
+        assertFalse(WearText.inWhatsOn(saved.copy(supplyId = "n"), onNow))
+        // Nothing on: in nothing. Nothing known: in the usual, as before.
+        assertNull(WearText.entryDraft(new, ContinenceWearing(since = 1, nothingOn = true), "d").supplyId)
+        assertEquals("d", WearText.entryDraft(new, ContinenceWearing(), "d").supplyId)
+        assertEquals("d", WearText.entryDraft(new, null, "d").supplyId)
+        assertNull(WearText.entryDraft(new, null, "d").fullness)
+        // Kinds without a product have none; a catheter keeps its own.
+        assertNull(WearText.entryDraft(new.copy(kind = ContinenceKind.URINATION, supplyId = "n"), onNow, "d").supplyId)
+        assertEquals("c", WearText.entryDraft(new.copy(kind = ContinenceKind.CATHETER, supplyId = "c"), onNow, "d").supplyId)
+    }
+
+    @Test
+    fun `save and change takes off what the accident was in, as it left it`() {
+        val now = at(5, 2)
+        val accident = ContinenceEntry(at(5), ContinenceKind.LEAK, supplyId = "n", fullness = Fullness.SOAKED, leakedThrough = true)
+        val c = WearText.changeAfter(accident, onNow, ContinenceSettings(defaultSupplyId = "d"), all, emptyList(), now)
+        assertEquals(ContinenceKind.PAD_CHANGE, c.kind)
+        assertEquals(now, c.at)
+        assertEquals("n", c.supplyId)
+        assertEquals("n", c.putOnSupplyId)
+        assertEquals(Fullness.SOAKED, c.fullness)
+        assertTrue(c.leakedThrough)
+        // Not noted in the accident: as it was before.
+        assertEquals(Fullness.DAMP, WearText.changeAfter(accident.copy(fullness = null, leakedThrough = false), onNow, null, all, emptyList(), now).fullness)
+        // Logged as a while ago: the change is never before it.
+        assertEquals(accident.at, WearText.changeAfter(accident, onNow, null, all, emptyList(), accident.at - 60_000).at)
+        // In something put away since: it still comes off, and the usual goes on.
+        val old = WearText.changeAfter(accident.copy(supplyId = "o"), onNow, ContinenceSettings(defaultSupplyId = "d"), all, emptyList(), now)
+        assertEquals("o", old.supplyId)
+        assertEquals("d", old.putOnSupplyId)
+        // In nothing: nothing comes off, and how it was isn't asked.
+        val none = WearText.changeAfter(accident.copy(supplyId = null), onNow, ContinenceSettings(defaultSupplyId = "d"), all, emptyList(), now)
+        assertNull(none.supplyId)
+        assertNull(none.fullness)
+        assertFalse(none.leakedThrough)
+        // The accident just saved counts in what comes off, once.
+        assertEquals(2, WearText.withAccident(onNow, accident)?.wear?.accidents?.size)
+        assertEquals(1, WearText.withAccident(onNow, accident.copy(at = leak.at))?.wear?.accidents?.size)
+        assertEquals(1, WearText.withAccident(onNow, accident.copy(supplyId = "d"))?.wear?.accidents?.size)
+        assertEquals(onNow, WearText.withAccident(onNow, null))
+    }
+
+    @Test
+    fun `what's on reads how it is`() {
+        assertEquals("Damp · 1 accident", WearText.stateLine(wear))
+        assertEquals("Dry so far", WearText.stateLine(wear.copy(fullness = null, accidents = emptyList())))
+        assertEquals("Wet · leaked through · 2 accidents", WearText.stateLine(wear.copy(fullness = Fullness.WET, leakedThrough = true, accidents = listOf(leak, leak))))
+        assertEquals("Leaked through · 1 accident", WearText.stateLine(wear.copy(fullness = Fullness.LEAKED, leakedThrough = true)))
+        assertEquals("1 accident", WearText.stateLine(wear.copy(fullness = null)))
+        assertNull(WearText.stateLine(null))
+        assertEquals(Fullness.DRY, WearText.shownFullness(wear.copy(fullness = null, accidents = emptyList())))
+        assertNull(WearText.shownFullness(wear.copy(fullness = null)))
+        assertTrue(WearText.marksLeak(wear.copy(leakedThrough = true)))
+        assertFalse(WearText.marksLeak(wear.copy(leakedThrough = true, fullness = Fullness.LEAKED)))
+    }
+
+    @Test
+    fun `a one-tap accident is in what's on, and the quick buttons leave Change to the card above`() {
+        val statuses = listOf(com.health.api.SupplyStatus(day))
+        assertEquals("n", quickEntry(ContinenceKind.LEAK, ContinenceSettings(), statuses, 5, onNow).supplyId)
+        assertEquals("n", quickEntry(ContinenceKind.BEDWETTING, ContinenceSettings(), statuses, 5, onNow).supplyId)
+        assertNull(quickEntry(ContinenceKind.LEAK, ContinenceSettings(), statuses, 5, null).supplyId)
+        assertNull(quickEntry(ContinenceKind.URINATION, ContinenceSettings(), statuses, 5, onNow).supplyId)
+        val change = quickEntry(ContinenceKind.PAD_CHANGE, ContinenceSettings(defaultSupplyId = "d"), statuses, 5, onNow)
+        assertNull(change.supplyId)
+        assertEquals("d", change.putOnSupplyId)
+        val kinds = listOf(ContinenceKind.URINATION, ContinenceKind.LEAK, ContinenceKind.BOWEL, ContinenceKind.PAD_CHANGE)
+        assertEquals(listOf(ContinenceKind.URINATION, ContinenceKind.LEAK, ContinenceKind.BOWEL), WearText.quickKinds(kinds, changeAbove = true))
+        assertEquals(kinds, WearText.quickKinds(kinds, changeAbove = false))
     }
 
     @Test

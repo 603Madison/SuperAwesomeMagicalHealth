@@ -12,13 +12,19 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.health.api.ContinenceDay
+import com.health.api.ContinenceDiary
+import com.health.api.ContinenceDiaryItem
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
 import com.health.api.ContinenceProgress
 import com.health.api.ContinenceSettings
 import com.health.api.ContinenceSummary
+import com.health.api.ContinenceWear
 import com.health.api.ContinenceWearing
 import com.health.api.Count
 import com.health.api.DaySummary
@@ -31,6 +37,7 @@ import com.health.api.ModulesToday
 import com.health.api.ProductStats
 import com.health.api.ProgressMetric
 import com.health.api.ProgressWeek
+import com.health.api.ScreenLayout
 import com.health.api.Supply
 import com.health.api.SupplyKind
 import com.health.api.SupplyStatus
@@ -47,6 +54,7 @@ import com.health.app.ui.modules.continence.ContinenceScreen
 import com.health.app.ui.modules.continence.ContinenceState
 import com.health.app.ui.modules.continence.DiarySettingsScreen
 import com.health.app.ui.modules.continence.DiarySettingsState
+import com.health.app.ui.modules.continence.EntryForm
 import com.health.app.ui.modules.continence.FormContext
 import com.health.app.ui.modules.continence.ProgressScreen
 import com.health.app.ui.modules.continence.ProgressState
@@ -97,10 +105,13 @@ class WearingScreenshotTest {
     private val fields = Fields.DEFAULTS + Fields.CONTINENCE_PROTECTION + Fields.CONTINENCE_PAD_WEIGHT + Fields.CONTINENCE_CHANGES +
         Fields.CONTINENCE_SKIN + Fields.CONTINENCE_SUPPLIES + Fields.CONTINENCE_LEAK_SIZE + Fields.CONTINENCE_TRIGGERS
 
-    private fun render(dark: Boolean = false, readOnly: Boolean = false, tab: String = "health", content: @Composable () -> Unit) {
+    private fun render(dark: Boolean = false, readOnly: Boolean = false, tab: String = "health", layout: LayoutPrefs = LayoutPrefs(), content: @Composable () -> Unit) {
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
-                CompositionLocalProvider(LocalLayoutStore provides remember { MemoryLayoutStore(LayoutPrefs()) }, LocalReadOnly provides readOnly) {
+                CompositionLocalProvider(
+                    LocalLayoutStore provides remember { MemoryLayoutStore(layout) }, LocalReadOnly provides readOnly,
+                    com.health.app.ui.modules.LocalArrangements provides layout.takeIf { it.screens.isNotEmpty() },
+                ) {
                     AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(all), content = content)
                 }
             }
@@ -138,21 +149,52 @@ class WearingScreenshotTest {
         SupplyStatus(liners),
     )
     private val settings = ContinenceSettings(defaultSupplyId = "d", changeReminderHours = 5)
-    private val wearing = ContinenceWearing("d", "Day pants", SupplyKind.PULL_UP, at(11, 45), 345, typicalMinutes = 330, changeDueAt = at(16, 45))
     private val products = listOf(
         ProductStats("d", "Day pants", 43, avgWornMinutes = 330, typicalFullness = Fullness.WET, leakedThroughPct = 0, nightShare = 0.0, leakedThrough = 0, kind = SupplyKind.PULL_UP),
         ProductStats("n", "Night briefs", 15, avgWornMinutes = 450, typicalFullness = Fullness.FULL, leakedThroughPct = 7, nightShare = 1.0, leakedThrough = 1, kind = SupplyKind.BRIEF),
     )
 
+    // Night briefs put on last night (nothing taken off), a leak before sleep and a wet night; day pants from 6:30, changed at 11:45; two leaks since.
     private val entries = listOf(
-        ContinenceEntry(at(23, 20, today.minusDays(1)), ContinenceKind.PAD_CHANGE, supplyId = "d", putOnSupplyId = "n", fullness = Fullness.DAMP, wornMinutes = 350, night = true, id = "y1"),
+        ContinenceEntry(at(23, 20, today.minusDays(1)), ContinenceKind.PAD_CHANGE, putOnSupplyId = "n", night = true, id = "y1"),
+        ContinenceEntry(at(23, 50, today.minusDays(1)), ContinenceKind.LEAK, leak = LeakSize.DROPS, triggers = listOf("cough"), supplyId = "n", fullness = Fullness.DAMP, night = true, id = "y2"),
         ContinenceEntry(at(3, 10), ContinenceKind.URINATION, urgency = 2, night = true, id = "c1"),
+        ContinenceEntry(at(4, 40), ContinenceKind.BEDWETTING, supplyId = "n", fullness = Fullness.WET, night = true, id = "a1"),
         ContinenceEntry(at(6, 30), ContinenceKind.PAD_CHANGE, supplyId = "n", putOnSupplyId = "d", fullness = Fullness.FULL, skin = 1, wornMinutes = 430, id = "c2"),
         ContinenceEntry(at(7, 5), ContinenceKind.URINATION, volumeMl = 320, id = "c3"),
         ContinenceEntry(at(9, 40), ContinenceKind.LEAK, leak = LeakSize.SMALL, triggers = listOf("cough", "lifting"), supplyId = "d", fullness = Fullness.DAMP, id = "c4"),
         ContinenceEntry(at(11, 45), ContinenceKind.PAD_CHANGE, supplyId = "d", putOnSupplyId = "d", fullness = Fullness.WET, wornMinutes = 315, id = "c5"),
         ContinenceEntry(at(13, 20), ContinenceKind.URINATION, id = "c6"),
+        ContinenceEntry(at(15, 10), ContinenceKind.LEAK, leak = LeakSize.SMALL, triggers = listOf("laugh"), supplyId = "d", fullness = Fullness.DAMP, id = "a3"),
+        ContinenceEntry(at(16, 50), ContinenceKind.LEAK, leak = LeakSize.MEDIUM, triggers = listOf("standing up"), supplyId = "d", fullness = Fullness.WET, id = "a4"),
     ).map { it.copy(date = java.time.Instant.ofEpochMilli(it.at).atZone(zone).toLocalDate().toString()) }
+    private fun entry(id: String) = entries.single { it.id == id }
+
+    // What's on now, wet after two leaks; and each product worn today, with its accidents.
+    private val currentWear = ContinenceWear(
+        "d", "Day pants", SupplyKind.PULL_UP, on = entry("c5"), start = at(11, 45), current = true, minutes = 345,
+        fullness = Fullness.WET, accidents = listOf(entry("a3"), entry("a4")),
+    )
+    private val wearing = ContinenceWearing("d", "Day pants", SupplyKind.PULL_UP, at(11, 45), 345, typicalMinutes = 330, changeDueAt = at(16, 45), wear = currentWear)
+    private val morningWear = ContinenceWear(
+        "d", "Day pants", SupplyKind.PULL_UP, on = entry("c2"), off = entry("c5"), start = at(6, 30), end = at(11, 45), minutes = 315,
+        fullness = Fullness.WET, accidents = listOf(entry("c4")), nextName = "Day pants",
+    )
+    private val nightWear = ContinenceWear(
+        "n", "Night briefs", SupplyKind.BRIEF, on = entry("y1"), off = entry("c2"), start = at(23, 20, today.minusDays(1)), end = at(6, 30), minutes = 430,
+        fullness = Fullness.FULL, accidents = listOf(entry("y2"), entry("a1")), nextName = "Day pants",
+    )
+    private val grouped = ContinenceDiary(
+        today.toString(),
+        listOf(
+            ContinenceDiaryItem(now, wear = currentWear),
+            ContinenceDiaryItem(at(13, 20), entry = entry("c6")),
+            ContinenceDiaryItem(at(11, 45), wear = morningWear),
+            ContinenceDiaryItem(at(7, 5), entry = entry("c3")),
+            ContinenceDiaryItem(at(6, 30), wear = nightWear),
+            ContinenceDiaryItem(at(3, 10), entry = entry("c1")),
+        ),
+    )
 
     private val progress = ContinenceProgress(
         Verdict.STEADY, "About the same as the weeks before.", 4,
@@ -160,30 +202,70 @@ class WearingScreenshotTest {
         (0 until 8).map { i -> ProgressWeek(today.minusWeeks(7L - i).with(java.time.DayOfWeek.MONDAY).toString(), 7, voidsPerDay = 4.0, leaksPerDay = 0.5 - i * 0.02, productsPerDay = 3.0) },
     )
 
-    private fun diary(wearing: ContinenceWearing? = this.wearing) = ContinenceState(
+    private fun diary(wearing: ContinenceWearing? = this.wearing, grouped: ContinenceDiary? = this.grouped) = ContinenceState(
         today, entries,
         ContinenceSummary(
             days = (0 until 14).map { i -> ContinenceDay(today.minusDays(13L - i).toString(), voids = 4, nightVoids = 1, leaks = i % 3 / 2, products = 3, fluidMl = 1500) },
             averageVoids = 3.9, averageNightVoids = 1.0, averageLeaks = 0.4, triggers = listOf(Count("cough", 5), Count("lifting", 1)),
         ),
-        loading = false, settings = settings, supplies = statuses, progress = progress, wearing = wearing, products = products,
+        loading = false, settings = settings, supplies = statuses, progress = progress, wearing = wearing, products = products, diary = grouped,
     )
 
-    // ---- The diary: Wearing now, the list of changes, how the products go ----
+    private fun shown(text: String, substring: Boolean = false) = compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty()
+
+    /** A fullness meter, by what it says aloud ("Wet, 2 of 5"). */
+    private fun meter(said: String) = compose.onAllNodesWithContentDescription(said, substring = true).fetchSemanticsNodes().isNotEmpty()
+
+    // ---- The diary: Wearing now with its accidents, Today grouped by what was worn, how the products go ----
 
     @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
     fun diaryLight() {
         render { ContinenceScreen(diary(), zone, ContinenceActions(), fields = fields, now = now) }
-        assertTrue(compose.onAllNodesWithText("Night briefs → Day pants").fetchSemanticsNodes().isNotEmpty())
+        // The card: how it is, its accidents, and both buttons; Change isn't repeated in the Log card.
+        assertTrue(meter("Wet, 2 of 5") && shown("Log an accident") && shown("Change"))
+        assertTrue("one Change only", compose.onAllNodesWithText("Change").fetchSemanticsNodes().size == 1)
+        // Today: each product worn with its accidents beneath; what's on now is in the card above.
+        assertTrue(shown("Night briefs") && shown("Worn 7 h 10 min · then Day pants · skin a little sore") && shown("Put on yesterday at 11:20", substring = true))
+        assertTrue(shown("Wet night") && meter("Full, 3 of 5"))
+        assertTrue("on now is in the card", !shown("On now"))
+        assertTrue("no flat changes", !shown("Night briefs → Day pants"))
         save("wearing_diary_light")
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
     fun diaryDark() {
         render(dark = true) { ContinenceScreen(diary(), zone, ContinenceActions(), fields = fields, now = now) }
         save("wearing_diary_dark")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h2600dp-xxhdpi")
+    fun diaryNarrow() {
+        // A narrow screen: the card's two buttons stack, each the full width.
+        render { ContinenceScreen(diary(), zone, ContinenceActions(), fields = fields, now = now) }
+        save("wearing_diary_narrow_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    fun olderServer() {
+        // No grouped diary: Today lists each entry on its own, as before.
+        render { ContinenceScreen(diary(grouped = null), zone, ContinenceActions(), fields = fields, now = now) }
+        assertTrue(shown("Night briefs → Day pants"))
+        save("wearing_diary_older_server_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
+    fun timelineOnNow() {
+        // Wearing now hidden (Arrange): what's on is Today's first row, marked "On now", with Change back in the Log card.
+        val layout = LayoutPrefs(mapOf(com.health.app.ui.modules.FeatureScreens.CONTINENCE to ScreenLayout(hidden = setOf("wearing", "summary", "progress", "products", "insights", "more"))))
+        render(dark = true, layout = layout) { ContinenceScreen(diary(), zone, ContinenceActions(), fields = fields, now = now) }
+        assertTrue(shown("On now") && shown("Since 11:45", substring = true) && shown("5 h 45 min", substring = true))
+        assertTrue(shown("Change"))
+        save("wearing_timeline_on_now_dark")
     }
 
     @Test
@@ -209,21 +291,61 @@ class WearingScreenshotTest {
         save("wearing_share_view_light")
     }
 
+    // ---- The leak sheet: in what's on now ----
+
+    private val leakFields = fields + Fields.CONTINENCE_URGENCY
+
+    private fun leakSheet(dark: Boolean = false) = sheet(dark) {
+        EntryForm(
+            ContinenceEntry(now, ContinenceKind.LEAK, supplyId = "d"), FormContext(leakFields, settings, statuses.map { it.supply }, wearing),
+            onSave = {}, onDelete = null, onPadChange = {}, onSaveAndChange = {},
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2000dp-xxhdpi")
+    fun leakSheetLight() {
+        leakSheet()
+        assertTrue(shown("In your Day pants") && shown("Not this") && shown("How full it is now") && shown("Save and change"))
+        assertTrue("no toggle", !shown("Changed it afterwards"))
+        assertTrue("no list of products", !shown("What you were wearing"))
+        save("wearing_leak_sheet_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2000dp-xxhdpi")
+    fun leakSheetDark() {
+        leakSheet(dark = true)
+        save("wearing_leak_sheet_dark")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h2000dp-xxhdpi")
+    fun leakSheetNotThis() {
+        // "Not this": the products to pick from, and the fullness as it was.
+        leakSheet()
+        compose.onNodeWithText("Not this").performClick()
+        assertTrue(shown("What you were wearing") && shown("Nothing listed"))
+        save("wearing_leak_sheet_not_this_light")
+    }
+
     // ---- The Change sheet ----
 
-    private val draft get() = WearText.changeDraft(wearing, settings, statuses.map { it.supply }, listOf("d", "n"), now).copy(fullness = Fullness.WET)
+    private val draft get() = WearText.changeDraft(wearing, settings, statuses.map { it.supply }, listOf("d", "n"), now)
 
     @Test
     @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
     fun changeSheetLight() {
-        sheet { ChangeForm(draft, FormContext(fields, settings, statuses.map { it.supply }), listOf("d", "n"), {}, null) }
+        // How it was starts from how it is so far (Wet), with its accidents counted.
+        sheet { ChangeForm(draft, FormContext(fields, settings, statuses.map { it.supply }, wearing), listOf("d", "n"), {}, null) }
+        assertTrue(shown("2 accidents while you wore it") && shown("Wet · 2 of 5"))
         save("wearing_change_sheet_light")
     }
 
     @Test
     @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
     fun changeSheetDark() {
-        sheet(dark = true) { ChangeForm(draft, FormContext(fields, settings, statuses.map { it.supply }), listOf("d", "n"), {}, null) }
+        sheet(dark = true) { ChangeForm(draft, FormContext(fields, settings, statuses.map { it.supply }, wearing), listOf("d", "n"), {}, null) }
         save("wearing_change_sheet_dark")
     }
 
@@ -250,6 +372,8 @@ class WearingScreenshotTest {
     fun todayLight() {
         render(tab = "today") { TodayScreen(TodayState(today, today, day, loading = false), Units.METRIC, zone, TodayActions(), modules = Module.DEFAULT + Module.CONTINENCE, now = now) }
         assertTrue(compose.onAllNodesWithText("Time to change: Day pants,\u00A06\u00A0h").fetchSemanticsNodes().isNotEmpty())
+        // How what's on is, then the day's other counts.
+        assertTrue(compose.onAllNodesWithText("Wet \u00B7 2 accidents \u00B7 3 trips \u00B7 1 at night", substring = true).fetchSemanticsNodes().isNotEmpty())
         save("wearing_today_light")
     }
 

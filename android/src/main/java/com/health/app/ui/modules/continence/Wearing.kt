@@ -2,6 +2,7 @@
 
 package com.health.app.ui.modules.continence
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -20,8 +21,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,12 +46,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceSettings
+import com.health.api.ContinenceWear
 import com.health.api.ContinenceWearing
 import com.health.api.Fields
 import com.health.api.Fullness
@@ -61,13 +70,17 @@ import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
+import com.health.app.ui.components.Pill
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.components.shownFields
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.StepScale
+import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /*
@@ -77,8 +90,9 @@ import java.time.ZoneId
  */
 
 /**
- * The diary's "Wearing now": what's on, since when and the usual, with Change; with nothing on,
- * or nothing known ("What are you wearing?"), a row of products to put on with a tap.
+ * The diary's "Wearing now": what's on, since when and the usual; how full it is so far, with the
+ * accidents while it's been on beneath (each opens to edit); and "Log an accident" and Change. With
+ * nothing on, or nothing known ("What are you wearing?"), a row of products to put on with a tap.
  */
 @Composable
 fun WearingCard(
@@ -92,26 +106,52 @@ fun WearingCard(
     onPutOn: (String) -> Unit,
     onSupplies: () -> Unit = {},
     now: Long = System.currentTimeMillis(),
+    /** "Log an accident": the leak sheet, in what's on. */
+    onAccident: () -> Unit = {},
+    /** Opens an entry to edit: an accident, or the change that put it on. */
+    onOpen: (ContinenceEntry) -> Unit = {},
 ) {
     val clock = { at: Long -> Format.timeOfDay(at, zone) }
     if (wearing?.supplyId != null) {
+        val wear = wearing.wear?.takeIf { it.supplyId == wearing.supplyId }
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         InfoCard("Wearing now", icon = Icons.Rounded.Layers) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(wearing.name ?: "A product", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.align(Alignment.CenterVertically))
-                WearText.kindWord(wearing.kind ?: supplies.firstOrNull { it.id == wearing.supplyId }?.kind)?.let { KindTag(it, Modifier.align(Alignment.CenterVertically)) }
+            // What's on and since when: a tap edits putting it on.
+            val putOn = wear?.on?.takeIf { !readOnly && it.id != null }
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .then(if (putOn != null) Modifier.clickable(onClickLabel = "Edit when it went on") { onOpen(putOn) } else Modifier),
+            ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(wearing.name ?: "A product", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.align(Alignment.CenterVertically))
+                    WearText.kindWord(wearing.kind ?: supplies.firstOrNull { it.id == wearing.supplyId }?.kind)?.let { KindTag(it, Modifier.align(Alignment.CenterVertically)) }
+                }
+                Text(WearText.sinceLine(wearing, now, clock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 2.dp))
             }
-            Text(WearText.sinceLine(wearing, now, clock), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 2.dp))
             val usual = WearText.usualLine(wearing)
             val due = WearText.changeDue(wearing, now)
             if (usual != null || due) {
                 Hint(listOfNotNull(usual?.let { "$it." }, "Time for a check when you're ready.".takeIf { due }).joinToString(" "), Modifier.padding(top = 4.dp))
             }
+            if (wear != null) WearState(wear, zone, today, onOpen.takeIf { !readOnly })
             if (!readOnly) {
-                Button(onClick = onChange, modifier = Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(min = 48.dp)) {
-                    Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Change")
-                }
+                ButtonPair(
+                    {
+                        FilledTonalButton(onClick = onAccident, modifier = Modifier.heightIn(min = 48.dp), contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
+                            Icon(Icons.Rounded.WaterDrop, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Log an accident", softWrap = false)
+                        }
+                    },
+                    {
+                        Button(onClick = onChange, modifier = Modifier.heightIn(min = 48.dp), contentPadding = ButtonDefaults.ButtonWithIconContentPadding) {
+                            Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Change", softWrap = false)
+                        }
+                    },
+                    Modifier.padding(top = 14.dp),
+                )
             }
         }
         return
@@ -151,6 +191,94 @@ private fun KindTag(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
+ * How what's on is: how full so far ("Dry so far" with nothing logged since it went on), a
+ * "Leaked through" mark when it has, and the accidents while it's been on, oldest first.
+ */
+@Composable
+private fun WearState(wear: ContinenceWear, zone: ZoneId, today: LocalDate, onOpen: ((ContinenceEntry) -> Unit)?) {
+    val fullness = WearText.shownFullness(wear)
+    val leaked = WearText.marksLeak(wear)
+    if (fullness != null || leaked) {
+        FlowRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            fullness?.let { FullnessMeter(it, Modifier.align(Alignment.CenterVertically), label = WearText.fullnessWord(wear) ?: it.label, large = true) }
+            if (leaked) Pill("Leaked through", AppTheme.status.warn, Modifier.align(Alignment.CenterVertically))
+        }
+    }
+    if (wear.accidents.isNotEmpty()) {
+        HorizontalDivider(Modifier.padding(top = 12.dp, bottom = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        wear.accidents.sortedBy { it.at }.forEach { a -> AccidentRow(a, zone, today, onOpen?.let { open -> { open(a) } }) }
+    }
+}
+
+/** An accident while a product was on, in a line: its icon and kind, in short ("Small · cough"), and when. A tap edits it. */
+@Composable
+internal fun AccidentRow(a: ContinenceEntry, zone: ZoneId, today: LocalDate, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Edit", onClick = onClick) else Modifier.semantics(mergeDescendants = true) {})
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(kindIcon(a.kind), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(a.kind.label, style = MaterialTheme.typography.bodyMedium)
+            val detail = WearTimeline.accidentDetail(a)
+            if (detail.isNotEmpty()) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        TimeStamp(a.at, zone, today, Modifier.padding(start = 8.dp))
+    }
+}
+
+/** When, in a list's right-hand column: the time, with the day above it when it isn't today ("Yesterday", "Wed"). */
+@Composable
+internal fun TimeStamp(at: Long, zone: ZoneId, today: LocalDate, modifier: Modifier = Modifier) {
+    Column(modifier.semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.End) {
+        WearTimeline.dayOf(at, zone, today)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        Text(Format.timeOfDay(at, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/**
+ * Two buttons side by side when both fit, as near the same width as their labels allow (the
+ * longer one keeps its full label); otherwise one above the other, each the full width (a narrow
+ * screen, larger or bold text). Each button's label should not wrap ([Text]'s softWrap = false),
+ * so its full width is what's measured.
+ */
+@Composable
+internal fun ButtonPair(first: @Composable () -> Unit, second: @Composable () -> Unit, modifier: Modifier = Modifier, gap: Dp = 8.dp) {
+    Layout(content = { first(); second() }, modifier = modifier.fillMaxWidth()) { measurables, constraints ->
+        val space = gap.roundToPx()
+        val width = constraints.maxWidth
+        val natural = measurables.map { it.maxIntrinsicWidth(Constraints.Infinity) }
+        if (measurables.size == 2 && natural.sum() + space <= width) {
+            val half = (width - space) / 2
+            val firstWidth = when {
+                natural[0] > half -> natural[0]
+                natural[1] > half -> width - space - natural[1]
+                else -> half
+            }
+            val widths = listOf(firstWidth, width - space - firstWidth)
+            val placed = measurables.mapIndexed { i, m -> m.measure(Constraints.fixedWidth(widths[i])) }
+            val height = placed.maxOf { it.height }
+            layout(width, height) {
+                placed[0].placeRelative(0, (height - placed[0].height) / 2)
+                placed[1].placeRelative(widths[0] + space, (height - placed[1].height) / 2)
+            }
+        } else {
+            val placed = measurables.map { it.measure(Constraints.fixedWidth(width)) }
+            val height = placed.sumOf { it.height } + space * (placed.size - 1).coerceAtLeast(0)
+            layout(width, height) {
+                var y = 0
+                placed.forEach { p -> p.placeRelative(0, y); y += p.height + space }
+            }
+        }
+    }
+}
+
+/**
  * A change as one step, on one sheet: what came off (what's on, already picked) and how it was
  * (as much as the person's fields show), what went on (the same again, picked; the usual and the
  * last used first; or nothing for now), and when. Saving logs one change with all of it.
@@ -179,6 +307,8 @@ fun ChangeForm(initial: ContinenceEntry, context: FormContext, recent: List<Stri
                 offOptions.forEach { s -> FilterChip(selected = e.supplyId == s.id, onClick = { e = e.copy(supplyId = s.id) }, label = { Text(s.name) }) }
                 FilterChip(selected = e.supplyId == null, onClick = { e = e.copy(supplyId = null, fullness = null) }, label = { Text("Nothing") })
             }
+            // "2 accidents while you wore it": taking off what's on now.
+            WearText.whileWorn(context.wearing?.wear?.takeIf { initial.id == null && e.supplyId != null && it.supplyId == e.supplyId })?.let { Hint(it) }
         }
 
         val how = e.supplyId != null && (shows(Fields.CONTINENCE_PROTECTION) || shows(Fields.CONTINENCE_CHANGES) || shows(Fields.CONTINENCE_SKIN) || shows(Fields.CONTINENCE_PAD_WEIGHT))
@@ -310,7 +440,7 @@ fun ChangeSheet(onDismiss: () -> Unit) {
         if (d == null) Loading()
         else ChangeForm(
             WearText.changeDraft(d.wearing, d.settings, d.supplies, d.recent, System.currentTimeMillis()),
-            FormContext(fields, d.settings, d.supplies), d.recent,
+            FormContext(fields, d.settings, d.supplies, d.wearing), d.recent,
             onSave = { entry ->
                 c.scope.launch {
                     runCatching { c.ui.addContinence(entry) }

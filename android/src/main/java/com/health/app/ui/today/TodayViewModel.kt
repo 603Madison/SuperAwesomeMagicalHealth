@@ -118,8 +118,10 @@ class TodayViewModel(private val c: Container) : ViewModel() {
     /** A face tapped on Today: the mood, now. */
     fun quickMood(mood: Int) = act("Mood saved") { c.ui.addMood(MoodEntry(System.currentTimeMillis(), mood)) }
 
+    /** A one-tap log from Today: an accident is in what's on now. */
     fun logContinence(kind: ContinenceKind) = act("${kind.label} noted") {
-        c.ui.addContinence(ContinenceEntry(System.currentTimeMillis(), kind))
+        val wearing = _state.value.let { s -> s.summary?.takeIf { s.date == s.today }?.modules?.continence?.wearing }
+        c.ui.addContinence(ContinenceEntry(System.currentTimeMillis(), kind, supplyId = com.health.app.ui.modules.continence.WearText.quickSupply(kind, wearing)))
     }
 
     /**
