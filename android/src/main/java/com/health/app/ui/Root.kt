@@ -306,6 +306,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         }
         composable("settings/watch") { WatchRoute(onBack = { nav.popBackStack() }) }
         composable("settings/integrations") { IntegrationsRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/mealie") { com.health.app.ui.settings.MealieRoute(onBack = { nav.popBackStack() }) }
         composable("digest") { DigestRoute(onBack = { nav.popBackStack() }) }
         composable("reports") { ReportsRoute(onBack = { nav.popBackStack() }) }
 

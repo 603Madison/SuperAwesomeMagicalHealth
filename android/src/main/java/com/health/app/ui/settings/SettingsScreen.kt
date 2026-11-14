@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Eco
@@ -68,6 +69,7 @@ import com.health.api.EnergyProfile
 import com.health.api.Fields
 import com.health.api.Goals
 import com.health.api.Layouts
+import com.health.api.MealieStatus
 import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.Units
@@ -77,6 +79,7 @@ import com.health.app.data.Palette
 import com.health.app.data.Settings
 import com.health.app.data.ThemeMode
 import com.health.app.net.aiStatus
+import com.health.app.net.mealieStatus
 import com.health.app.ui.Format
 import com.health.app.ui.components.ArrangeButton
 import com.health.app.ui.components.ArrangeItem
@@ -115,6 +118,10 @@ fun SettingsRoute(onOpen: (String) -> Unit = {}) {
     val profile by c.profile.collectAsState()
     var ai by remember { mutableStateOf<AiStatus?>(null) }
     LaunchedEffect(Unit) { ai = attempt { c.api.aiStatus() }.getOrNull() }
+    // Mealie is the person's own, and never asked about while viewing a share.
+    val viewing by c.viewing.collectAsState()
+    var mealie by remember { mutableStateOf<MealieStatus?>(null) }
+    LaunchedEffect(viewing) { mealie = if (viewing == null) attempt { c.api.mealieStatus() }.getOrNull() else null }
     SettingsScreen(
         settings, profile,
         SettingsActions(
@@ -127,6 +134,7 @@ fun SettingsRoute(onOpen: (String) -> Unit = {}) {
         water = showsField(Fields.NUTRITION_WATER),
         micros = com.health.app.ui.food.showsMicros(),
         ai = ai,
+        mealie = mealie,
         hiddenFromHealth = screenLayout(Layouts.NAV)?.hidden.orEmpty(),
         serverNotice = com.health.app.ui.components.serverNotice(),
         serverVersion = c.serverVersion.collectAsState().value,
@@ -161,8 +169,8 @@ private enum class Edit { BIRTH_YEAR, HEIGHT, ENERGY, STEPS, ACTIVE, SLEEP, CALO
 /**
  * Settings, in sections the person can arrange: You, Features, Goals, Reminders & sharing,
  * Connections, Appearance and Account. [water] is whether water is shown; [ai] the assistant's
- * status (null until known, or without one); [hiddenFromHealth] the features hidden from the
- * Health tab, which open from here instead.
+ * status (null until known, or without one); [mealie] whether Mealie is connected (null until
+ * known); [hiddenFromHealth] the features hidden from the Health tab, which open from here instead.
  */
 @Composable
 fun SettingsScreen(
@@ -177,6 +185,7 @@ fun SettingsScreen(
     serverVersion: String? = null,
     /** Whether vitamins and minerals show (their field, never in eating disorder recovery): their targets are under Goals. */
     micros: Boolean = false,
+    mealie: MealieStatus? = null,
 ) {
     var editing by remember { mutableStateOf<Edit?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
@@ -202,7 +211,7 @@ fun SettingsScreen(
                             NavRow(Icons.Rounded.Group, "Sharing", "Let someone you trust see what you choose", onClick = { onOpen("settings/sharing") })
                             NavRow(Icons.Rounded.Description, "Reports and export", "A PDF for your doctor, or all your data", onClick = { onOpen("reports") })
                         }
-                        SettingsSections.CONNECTIONS -> ConnectionsSection(settings, ai, actions, onOpen)
+                        SettingsSections.CONNECTIONS -> ConnectionsSection(settings, ai, mealie, food = profile?.modules?.contains(Module.NUTRITION) == true, actions, onOpen)
                         SettingsSections.APPEARANCE -> AppearanceSection(settings, actions)
                         SettingsSections.ACCOUNT -> SectionCard("Account") {
                             Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
@@ -330,9 +339,9 @@ private fun GoalsSection(g: Goals, units: Units, water: Boolean, micros: Boolean
     }
 }
 
-/** Syncing, other apps, the watch, webhooks and the AI assistant. */
+/** Syncing, other apps, the watch, webhooks, Mealie (with Food on) and the AI assistant. */
 @Composable
-private fun ConnectionsSection(settings: Settings, ai: AiStatus?, actions: SettingsActions, onOpen: (String) -> Unit) {
+private fun ConnectionsSection(settings: Settings, ai: AiStatus?, mealie: MealieStatus?, food: Boolean, actions: SettingsActions, onOpen: (String) -> Unit) {
     SectionCard("Connections") {
         LabeledSwitch(
             "Sync in the background", settings.backgroundSync, { v -> actions.updateSettings { it.copy(backgroundSync = v) } },
@@ -347,6 +356,9 @@ private fun ConnectionsSection(settings: Settings, ai: AiStatus?, actions: Setti
         NavRow(Icons.Rounded.FileUpload, "Export to other apps", "Health Connect, FIT files, CSV and FHIR", onClick = { onOpen("settings/export") })
         NavRow(Icons.Rounded.Watch, "Pebble watch", "Today's scores and one-tap logging on your wrist", onClick = { onOpen("settings/watch") })
         NavRow(Icons.Rounded.Hub, "Integrations", "Webhooks and Home Assistant", onClick = { onOpen("settings/integrations") })
+        if (food) {
+            NavRow(Icons.AutoMirrored.Rounded.MenuBook, "Mealie", com.health.app.ui.food.MealieText.row(mealie), onClick = { onOpen("settings/mealie") })
+        }
         if (ai?.available == true) {
             NavRow(
                 Icons.Rounded.AutoAwesome, "AI assistant",
