@@ -128,10 +128,14 @@ class VoiceReminders(private val context: Context) {
             reminders.update(plan, VoiceStore(context).practisedOn, zone)
         }
 
-        /** Signing out: no reminder, and nothing the trainer kept on the phone (recordings included). */
-        fun forget(context: Context) {
+        /**
+         * Signing out: no reminder, and nothing the trainer kept on the phone (recordings
+         * included), except sessions waiting to be sent, each under its account; [dropUnsentOf]'s
+         * go too (the person asked to sign out of it).
+         */
+        fun forget(context: Context, dropUnsentOf: String? = null) {
             VoiceReminders(context).clear()
-            VoiceStore(context).forget(context)
+            VoiceStore(context).forget(context, dropUnsentOf)
             VoiceViewModel.forget()
         }
 

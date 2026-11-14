@@ -17,6 +17,7 @@ import com.health.app.net.saveVoicePlan
 import com.health.app.net.voicePlan
 import com.health.app.net.voiceProgram
 import com.health.app.net.voiceProgress
+import com.health.app.sync.SyncManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,16 +72,43 @@ class VoiceStore(context: Context) {
     fun plan(): VoicePlan? = read("plan.json") { ApiJson.decodeFromString(VoicePlan.serializer(), it) }
     fun savePlan(plan: VoicePlan) = write("plan.json", ApiJson.encodeToString(VoicePlan.serializer(), plan))
 
-    fun pending(): List<VoiceSession> = read("pending.json") { ApiJson.decodeFromString(ListSerializer(VoiceSession.serializer()), it) }.orEmpty()
-    fun savePending(sessions: List<VoiceSession>) {
-        if (sessions.isEmpty()) File(dir, "pending.json").delete()
-        else write("pending.json", ApiJson.encodeToString(ListSerializer(VoiceSession.serializer()), sessions))
+    /**
+     * Sessions [account] finished here that wait to be sent: kept under that account, so they
+     * only ever go to it (none when signed out).
+     */
+    fun pending(account: String?): List<VoiceSession> {
+        account ?: return emptyList()
+        adopt(account)
+        return readSessions(pendingName(account))
     }
 
-    /** Forgets everything the trainer kept here (signing out), recordings included. */
-    fun forget(context: Context) {
+    fun savePending(account: String, sessions: List<VoiceSession>) {
+        if (sessions.isEmpty()) File(dir, pendingName(account)).delete()
+        else write(pendingName(account), ApiJson.encodeToString(ListSerializer(VoiceSession.serializer()), sessions))
+    }
+
+    /** Sessions kept before they were kept per account (an older version of the app) belong to whoever is signed in now. */
+    fun adopt(account: String) {
+        val loose = File(dir, LEGACY_PENDING).takeIf { it.exists() } ?: return
+        val sessions = readSessions(pendingName(account)) + readSessions(LEGACY_PENDING)
+        savePending(account, sessions)
+        loose.delete()
+    }
+
+    private fun readSessions(name: String): List<VoiceSession> = read(name) { ApiJson.decodeFromString(ListSerializer(VoiceSession.serializer()), it) }.orEmpty()
+
+    private fun pendingName(account: String) = "pending-$account.json"
+
+    /**
+     * Forgets everything the trainer kept here (signing out), recordings included. Sessions waiting
+     * to be sent stay, each under its account, unless they're [dropUnsentOf]'s (the person asked to
+     * sign out of it).
+     */
+    fun forget(context: Context, dropUnsentOf: String? = null) {
         prefs.edit { clear() }
-        dir.listFiles().orEmpty().forEach { it.delete() }
+        dir.listFiles().orEmpty()
+            .filter { f -> !f.name.startsWith("pending-") || (dropUnsentOf != null && f.name == pendingName(dropUnsentOf)) }
+            .forEach { it.delete() }
         VoiceRecordings(context).deleteAll()
     }
 
@@ -100,6 +128,7 @@ class VoiceStore(context: Context) {
         const val KEEP = "keepRecordings"
         const val SPEAKING = "speakingDb"
         const val PRACTISED = "practisedOn"
+        const val LEGACY_PENDING = "pending.json"
     }
 }
 
@@ -124,7 +153,7 @@ private object VoiceMemory {
 class VoiceViewModel(private val c: Container) : ViewModel() {
     val store = VoiceStore(c.context)
     private val _state = MutableStateFlow(
-        VoiceMemory.state ?: VoiceState(program = store.program() ?: VoiceOffline.program, plan = store.plan(), pending = store.pending().size),
+        VoiceMemory.state ?: VoiceState(program = store.program() ?: VoiceOffline.program, plan = store.plan(), pending = store.pending(c.settings.value.account).size),
     )
     val state: StateFlow<VoiceState> = _state.asStateFlow()
 
@@ -166,7 +195,7 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
                     loading = false,
                     offline = p.isFailure && programNow != null,
                     error = if (programNow == null) (p.exceptionOrNull()?.message ?: "Couldn't load the lessons") else null,
-                    pending = store.pending().size,
+                    pending = store.pending(c.settings.value.account).size,
                 )
             }
         }
@@ -191,29 +220,42 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
         then()
     }
 
-    /** Sends a finished session; if the server can't be reached, keeps it to send later. */
+    /**
+     * Sends a finished session; if the server can't be reached, keeps it (under the account that
+     * practised) to send later.
+     */
     fun saveSession(session: VoiceSession) {
         store.practisedOn = LocalDate.now(c.zone())
         _state.value.plan?.let { VoiceReminders(c.context).update(it, store.practisedOn, c.zone()) }
+        val account = c.settings.value.account
         c.scope.launch {
             try {
                 c.api.addVoiceSession(session)
                 c.tell("Practice saved")
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                store.savePending(store.pending() + session)
-                set { it.copy(pending = store.pending().size) }
-                c.tell("Saved on this phone; it'll be sent when the server can be reached")
+                if (account == null || SyncManager.isRefused(e)) {
+                    c.tell(e.message ?: "The practice didn't save")
+                } else {
+                    store.savePending(account, store.pending(account) + session)
+                    set { it.copy(pending = store.pending(account).size) }
+                    c.tell("Saved on this phone; it'll be sent when the server can be reached")
+                }
             }
             c.dataChanged()
         }
     }
 
+    /** Sends the sessions waiting; one the server refuses as wrong is dropped, the rest wait for next time. */
     private suspend fun sendPending() {
         if (c.viewing.value != null) return
-        val waiting = store.pending()
+        val account = c.settings.value.account ?: return
+        val waiting = store.pending(account)
         if (waiting.isEmpty()) return
-        val left = waiting.filter { session -> attempt { c.api.addVoiceSession(session) }.isFailure }
-        store.savePending(left)
+        val left = waiting.filter { session ->
+            val failure = attempt { c.api.addVoiceSession(session) }.exceptionOrNull()
+            failure != null && !(failure is Exception && SyncManager.isRefused(failure))
+        }
+        store.savePending(account, left)
         if (left.size < waiting.size) c.dataChanged()
     }
 

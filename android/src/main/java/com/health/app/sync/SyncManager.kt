@@ -16,7 +16,7 @@ import kotlinx.coroutines.sync.withLock
  * Carries data from each data source to the server: sends anything left in the outbox, then asks
  * each source that's set up for what's new, uploads it in parts, and remembers where it got to.
  * A source that fails doesn't stop the others; batches the server can't take now wait in the
- * outbox.
+ * outbox, under the [account] signed in when the sync began.
  */
 class SyncManager(
     private val conduits: List<Conduit>,
@@ -27,6 +27,8 @@ class SyncManager(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Told after a sync that brought something in, so screens can refresh. */
     private val onNewData: () -> Unit = {},
+    /** The account signed in ([com.health.app.data.Settings.account]), whose outbox is used; null when signed out. */
+    private val account: () -> String?,
 ) {
     private val mutex = Mutex()
 
@@ -44,16 +46,20 @@ class SyncManager(
     suspend fun sync(onlyId: String? = null): String = mutex.withLock {
         var total = 0
         val problems = mutableListOf<String>()
+        // Whose sync this is, fixed for all of it: a sign-out meanwhile can't send a batch elsewhere.
+        val account = account()
         try {
             _running.value = ""
-            val flushed = outbox.flush({ uploadJson(it) }, ::isTemporary)
-            if (flushed > 0) total++
+            if (account != null) {
+                val flushed = outbox.flush(account, { uploadJson(it) }, ::isTemporary)
+                if (flushed > 0) total++
+            }
             for (conduit in conduits) {
                 if (onlyId != null && conduit.id != onlyId) continue
                 val ready = attempt { conduit.ready() }.getOrDefault(false)
                 if (!ready) continue
                 _running.value = conduit.id
-                val result = syncOne(conduit)
+                val result = syncOne(conduit, account)
                 if (!result.ok) problems += "${conduit.title}: ${result.message}"
                 total += result.samples + result.sleep + result.workouts
             }
@@ -69,7 +75,7 @@ class SyncManager(
         }
     }
 
-    private suspend fun syncOne(conduit: Conduit): ConduitStatus {
+    private suspend fun syncOne(conduit: Conduit, account: String?): ConduitStatus {
         val now = clock()
         val status = try {
             val collected = conduit.collect(store.cursor(conduit.id))
@@ -87,8 +93,8 @@ class SyncManager(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    if (!isTemporary(e)) throw e
-                    outbox.add(batch)
+                    if (!isTemporary(e) || account == null) throw e
+                    outbox.add(account, batch)
                     queued++
                 }
             }
@@ -118,7 +124,18 @@ class SyncManager(
     companion object {
         private const val TAG = "SyncManager"
 
-        /** Whether trying again later may work: offline, or the server down or busy. */
-        fun isTemporary(e: Exception): Boolean = e is ServerException && (e.code == 0 || e.code == 408 || e.code == 429 || e.code >= 500)
+        /** The server's answers when a batch itself is wrong: only these drop one. */
+        val BATCH_REFUSED = setOf(400, 422)
+
+        /**
+         * Whether the server itself refused a request as wrong, in its own words (its JSON error)
+         * with one of [codes]: sending it again won't help. Anything else may pass: offline, the
+         * server down or busy, a redirect, a proxy's 404, 403 or 413, a captive portal's page (even
+         * one that says 200), or the server's sign-in no longer being good.
+         */
+        fun isRefused(e: Exception, codes: Set<Int> = BATCH_REFUSED): Boolean = e is ServerException && e.fromServer && e.code in codes
+
+        /** Whether trying again later may work: anything but the server refusing a batch as wrong. */
+        fun isTemporary(e: Exception): Boolean = !isRefused(e)
     }
 }

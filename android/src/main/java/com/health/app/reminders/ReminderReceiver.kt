@@ -37,15 +37,24 @@ class ReminderReceiver : BroadcastReceiver() {
                 c.reminders.marked(dose)
                 val site = c.medsCache.nextSite(dose.medicationId)?.takeIf { dose.form == MedForm.INJECTION || dose.form == MedForm.PATCH }
                 val log = DoseLog(dose.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = dose.at, site = site)
+                // Whose dose this is: if it has to wait, it waits for this account only.
+                val account = c.settings.value.account
                 val pending = goAsync()
                 scope.launch {
                     try {
                         c.api.logDose(log)
                         c.dataChanged()
                     } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                        // No server right now: it goes with the next sync.
-                        Log.i(TAG, "Keeping a dose to send later: ${e.message}")
-                        c.doseOutbox.add(log)
+                        when {
+                            // The server says it's wrong (its medication is gone, say): sending it again won't help.
+                            DoseOutbox.refused(e) -> Log.w(TAG, "The server refused a dose: ${e.message}")
+                            account == null -> Log.w(TAG, "Signed out, so a dose can't be kept: ${e.message}")
+                            else -> {
+                                // No server right now: it goes with the next sync.
+                                Log.i(TAG, "Keeping a dose to send later: ${e.message}")
+                                c.doseOutbox.add(account, log)
+                            }
+                        }
                     } finally {
                         pending.finish()
                     }

@@ -48,6 +48,6 @@ object ServerVersion {
     internal suspend fun <T> plain(what: String, badRequestToo: Boolean = false, block: suspend () -> T): T = try {
         block()
     } catch (e: ServerException) {
-        if (missing(e, badRequestToo)) throw ServerException(e.code, needsUpdate(what)) else throw e
+        if (missing(e, badRequestToo)) throw ServerException(e.code, needsUpdate(what), e.fromServer) else throw e
     }
 }

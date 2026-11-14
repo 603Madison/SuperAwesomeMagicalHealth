@@ -56,7 +56,7 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             combine(c.syncStore.ring, c.syncStore.statuses, c.sync.running, c.syncStore.gadgetbridgeUri, c.colmi.readings.state) { ring, statuses, running, gb, readings ->
                 _state.value.copy(
-                    ring = ring, statuses = statuses, running = running, gadgetbridgeFile = gb?.let { c.gadgetbridge.fileName() ?: "Export file" }, outbox = c.outbox.size,
+                    ring = ring, statuses = statuses, running = running, gadgetbridgeFile = gb?.let { c.gadgetbridge.fileName() ?: "Export file" }, outbox = c.outbox.size(c.settings.value.account),
                     ringReadings = readings,
                 )
             }.collect { _state.value = it }

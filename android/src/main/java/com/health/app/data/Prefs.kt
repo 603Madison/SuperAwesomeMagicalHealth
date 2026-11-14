@@ -10,6 +10,7 @@ import com.health.api.ApiJson
 import com.health.api.Units
 import com.health.api.User
 import com.health.app.attempt
+import java.security.MessageDigest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -42,6 +43,21 @@ data class Settings(
     val versionNoticeDismissed: String = "",
 ) {
     val signedIn: Boolean get() = server.isNotEmpty() && token != null
+
+    /**
+     * The account signed in here (this server and this person), as a short key: what's waiting to
+     * be sent is kept under it, so it only ever goes to the account it was recorded for. Null once
+     * signed out.
+     */
+    val account: String? get() = user?.id?.takeIf { server.isNotEmpty() }?.let { Accounts.key(server, it) }
+}
+
+/** Keys for accounts, for what waits on the phone to be sent. */
+object Accounts {
+    /** A short, stable key for [userId] on [server], fit for a folder's or file's name. */
+    fun key(server: String, userId: String): String =
+        MessageDigest.getInstance("SHA-256").digest("${server.trim().trimEnd('/').lowercase()}\n$userId".toByteArray())
+            .take(12).joinToString("") { "%02x".format(it) }
 }
 
 /** Light, dark, or as the phone is. */

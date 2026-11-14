@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -75,6 +76,48 @@ class ServerApiTest {
             assertEquals("Sign in first", e.message)
         }
         assertEquals(1, signedOut)
+    }
+
+    @Test
+    fun `a 401 page from something in between doesn't sign out`() = runBlocking {
+        // A sign-in gateway or proxy in front of the server, with a page of its own.
+        server.enqueue(MockResponse().setResponseCode(401).setHeader("Content-Type", "text/html").setBody("<html><body>Please sign in</body></html>"))
+        try {
+            api.me()
+            fail()
+        } catch (e: ServerException) {
+            assertEquals(401, e.code)
+            assertFalse(e.fromServer)
+        }
+        assertEquals(0, signedOut)
+    }
+
+    private suspend fun failure(response: MockResponse): ServerException {
+        server.enqueue(response)
+        try {
+            api.ingestJson("{}")
+        } catch (e: ServerException) {
+            return e
+        }
+        error("It went through")
+    }
+
+    @Test
+    fun `only the server's own refusal of a batch counts as permanent`() = runBlocking {
+        // A captive portal answering 200 with its sign-in page: the batch never reached the server.
+        val portal = failure(MockResponse().setResponseCode(200).setHeader("Content-Type", "text/html").setBody("<html>Welcome to the café Wi-Fi</html>"))
+        assertFalse(portal.fromServer)
+        assertTrue(com.health.app.sync.SyncManager.isTemporary(portal))
+        // A proxy's own pages.
+        for (code in listOf(404, 403, 413)) {
+            val proxy = failure(MockResponse().setResponseCode(code).setBody("<html><h1>$code</h1>nginx</html>"))
+            assertEquals(code, proxy.code)
+            assertTrue("$code", com.health.app.sync.SyncManager.isTemporary(proxy))
+        }
+        // The server saying the batch is wrong.
+        val refused = failure(json("""{"error":"That request isn't right"}""", 400))
+        assertTrue(refused.fromServer)
+        assertFalse(com.health.app.sync.SyncManager.isTemporary(refused))
     }
 
     @Test

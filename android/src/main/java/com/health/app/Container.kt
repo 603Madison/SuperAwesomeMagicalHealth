@@ -73,7 +73,7 @@ class Container(val context: Context) {
         .addInterceptor(ServerApi.authInterceptor({ settings.value.server }, { settings.value.token }))
         .build()
 
-    val api = ServerApi(http, { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { signOut(callServer = false) } })
+    val api = ServerApi(http, { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { signOut(requested = false) } })
 
     val signIn = SignIn(context, api, prefs)
 
@@ -94,6 +94,7 @@ class Container(val context: Context) {
         upload = { api.ingest(it) },
         uploadJson = { api.ingestJson(it) },
         onNewData = { dataChanged() },
+        account = { settings.value.account },
     )
 
     /** Medications kept on the phone for reminders, the reminders themselves, and doses waiting to be sent. */
@@ -101,6 +102,15 @@ class Container(val context: Context) {
     val reminderCache = ReminderCache(context)
     val reminders = Reminders(context, medsCache, ::zone, reminderCache)
     val doseOutbox = DoseOutbox(File(context.filesDir, "dose-outbox"))
+
+    init {
+        // What an older version kept waiting (not yet under an account) is the signed-in account's.
+        settings.value.account?.let { account ->
+            attempt { outbox.adopt(account) }
+            attempt { doseOutbox.adopt(account) }
+            attempt { com.health.app.ui.modules.transition.voice.VoiceStore(context).adopt(account) }
+        }
+    }
 
     // ---- Viewing someone else's data, from a share (read-only) ----
 
@@ -311,10 +321,11 @@ class Container(val context: Context) {
         reminders.reschedule()
     }
 
-    /** Sends doses marked from notifications while offline. */
+    /** Sends doses marked from notifications while offline (the signed-in account's only). */
     suspend fun flushDoses() {
-        if (doseOutbox.size() == 0) return
-        val sent = doseOutbox.flush { api.logDoseJson(it) }
+        val account = settings.value.account ?: return
+        if (doseOutbox.size(account) == 0) return
+        val sent = doseOutbox.flush(account, { api.logDoseJson(it) })
         if (sent > 0) dataChanged()
     }
 
@@ -414,12 +425,27 @@ class Container(val context: Context) {
         }
     }
 
-    suspend fun signOut(callServer: Boolean = true) {
-        if (callServer) api.logout()
+    /**
+     * Signs out. When the person asks ([requested]), the server is told, and what this account had
+     * waiting to be sent goes with the rest. When the server says the sign-in is no longer good (a
+     * revoked or expired sign-in), what's waiting to be sent stays, kept under its account: it goes
+     * once the same person signs in to the same server again, and never to anyone else.
+     */
+    suspend fun signOut(requested: Boolean = true) {
+        val account = settings.value.account
+        if (requested) {
+            api.logout()
+        } else if (!settings.value.signedIn) {
+            return // Already signed out: several requests can come back refused at once.
+        }
         prefs.signOut()
         syncStore.clear()
-        outbox.clear()
-        doseOutbox.clear()
+        if (requested && account != null) {
+            outbox.clear(account)
+            doseOutbox.clear(account)
+        }
+        // The practice reminder, and what the voice trainer kept (recordings too; unsent sessions as above).
+        com.health.app.ui.modules.transition.voice.VoiceReminders.forget(context, dropUnsentOf = account.takeIf { requested })
         // Snoozed doses' alarms are found from the reminders kept, so they go first.
         reminders.cancelAll()
         medsCache.clear()
@@ -484,13 +510,9 @@ class Container(val context: Context) {
     }
 
     // ---- Voice trainer (ui/modules/transition/voice): its practice reminder follows the plan and
-    // Transition being on; signing out cancels it and deletes what the trainer kept here, recordings included ----
+    // Transition being on; signing out (in signOut) cancels it and deletes what the trainer kept here,
+    // recordings included ----
     init {
-        scope.launch {
-            settings.map { it.signedIn }.distinctUntilChanged().drop(1).collect { signedIn ->
-                if (!signedIn) com.health.app.ui.modules.transition.voice.VoiceReminders.forget(context)
-            }
-        }
         scope.launch {
             profile.map { it?.modules?.contains(Module.TRANSITION) }.distinctUntilChanged().collect { on ->
                 if (on != null && _viewing.value == null) attempt { com.health.app.ui.modules.transition.voice.VoiceReminders.refresh(context, api, on, zone()) }
