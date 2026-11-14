@@ -73,6 +73,7 @@ import com.health.api.VoiceProgram
 import com.health.api.VoiceProgress
 import com.health.api.VoiceSkill
 import com.health.api.VoiceWeek
+import com.health.app.attempt
 import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.components.AxisLabels
 import com.health.app.ui.components.BackBar
@@ -431,7 +432,7 @@ private fun ChartTitle(title: String, value: String?, top: androidx.compose.ui.u
 
 private fun weekLabels(weeks: List<VoiceWeek>): Triple<String, String?, String> {
     val format = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
-    fun label(w: VoiceWeek) = runCatching { LocalDate.parse(w.weekStart).format(format) }.getOrDefault(w.weekStart)
+    fun label(w: VoiceWeek) = attempt { LocalDate.parse(w.weekStart).format(format) }.getOrDefault(w.weekStart)
     return Triple(label(weeks.first()), weeks.getOrNull(weeks.size / 2)?.takeIf { weeks.size > 2 }?.let(::label), label(weeks.last()))
 }
 

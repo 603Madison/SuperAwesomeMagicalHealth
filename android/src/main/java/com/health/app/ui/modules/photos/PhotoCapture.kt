@@ -73,6 +73,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.health.api.Photo
 import com.health.api.PhotoAlbum
 import com.health.api.Pose
+import com.health.app.attempt
 import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
@@ -107,7 +108,7 @@ fun PhotoAddPage(
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri == null) onBack() else reading = uri }
     LaunchedEffect(reading) {
         val uri = reading ?: return@LaunchedEffect
-        picked = runCatching { readPicked(context, uri) }.getOrElse { problem = it.message ?: "Couldn't read that picture"; null }
+        picked = attempt { readPicked(context, uri) }.getOrElse { problem = it.message ?: "Couldn't read that picture"; null }
         reading = null
     }
     LaunchedEffect(source) {
@@ -215,7 +216,7 @@ private fun CameraView(ghost: Photo?, image: PhotoImage, onTaken: (Picked) -> Un
         val future = ProcessCameraProvider.getInstance(context)
         var provider: ProcessCameraProvider? = null
         future.addListener({
-            runCatching {
+            attempt {
                 provider = future.get().also { p ->
                     p.unbindAll()
                     val use = Preview.Builder().build().also { it.surfaceProvider = preview.surfaceProvider }
@@ -245,7 +246,7 @@ private fun CameraView(ghost: Photo?, image: PhotoImage, onTaken: (Picked) -> Un
                 busy = true
                 capture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
-                        val picked = runCatching { upright(image) }.getOrNull()
+                        val picked = attempt { upright(image) }.getOrNull()
                         image.close()
                         busy = false
                         if (picked != null) onTaken(picked) else problem = "That photo didn't work. Try again?"

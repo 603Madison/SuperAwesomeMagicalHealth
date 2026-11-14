@@ -6,6 +6,8 @@ import com.health.api.ApiJson
 import com.health.api.DoseLog
 import com.health.api.Medication
 import com.health.api.MedsDay
+import com.health.app.attempt
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
 
@@ -17,7 +19,7 @@ class MedsCache(context: Context) {
     private val prefs = context.getSharedPreferences("medications", Context.MODE_PRIVATE)
 
     fun medications(): List<Medication> = prefs.getString(MEDS, null)
-        ?.let { runCatching { ApiJson.decodeFromString(ListSerializer(Medication.serializer()), it) }.getOrNull() }
+        ?.let { attempt { ApiJson.decodeFromString(ListSerializer(Medication.serializer()), it) }.getOrNull() }
         .orEmpty()
 
     fun save(meds: List<Medication>) = prefs.edit { putString(MEDS, ApiJson.encodeToString(ListSerializer(Medication.serializer()), meds)) }
@@ -61,7 +63,7 @@ class DoseOutbox(private val dir: File) {
         for (file in files()) {
             try {
                 send(file.readText())
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 break
             }
             file.delete()

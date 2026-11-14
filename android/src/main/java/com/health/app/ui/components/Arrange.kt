@@ -45,6 +45,7 @@ import com.health.api.LayoutPrefs
 import com.health.api.Layouts
 import com.health.api.ScreenLayout
 import com.health.app.HealthApp
+import com.health.app.attempt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -184,7 +185,7 @@ fun ArrangeContent(
     fun send(layout: ScreenLayout) {
         scope.launch {
             error = null
-            runCatching { checkNotNull(store) { "Nowhere to save" }.saveLayout(key, layout) }
+            attempt { checkNotNull(store) { "Nowhere to save" }.saveLayout(key, layout) }
                 // An older server without arranging says so plainly; anything else is likely the connection.
                 .onFailure { e -> error = e.message?.takeIf { com.health.app.net.ServerVersion.missing(e) } ?: "Couldn't save that. Check the connection and try again." }
         }

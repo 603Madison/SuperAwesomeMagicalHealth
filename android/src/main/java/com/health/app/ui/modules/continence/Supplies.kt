@@ -55,6 +55,7 @@ import com.health.api.SupplyKind
 import com.health.api.SupplyReason
 import com.health.api.SupplyStatus
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addSupply
 import com.health.app.net.continenceProducts
 import com.health.app.net.adjustSupply
@@ -81,6 +82,7 @@ import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.modules.sectionId
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -141,23 +143,23 @@ class SuppliesViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 val statuses = async { c.ui.supplyStatus() }
-                val all = async { runCatching { c.ui.supplies(all = true) }.getOrDefault(emptyList()) }
-                val products = async { runCatching { c.ui.continenceProducts(90) }.getOrNull() }
+                val all = async { attempt { c.ui.supplies(all = true) }.getOrDefault(emptyList()) }
+                val products = async { attempt { c.ui.continenceProducts(90) }.getOrNull() }
                 _state.update {
                     it.copy(statuses = statuses.await(), putAway = all.await().filter { s -> !s.active }, products = products.await() ?: it.products, loading = false)
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your supplies") }
             }
         }
     }
 
     fun history(id: String) = viewModelScope.launch {
-        runCatching { c.ui.supplyLog(id, 365) }.onSuccess { list -> _state.update { it.copy(history = it.history + (id to list)) } }
+        attempt { c.ui.supplyLog(id, 365) }.onSuccess { list -> _state.update { it.copy(history = it.history + (id to list)) } }
     }
 
     private fun act(done: String, block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }.onSuccess { c.tell(done); c.dataChanged() }.onFailure { c.tell(it.message ?: "Couldn't save that") }
+        attempt { block() }.onSuccess { c.tell(done); c.dataChanged() }.onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun save(supply: Supply) = act("Saved") { if (supply.id == null) c.ui.addSupply(supply) else c.ui.updateSupply(supply) }

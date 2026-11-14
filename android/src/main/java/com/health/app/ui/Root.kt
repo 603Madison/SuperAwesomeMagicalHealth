@@ -42,6 +42,7 @@ import com.health.api.Screener
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
+import com.health.app.attempt
 import com.health.app.ui.care.AppointmentEditorRoute
 import com.health.app.ui.care.AppointmentsRoute
 import com.health.app.ui.care.DigestRoute
@@ -137,7 +138,7 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
     // A notification asked for a page.
     LaunchedEffect(open) {
         if (open != null) {
-            runCatching { nav.navigate(open) { launchSingleTop = true } }
+            attempt { nav.navigate(open) { launchSingleTop = true } }
             onOpened()
         }
     }
@@ -215,7 +216,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             "food/add/{date}/{meal}",
             arguments = listOf(navArgument("date") { type = NavType.StringType }, navArgument("meal") { type = NavType.StringType }),
         ) { back ->
-            val date = runCatching { LocalDate.parse(back.arguments?.getString("date")) }.getOrElse { LocalDate.now() }
+            val date = attempt { LocalDate.parse(back.arguments?.getString("date")) }.getOrElse { LocalDate.now() }
             val meal = Meal.entries.firstOrNull { it.name == back.arguments?.getString("meal") } ?: Meal.SNACK
             AddFoodRoute(date, meal, onDone = { nav.popBackStack() })
         }
@@ -273,7 +274,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             "cycle?log={log}",
             arguments = listOf(navArgument("log") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { back ->
-            CycleRoute(back.arguments?.getString("log")?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, onOpen = ::open)
+            CycleRoute(back.arguments?.getString("log")?.let { attempt { LocalDate.parse(it) }.getOrNull() }, onOpen = ::open)
         }
 
         composable("continence") { ContinenceRoute(onPelvicFloor = { open("continence/pelvic") }, onOpen = ::open) }

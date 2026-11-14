@@ -65,6 +65,7 @@ import com.health.app.ui.modules.ArrangeAction
 import com.health.app.ui.modules.FeatureScreens
 import com.health.app.ui.modules.Sections
 import com.health.app.ui.modules.arrangedIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,7 +87,7 @@ class SharingViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 _state.update { it.copy(shares = c.api.shares(), loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load sharing") }
             }
         }
@@ -97,7 +98,7 @@ class SharingViewModel(private val c: Container) : ViewModel() {
             block()
             message?.let(c::tell)
             load()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             c.tell(e.message ?: "That didn't work")
         }
     }

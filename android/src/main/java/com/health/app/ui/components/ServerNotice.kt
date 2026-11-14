@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.health.app.BuildConfig
+import com.health.app.attempt
 import com.health.app.net.ServerVersion
 import kotlinx.coroutines.launch
 
@@ -60,7 +61,7 @@ fun ServerUpdateNotice(state: ServerNoticeState, modifier: Modifier = Modifier) 
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Time to update your server", style = MaterialTheme.typography.titleSmall)
                 Text(ServerVersion.notice(state.server, state.app), style = MaterialTheme.typography.bodyMedium)
-                TextButton(onClick = { runCatching { uri.openUri(ServerVersion.HELP_URL) } }, modifier = Modifier.padding(start = 0.dp)) {
+                TextButton(onClick = { attempt { uri.openUri(ServerVersion.HELP_URL) } }, modifier = Modifier.padding(start = 0.dp)) {
                     Text("How to update")
                 }
             }

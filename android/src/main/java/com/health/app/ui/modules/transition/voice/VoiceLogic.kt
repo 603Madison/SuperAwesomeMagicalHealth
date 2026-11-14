@@ -10,6 +10,7 @@ import com.health.api.VoicePlan
 import com.health.api.VoiceProgram
 import com.health.api.VoiceProgress
 import com.health.api.VoiceSession
+import com.health.app.attempt
 import com.health.app.ui.modules.transition.PitchPoint
 import java.time.Instant
 import java.time.LocalDate
@@ -338,7 +339,7 @@ object VoiceReminderPlan {
      * has already practised today ([practisedOn]). Null without a time.
      */
     fun next(time: String?, restDays: List<Int>, practisedOn: LocalDate?, now: Long, zone: ZoneId): Long? {
-        val at = time?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: return null
+        val at = time?.let { attempt { LocalTime.parse(it) }.getOrNull() } ?: return null
         val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
         for (offset in 0..7) {
             val date = today.plusDays(offset.toLong())

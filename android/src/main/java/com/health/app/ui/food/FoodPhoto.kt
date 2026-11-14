@@ -93,6 +93,7 @@ import com.health.api.AiStatus
 import com.health.api.FoodPhotoEstimate
 import com.health.api.Meal
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.aiStatus
 import com.health.app.net.foodPhoto
 import com.health.app.ui.components.AppCard
@@ -101,6 +102,7 @@ import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.appContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -160,7 +162,7 @@ class FoodPhotoViewModel(private val c: Container, val date: LocalDate, val meal
 
     init {
         // For the notice's links; the assistant is only ever the person's own.
-        viewModelScope.launch { runCatching { c.api.aiStatus() }.onSuccess { s -> _state.update { it.copy(status = s) } } }
+        viewModelScope.launch { attempt { c.api.aiStatus() }.onSuccess { s -> _state.update { it.copy(status = s) } } }
     }
 
     fun acknowledge() {
@@ -178,7 +180,7 @@ class FoodPhotoViewModel(private val c: Container, val date: LocalDate, val meal
                     jpeg to android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
                 }
                 _state.update { it.copy(photo = jpeg, preview = preview, preparing = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(preparing = false, problem = e.message ?: "That photo didn't work. Try another one.") }
             }
         }
@@ -217,7 +219,7 @@ class FoodPhotoViewModel(private val c: Container, val date: LocalDate, val meal
                         it.copy(sending = false, estimate = estimate, rows = FoodPhotoText.rows(estimate), photo = null, preview = null)
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(sending = false, problem = FoodPhotoText.error(e)) }
             }
         }
@@ -246,7 +248,7 @@ class FoodPhotoViewModel(private val c: Container, val date: LocalDate, val meal
                 c.dataChanged()
                 c.tell("Logged $done to ${meal.label.lowercase()}")
                 _state.update { it.copy(logging = false, done = true) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 val logged = ready.take(done).map { it.key }.toSet()
                 if (done > 0) c.dataChanged()
                 c.tell(e.message ?: "Couldn't log that")
@@ -301,11 +303,11 @@ fun FoodPhotoNotice(status: AiStatus?, onBack: () -> Unit, onAcknowledge: () -> 
                 Text(FoodPhotoText.notice(provider), style = MaterialTheme.typography.bodyMedium)
                 if (status != null) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { runCatching { uri.openUri(status.termsUrl) } }) {
+                        TextButton(onClick = { attempt { uri.openUri(status.termsUrl) } }) {
                             Text("$provider's commercial terms")
                             Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.padding(start = 4.dp).size(16.dp))
                         }
-                        TextButton(onClick = { runCatching { uri.openUri(status.privacyUrl) } }) {
+                        TextButton(onClick = { attempt { uri.openUri(status.privacyUrl) } }) {
                             Text("$provider's privacy policy")
                             Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.padding(start = 4.dp).size(16.dp))
                         }
@@ -401,7 +403,7 @@ private fun FoodCamera(onTaken: (ByteArray, Int) -> Unit) {
         val future = ProcessCameraProvider.getInstance(context)
         var provider: ProcessCameraProvider? = null
         future.addListener({
-            runCatching {
+            attempt {
                 provider = future.get().also { p ->
                     p.unbindAll()
                     val use = Preview.Builder().build().also { it.surfaceProvider = preview.surfaceProvider }
@@ -419,7 +421,7 @@ private fun FoodCamera(onTaken: (ByteArray, Int) -> Unit) {
                 busy = true
                 capture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
-                        val bytes = runCatching {
+                        val bytes = attempt {
                             val buffer = image.planes[0].buffer
                             ByteArray(buffer.remaining()).also { buffer.get(it) }
                         }.getOrNull()

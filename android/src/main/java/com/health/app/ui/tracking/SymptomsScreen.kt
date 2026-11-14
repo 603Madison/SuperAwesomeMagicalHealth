@@ -59,6 +59,7 @@ import com.health.api.Place
 import com.health.api.SymptomEntry
 import com.health.api.SymptomsSummary
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addMigraine
 import com.health.app.net.addSymptom
 import com.health.app.net.deleteMigraine
@@ -87,6 +88,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.History
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -131,14 +133,14 @@ class SymptomsViewModel(private val c: Container) : ViewModel() {
                 val migraines = async { c.ui.migraines(90) }
                 val summary = async { c.ui.symptomsSummary(90) }
                 _state.update { it.copy(entries = entries.await(), migraines = migraines.await(), summary = summary.await(), loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your symptoms") }
             }
         }
     }
 
     private fun act(message: String?, block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }
+        attempt { block() }
             .onSuccess { message?.let(c::tell); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "That didn't work") }
     }
@@ -159,7 +161,7 @@ class SymptomsViewModel(private val c: Container) : ViewModel() {
         if (query.isBlank()) return
         _state.update { it.copy(searching = true) }
         viewModelScope.launch {
-            val found = runCatching { c.ui.places(query) }.getOrElse { c.tell(it.message ?: "Couldn't look that up"); emptyList() }
+            val found = attempt { c.ui.places(query) }.getOrElse { c.tell(it.message ?: "Couldn't look that up"); emptyList() }
             _state.update { it.copy(places = found, searching = false) }
         }
     }

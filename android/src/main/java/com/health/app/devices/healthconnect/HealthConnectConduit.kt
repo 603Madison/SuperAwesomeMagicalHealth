@@ -32,6 +32,7 @@ import com.health.api.Sample
 import com.health.api.SleepSession
 import com.health.api.StageSpan
 import com.health.api.Workout
+import com.health.app.attempt
 import com.health.app.sync.Collected
 import com.health.app.sync.Conduit
 import com.health.app.sync.SyncStore
@@ -53,10 +54,10 @@ class HealthConnectConduit(
     override val title = "Health Connect"
 
     /** Whether Health Connect is on this phone (built in from Android 14; an app before). */
-    fun availability(): Int = runCatching { HealthConnectClient.getSdkStatus(context) }.getOrDefault(HealthConnectClient.SDK_UNAVAILABLE)
+    fun availability(): Int = attempt { HealthConnectClient.getSdkStatus(context) }.getOrDefault(HealthConnectClient.SDK_UNAVAILABLE)
 
     private fun client(): HealthConnectClient? =
-        if (availability() == HealthConnectClient.SDK_AVAILABLE) runCatching { HealthConnectClient.getOrCreate(context) }.getOrNull() else null
+        if (availability() == HealthConnectClient.SDK_AVAILABLE) attempt { HealthConnectClient.getOrCreate(context) }.getOrNull() else null
 
     /** The permissions to ask for: reading each kind of record, in the background, and the past. */
     fun permissions(): Set<String> {
@@ -73,7 +74,7 @@ class HealthConnectConduit(
         return reads
     }
 
-    suspend fun granted(): Set<String> = client()?.let { runCatching { it.permissionController.getGrantedPermissions() }.getOrNull() }.orEmpty()
+    suspend fun granted(): Set<String> = client()?.let { attempt { it.permissionController.getGrantedPermissions() }.getOrNull() }.orEmpty()
 
     override suspend fun ready(): Boolean = store.healthConnectOn.value && granted().any { it.contains("READ_") }
 

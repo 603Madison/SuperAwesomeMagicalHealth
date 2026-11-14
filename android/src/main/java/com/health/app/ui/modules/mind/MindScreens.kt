@@ -68,6 +68,7 @@ import com.health.api.Screener
 import com.health.api.ScreenerDefinition
 import com.health.api.ScreenerResult
 import com.health.api.ThoughtRecord
+import com.health.app.attempt
 import com.health.app.ui.Format
 import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.AxisLabels
@@ -399,7 +400,7 @@ fun SupportSheet(resources: List<CrisisResource>, onDismiss: () -> Unit) {
 @Composable
 fun SupportContent(resources: List<CrisisResource>) {
     val context = LocalContext.current
-    fun open(intent: Intent) = runCatching { context.startActivity(intent) }
+    fun open(intent: Intent) = attempt { context.startActivity(intent) }
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),

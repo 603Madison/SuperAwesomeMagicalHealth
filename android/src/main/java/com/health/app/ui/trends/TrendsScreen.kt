@@ -51,6 +51,7 @@ import com.health.api.TrendDay
 import com.health.api.Trends
 import com.health.api.Units
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.ui.Format
 import com.health.app.ui.components.AxisLabels
 import com.health.app.ui.components.BarChart
@@ -78,6 +79,7 @@ import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.modules.Sections
 import com.health.api.Fields
 import com.health.api.VitalsTargets
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -120,26 +122,26 @@ class TrendsViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 val trends = c.ui.trends(days)
-                val weights = runCatching { c.ui.measurements(Metric.WEIGHT, maxOf(days, 90)) }.getOrDefault(emptyList())
+                val weights = attempt { c.ui.measurements(Metric.WEIGHT, maxOf(days, 90)) }.getOrDefault(emptyList())
                 _state.update { if (it.days == days) it.copy(trends = trends, weights = weights, loading = false) else it }
                 // Combined devices: today's, for the charts' "From 2 devices" (ui/components/Sources.kt).
-                runCatching { c.ui.day(LocalDate.now(c.zone()).toString()) }.getOrNull()?.let { day ->
+                attempt { c.ui.day(LocalDate.now(c.zone()).toString()) }.getOrNull()?.let { day ->
                     _state.update { it.copy(combined = day.combined, combinedSleep = day.sleepSummary?.combined) }
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your trends") }
             }
         }
     }
 
     fun logWeight(kg: Double) = viewModelScope.launch {
-        runCatching { c.ui.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, System.currentTimeMillis())) }
+        attempt { c.ui.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, System.currentTimeMillis())) }
             .onSuccess { c.tell("Weight saved"); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun deleteWeight(id: Long) = viewModelScope.launch {
-        runCatching { c.ui.deleteMeasurement(id) }
+        attempt { c.ui.deleteMeasurement(id) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't delete that") }
     }

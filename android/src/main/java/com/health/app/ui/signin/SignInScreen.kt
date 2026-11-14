@@ -51,6 +51,7 @@ import com.health.app.net.ServerApi
 import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.Backdrop
 import com.health.app.ui.components.appContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** What signing in needs from the rest of the app (so it can be drawn on its own). */
@@ -105,7 +106,7 @@ fun SignInScreen(
         scope.launch {
             try {
                 config = server to actions.checkServer(server)
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 message = "Couldn't reach a SuperAwesomeMagicalHealth server there (${e.message ?: e.javaClass.simpleName})"
             }
             busy = false
@@ -118,7 +119,7 @@ fun SignInScreen(
         scope.launch {
             try {
                 actions.passwordSignIn(server, username.trim(), password)
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 message = e.message ?: "Couldn't sign in"
             }
             busy = false

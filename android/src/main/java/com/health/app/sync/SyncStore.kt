@@ -3,6 +3,7 @@ package com.health.app.sync
 import android.content.Context
 import androidx.core.content.edit
 import com.health.api.ApiJson
+import com.health.app.attempt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,9 +89,9 @@ class SyncStore(context: Context) {
 
     private fun readStatuses(): Map<String, ConduitStatus> = prefs.all.keys.filter { it.startsWith("status.") }.mapNotNull { key ->
         val json = prefs.getString(key, null) ?: return@mapNotNull null
-        runCatching { key.removePrefix("status.") to ApiJson.decodeFromString(ConduitStatus.serializer(), json) }.getOrNull()
+        attempt { key.removePrefix("status.") to ApiJson.decodeFromString(ConduitStatus.serializer(), json) }.getOrNull()
     }.toMap()
 
     private fun readRing(): PairedRing? =
-        prefs.getString("ring", null)?.let { runCatching { ApiJson.decodeFromString(PairedRing.serializer(), it) }.getOrNull() }
+        prefs.getString("ring", null)?.let { attempt { ApiJson.decodeFromString(PairedRing.serializer(), it) }.getOrNull() }
 }

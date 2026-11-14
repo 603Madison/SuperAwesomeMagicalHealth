@@ -34,6 +34,7 @@ import com.health.api.Sample
 import com.health.api.WaterEntry
 import com.health.api.Workout
 import com.health.api.WorkoutType
+import com.health.app.attempt
 import com.health.app.data.DeviceChoices
 import com.health.app.net.ServerApi
 import com.health.app.net.bloodPressure
@@ -262,16 +263,16 @@ class HealthConnectWriter(
     private val ledgerFile = File(context.filesDir, "health-connect-written.json")
     private val ledgerSerializer = MapSerializer(String.serializer(), Written.serializer())
 
-    fun available(): Boolean = runCatching { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
+    fun available(): Boolean = attempt { HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE }.getOrDefault(false)
 
-    private fun client(): HealthConnectClient? = if (available()) runCatching { HealthConnectClient.getOrCreate(context) }.getOrNull() else null
+    private fun client(): HealthConnectClient? = if (available()) attempt { HealthConnectClient.getOrCreate(context) }.getOrNull() else null
 
     fun chosen(): Set<ExportKind> = choices.healthConnectExport.value.mapNotNull { n -> ExportKind.entries.firstOrNull { it.name == n } }.toSet()
 
     /** The write permissions for [kinds], and nothing else. */
     fun permissions(kinds: Set<ExportKind>): Set<String> = kinds.map { it.permission }.toSet()
 
-    suspend fun granted(): Set<String> = client()?.let { runCatching { it.permissionController.getGrantedPermissions() }.getOrNull() }.orEmpty()
+    suspend fun granted(): Set<String> = client()?.let { attempt { it.permissionController.getGrantedPermissions() }.getOrNull() }.orEmpty()
 
     /** Writes what's chosen and allowed; a line for people, or null when nothing's chosen. */
     suspend fun run(): String? = mutex.withLock {
@@ -280,7 +281,7 @@ class HealthConnectWriter(
         val client = client() ?: return "Health Connect isn't available on this phone".also(choices::setHealthConnectNote)
         val granted = granted()
         // Water and drinks only while the person shows water (Settings › Features › Water).
-        val fields = if (ExportKind.HYDRATION in kinds) runCatching { api.fields().effective }.getOrNull() else null
+        val fields = if (ExportKind.HYDRATION in kinds) attempt { api.fields().effective }.getOrNull() else null
         val wanted = HealthConnectExportMapping.writable(kinds, fields)
         if (wanted.isEmpty()) return "Water is hidden, so nothing's written".also(choices::setHealthConnectNote)
         val allowed = wanted.filter { it.permission in granted }.toSet()
@@ -291,7 +292,7 @@ class HealthConnectWriter(
         val outgoing = mutableListOf<Outgoing>()
         val fetched = mutableSetOf<ExportKind>()
         val z = zone()
-        val sources = runCatching { HealthConnectExportMapping.healthConnectSources(api.devices()) }.getOrElse { return "Couldn't reach the server".also(choices::setHealthConnectNote) }
+        val sources = attempt { HealthConnectExportMapping.healthConnectSources(api.devices()) }.getOrElse { return "Couldn't reach the server".also(choices::setHealthConnectNote) }
         suspend fun fetch(kind: ExportKind, block: suspend () -> List<Outgoing>) {
             if (kind !in allowed) return
             try {
@@ -358,15 +359,15 @@ class HealthConnectWriter(
 
     /** Signing out: what was written is forgotten here (it stays in Health Connect, which the person controls). */
     fun forget() {
-        runCatching { ledgerFile.delete() }
+        attempt { ledgerFile.delete() }
     }
 
     private suspend fun readLedger(): Map<String, Written> = withContext(Dispatchers.IO) {
-        runCatching { ApiJson.decodeFromString(ledgerSerializer, ledgerFile.readText()) }.getOrDefault(emptyMap())
+        attempt { ApiJson.decodeFromString(ledgerSerializer, ledgerFile.readText()) }.getOrDefault(emptyMap())
     }
 
     private suspend fun writeLedger(ledger: Map<String, Written>) = withContext(Dispatchers.IO) {
-        runCatching { ledgerFile.writeText(ApiJson.encodeToString(ledgerSerializer, ledger)) }
+        attempt { ledgerFile.writeText(ApiJson.encodeToString(ledgerSerializer, ledger)) }
     }
 
     companion object {

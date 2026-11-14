@@ -32,6 +32,7 @@ import com.health.api.CyclePhase
 import com.health.api.CycleSettings
 import com.health.api.Fields
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.cycleSettings
 import com.health.app.net.saveCycleSettings
 import com.health.app.reminders.ReminderPlanner
@@ -47,6 +48,7 @@ import com.health.app.ui.components.appContainer
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.modules.CustomFieldsEditor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -85,7 +87,7 @@ class CycleSettingsViewModel(private val c: Container) : ViewModel() {
                 val saved = c.api.cycleSettings()
                 CycleWording.neutral.value = saved.neutralWording
                 _state.update { it.copy(saved = saved, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load the cycle's settings") }
             }
         }
@@ -100,7 +102,7 @@ class CycleSettingsViewModel(private val c: Container) : ViewModel() {
                 CycleWording.neutral.value = saved.neutralWording
                 c.tell("Saved")
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(saving = false) }
                 c.tell(e.message ?: "Couldn't save that")
             }
@@ -230,7 +232,7 @@ fun plainOnToday(): Boolean {
     val neutral by CycleWording.neutral.collectAsState()
     val viewing by c.viewing.collectAsState()
     LaunchedEffect(viewing == null) {
-        if (viewing == null && CycleWording.neutral.value == null) CycleWording.neutral.value = runCatching { c.api.cycleSettings().neutralWording }.getOrNull()
+        if (viewing == null && CycleWording.neutral.value == null) CycleWording.neutral.value = attempt { c.api.cycleSettings().neutralWording }.getOrNull()
     }
     return Fields.CYCLE_FERTILITY !in (layout?.effective ?: Fields.DEFAULTS) || (viewing == null && neutral == true)
 }

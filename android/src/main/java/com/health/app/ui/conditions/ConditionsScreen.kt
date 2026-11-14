@@ -59,6 +59,7 @@ import com.health.api.Module
 import com.health.api.MyCondition
 import com.health.api.MyConditions
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.conditionCatalog
 import com.health.app.net.conditions
 import com.health.app.net.saveConditions
@@ -72,6 +73,7 @@ import com.health.app.ui.components.Pill
 import com.health.app.ui.components.SearchField
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.modules.ModuleInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -109,7 +111,7 @@ class ConditionsViewModel(private val c: Container) : ViewModel() {
                 val mine = async { c.api.conditions() }
                 val saved = mine.await()
                 _state.update { it.copy(catalog = catalog.await(), saved = saved, mine = saved, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your conditions") }
             }
         }
@@ -128,12 +130,12 @@ class ConditionsViewModel(private val c: Container) : ViewModel() {
                 // Saving can turn features on, and brings their fields.
                 c.loadProfile()
                 c.refreshFields()
-                runCatching { c.refreshReminders() }
+                attempt { c.refreshReminders() }
                 c.dataChanged()
                 val turnedOn = Module.entries.filter { it in c.modules() && it !in before }.map { it.label }
                 c.tell(if (turnedOn.isEmpty()) "Saved" else "Saved. Turned on ${ConditionsLogic.sayList(turnedOn)}.")
                 onSaved()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(saving = false) }
                 c.tell(e.message ?: "Couldn't save that")
             }

@@ -3,6 +3,7 @@ package com.health.app.sync
 import android.util.Log
 import com.health.api.IngestBatch
 import com.health.api.IngestResult
+import com.health.app.attempt
 import com.health.app.net.ServerException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,14 +50,14 @@ class SyncManager(
             if (flushed > 0) total++
             for (conduit in conduits) {
                 if (onlyId != null && conduit.id != onlyId) continue
-                val ready = runCatching { conduit.ready() }.getOrDefault(false)
+                val ready = attempt { conduit.ready() }.getOrDefault(false)
                 if (!ready) continue
                 _running.value = conduit.id
                 val result = syncOne(conduit)
                 if (!result.ok) problems += "${conduit.title}: ${result.message}"
                 total += result.samples + result.sleep + result.workouts
             }
-            if (onlyId == null) afterSync?.let { after -> runCatching { after() }.onFailure { Log.w(TAG, "After sync", it) } }
+            if (onlyId == null) afterSync?.let { after -> attempt { after() }.onFailure { Log.w(TAG, "After sync", it) } }
         } finally {
             _running.value = null
         }

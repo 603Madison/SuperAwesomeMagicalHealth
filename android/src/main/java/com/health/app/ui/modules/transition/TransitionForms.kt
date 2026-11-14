@@ -54,6 +54,7 @@ import com.health.api.MilestoneTemplate
 import com.health.api.MomentKind
 import com.health.api.TransitionProfile
 import com.health.api.VoiceSession
+import com.health.app.attempt
 import com.health.app.ui.Format
 import com.health.app.ui.care.CareFormat
 import com.health.app.ui.care.DatePickDialog
@@ -100,7 +101,7 @@ fun TransitionProfileEditor(initial: TransitionProfile, today: LocalDate, onBack
         }
     }
     if (picking) {
-        DatePickDialog(p.startedOn?.let { runCatching { LocalDate.parse(if (it.length == 7) "$it-01" else it) }.getOrNull() } ?: today, onDismiss = { picking = false }) {
+        DatePickDialog(p.startedOn?.let { attempt { LocalDate.parse(if (it.length == 7) "$it-01" else it) }.getOrNull() } ?: today, onDismiss = { picking = false }) {
             p = p.copy(startedOn = it.coerceAtMost(today).toString())
             picking = false
         }

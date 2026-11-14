@@ -53,6 +53,7 @@ import com.health.api.GlucoseUnit
 import com.health.api.VitalsSummary
 import com.health.api.VitalsTargets
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addBloodPressure
 import com.health.app.net.addGlucose
 import com.health.app.net.deleteBloodPressure
@@ -78,6 +79,7 @@ import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.today.InsightCard
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -117,14 +119,14 @@ class VitalsViewModel(private val c: Container) : ViewModel() {
             try {
                 val summary = c.ui.vitalsSummary(days)
                 _state.update { if (it.days == days) it.copy(summary = summary, loading = false) else it }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your readings") }
             }
         }
     }
 
     private fun act(message: String?, block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }
+        attempt { block() }
             .onSuccess { message?.let(c::tell); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "That didn't work") }
     }

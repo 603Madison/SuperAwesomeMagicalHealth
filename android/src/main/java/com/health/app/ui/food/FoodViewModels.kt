@@ -13,6 +13,7 @@ import com.health.api.FoodSearch
 import com.health.api.FoodSuggestion
 import com.health.api.FoodSuggestions
 import com.health.api.toInput
+import com.health.app.attempt
 import com.health.app.net.foodSuggestions
 import com.health.api.Meal
 import com.health.api.Nutrients
@@ -24,6 +25,7 @@ import com.health.app.net.deleteDrink
 import com.health.app.net.drinksDay
 import com.health.app.net.updateDrink
 import com.health.app.ui.tracking.quickDrink
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,10 +69,10 @@ class FoodViewModel(private val c: Container) : ViewModel() {
         job = viewModelScope.launch {
             try {
                 val day = c.ui.foodDay(date.toString())
-                val drinks = runCatching { c.ui.drinksDay(date.toString()) }.getOrNull()
+                val drinks = attempt { c.ui.drinksDay(date.toString()) }.getOrNull()
                 _state.update { if (it.date == date) it.copy(day = day, drinks = drinks, loading = false) else it }
                 if (date == today) loadIdeas()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load the day") }
             }
         }
@@ -83,7 +85,7 @@ class FoodViewModel(private val c: Container) : ViewModel() {
 
     private suspend fun loadIdeas() {
         val s = _state.value
-        val result = runCatching { c.ui.foodSuggestions(s.date.toString(), s.ideasMeal) }
+        val result = attempt { c.ui.foodSuggestions(s.date.toString(), s.ideasMeal) }
         _state.update {
             if (it.date != s.date) it
             else it.copy(ideas = result.getOrNull(), ideasError = result.exceptionOrNull()?.let { e -> e.message ?: "Ideas aren't available just now" })
@@ -104,15 +106,15 @@ class FoodViewModel(private val c: Container) : ViewModel() {
             val added = mutableListOf<com.health.api.FoodEntry>()
             try {
                 idea.items.forEach { added += c.ui.addFood(it.toInput(date, meal)) }
-            } catch (e: Exception) {
-                added.forEach { a -> a.id?.let { id -> runCatching { c.ui.deleteFood(id) } } }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                added.forEach { a -> a.id?.let { id -> attempt { c.ui.deleteFood(id) } } }
                 c.tell(e.message ?: "Couldn't add that")
                 return@launch
             }
             c.dataChanged()
             c.tell("Added to ${com.health.app.ui.today.InsightLinks.mealWord(meal)}: ${idea.name}", "Undo") {
                 c.scope.launch {
-                    runCatching { added.forEach { a -> a.id?.let { id -> c.ui.deleteFood(id) } } }
+                    attempt { added.forEach { a -> a.id?.let { id -> c.ui.deleteFood(id) } } }
                         .onSuccess { c.tell("Taken back off") }
                         .onFailure { c.tell(it.message ?: "Couldn't undo that") }
                     c.dataChanged()
@@ -127,7 +129,7 @@ class FoodViewModel(private val c: Container) : ViewModel() {
                 block()
                 message?.let(c::tell)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't work")
             }
         }
@@ -181,11 +183,11 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
 
     init {
         viewModelScope.launch {
-            runCatching { c.ui.recentFoods() }.onSuccess { recent -> _state.update { it.copy(recent = recent) } }
+            attempt { c.ui.recentFoods() }.onSuccess { recent -> _state.update { it.copy(recent = recent) } }
         }
         // The assistant is only ever the person's own: nothing is offered while viewing a share.
         if (c.viewing.value == null) viewModelScope.launch {
-            runCatching { c.api.aiStatus() }.onSuccess { s -> _state.update { it.copy(photoOffer = FoodPhotoText.offer(s, c.viewing.value != null)) } }
+            attempt { c.api.aiStatus() }.onSuccess { s -> _state.update { it.copy(photoOffer = FoodPhotoText.offer(s, c.viewing.value != null)) } }
         }
     }
 
@@ -202,7 +204,7 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
             try {
                 val results = c.ui.searchFoods(text.trim())
                 _state.update { if (it.query == text) it.copy(results = results, searching = false) else it }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(searching = false, error = e.message ?: "Couldn't search") }
             }
         }
@@ -216,7 +218,7 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
             try {
                 val food = c.ui.barcode(code)
                 _state.update { it.copy(searching = false, picked = food, unknownBarcode = if (food == null) code else null) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(searching = false, error = e.message ?: "Couldn't look that up") }
             }
         }
@@ -242,7 +244,7 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
                 c.dataChanged()
                 c.tell("Added to ${meal.label.lowercase()}")
                 _state.update { it.copy(done = true, picked = null, unknownBarcode = null) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: "Couldn't add that") }
             }
         }

@@ -62,6 +62,7 @@ import com.health.api.Fields
 import com.health.api.Fullness
 import com.health.api.ProductStats
 import com.health.api.Supply
+import com.health.app.attempt
 import com.health.app.net.continenceSettings
 import com.health.app.net.continenceWearing
 import com.health.app.net.supplies
@@ -425,12 +426,12 @@ fun ChangeSheet(onDismiss: () -> Unit) {
     val c = appContainer()
     val fields = shownFields()
     val data by produceState<ChangeData?>(null) {
-        value = runCatching {
+        value = attempt {
             coroutineScope {
-                val supplies = async { runCatching { c.ui.supplies() }.getOrDefault(emptyList()) }
-                val settings = async { runCatching { c.ui.continenceSettings() }.getOrDefault(ContinenceSettings()) }
-                val entries = async { runCatching { c.ui.continence(3) }.getOrDefault(emptyList()) }
-                val wearing = async { runCatching { c.ui.continenceWearing() }.getOrNull() }
+                val supplies = async { attempt { c.ui.supplies() }.getOrDefault(emptyList()) }
+                val settings = async { attempt { c.ui.continenceSettings() }.getOrDefault(ContinenceSettings()) }
+                val entries = async { attempt { c.ui.continence(3) }.getOrDefault(emptyList()) }
+                val wearing = async { attempt { c.ui.continenceWearing() }.getOrNull() }
                 ChangeData(supplies.await(), settings.await(), WearText.recentPutOns(entries.await()), wearing.await())
             }
         }.getOrNull()
@@ -443,7 +444,7 @@ fun ChangeSheet(onDismiss: () -> Unit) {
             FormContext(fields, d.settings, d.supplies, d.wearing), d.recent,
             onSave = { entry ->
                 c.scope.launch {
-                    runCatching { c.ui.addContinence(entry) }
+                    attempt { c.ui.addContinence(entry) }
                         .onSuccess { c.tell("Change logged"); c.dataChanged(); c.continenceChanged() }
                         .onFailure { c.tell(it.message ?: "Couldn't save that") }
                 }

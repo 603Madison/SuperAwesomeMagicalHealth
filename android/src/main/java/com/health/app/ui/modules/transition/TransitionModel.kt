@@ -10,6 +10,7 @@ import com.health.api.MilestoneTemplate
 import com.health.api.TransitionOverview
 import com.health.api.VoiceSession
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.ServerApi
 import com.health.app.net.bodyChanges
 import com.health.app.net.genderMoments
@@ -17,6 +18,7 @@ import com.health.app.net.hairRemoval
 import com.health.app.net.milestoneTemplates
 import com.health.app.net.transitionOverview
 import com.health.app.net.voiceProgress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,18 +61,18 @@ class TransitionViewModel(private val c: Container) : ViewModel() {
             try {
                 val api = c.ui
                 val overview = async { api.transitionOverview() }
-                val templates = async { runCatching { api.milestoneTemplates() }.getOrDefault(_state.value.templates) }
+                val templates = async { attempt { api.milestoneTemplates() }.getOrDefault(_state.value.templates) }
                 val changes = async { api.bodyChanges() }
                 val hair = async { api.hairRemoval(730) }
                 val moments = async { api.genderMoments(90) }
-                val voice = async { runCatching { api.voiceProgress() }.getOrDefault(_state.value.voiceProgress) }
+                val voice = async { attempt { api.voiceProgress() }.getOrDefault(_state.value.voiceProgress) }
                 _state.update {
                     it.copy(
                         overview = overview.await(), templates = templates.await(), changes = changes.await(), hair = hair.await(),
                         moments = moments.await(), loading = false, voiceProgress = voice.await(),
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load Transition") }
             }
         }
@@ -83,7 +85,7 @@ class TransitionViewModel(private val c: Container) : ViewModel() {
                 block(c.ui)
                 message?.let(c::tell)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }

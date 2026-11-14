@@ -1,6 +1,7 @@
 package com.health.app.devices.vitals
 
 import com.health.api.GlucoseContext
+import com.health.app.attempt
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Locale
@@ -47,7 +48,7 @@ object VitalsProtocol {
         val month = b[at + 2].toInt() and 0xFF
         val day = b[at + 3].toInt() and 0xFF
         if (year == 0 || month == 0 || day == 0) return null
-        return runCatching {
+        return attempt {
             LocalDateTime.of(year, month, day, b[at + 4].toInt() and 0xFF, b[at + 5].toInt() and 0xFF, b[at + 6].toInt() and 0xFF)
         }.getOrNull()
     }

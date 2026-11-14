@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import com.health.api.Routine
 import com.health.api.RoutineRun
 import com.health.api.RoutineStep
+import com.health.app.attempt
 import com.health.app.ui.care.CareFormat
 import com.health.app.ui.care.TimePickDialog
 import com.health.app.ui.components.AppCard
@@ -183,7 +184,7 @@ fun RoutineEditor(
         }
     }
     if (pickingTime) {
-        TimePickDialog(r.reminder?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.of(8, 0), "Remind me at", onDismiss = { pickingTime = false }) { t ->
+        TimePickDialog(r.reminder?.let { attempt { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.of(8, 0), "Remind me at", onDismiss = { pickingTime = false }) { t ->
             r = r.copy(reminder = "%02d:%02d".format(t.hour, t.minute))
             pickingTime = false
         }
@@ -207,7 +208,7 @@ private fun BreakDownCard(breakDown: suspend (String) -> List<RoutineStep>, onSt
                 busy = true
                 problem = null
                 scope.launch {
-                    runCatching { breakDown(task.trim()) }
+                    attempt { breakDown(task.trim()) }
                         .onSuccess { onSteps(it); task = "" }
                         .onFailure { problem = it.message ?: "The assistant couldn't help just now" }
                     busy = false

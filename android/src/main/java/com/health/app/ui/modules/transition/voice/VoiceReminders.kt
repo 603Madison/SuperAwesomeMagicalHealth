@@ -15,6 +15,7 @@ import com.health.api.ApiJson
 import com.health.api.VoicePlan
 import com.health.app.MainActivity
 import com.health.app.R
+import com.health.app.attempt
 import com.health.app.container
 import com.health.app.net.ServerApi
 import com.health.app.net.voicePlan
@@ -39,10 +40,10 @@ class VoiceReminders(private val context: Context) {
 
     private fun time(): String? = prefs.getString(TIME, null)
     private fun restDays(): List<Int> = prefs.getString(REST, null)?.let {
-        runCatching { ApiJson.decodeFromString(ListSerializer(Int.serializer()), it) }.getOrNull()
+        attempt { ApiJson.decodeFromString(ListSerializer(Int.serializer()), it) }.getOrNull()
     }.orEmpty()
 
-    private fun practisedOn(): LocalDate? = prefs.getString(PRACTISED, null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    private fun practisedOn(): LocalDate? = prefs.getString(PRACTISED, null)?.let { attempt { LocalDate.parse(it) }.getOrNull() }
 
     /** Keeps the plan's reminder time and rest days, and sets the next alarm (or none). */
     fun update(plan: VoicePlan, practisedOn: LocalDate?, zone: ZoneId, now: Long = System.currentTimeMillis()) {
@@ -127,7 +128,7 @@ class VoiceReminders(private val context: Context) {
         suspend fun refresh(context: Context, api: ServerApi, on: Boolean, zone: ZoneId) {
             val reminders = VoiceReminders(context)
             if (!on) return reminders.clear()
-            val plan = runCatching { api.voicePlan() }.getOrNull() ?: return
+            val plan = attempt { api.voicePlan() }.getOrNull() ?: return
             reminders.update(plan, VoiceStore(context).practisedOn, zone)
         }
 

@@ -58,6 +58,7 @@ import com.health.api.HabitSource
 import com.health.api.HabitStatus
 import com.health.api.HabitTick
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addHabit
 import com.health.app.net.deleteHabit
 import com.health.app.net.habitsToday
@@ -80,6 +81,7 @@ import com.health.app.ui.modules.sectionId
 import com.health.api.Fields
 import com.health.app.ui.modules.IconTile
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -108,14 +110,14 @@ class HabitsViewModel(private val c: Container) : ViewModel() {
             try {
                 val statuses = c.ui.habitsToday()
                 _state.update { it.copy(statuses = statuses, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your habits") }
             }
         }
     }
 
     private fun act(message: String?, block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }
+        attempt { block() }
             .onSuccess { message?.let(c::tell); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "That didn't work") }
     }

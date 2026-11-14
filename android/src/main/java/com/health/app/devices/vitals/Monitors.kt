@@ -15,6 +15,7 @@ import com.health.api.DeviceKind
 import com.health.api.GlucoseContext
 import com.health.api.GlucoseReading
 import com.health.api.IngestBatch
+import com.health.app.attempt
 import com.health.app.devices.ble.BleException
 import com.health.app.devices.ble.GattConnection
 import com.health.app.devices.colmi.ColmiConduit
@@ -101,7 +102,7 @@ object MonitorScanner {
                     glucose in services -> MonitorKind.GLUCOSE
                     else -> return
                 }
-                val name = result.scanRecord?.deviceName ?: runCatching { result.device.name }.getOrNull()
+                val name = result.scanRecord?.deviceName ?: attempt { result.device.name }.getOrNull()
                 trySend(FoundMonitor(result.device.address, name?.ifBlank { null } ?: kind.label, kind, result.rssi))
             }
 
@@ -110,7 +111,7 @@ object MonitorScanner {
             }
         }
         scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
-        awaitClose { runCatching { scanner.stopScan(callback) } }
+        awaitClose { attempt { scanner.stopScan(callback) } }
     }
 }
 
@@ -183,7 +184,7 @@ class VitalsConduit(
     private suspend fun readGlucose(gatt: GattConnection, monitor: PairedMonitor): List<GlucoseReading> {
         if (!gatt.hasService(VitalsProtocol.GLUCOSE_SERVICE)) throw BleException("That isn't a glucose meter")
         gatt.enableNotifications(VitalsProtocol.GLUCOSE_SERVICE, VitalsProtocol.GLUCOSE_MEASUREMENT)
-        runCatching { gatt.enableNotifications(VitalsProtocol.GLUCOSE_SERVICE, VitalsProtocol.GLUCOSE_CONTEXT) }
+        attempt { gatt.enableNotifications(VitalsProtocol.GLUCOSE_SERVICE, VitalsProtocol.GLUCOSE_CONTEXT) }
         gatt.enableNotifications(VitalsProtocol.GLUCOSE_SERVICE, VitalsProtocol.RACP, indicate = true)
         gatt.write(VitalsProtocol.GLUCOSE_SERVICE, VitalsProtocol.RACP, VitalsProtocol.reportRecords(monitor.lastSequence))
         val now = clock()

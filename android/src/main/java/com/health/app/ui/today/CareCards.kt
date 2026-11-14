@@ -9,6 +9,7 @@ import com.health.api.HormonesToday
 import com.health.api.LifeStage
 import com.health.api.LifeStageToday
 import com.health.api.Module
+import com.health.app.attempt
 import com.health.app.ui.care.CareFormat
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.modules.ModuleInfo
@@ -21,7 +22,7 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun HormonesTodayCard(h: HormonesToday, today: LocalDate, onOpen: () -> Unit) {
     InfoCard("Hormone therapy", icon = Icons.Rounded.Science, onClick = onOpen, onOpen = onOpen) {
-        val due = h.nextLabsDue?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val due = h.nextLabsDue?.let { attempt { LocalDate.parse(it) }.getOrNull() }
         val labs = due?.let {
             val days = ChronoUnit.DAYS.between(today, it)
             when {

@@ -11,11 +11,13 @@ import com.health.api.VoiceProgram
 import com.health.api.VoiceProgress
 import com.health.api.VoiceSession
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addVoiceSession
 import com.health.app.net.saveVoicePlan
 import com.health.app.net.voicePlan
 import com.health.app.net.voiceProgram
 import com.health.app.net.voiceProgress
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,7 +62,7 @@ class VoiceStore(context: Context) {
 
     /** The last day a session was finished on this phone (the reminder skips it). */
     var practisedOn: LocalDate?
-        get() = prefs.getString(PRACTISED, null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        get() = prefs.getString(PRACTISED, null)?.let { attempt { LocalDate.parse(it) }.getOrNull() }
         set(value) = prefs.edit { if (value == null) remove(PRACTISED) else putString(PRACTISED, value.toString()) }
 
     fun program(): VoiceProgram? = read("program.json") { ApiJson.decodeFromString(VoiceProgram.serializer(), it) }
@@ -83,10 +85,10 @@ class VoiceStore(context: Context) {
     }
 
     private fun <T> read(name: String, parse: (String) -> T): T? =
-        runCatching { File(dir, name).takeIf { it.exists() }?.readText()?.let(parse) }.getOrNull()
+        attempt { File(dir, name).takeIf { it.exists() }?.readText()?.let(parse) }.getOrNull()
 
     private fun write(name: String, text: String) {
-        runCatching {
+        attempt {
             dir.mkdirs()
             val tmp = File(dir, "$name.tmp")
             tmp.writeText(text)
@@ -141,9 +143,9 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             sendPending()
             val api = c.ui
-            val program = async { runCatching { api.voiceProgram() } }
-            val plan = async { runCatching { api.voicePlan() } }
-            val progress = async { runCatching { api.voiceProgress() } }
+            val program = async { attempt { api.voiceProgram() } }
+            val plan = async { attempt { api.voicePlan() } }
+            val progress = async { attempt { api.voiceProgress() } }
             val p = program.await()
             val pl = plan.await()
             val pr = progress.await()
@@ -182,7 +184,7 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
                 store.savePlan(saved)
                 c.tell("Plan saved")
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "The plan didn't save")
             }
         }
@@ -197,7 +199,7 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
             try {
                 c.api.addVoiceSession(session)
                 c.tell("Practice saved")
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 store.savePending(store.pending() + session)
                 set { it.copy(pending = store.pending().size) }
                 c.tell("Saved on this phone; it'll be sent when the server can be reached")
@@ -210,7 +212,7 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
         if (c.viewing.value != null) return
         val waiting = store.pending()
         if (waiting.isEmpty()) return
-        val left = waiting.filter { session -> runCatching { c.api.addVoiceSession(session) }.isFailure }
+        val left = waiting.filter { session -> attempt { c.api.addVoiceSession(session) }.isFailure }
         store.savePending(left)
         if (left.size < waiting.size) c.dataChanged()
     }

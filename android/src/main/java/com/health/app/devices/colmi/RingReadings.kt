@@ -6,6 +6,7 @@ import com.health.api.ApiJson
 import com.health.api.Metric
 import com.health.api.Sample
 import com.health.api.SleepSession
+import com.health.app.attempt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,7 +102,7 @@ class RingReadingsStore(context: Context) {
     }
 
     private fun read(): RingReadingsState =
-        prefs.getString(KEY, null)?.let { runCatching { ApiJson.decodeFromString(RingReadingsState.serializer(), it) }.getOrNull() } ?: RingReadingsState()
+        prefs.getString(KEY, null)?.let { attempt { ApiJson.decodeFromString(RingReadingsState.serializer(), it) }.getOrNull() } ?: RingReadingsState()
 
     private companion object {
         const val KEY = "state"

@@ -29,6 +29,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.health.app.attempt
 import com.health.app.ui.components.ArrangeItem
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +67,7 @@ import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.Pill
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.today.InsightCard
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -111,7 +113,7 @@ class LifeStageViewModel(private val c: Container) : ViewModel() {
                         feed = s.feed ?: overview.feeds.firstOrNull { it.end == null },
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: "Couldn't load your life stage") }
             }
         }
@@ -122,7 +124,7 @@ class LifeStageViewModel(private val c: Container) : ViewModel() {
             block()
             message?.let(c::tell)
             c.dataChanged()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             c.tell(e.message ?: "That didn't save")
         }
     }
@@ -424,8 +426,8 @@ private fun HotFlashCard(overview: LifeStageOverview, zone: ZoneId, readOnly: Bo
 @Composable
 private fun StageDialog(current: LifeStageInfo, today: LocalDate, onDismiss: () -> Unit, onSave: (LifeStageInfo) -> Unit) {
     var stage by remember { mutableStateOf(current.stage) }
-    var due by remember { mutableStateOf(current.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }) }
-    var birth by remember { mutableStateOf(current.birthDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }) }
+    var due by remember { mutableStateOf(current.dueDate?.let { attempt { LocalDate.parse(it) }.getOrNull() }) }
+    var birth by remember { mutableStateOf(current.birthDate?.let { attempt { LocalDate.parse(it) }.getOrNull() }) }
     var picking by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,

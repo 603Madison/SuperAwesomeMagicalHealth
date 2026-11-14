@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.health.api.ApiJson
 import com.health.api.Units
 import com.health.api.User
+import com.health.app.attempt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -89,7 +90,7 @@ class Prefs(private val context: Context) {
     private fun read(prefs: Preferences) = Settings(
         server = prefs[SERVER].orEmpty(),
         token = prefs[TOKEN],
-        user = prefs[USER]?.let { runCatching { ApiJson.decodeFromString(User.serializer(), it) }.getOrNull() },
+        user = prefs[USER]?.let { attempt { ApiJson.decodeFromString(User.serializer(), it) }.getOrNull() },
         serverName = prefs[SERVER_NAME].orEmpty(),
         themeMode = ThemeMode.entries.firstOrNull { it.name == prefs[THEME_MODE] } ?: ThemeMode.SYSTEM,
         wallpaperColors = prefs[WALLPAPER_COLORS] ?: false,

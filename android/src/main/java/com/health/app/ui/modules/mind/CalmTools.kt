@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.MindfulnessSession
+import com.health.app.attempt
 import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.Hint
@@ -92,7 +93,7 @@ fun CalmToolRoute(kind: String, onBack: () -> Unit) {
 @Composable
 private fun reducedMotion(): Boolean {
     val context = LocalContext.current
-    return remember { runCatching { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }.getOrDefault(false) }
+    return remember { attempt { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }.getOrDefault(false) }
 }
 
 /**

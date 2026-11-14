@@ -52,6 +52,7 @@ import com.health.api.Appointment
 import com.health.api.AppointmentQuestion
 import com.health.api.SuggestedQuestion
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.appointmentSuggestions
 import com.health.app.net.appointments
 import com.health.app.net.deleteAppointment
@@ -70,6 +71,7 @@ import com.health.app.ui.modules.FeatureScreens
 import com.health.app.ui.modules.Sections
 import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.modules.IconTile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -107,14 +109,14 @@ class AppointmentsViewModel(private val c: Container) : ViewModel() {
             try {
                 val list = c.ui.appointments(days = 730)
                 _state.update { it.copy(list = list, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your appointments") }
             }
         }
     }
 
     fun loadSuggestions(id: String) = viewModelScope.launch {
-        runCatching { c.ui.appointmentSuggestions(id) }.onSuccess { s -> _state.update { it.copy(suggestions = it.suggestions + (id to s)) } }
+        attempt { c.ui.appointmentSuggestions(id) }.onSuccess { s -> _state.update { it.copy(suggestions = it.suggestions + (id to s)) } }
     }
 
     private fun act(message: String?, block: suspend () -> Unit) = viewModelScope.launch {
@@ -122,7 +124,7 @@ class AppointmentsViewModel(private val c: Container) : ViewModel() {
             block()
             message?.let(c::tell)
             c.dataChanged()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             c.tell(e.message ?: "That didn't save")
         }
     }

@@ -9,6 +9,7 @@ import com.health.api.LabResult
 import com.health.api.Medication
 import com.health.api.MedsDay
 import com.health.app.Container
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,7 @@ class MedsViewModel(private val c: Container) : ViewModel() {
                 val loaded = day.await()
                 c.medsCache.saveSites(loaded)
                 _state.update { it.copy(day = loaded, meds = meds.await(), labs = labs.await().sortedByDescending { l -> l.at }, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your medications") }
             }
         }
@@ -65,7 +66,7 @@ class MedsViewModel(private val c: Container) : ViewModel() {
                 message?.let(c::tell)
                 c.dataChanged()
                 after()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }

@@ -65,6 +65,7 @@ import com.health.api.LabResult
 import com.health.api.MedForm
 import com.health.api.Medication
 import com.health.api.MedsDay
+import com.health.app.attempt
 import com.health.app.reminders.ReminderPlanner
 import com.health.app.ui.Format
 import com.health.app.ui.components.AppCard
@@ -143,7 +144,7 @@ fun MedsRoute(onEdit: (String?) -> Unit) {
             retry = { vm.load() },
             allowExact = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    runCatching {
+                    attempt {
                         context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, "package:${context.packageName}".toUri()))
                     }
                 }
@@ -413,7 +414,7 @@ private fun LabDialog(zone: ZoneId, onDismiss: () -> Unit, onSave: (LabResult) -
     var low by remember { mutableStateOf("") }
     var high by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(LocalDate.now(zone).toString()) }
-    val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
+    val parsedDate = attempt { LocalDate.parse(date) }.getOrNull()
     val number = Format.parse(value)
     AlertDialog(
         onDismissRequest = onDismiss,

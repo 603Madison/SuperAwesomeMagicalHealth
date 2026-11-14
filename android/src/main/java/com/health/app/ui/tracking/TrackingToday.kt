@@ -53,6 +53,7 @@ import com.health.api.SymptomsDay
 import com.health.api.Units
 import com.health.api.VitalsToday
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addBloodPressure
 import com.health.app.net.addDrink
 import com.health.app.net.addGlucose
@@ -88,7 +89,7 @@ class TrackingTodayActions(
         fun of(c: Container, glucoseUnit: GlucoseUnit = GlucoseUnit.MMOL_L): TrackingTodayActions {
             fun act(message: String?, block: suspend () -> Unit) {
                 c.scope.launch {
-                    runCatching { block() }
+                    attempt { block() }
                         .onSuccess { message?.let(c::tell); c.dataChanged() }
                         .onFailure { c.tell(it.message ?: "That didn't work") }
                 }

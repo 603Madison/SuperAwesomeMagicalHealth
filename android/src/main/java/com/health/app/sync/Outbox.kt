@@ -2,7 +2,9 @@ package com.health.app.sync
 
 import com.health.api.ApiJson
 import com.health.api.IngestBatch
+import com.health.app.attempt
 import java.io.File
+import kotlinx.coroutines.CancellationException
 
 /**
  * Batches the server couldn't take yet (it was down, the phone was offline), kept on disk and
@@ -35,7 +37,7 @@ class Outbox(private val dir: File, private val limit: Int = 500) {
     suspend fun flush(send: suspend (String) -> Unit, isTemporary: (Exception) -> Boolean): Int {
         var sent = 0
         for (file in files()) {
-            val json = runCatching { file.readText() }.getOrNull()
+            val json = attempt { file.readText() }.getOrNull()
             if (json == null) {
                 file.delete()
                 continue
@@ -44,7 +46,7 @@ class Outbox(private val dir: File, private val limit: Int = 500) {
                 send(json)
                 file.delete()
                 sent++
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 if (isTemporary(e)) break
                 file.delete()
             }

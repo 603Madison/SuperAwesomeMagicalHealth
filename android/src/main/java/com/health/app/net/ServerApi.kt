@@ -43,6 +43,8 @@ import com.health.api.SleepSummary
 import com.health.api.Trends
 import com.health.api.WaterEntry
 import com.health.api.Workout
+import com.health.app.attempt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
@@ -89,7 +91,7 @@ class ServerApi(
         SignedIn.serializer(), auth = false,
     )
 
-    suspend fun logout() = runCatching { send("POST", "${base()}/api/auth/logout", "{}", Unit.serializer()) }
+    suspend fun logout() = attempt { send("POST", "${base()}/api/auth/logout", "{}", Unit.serializer()) }
 
     suspend fun me(): Me = get("${base()}/api/me", Me.serializer())
 
@@ -311,7 +313,7 @@ class ServerApi(
             if (!it.isSuccessful) {
                 if (it.code == 401 && token() != null) onSignedOut()
                 val text = it.body?.string().orEmpty()
-                val message = runCatching { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
+                val message = attempt { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
                 throw ServerException(it.code, message ?: "The server answered HTTP ${it.code}")
             }
             it.body?.bytes() ?: ByteArray(0)
@@ -354,14 +356,14 @@ class ServerApi(
         val text = response.body?.string().orEmpty()
         if (!response.isSuccessful) {
             if (response.code == 401 && auth && token() != null) onSignedOut()
-            val message = runCatching { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
+            val message = attempt { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
             throw ServerException(response.code, message ?: "The server answered HTTP ${response.code}")
         }
         @Suppress("UNCHECKED_CAST")
         if (serializer == Unit.serializer()) return Unit as T
         return try {
             ApiJson.decodeFromString(serializer, text)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             throw ServerException(response.code, "The server's answer didn't make sense (${e.message?.substringBefore('\n')})")
         }
     }

@@ -3,6 +3,7 @@ package com.health.app.ui.food
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import com.health.app.attempt
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.min
@@ -40,7 +41,7 @@ object FoodPhotoImage {
     }
 
     /** The EXIF orientation (1–8) of a JPEG, or 1: read from its EXIF block's first directory, and nothing else of it. */
-    fun orientation(bytes: ByteArray): Int = runCatching { exifOrientation(bytes) }.getOrDefault(1)
+    fun orientation(bytes: ByteArray): Int = attempt { exifOrientation(bytes) }.getOrDefault(1)
 
     private fun exifOrientation(b: ByteArray): Int {
         fun u8(i: Int) = b[i].toInt() and 0xFF

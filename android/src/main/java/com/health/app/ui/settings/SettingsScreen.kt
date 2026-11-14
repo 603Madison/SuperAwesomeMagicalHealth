@@ -72,6 +72,7 @@ import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.Units
 import com.health.app.BuildConfig
+import com.health.app.attempt
 import com.health.app.data.Palette
 import com.health.app.data.Settings
 import com.health.app.data.ThemeMode
@@ -113,14 +114,14 @@ fun SettingsRoute(onOpen: (String) -> Unit = {}) {
     val settings by c.settings.collectAsState()
     val profile by c.profile.collectAsState()
     var ai by remember { mutableStateOf<AiStatus?>(null) }
-    LaunchedEffect(Unit) { ai = runCatching { c.api.aiStatus() }.getOrNull() }
+    LaunchedEffect(Unit) { ai = attempt { c.api.aiStatus() }.getOrNull() }
     SettingsScreen(
         settings, profile,
         SettingsActions(
-            saveProfile = { p -> scope.launch { runCatching { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
+            saveProfile = { p -> scope.launch { attempt { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
             updateSettings = { t -> scope.launch { c.prefs.update(t) } },
             signOut = { scope.launch { c.signOut() } },
-            setWater = { on -> scope.launch { runCatching { WaterSetting.save(c, on) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
+            setWater = { on -> scope.launch { attempt { WaterSetting.save(c, on) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
         ),
         onOpen = onOpen,
         water = showsField(Fields.NUTRITION_WATER),

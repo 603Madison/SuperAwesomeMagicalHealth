@@ -47,6 +47,7 @@ import com.health.api.HormoneSettings
 import com.health.api.LabSeries
 import com.health.api.LabTarget
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addDoseChange
 import com.health.app.net.deleteDoseChange
 import com.health.app.net.hormones
@@ -73,6 +74,7 @@ import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.meds.formIcon
 import com.health.app.ui.modules.IconTile
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -106,7 +108,7 @@ class HormonesViewModel(private val c: Container) : ViewModel() {
             try {
                 val overview = c.ui.hormones()
                 _state.update { it.copy(overview = overview, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load hormone therapy") }
             }
         }
@@ -117,7 +119,7 @@ class HormonesViewModel(private val c: Container) : ViewModel() {
             block()
             message?.let(c::tell)
             c.dataChanged()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             c.tell(e.message ?: "That didn't save")
         }
     }
@@ -237,7 +239,7 @@ fun HormonesScreen(state: HormonesState, zone: ZoneId, actions: HormonesActions)
 
 @Composable
 private fun LabsDueCard(overview: HormoneOverview, today: LocalDate, readOnly: Boolean, onEdit: () -> Unit) {
-    val due = overview.nextLabsDue?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    val due = overview.nextLabsDue?.let { attempt { LocalDate.parse(it) }.getOrNull() }
     InfoCard("Labs", icon = Icons.Rounded.EventRepeat, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Edit, "How often labs are checked", onEdit) })) {
         when {
             due == null && overview.settings.labsEveryWeeks == null -> Hint("No lab reminders. Set how often your labs are checked, and the next ones show here.")
@@ -270,7 +272,7 @@ private fun HormoneMedRow(med: HormoneMed, today: LocalDate, zone: ZoneId, readO
         Column(Modifier.weight(1f)) {
             Text(m.name, style = MaterialTheme.typography.titleMedium)
             Text(listOfNotNull(m.dose, if (!m.active) "stopped" else null).joinToString(" · ").ifBlank { "No dose noted" }, style = MaterialTheme.typography.bodyMedium)
-            med.since?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { since ->
+            med.since?.let { attempt { LocalDate.parse(it) }.getOrNull() }?.let { since ->
                 Hint("On it ${CareFormat.since(since, today)} · since ${CareFormat.date(since)}")
             }
         }

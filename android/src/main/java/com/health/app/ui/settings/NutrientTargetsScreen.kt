@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.health.api.MicroAim
 import com.health.api.NutrientTargetSetting
 import com.health.api.NutrientTargets
+import com.health.app.attempt
 import com.health.app.net.nutrientTargets
 import com.health.app.net.saveNutrientTargets
 import com.health.app.ui.Format
@@ -46,13 +47,13 @@ fun NutrientTargetsRoute(onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var tries by remember { mutableStateOf(0) }
     LaunchedEffect(tries) {
-        runCatching { c.api.nutrientTargets() }.onSuccess { targets = it; error = null }.onFailure { error = it.message ?: "Couldn't load your targets" }
+        attempt { c.api.nutrientTargets() }.onSuccess { targets = it; error = null }.onFailure { error = it.message ?: "Couldn't load your targets" }
     }
     NutrientTargetsScreen(
         targets, error, onBack, onRetry = { tries++ },
         onSave = { own ->
             scope.launch {
-                runCatching { c.api.saveNutrientTargets(own) }
+                attempt { c.api.saveNutrientTargets(own) }
                     .onSuccess { targets = it; c.tell("Saved"); c.dataChanged() }
                     .onFailure { c.tell(it.message ?: "Couldn't save that") }
             }

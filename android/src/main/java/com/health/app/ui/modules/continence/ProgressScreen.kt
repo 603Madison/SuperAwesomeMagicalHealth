@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.ContinenceProgress
 import com.health.api.ProgressWeek
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.continenceProducts
 import com.health.app.net.continenceProgress
 import com.health.app.ui.Format
@@ -53,6 +54,7 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.Pill
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -87,9 +89,9 @@ class ProgressViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 val p = c.ui.continenceProgress(weeks)
-                val products = runCatching { c.ui.continenceProducts(90) }.getOrNull()
+                val products = attempt { c.ui.continenceProducts(90) }.getOrNull()
                 _state.update { it.copy(progress = p, products = products ?: it.products, loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't work out how things are going") }
             }
         }

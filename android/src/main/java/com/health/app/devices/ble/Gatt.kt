@@ -11,6 +11,8 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
+import com.health.app.attempt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
@@ -161,8 +163,8 @@ class GattConnection private constructor() {
     fun close() {
         if (!::gatt.isInitialized) return
         isClosed = true
-        runCatching { gatt.disconnect() }
-        runCatching { gatt.close() }
+        attempt { gatt.disconnect() }
+        attempt { gatt.close() }
         notifications.close()
     }
 
@@ -176,7 +178,7 @@ class GattConnection private constructor() {
             val manager = context.getSystemService(BluetoothManager::class.java) ?: throw BleException("This phone has no Bluetooth")
             val adapter = manager.adapter ?: throw BleException("This phone has no Bluetooth")
             if (!adapter.isEnabled) throw BleException("Bluetooth is off")
-            val device = runCatching { adapter.getRemoteDevice(address) }.getOrNull() ?: throw BleException("That isn't a Bluetooth address")
+            val device = attempt { adapter.getRemoteDevice(address) }.getOrNull() ?: throw BleException("That isn't a Bluetooth address")
             val connection = GattConnection()
             connection.gatt = device.connectGatt(context, false, connection.callback, BluetoothDevice.TRANSPORT_LE)
                 ?: throw BleException("Couldn't connect to the ring")
@@ -188,7 +190,7 @@ class GattConnection private constructor() {
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                 connection.close()
                 throw BleException("Couldn't find the ring. Is it nearby, and charged?")
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 connection.close()
                 throw e
             }

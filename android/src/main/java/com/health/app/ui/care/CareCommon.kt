@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.health.app.attempt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -37,7 +38,7 @@ import java.time.format.DateTimeFormatter
 object CareFormat {
     fun date(date: LocalDate): String = DateTimeFormatter.ofPattern("d MMM yyyy").format(date)
 
-    fun date(text: String?): String? = text?.let { runCatching { date(LocalDate.parse(it)) }.getOrNull() }
+    fun date(text: String?): String? = text?.let { attempt { date(LocalDate.parse(it)) }.getOrNull() }
 
     fun dayTime(at: Long, zone: ZoneId): String = DateTimeFormatter.ofPattern("EEE d MMM, H:mm").format(Instant.ofEpochMilli(at).atZone(zone))
 

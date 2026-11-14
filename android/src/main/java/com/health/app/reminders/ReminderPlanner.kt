@@ -4,6 +4,7 @@ import com.health.api.MedForm
 import com.health.api.MedSchedule
 import com.health.api.Medication
 import com.health.api.ScheduleKind
+import com.health.app.attempt
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -40,7 +41,7 @@ object ReminderPlanner {
 
     /** Whether a dose is due at all on [date] (before any times). */
     fun isDueOn(schedule: MedSchedule, date: LocalDate): Boolean {
-        val start = schedule.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val start = schedule.startDate?.let { attempt { LocalDate.parse(it) }.getOrNull() }
         if (start != null && date.isBefore(start)) return false
         return when (schedule.kind) {
             ScheduleKind.DAILY -> true

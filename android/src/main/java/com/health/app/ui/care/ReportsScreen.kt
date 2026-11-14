@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.health.api.Module
 import com.health.api.ReportSectionKey
+import com.health.app.attempt
 import com.health.app.net.exportZip
 import com.health.app.net.reportPdf
 import com.health.app.ui.components.BackBar
@@ -80,7 +81,7 @@ fun ReportsRoute(onBack: () -> Unit) {
         onPdf = { from, to, sections ->
             busy = "pdf"
             scope.launch {
-                runCatching {
+                attempt {
                     val all = reportSections(profile?.modules ?: Module.DEFAULT).toSet()
                     val bytes = c.api.reportPdf(from, to, sections.takeIf { it != all })
                     shareFile(context, reportFileName("report", from, to, "pdf"), bytes, "application/pdf", "Your health report")
@@ -91,7 +92,7 @@ fun ReportsRoute(onBack: () -> Unit) {
         onExport = { from, to ->
             busy = "zip"
             scope.launch {
-                runCatching {
+                attempt {
                     val bytes = c.api.exportZip(from, to)
                     shareFile(context, reportFileName("export", from, to, "zip"), bytes, "application/zip", "Your health data")
                 }.onFailure { c.tell(it.message ?: "Couldn't export that") }

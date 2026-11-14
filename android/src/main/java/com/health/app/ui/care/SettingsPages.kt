@@ -48,6 +48,7 @@ import com.health.api.DigestPrefs
 import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.ReminderPrefs
+import com.health.app.attempt
 import com.health.app.net.emailDigestTest
 import com.health.app.net.latestDigest
 import com.health.app.reminders.ReminderPlanner
@@ -96,9 +97,9 @@ fun RemindersRoute(onBack: () -> Unit) {
         canNotify = remember(refresh) { c.reminders.canNotify() },
         onAllow = {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) ask.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            else runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)) }
+            else attempt { context.startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)) }
         },
-        onSave = { p -> scope.launch { runCatching { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
+        onSave = { p -> scope.launch { attempt { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
     )
 }
 
@@ -208,13 +209,13 @@ fun DigestRoute(onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
-        runCatching { c.ui.latestDigest() }.onSuccess { digest = it }.onFailure { error = it.message ?: "Couldn't load your digest" }
+        attempt { c.ui.latestDigest() }.onSuccess { digest = it }.onFailure { error = it.message ?: "Couldn't load your digest" }
         loading = false
     }
     DigestScreen(
         digest, loading, error, profile, onBack,
-        onSave = { p -> scope.launch { runCatching { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
-        onTestEmail = { scope.launch { runCatching { c.api.emailDigestTest() }.onSuccess { c.tell("Sent. Check your inbox.") }.onFailure { c.tell(it.message ?: "Couldn't send it") } } },
+        onSave = { p -> scope.launch { attempt { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
+        onTestEmail = { scope.launch { attempt { c.api.emailDigestTest() }.onSuccess { c.tell("Sent. Check your inbox.") }.onFailure { c.tell(it.message ?: "Couldn't send it") } } },
     )
 }
 
@@ -316,7 +317,7 @@ fun WatchRoute(onBack: () -> Unit) {
     val context = LocalContext.current
     WatchScreen(
         settings.server, onBack,
-        onReleases = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, RELEASES.toUri())) } },
+        onReleases = { attempt { context.startActivity(Intent(Intent.ACTION_VIEW, RELEASES.toUri())) } },
         water = com.health.app.ui.modules.waterShown(),
     )
 }
@@ -360,7 +361,7 @@ fun IntegrationsRoute(onBack: () -> Unit) {
     val c = appContainer()
     val settings by c.settings.collectAsState()
     val context = LocalContext.current
-    IntegrationsScreen(onBack) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "${settings.server.trimEnd('/')}/settings".toUri())) } }
+    IntegrationsScreen(onBack) { attempt { context.startActivity(Intent(Intent.ACTION_VIEW, "${settings.server.trimEnd('/')}/settings".toUri())) } }
 }
 
 @Composable

@@ -66,6 +66,7 @@ import androidx.lifecycle.viewModelScope
 import com.health.api.ApiJson
 import com.health.api.VoiceGoal
 import com.health.api.VoicePlan
+import com.health.app.attempt
 import com.health.app.ui.care.TimePickDialog
 import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.CARD_CORNER
@@ -99,7 +100,7 @@ enum class PlanStep { GOAL, HEALTH, BASELINE, TARGETS }
 /** A plan kept across rotation as JSON. */
 val PlanSaver = Saver<VoicePlan, String>(
     save = { ApiJson.encodeToString(VoicePlan.serializer(), it) },
-    restore = { runCatching { ApiJson.decodeFromString(VoicePlan.serializer(), it) }.getOrNull() },
+    restore = { attempt { ApiJson.decodeFromString(VoicePlan.serializer(), it) }.getOrNull() },
 )
 
 /** Vocal-health notes for when the programme hasn't loaded. */
@@ -540,7 +541,7 @@ private fun Practice(plan: VoicePlan, actions: PlanActions) {
         Hint("Rest is part of training: voices get stronger in between.", Modifier.padding(top = 4.dp))
     }
     if (picking) {
-        val current = plan.reminder?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.of(18, 30)
+        val current = plan.reminder?.let { attempt { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.of(18, 30)
         TimePickDialog(current, "Reminder time", onDismiss = { picking = false }) { t ->
             picking = false
             actions.change(plan.copy(reminder = "%02d:%02d".format(java.util.Locale.ROOT, t.hour, t.minute)))

@@ -42,6 +42,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.ContinenceCheckIn
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.addContinenceCheckIn
 import com.health.app.net.continenceCheckIns
 import com.health.app.net.deleteContinenceCheckIn
@@ -56,6 +57,7 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,20 +85,20 @@ class CheckInViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 _state.update { it.copy(list = c.ui.continenceCheckIns(365), loading = false, error = null) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your check-ins") }
             }
         }
     }
 
     fun save(checkIn: ContinenceCheckIn) = viewModelScope.launch {
-        runCatching { c.ui.addContinenceCheckIn(checkIn) }
+        attempt { c.ui.addContinenceCheckIn(checkIn) }
             .onSuccess { c.tell("Thanks for checking in"); c.dataChanged(); load() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun delete(id: String) = viewModelScope.launch {
-        runCatching { c.ui.deleteContinenceCheckIn(id) }.onSuccess { c.dataChanged(); load() }.onFailure { c.tell(it.message ?: "Couldn't delete that") }
+        attempt { c.ui.deleteContinenceCheckIn(id) }.onSuccess { c.dataChanged(); load() }.onFailure { c.tell(it.message ?: "Couldn't delete that") }
     }
 }
 

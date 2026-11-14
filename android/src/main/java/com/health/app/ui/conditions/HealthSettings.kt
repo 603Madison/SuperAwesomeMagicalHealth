@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.health.api.AiStatus
 import com.health.app.Container
 import com.health.app.HealthApp
+import com.health.app.attempt
 import com.health.app.net.aiStatus
 import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.Hint
@@ -33,7 +34,7 @@ fun YourHealthSettings(onOpen: (String) -> Unit) {
     if (LocalReadOnly.current) return
     val c = containerOrNull()
     var ai by remember { mutableStateOf<AiStatus?>(null) }
-    LaunchedEffect(c) { if (c != null) ai = runCatching { c.api.aiStatus() }.getOrNull() }
+    LaunchedEffect(c) { if (c != null) ai = attempt { c.api.aiStatus() }.getOrNull() }
     SectionCard("What you see") {
         NavRow(Icons.Rounded.MedicalInformation, "Conditions and goals", "What you live with or want to keep track of", onClick = { onOpen("settings/conditions") })
         NavRow(Icons.Rounded.EditNote, "Fields", "The details each form asks for", onClick = { onOpen("settings/fields") })

@@ -8,6 +8,7 @@ import com.health.api.DoseLog
 import com.health.api.DoseStatus
 import com.health.api.MedForm
 import com.health.app.container
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,7 +41,7 @@ class ReminderReceiver : BroadcastReceiver() {
                     try {
                         c.api.logDose(log)
                         c.dataChanged()
-                    } catch (e: Exception) {
+                    } catch (e: CancellationException) { throw e } catch (e: Exception) {
                         // No server right now: it goes with the next sync.
                         Log.i(TAG, "Keeping a dose to send later: ${e.message}")
                         c.doseOutbox.add(log)

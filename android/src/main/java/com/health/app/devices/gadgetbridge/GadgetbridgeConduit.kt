@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.net.toUri
+import com.health.app.attempt
 import com.health.app.sync.Collected
 import com.health.app.sync.Conduit
 import com.health.app.sync.SyncStore
@@ -31,11 +32,11 @@ class GadgetbridgeConduit(
         val uri = store.gadgetbridgeUri.value?.toUri() ?: return@withContext Collected(emptyList(), clock())
         val copy = File(context.cacheDir, "gadgetbridge.db")
         try {
-            val input = runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
+            val input = attempt { context.contentResolver.openInputStream(uri) }.getOrNull()
                 ?: throw IllegalStateException("Can't open the export file any more; choose it again")
             input.use { inp -> copy.outputStream().use { inp.copyTo(it) } }
             val start = since?.let { it - OVERLAP_MS } ?: (clock() - FIRST_SYNC_MS)
-            val result = runCatching { GadgetbridgeReader(copy).read(start) }.getOrElse {
+            val result = attempt { GadgetbridgeReader(copy).read(start) }.getOrElse {
                 throw IllegalStateException("That file isn't a Gadgetbridge database (${it.message})")
             }
             val note = when {
@@ -52,7 +53,7 @@ class GadgetbridgeConduit(
 
     /** Remembers the export file the person picked (keeping permission to read it). */
     fun choose(uri: Uri) {
-        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        attempt { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         store.setGadgetbridgeUri(uri.toString())
         store.setCursor(ID, null)
         store.clearStatus(ID)
@@ -60,7 +61,7 @@ class GadgetbridgeConduit(
 
     fun remove() {
         store.gadgetbridgeUri.value?.let { uri ->
-            runCatching { context.contentResolver.releasePersistableUriPermission(uri.toUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            attempt { context.contentResolver.releasePersistableUriPermission(uri.toUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         }
         store.setGadgetbridgeUri(null)
         store.setCursor(ID, null)
@@ -70,7 +71,7 @@ class GadgetbridgeConduit(
     /** The chosen file's name, for showing. */
     fun fileName(): String? {
         val uri = store.gadgetbridgeUri.value?.toUri() ?: return null
-        return runCatching {
+        return attempt {
             context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                 if (c.moveToFirst()) c.getString(0) else null
             }

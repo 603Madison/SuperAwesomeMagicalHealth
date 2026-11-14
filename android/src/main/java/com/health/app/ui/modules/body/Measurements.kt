@@ -35,6 +35,7 @@ import com.health.api.Point
 import com.health.api.Sample
 import com.health.api.Units
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.series
 import com.health.app.ui.Format
 import com.health.app.ui.care.CareFormat
@@ -53,6 +54,7 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.components.shownFields
 import com.health.app.ui.log.NumberField
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -115,10 +117,10 @@ class MeasurementsViewModel(private val c: Container) : ViewModel() {
                     .mapNotNull { (m, s) -> s?.let { m to it } }.toMap()
                 val now = System.currentTimeMillis()
                 val from = now - 365L * 86_400_000
-                val series = latest.filterValues { it.start >= from }.keys.map { m -> async { m to runCatching { api.series(m, from, now) }.getOrDefault(emptyList()) } }
+                val series = latest.filterValues { it.start >= from }.keys.map { m -> async { m to attempt { api.series(m, from, now) }.getOrDefault(emptyList()) } }
                     .awaitAll().toMap()
                 _state.update { it.copy(latest = latest, series = series, loading = false, error = null) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load measurements") }
             }
         }
@@ -130,7 +132,7 @@ class MeasurementsViewModel(private val c: Container) : ViewModel() {
                 inputs.forEach { c.ui.addMeasurement(it) }
                 c.tell(if (inputs.size == 1) "Measurement saved" else "${inputs.size} measurements saved")
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }

@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.health.app.attempt
 import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
@@ -58,6 +59,7 @@ import com.health.app.ui.components.LegendItem
 import com.health.app.ui.components.Stat
 import com.health.app.ui.theme.LocalDataColors
 import com.health.app.ui.theme.reduceMotion
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -114,7 +116,7 @@ class PitchMeter {
             val frame = 2_048
             val record = try {
                 AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT, maxOf(minBuffer, frame * 4))
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _problem.value = "The microphone couldn't be opened"
                 return@launch
             }
@@ -142,7 +144,7 @@ class PitchMeter {
                     _trace.value = (_trace.value + PitchPoint(now, steady)).dropWhile { it.at < now - 12_000 }
                 }
             } finally {
-                runCatching { record.stop() }
+                attempt { record.stop() }
                 record.release()
                 buffer.fill(0f)
             }

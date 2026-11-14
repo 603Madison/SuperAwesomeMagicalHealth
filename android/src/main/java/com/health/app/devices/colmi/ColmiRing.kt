@@ -1,5 +1,6 @@
 package com.health.app.devices.colmi
 
+import com.health.app.attempt
 import com.health.app.devices.ble.GattConnection
 import com.health.app.devices.ble.Notification
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -39,7 +40,7 @@ class ColmiRing(private val gatt: GattConnection) {
     suspend fun start() {
         gatt.enableNotifications(ColmiProtocol.SERVICE, ColmiProtocol.NOTIFY)
         hasBigData = gatt.hasService(ColmiProtocol.BIG_SERVICE)
-        if (hasBigData) runCatching { gatt.enableNotifications(ColmiProtocol.BIG_SERVICE, ColmiProtocol.BIG_NOTIFY) }.onFailure { hasBigData = false }
+        if (hasBigData) attempt { gatt.enableNotifications(ColmiProtocol.BIG_SERVICE, ColmiProtocol.BIG_NOTIFY) }.onFailure { hasBigData = false }
     }
 
     suspend fun setTime(now: LocalDateTime) {
@@ -55,7 +56,7 @@ class ColmiRing(private val gatt: GattConnection) {
         return result
     }
 
-    suspend fun firmware(): String? = runCatching {
+    suspend fun firmware(): String? = attempt {
         gatt.read(ColmiProtocol.DEVICE_INFO, ColmiProtocol.FIRMWARE_REVISION)?.toString(Charsets.UTF_8)?.trim()?.ifBlank { null }
     }.getOrNull()
 

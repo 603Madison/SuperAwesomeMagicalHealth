@@ -18,6 +18,7 @@ import com.health.app.ui.MainScaffold
 import com.health.app.ui.signin.SignInRoute
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.theme.isAppInDarkTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** The scrims Android's default edge-to-edge puts behind three-button navigation. */
@@ -81,7 +82,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         lifecycleScope.launch {
             try {
                 container.signIn.finish(link)
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 signInError.value = e.message ?: "Couldn't finish signing in"
             }
             finishing.value = false

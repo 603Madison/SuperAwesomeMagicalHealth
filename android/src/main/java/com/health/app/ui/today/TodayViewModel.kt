@@ -20,6 +20,8 @@ import com.health.api.SleepSession
 import com.health.api.WaterEntry
 import com.health.api.Workout
 import com.health.app.Container
+import com.health.app.attempt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,10 +67,10 @@ class TodayViewModel(private val c: Container) : ViewModel() {
                 val summary = c.ui.day(date.toString())
                 // Without amounts of food, the Food card says which meals are logged.
                 val meals = if (c.fields.value?.foodNumbers == false) {
-                    runCatching { c.ui.foodDay(date.toString()).entries.map { it.meal }.distinct() }.getOrNull()
+                    attempt { c.ui.foodDay(date.toString()).entries.map { it.meal }.distinct() }.getOrNull()
                 } else null
                 _state.update { if (it.date == date) it.copy(summary = summary, meals = meals, loading = false, refreshing = false) else it }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, refreshing = false, error = e.message ?: "Couldn't load the day") }
             }
         }
@@ -83,7 +85,7 @@ class TodayViewModel(private val c: Container) : ViewModel() {
     fun refresh() {
         _state.update { it.copy(refreshing = true) }
         viewModelScope.launch {
-            runCatching { c.sync.sync() }
+            attempt { c.sync.sync() }
             load(quiet = true)
         }
     }
@@ -94,7 +96,7 @@ class TodayViewModel(private val c: Container) : ViewModel() {
                 block()
                 message?.let(c::tell)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't work")
             }
         }
@@ -134,15 +136,15 @@ class TodayViewModel(private val c: Container) : ViewModel() {
             val added = mutableListOf<FoodEntry>()
             try {
                 idea.items.forEach { added += c.ui.addFood(it.toInput(date, idea.meal)) }
-            } catch (e: Exception) {
-                added.forEach { a -> a.id?.let { id -> runCatching { c.ui.deleteFood(id) } } }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                added.forEach { a -> a.id?.let { id -> attempt { c.ui.deleteFood(id) } } }
                 c.tell(e.message ?: "Couldn't add that")
                 return@launch
             }
             c.dataChanged()
             c.tell("Added to ${InsightLinks.mealWord(idea.meal)}: ${idea.name}", "Undo") {
                 c.scope.launch {
-                    runCatching { added.forEach { a -> a.id?.let { id -> c.ui.deleteFood(id) } } }
+                    attempt { added.forEach { a -> a.id?.let { id -> c.ui.deleteFood(id) } } }
                         .onSuccess { c.tell("Taken back off") }
                         .onFailure { c.tell(it.message ?: "Couldn't undo that") }
                     c.dataChanged()

@@ -3,6 +3,7 @@ package com.health.app.ui.modules.continence
 import com.health.api.ContinenceDay
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
+import com.health.app.attempt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -20,7 +21,7 @@ object ContinenceDiary {
     fun export(entries: List<ContinenceEntry>, days: List<ContinenceDay>, zone: ZoneId, today: LocalDate, dayCount: Int = 3): String {
         val first = today.minusDays(dayCount - 1L)
         val dates = (0 until dayCount).map { first.plusDays(it.toLong()) }
-        fun dateOf(e: ContinenceEntry) = e.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: Instant.ofEpochMilli(e.at).atZone(zone).toLocalDate()
+        fun dateOf(e: ContinenceEntry) = e.date?.let { attempt { LocalDate.parse(it) }.getOrNull() } ?: Instant.ofEpochMilli(e.at).atZone(zone).toLocalDate()
         val shown = entries.filter { dateOf(it) in dates }.sortedBy { it.at }
         return buildString {
             appendLine("Bladder and bowel diary, ${TITLE_DAY.format(first)} to ${TITLE_DAY.format(today)}")

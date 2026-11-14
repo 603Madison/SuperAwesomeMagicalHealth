@@ -64,6 +64,7 @@ import com.health.api.OverloadEvent
 import com.health.api.OverloadKind
 import com.health.app.HealthApp
 import com.health.app.MainActivity
+import com.health.app.attempt
 import com.health.app.data.DeviceChoices
 import com.health.app.net.energyDays
 import com.health.app.net.saveFieldChoices
@@ -156,7 +157,7 @@ fun NeuroRoute(open: (String) -> Unit) {
             setCalm = choices::setCalm,
             showField = { key ->
                 scope.launch {
-                    runCatching {
+                    attempt {
                         val now = layout
                         c.api.saveFieldChoices(FieldChoices(show = now?.show.orEmpty() + key, hide = now?.hide.orEmpty() - key))
                         c.refreshFields()
@@ -471,7 +472,7 @@ fun MindNeuroSection(part: String) {
     val energy = part == "energy" && Fields.MIND_ENERGY_BUDGET in fields
     var day by remember { mutableStateOf<EnergyDay?>(null) }
     LaunchedEffect(revision, energy) {
-        if (energy) day = runCatching { c.ui.energyDays(1).firstOrNull { it.date == LocalDate.now(c.zone()).toString() } }.getOrNull()
+        if (energy) day = attempt { c.ui.energyDays(1).firstOrNull { it.date == LocalDate.now(c.zone()).toString() } }.getOrNull()
     }
     MindNeuroCards(part == "neuro" && Module.NEURO in modules, energy, day, LocalReadOnly.current, Fields.NEURO_SOCIAL in fields) { openInApp(context, it) }
 }

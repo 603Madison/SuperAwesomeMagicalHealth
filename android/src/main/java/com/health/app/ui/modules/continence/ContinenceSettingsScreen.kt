@@ -35,6 +35,7 @@ import com.health.api.ContinenceSettings
 import com.health.api.Fields
 import com.health.api.Supply
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.continenceSettings
 import com.health.app.net.saveContinenceSettings
 import com.health.app.net.supplies
@@ -52,6 +53,7 @@ import com.health.app.ui.components.appContainer
 import com.health.app.ui.components.shownFields
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.modules.CustomFieldsEditor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,9 +84,9 @@ class DiarySettingsViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 val settings = async { c.api.continenceSettings() }
-                val supplies = async { runCatching { c.api.supplies() }.getOrDefault(emptyList()) }
+                val supplies = async { attempt { c.api.supplies() }.getOrDefault(emptyList()) }
                 _state.update { it.copy(saved = settings.await(), supplies = supplies.await(), loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load the diary's settings") }
             }
         }
@@ -99,8 +101,8 @@ class DiarySettingsViewModel(private val c: Container) : ViewModel() {
                 c.tell("Saved")
                 c.dataChanged()
                 // Bladder training's reminders on this phone follow straight away.
-                runCatching { c.refreshReminders() }
-            } catch (e: Exception) {
+                attempt { c.refreshReminders() }
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(saving = false) }
                 c.tell(e.message ?: "Couldn't save that")
             }

@@ -44,6 +44,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.health.app.attempt
 import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.modules.ArrangeAction
 import com.health.app.ui.modules.FeatureScreens
@@ -98,6 +99,7 @@ import com.health.app.ui.components.appContainer
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.ChipPicker
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -144,13 +146,13 @@ class CycleViewModel(private val c: Container) : ViewModel() {
             try {
                 val overview = async { c.ui.cycle(12) }
                 // The detail: each can be missing without spoiling the calendar.
-                val settings = async { runCatching { c.ui.cycleSettings() }.getOrNull() }
-                val supplies = async { runCatching { c.ui.supplyStatus() }.getOrNull() }
+                val settings = async { attempt { c.ui.cycleSettings() }.getOrNull() }
+                val supplies = async { attempt { c.ui.supplyStatus() }.getOrNull() }
                 _state.update {
                     it.copy(overview = overview.await(), loading = false, settings = settings.await() ?: it.settings, supplies = supplies.await() ?: it.supplies)
                 }
                 if (c.viewing.value == null) settings.await()?.let { CycleWording.neutral.value = it.neutralWording }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your cycle") }
             }
         }
@@ -159,13 +161,13 @@ class CycleViewModel(private val c: Container) : ViewModel() {
     fun month(month: YearMonth) = _state.update { it.copy(month = month) }
 
     fun save(day: CycleDay) = viewModelScope.launch {
-        runCatching { c.ui.saveCycleDay(day) }
+        attempt { c.ui.saveCycleDay(day) }
             .onSuccess { c.tell("Saved"); c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun clear(date: LocalDate) = viewModelScope.launch {
-        runCatching { c.ui.deleteCycleDay(date.toString()) }
+        attempt { c.ui.deleteCycleDay(date.toString()) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't clear that day") }
     }
@@ -342,8 +344,8 @@ private fun flowStrength(flow: Flow): Float = when (flow) {
 }
 
 private fun dates(from: String?, to: String?): Set<LocalDate> {
-    val a = from?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return emptySet()
-    val b = to?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: a
+    val a = from?.let { attempt { LocalDate.parse(it) }.getOrNull() } ?: return emptySet()
+    val b = to?.let { attempt { LocalDate.parse(it) }.getOrNull() } ?: a
     if (b.isBefore(a) || ChronoUnit.DAYS.between(a, b) > 20) return setOf(a)
     return generateSequence(a) { it.plusDays(1) }.takeWhile { !it.isAfter(b) }.toSet()
 }

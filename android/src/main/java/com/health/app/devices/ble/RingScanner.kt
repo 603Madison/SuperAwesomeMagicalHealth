@@ -7,6 +7,7 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
+import com.health.app.attempt
 import com.health.app.devices.colmi.ColmiProtocol
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +29,7 @@ object RingScanner {
         val ringService = ParcelUuid(ColmiProtocol.SERVICE)
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                val name = result.scanRecord?.deviceName ?: runCatching { result.device.name }.getOrNull()
+                val name = result.scanRecord?.deviceName ?: attempt { result.device.name }.getOrNull()
                 val offersService = result.scanRecord?.serviceUuids?.contains(ringService) == true
                 if (offersService || ColmiProtocol.looksLikeRing(name)) {
                     trySend(FoundRing(result.device.address, name?.ifBlank { null } ?: "Smart ring", result.rssi))
@@ -40,6 +41,6 @@ object RingScanner {
             }
         }
         scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), callback)
-        awaitClose { runCatching { scanner.stopScan(callback) } }
+        awaitClose { attempt { scanner.stopScan(callback) } }
     }
 }

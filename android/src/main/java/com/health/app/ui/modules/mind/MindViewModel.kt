@@ -11,7 +11,9 @@ import com.health.api.Screener
 import com.health.api.ScreenerDefinition
 import com.health.api.ScreenerResult
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.lifeStage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,13 +58,13 @@ class MindViewModel(private val c: Container) : ViewModel() {
                 val summary = async { c.ui.mindSummary(30) }
                 val moods = async { c.ui.moods(14) }
                 val journal = async { c.ui.journal(365) }
-                val screeners = async { runCatching { c.ui.screeners() }.getOrDefault(_state.value.screeners) }
+                val screeners = async { attempt { c.ui.screeners() }.getOrDefault(_state.value.screeners) }
                 val results = async { c.ui.screenerResults(365) }
                 val sessions = async { c.ui.mindSessions(30) }
-                val resources = async { runCatching { c.ui.crisisResources() }.getOrDefault(_state.value.resources) }
+                val resources = async { attempt { c.ui.crisisResources() }.getOrDefault(_state.value.resources) }
                 // While pregnant or after a birth, the EPDS is offered too.
                 val stage = async {
-                    if (com.health.api.Module.CYCLE in c.shownModules()) runCatching { c.ui.lifeStage().stage }.getOrNull() else null
+                    if (com.health.api.Module.CYCLE in c.shownModules()) attempt { c.ui.lifeStage().stage }.getOrNull() else null
                 }
                 _state.update {
                     it.copy(
@@ -72,7 +74,7 @@ class MindViewModel(private val c: Container) : ViewModel() {
                         stage = stage.await(),
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load Mind") }
             }
         }
@@ -81,7 +83,7 @@ class MindViewModel(private val c: Container) : ViewModel() {
     /** Makes sure the support list is there (it's also kept from the last load, for when offline). */
     fun loadResources() {
         if (_state.value.resources.isNotEmpty()) return
-        viewModelScope.launch { runCatching { c.ui.crisisResources() }.onSuccess { r -> _state.update { it.copy(resources = r) } } }
+        viewModelScope.launch { attempt { c.ui.crisisResources() }.onSuccess { r -> _state.update { it.copy(resources = r) } } }
     }
 
     private fun act(message: String?, block: suspend () -> Unit) {
@@ -90,7 +92,7 @@ class MindViewModel(private val c: Container) : ViewModel() {
                 block()
                 message?.let(c::tell)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }
@@ -114,7 +116,7 @@ class MindViewModel(private val c: Container) : ViewModel() {
                 val scored = c.ui.submitScreener(result)
                 _state.update { it.copy(justScored = scored, results = it.results + scored) }
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }

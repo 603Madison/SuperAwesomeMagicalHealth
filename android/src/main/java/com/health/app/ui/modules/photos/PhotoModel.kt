@@ -18,12 +18,14 @@ import com.health.api.Photo
 import com.health.api.PhotoAlbum
 import com.health.api.Pose
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.ServerApi
 import com.health.app.net.photoAlbums
 import com.health.app.net.photoImage
 import com.health.app.net.photoThumb
 import com.health.app.net.photos
 import com.health.app.ui.components.appContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,7 +63,7 @@ class PhotosViewModel(private val c: Container) : ViewModel() {
                 val photos = async { c.ui.photos() }
                 val albums = async { c.ui.photoAlbums() }
                 _state.update { it.copy(photos = photos.await().sortedByDescending { p -> p.at }, albums = albums.await(), loading = false, error = null) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your photos") }
             }
         }
@@ -74,7 +76,7 @@ class PhotosViewModel(private val c: Container) : ViewModel() {
                 block(c.ui)
                 message?.let(c::tell)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }
@@ -152,7 +154,7 @@ fun rememberPhoto(id: String?, thumb: Boolean): ImageBitmap? {
     var image by remember(key, thumb) { mutableStateOf(PhotoMemory.get(key, thumb)?.asImageBitmap()) }
     LaunchedEffect(key, thumb) {
         if (image != null || id == null) return@LaunchedEffect
-        val bitmap = runCatching {
+        val bitmap = attempt {
             val bytes = if (thumb) c.ui.photoThumb(id) else c.ui.photoImage(id)
             withContext(Dispatchers.Default) { PhotoMemory.decode(bytes, if (thumb) 400 else 1600) }
         }.getOrNull()

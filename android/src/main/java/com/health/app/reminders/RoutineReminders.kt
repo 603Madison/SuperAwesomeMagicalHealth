@@ -16,6 +16,7 @@ import com.health.api.Routine
 import com.health.api.RoutineRun
 import com.health.app.MainActivity
 import com.health.app.R
+import com.health.app.attempt
 import com.health.app.container
 import com.health.app.net.ServerApi
 import com.health.app.net.routineRuns
@@ -41,7 +42,7 @@ data class RoutineAlarm(val id: String, val name: String, val time: String, val 
 /** When routines remind: pure, so it can be tested. */
 object RoutinePlanner {
     fun alarmsOf(routines: List<Routine>): List<RoutineAlarm> = routines.filter { it.active && it.reminder != null && it.id != null }.mapNotNull { r ->
-        val time = runCatching { LocalTime.parse(r.reminder) }.getOrNull() ?: return@mapNotNull null
+        val time = attempt { LocalTime.parse(r.reminder) }.getOrNull() ?: return@mapNotNull null
         RoutineAlarm(r.id!!, r.name, time.toString(), r.days, r.steps.size, r.steps.mapNotNull { it.minutes }.sum())
     }
 
@@ -88,7 +89,7 @@ class RoutineReminders(private val context: Context) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
     fun alarms(): List<RoutineAlarm> = prefs.getString(ALARMS, null)?.let {
-        runCatching { ApiJson.decodeFromString(ListSerializer(RoutineAlarm.serializer()), it) }.getOrNull()
+        attempt { ApiJson.decodeFromString(ListSerializer(RoutineAlarm.serializer()), it) }.getOrNull()
     }.orEmpty()
 
     fun done(): Map<String, Set<String>> = prefs.all.keys.filter { it.startsWith(DONE) }.associate { key ->
@@ -102,7 +103,7 @@ class RoutineReminders(private val context: Context) {
         prefs.edit {
             putString(ALARMS, ApiJson.encodeToString(ListSerializer(RoutineAlarm.serializer()), RoutinePlanner.alarmsOf(routines)))
             prefs.all.keys.filter { it.startsWith(DONE) }.forEach { remove(it) }
-            done.filterKeys { runCatching { !LocalDate.parse(it).isBefore(keep) }.getOrDefault(false) }.forEach { (date, ids) -> putStringSet(DONE + date, ids) }
+            done.filterKeys { attempt { !LocalDate.parse(it).isBefore(keep) }.getOrDefault(false) }.forEach { (date, ids) -> putStringSet(DONE + date, ids) }
         }
         reschedule(zone, now)
     }

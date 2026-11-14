@@ -7,6 +7,7 @@ import com.health.api.Appointment
 import com.health.api.MedsDay
 import com.health.api.Module
 import com.health.api.ReminderPrefs
+import com.health.app.attempt
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
@@ -76,7 +77,7 @@ class ReminderCache(context: Context) {
 
     fun clear() = prefs.edit { clear() }
 
-    private fun <T> read(key: String, decode: (String) -> T): T? = prefs.getString(key, null)?.let { runCatching { decode(it) }.getOrNull() }
+    private fun <T> read(key: String, decode: (String) -> T): T? = prefs.getString(key, null)?.let { attempt { decode(it) }.getOrNull() }
 
     private companion object {
         const val PREFS = "prefs"

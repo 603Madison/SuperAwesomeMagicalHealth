@@ -41,6 +41,7 @@ import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.SectionTitle
 import com.health.app.ui.components.appContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Looking for the ring nearby: tap it to pair, then it syncs. */
@@ -61,7 +62,7 @@ fun RingPairRoute(onDone: () -> Unit) {
                     found = (found.filterNot { it.address == ring.address } + ring).sortedByDescending { it.rssi }
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             error = e.message ?: "Couldn't look for rings"
         }
         searching = false

@@ -58,6 +58,7 @@ import androidx.core.net.toUri
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.Device
+import com.health.app.attempt
 import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
@@ -132,7 +133,7 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}) {
                 try {
                     context.startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage("com.android.vending"))
                 } catch (_: ActivityNotFoundException) {
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata".toUri())) }
+                    attempt { context.startActivity(Intent(Intent.ACTION_VIEW, "https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata".toUri())) }
                 }
             },
             chooseGadgetbridge = { file.launch(arrayOf("*/*")) },

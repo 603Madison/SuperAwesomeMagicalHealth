@@ -14,6 +14,7 @@ import com.health.api.Routine
 import com.health.api.RoutineRun
 import com.health.api.Wording
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.breakdownStatus
 import com.health.app.net.communicationCards
 import com.health.app.net.energyDays
@@ -24,6 +25,7 @@ import com.health.app.net.neuroSummary
 import com.health.app.net.overloads
 import com.health.app.net.routineRuns
 import com.health.app.net.routines
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -92,7 +94,7 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
                 // Only the person's own: someone viewing a share never gets the assistant.
                 val ai = async {
                     if (c.viewing.value != null) false
-                    else runCatching { api.breakdownStatus().let { s -> s.available && s.consent?.acknowledged == true } }.getOrDefault(false)
+                    else attempt { api.breakdownStatus().let { s -> s.available && s.consent?.acknowledged == true } }.getOrDefault(false)
                 }
                 _state.update {
                     it.copy(
@@ -101,7 +103,7 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
                         cards = cards.await(), canBreakDown = ai.await(), loading = false,
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load Autism & ADHD") }
             }
         }
@@ -117,7 +119,7 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
                 block(c.ui)
                 message?.let(c::tell)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "That didn't save")
             }
         }

@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.PermissionController
 import com.health.api.Fields
+import com.health.app.attempt
 import com.health.app.data.DeviceChoices
 import com.health.app.devices.healthconnect.ExportKind
 import com.health.app.net.fitExport
@@ -100,7 +101,7 @@ fun ExportRoute(onBack: () -> Unit, onOpen: (String) -> Unit) {
     fun writeNow() {
         busy = "write"
         scope.launch {
-            val result = runCatching { writer.run() }.getOrElse { it.message }
+            val result = attempt { writer.run() }.getOrElse { it.message }
             result?.let(c::tell)
             granted = writer.granted()
             busy = null
@@ -124,7 +125,7 @@ fun ExportRoute(onBack: () -> Unit, onOpen: (String) -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         busy = "fit"
         scope.launch {
-            runCatching {
+            attempt {
                 val bytes = c.api.fitExport(range.first, range.second)
                 withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }
                 c.tell("Saved the FIT files")
@@ -145,7 +146,7 @@ fun ExportRoute(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     writeNow()
                 } else {
                     pendingKind = kind
-                    runCatching { ask.launch(setOf(kind.permission)) }.onFailure { c.tell("Health Connect couldn't be asked") }
+                    attempt { ask.launch(setOf(kind.permission)) }.onFailure { c.tell("Health Connect couldn't be asked") }
                 }
             },
             writeNow = ::writeNow,
@@ -153,7 +154,7 @@ fun ExportRoute(onBack: () -> Unit, onOpen: (String) -> Unit) {
             shareFit = { from, to ->
                 busy = "fit"
                 scope.launch {
-                    runCatching { shareFile(context, "health-fit-$from-to-$to.zip", c.api.fitExport(from, to), "application/zip", "Your workouts and weight (FIT)") }
+                    attempt { shareFile(context, "health-fit-$from-to-$to.zip", c.api.fitExport(from, to), "application/zip", "Your workouts and weight (FIT)") }
                         .onFailure { c.tell(it.message ?: "Couldn't export that") }
                     busy = null
                 }

@@ -28,6 +28,7 @@ import com.health.app.reminders.HabitReminder
 import com.health.app.reminders.MedsCache
 import com.health.app.reminders.ReminderCache
 import com.health.app.reminders.Reminders
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -122,7 +123,7 @@ class Container(val context: Context) {
     suspend fun view(share: Share?) {
         _viewing.value = share
         _viewProfile.value = null
-        if (share != null) _viewProfile.value = runCatching { viewApi.profile() }.getOrNull()
+        if (share != null) _viewProfile.value = attempt { viewApi.profile() }.getOrNull()
         _fields.value = null
         refreshFields()
         dataChanged()
@@ -140,7 +141,7 @@ class Container(val context: Context) {
     suspend fun refreshFields() {
         _fields.value = try {
             ui.fields()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             Log.w(TAG, "Couldn't load the fields", e)
             _fields.value
         }
@@ -153,7 +154,7 @@ class Container(val context: Context) {
 
     /** Reloads [layout] from the server, keeping what's there if it can't. */
     suspend fun refreshLayout() {
-        runCatching { api.layout() }.onSuccess { _layout.value = it }.onFailure { Log.w(TAG, "Couldn't load the layout", it) }
+        attempt { api.layout() }.onSuccess { _layout.value = it }.onFailure { Log.w(TAG, "Couldn't load the layout", it) }
     }
 
     /**
@@ -165,7 +166,7 @@ class Container(val context: Context) {
         _layout.value = before.copy(screens = if (screen.order.isEmpty() && screen.hidden.isEmpty()) before.screens - key else before.screens + (key to screen))
         try {
             _layout.value = api.saveScreenLayout(key, screen)
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             _layout.value = before
             throw e
         }
@@ -193,6 +194,8 @@ class Container(val context: Context) {
     class Message(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
 
     fun tell(message: String) {
+        // Work stopped on purpose (a screen reloading or closing) is never news.
+        if (isCancellationMessage(message)) return
         _messages.tryEmit(Message(message))
     }
 
@@ -208,7 +211,7 @@ class Container(val context: Context) {
 
     /** Asks the server its version: after signing in, and each time the app starts. */
     suspend fun refreshServerVersion() {
-        runCatching { api.serverHealth().version }.onSuccess { _serverVersion.value = it }.onFailure { Log.w(TAG, "Couldn't ask the server its version", it) }
+        attempt { api.serverHealth().version }.onSuccess { _serverVersion.value = it }.onFailure { Log.w(TAG, "Couldn't ask the server its version", it) }
     }
 
     fun dataChanged() {
@@ -237,11 +240,11 @@ class Container(val context: Context) {
         if (Module.MEDICATIONS in modules) {
             try {
                 medsCache.save(api.medications())
-                runCatching { api.medsDay(today.toString()) }.getOrNull()?.let {
+                attempt { api.medsDay(today.toString()) }.getOrNull()?.let {
                     medsCache.saveSites(it)
                     reminderCache.saveMarked(it)
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 Log.w(TAG, "Couldn't load the medications; reminders use the ones kept", e)
             }
         } else {
@@ -249,7 +252,7 @@ class Container(val context: Context) {
         }
         // Habits with a reminder time, and whether each is done today.
         if (Module.HABITS in modules) {
-            runCatching { api.habitsForReminders(today) }.getOrNull()?.let { list ->
+            attempt { api.habitsForReminders(today) }.getOrNull()?.let { list ->
                 reminderCache.saveHabits(
                     list.filter { it.habit.active && it.habit.reminderTime != null && it.habit.id != null }
                         .map { HabitReminder(it.habit.id!!, it.habit.name, it.habit.reminderTime!!, it.date, it.done) },
@@ -259,13 +262,13 @@ class Container(val context: Context) {
             reminderCache.saveHabits(emptyList())
         }
         if (Module.APPOINTMENTS in modules) {
-            runCatching { api.appointments(days = 60, upcoming = true) }.getOrNull()?.let(reminderCache::saveAppointments)
+            attempt { api.appointments(days = 60, upcoming = true) }.getOrNull()?.let(reminderCache::saveAppointments)
         } else {
             reminderCache.saveAppointments(emptyList())
         }
         // Bladder training (bladder and bowel detail): its settings, kept for the phone's own reminders.
         if (Module.CONTINENCE in modules) {
-            runCatching { api.continenceSettings() }.getOrNull()?.let { reminderCache.saveBladder(it.bladderTraining.takeIf { t -> t.enabled }) }
+            attempt { api.continenceSettings() }.getOrNull()?.let { reminderCache.saveBladder(it.bladderTraining.takeIf { t -> t.enabled }) }
             saveChangeDue()
         } else {
             reminderCache.saveBladder(null)
@@ -276,7 +279,7 @@ class Container(val context: Context) {
 
     /** Keeps when a check or change of what's being worn is due, for the phone's own reminder. */
     private suspend fun saveChangeDue() {
-        runCatching { api.continenceWearing() }.onSuccess { w ->
+        attempt { api.continenceWearing() }.onSuccess { w ->
             reminderCache.saveChangeDue(w.changeDueAt.takeIf { !w.nothingOn }, w.since)
         }
     }
@@ -297,17 +300,17 @@ class Container(val context: Context) {
 
     /** The person's time zone: the profile's, else the phone's. */
     fun zone(): ZoneId = profile.value?.timezone?.takeIf { it.isNotBlank() }
-        ?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+        ?.let { attempt { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
 
     fun start() {
         scope.launch {
             settings.map { Triple(it.signedIn, it.backgroundSync, it.syncOnWifiOnly) }.distinctUntilChanged().collect { (signedIn, on, wifi) ->
                 SyncWorker.schedule(context, signedIn && on, wifi)
                 if (signedIn) {
-                    runCatching { refreshServerVersion() }
+                    attempt { refreshServerVersion() }
                     loadProfile()
-                    runCatching { refreshReminders() }
-                    runCatching { flushDoses() }
+                    attempt { refreshReminders() }
+                    attempt { flushDoses() }
                 } else {
                     _profile.value = null
                     _fields.value = null
@@ -327,12 +330,12 @@ class Container(val context: Context) {
     private fun startCare() {
         scope.launch {
             revision.drop(1).debounce(3_000).collect {
-                if (settings.value.signedIn) runCatching { refreshReminders() }
+                if (settings.value.signedIn) attempt { refreshReminders() }
             }
         }
         scope.launch {
             profile.map { it?.digest to it?.timezone }.distinctUntilChanged().collect { (digest, _) ->
-                if (digest != null) runCatching { DigestWorker.schedule(context, digest, zone()) }
+                if (digest != null) attempt { DigestWorker.schedule(context, digest, zone()) }
             }
         }
     }
@@ -346,7 +349,7 @@ class Container(val context: Context) {
         refreshFields()
         refreshLayout()
         p
-    } catch (e: Exception) {
+    } catch (e: CancellationException) { throw e } catch (e: Exception) {
         Log.w(TAG, "Couldn't load the profile", e)
         _profile.value
     }
@@ -358,14 +361,14 @@ class Container(val context: Context) {
         prefs.update { it.copy(units = saved.units) }
         if (before != saved.modules) refreshFields()
         dataChanged()
-        if (before != saved.modules || saved.reminders != reminderCache.prefs()) runCatching { refreshReminders() }
+        if (before != saved.modules || saved.reminders != reminderCache.prefs()) attempt { refreshReminders() }
         return saved
     }
 
     /** Syncs now, from the Sync button: tells the person how it went. */
     fun syncNow(onlyId: String? = null) {
         scope.launch {
-            val result = runCatching { sync.sync(onlyId) }.getOrElse { it.message ?: "Couldn't sync" }
+            val result = attempt { sync.sync(onlyId) }.getOrElse { it.message ?: "Couldn't sync" }
             tell(result.lineSequence().first())
         }
     }
@@ -378,8 +381,8 @@ class Container(val context: Context) {
         if (now - lastQuietSync < 15 * 60_000L || sync.running.value != null) return
         lastQuietSync = now
         scope.launch {
-            runCatching { flushDoses() }
-            runCatching { sync.sync() }
+            attempt { flushDoses() }
+            attempt { sync.sync() }
         }
     }
 
@@ -393,7 +396,7 @@ class Container(val context: Context) {
         reminderCache.clear()
         reminders.cancelAll()
         monitors.clear()
-        runCatching { DigestWorker.schedule(context, null, zone()) }
+        attempt { DigestWorker.schedule(context, null, zone()) }
         _viewing.value = null
         _viewProfile.value = null
         _profile.value = null
@@ -421,10 +424,10 @@ class Container(val context: Context) {
     private fun startWaveThree() {
         sync.afterSync = { healthConnectWriter.run() }
         scope.launch {
-            profile.map { it?.modules }.distinctUntilChanged().collect { runCatching { refreshRoutineReminders() } }
+            profile.map { it?.modules }.distinctUntilChanged().collect { attempt { refreshRoutineReminders() } }
         }
         scope.launch {
-            revision.drop(1).debounce(5_000).collect { runCatching { refreshRoutineReminders() } }
+            revision.drop(1).debounce(5_000).collect { attempt { refreshRoutineReminders() } }
         }
         scope.launch {
             settings.map { it.signedIn }.distinctUntilChanged().drop(1).collect { signedIn ->
@@ -453,7 +456,7 @@ class Container(val context: Context) {
         }
         scope.launch {
             profile.map { it?.modules?.contains(Module.TRANSITION) }.distinctUntilChanged().collect { on ->
-                if (on != null && _viewing.value == null) runCatching { com.health.app.ui.modules.transition.voice.VoiceReminders.refresh(context, api, on, zone()) }
+                if (on != null && _viewing.value == null) attempt { com.health.app.ui.modules.transition.voice.VoiceReminders.refresh(context, api, on, zone()) }
             }
         }
     }

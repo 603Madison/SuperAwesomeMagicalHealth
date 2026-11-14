@@ -53,12 +53,14 @@ import com.health.api.SourceValue
 import com.health.api.Units
 import com.health.app.Container
 import com.health.app.HealthApp
+import com.health.app.attempt
 import com.health.app.net.choosing
 import com.health.app.net.choosingSleep
 import com.health.app.net.deviceChoices
 import com.health.app.net.saveDeviceChoices
 import com.health.app.ui.Format
 import com.health.app.ui.care.LocalReadOnly
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -188,7 +190,7 @@ private class ContainerChooser(private val c: Container) : SourceChooser {
 
     override fun load() {
         if (c.viewing.value != null) return
-        c.scope.launch { runCatching { c.api.deviceChoices() }.onSuccess { _choices.value = it } }
+        c.scope.launch { attempt { c.api.deviceChoices() }.onSuccess { _choices.value = it } }
     }
 
     override fun choose(metric: Metric, deviceId: String?, device: String?) =
@@ -204,7 +206,7 @@ private class ContainerChooser(private val c: Container) : SourceChooser {
                 _choices.value = c.api.saveDeviceChoices(next)
                 c.tell(done)
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "Couldn't save that")
             }
         }

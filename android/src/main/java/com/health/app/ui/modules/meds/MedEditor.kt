@@ -53,6 +53,7 @@ import com.health.api.MedForm
 import com.health.api.MedSchedule
 import com.health.api.Medication
 import com.health.api.ScheduleKind
+import com.health.app.attempt
 import com.health.app.reminders.ReminderPlanner
 import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.Hint
@@ -312,7 +313,7 @@ fun MedEditorScreen(
     }
 
     if (pickingDate) {
-        val initial = startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+        val initial = startDate?.let { attempt { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
         val picker = rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(
             onDismissRequest = { pickingDate = false },
@@ -327,7 +328,7 @@ fun MedEditorScreen(
     }
 
     if (pickingStarted) {
-        val initial = startedOn?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+        val initial = startedOn?.let { attempt { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
         com.health.app.ui.care.DatePickDialog(initial, { pickingStarted = false }) { startedOn = it.toString(); pickingStarted = false }
     }
 

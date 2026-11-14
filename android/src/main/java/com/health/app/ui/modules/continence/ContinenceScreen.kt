@@ -53,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.Today
+import com.health.app.attempt
 import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.modules.ArrangeAction
 import com.health.app.ui.modules.TitleAction
@@ -111,6 +112,7 @@ import com.health.app.ui.modules.IconTile
 import com.health.app.ui.modules.NavRow
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.today.InsightCard
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -177,13 +179,13 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
                 val entries = async { c.ui.continence(3) }
                 val summary = async { c.ui.continenceSummary(14) }
                 // The detail: each can be missing without spoiling the diary.
-                val settings = async { runCatching { c.ui.continenceSettings() }.getOrNull() }
-                val supplies = async { runCatching { c.ui.supplyStatus() }.getOrNull() }
-                val progress = async { runCatching { c.ui.continenceProgress(12) }.getOrNull() }
-                val wearing = async { runCatching { c.ui.continenceWearing() }.getOrNull() }
-                val products = async { runCatching { c.ui.continenceProducts(90) }.getOrNull() }
+                val settings = async { attempt { c.ui.continenceSettings() }.getOrNull() }
+                val supplies = async { attempt { c.ui.supplyStatus() }.getOrNull() }
+                val progress = async { attempt { c.ui.continenceProgress(12) }.getOrNull() }
+                val wearing = async { attempt { c.ui.continenceWearing() }.getOrNull() }
+                val products = async { attempt { c.ui.continenceProducts(90) }.getOrNull() }
                 // Today, grouped. Missing (an older server), Today lists each entry on its own, from the fresh entries.
-                val diary = async { runCatching { c.ui.continenceDiary(today.toString()) }.getOrNull() }
+                val diary = async { attempt { c.ui.continenceDiary(today.toString()) }.getOrNull() }
                 _state.update {
                     it.copy(
                         entries = entries.await(), summary = summary.await(), loading = false,
@@ -191,27 +193,27 @@ class ContinenceViewModel(private val c: Container) : ViewModel() {
                         wearing = wearing.await() ?: it.wearing, products = products.await() ?: it.products, diary = diary.await(),
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your diary") }
             }
         }
     }
 
     fun save(entry: ContinenceEntry) = viewModelScope.launch {
-        runCatching { if (entry.id == null) c.ui.addContinence(entry) else c.ui.updateContinence(entry) }
+        attempt { if (entry.id == null) c.ui.addContinence(entry) else c.ui.updateContinence(entry) }
             .onSuccess { c.tell("${it.kind.label} logged"); c.dataChanged(); if (it.kind == com.health.api.ContinenceKind.PAD_CHANGE) c.continenceChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     /** "Put on" alone, from "What are you wearing?". */
     fun putOn(supplyId: String) = viewModelScope.launch {
-        runCatching { c.ui.addContinence(WearText.putOnEntry(supplyId, System.currentTimeMillis())) }
+        attempt { c.ui.addContinence(WearText.putOnEntry(supplyId, System.currentTimeMillis())) }
             .onSuccess { c.tell("${_state.value.supplies.firstOrNull { s -> s.supply.id == supplyId }?.supply?.name ?: "It"} on"); c.dataChanged(); c.continenceChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't save that") }
     }
 
     fun delete(id: String) = viewModelScope.launch {
-        runCatching { c.ui.deleteContinence(id) }
+        attempt { c.ui.deleteContinence(id) }
             .onSuccess { c.dataChanged() }
             .onFailure { c.tell(it.message ?: "Couldn't delete that") }
     }
@@ -246,7 +248,7 @@ fun ContinenceRoute(onPelvicFloor: () -> Unit, onOpen: (String) -> Unit = {}) {
                 val send = Intent(Intent.ACTION_SEND).setType("text/plain")
                     .putExtra(Intent.EXTRA_SUBJECT, "Bladder and bowel diary")
                     .putExtra(Intent.EXTRA_TEXT, text)
-                runCatching { context.startActivity(Intent.createChooser(send, "Share your diary")) }
+                attempt { context.startActivity(Intent.createChooser(send, "Share your diary")) }
             },
             pelvicFloor = onPelvicFloor,
             retry = { vm.load() },

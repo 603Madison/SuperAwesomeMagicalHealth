@@ -51,6 +51,7 @@ import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.SectionTitle
 import com.health.app.ui.components.appContainer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
 fun monitorIcon(kind: MonitorKind): ImageVector = if (kind == MonitorKind.BLOOD_PRESSURE) Icons.Rounded.MonitorHeart else Icons.Rounded.Bloodtype
@@ -121,7 +122,7 @@ fun MonitorPairRoute(onDone: () -> Unit) {
             withTimeoutOrNull(20_000) {
                 MonitorScanner.scan(context).collect { m -> found = (found.filterNot { it.address == m.address } + m).sortedByDescending { it.rssi } }
             }
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             error = e.message ?: "Couldn't look for monitors"
         }
         searching = false

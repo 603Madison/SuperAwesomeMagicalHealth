@@ -20,6 +20,7 @@ import com.health.api.FieldLayout
 import com.health.api.Module
 import com.health.api.MyConditions
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.conditionCatalog
 import com.health.app.net.conditions
 import com.health.app.net.saveFieldChoices
@@ -31,6 +32,7 @@ import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.modules.ModuleInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,10 +61,10 @@ class FieldsViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch {
             try {
                 c.refreshFields()
-                val catalog = async { runCatching { c.api.conditionCatalog() }.getOrDefault(emptyList()) }
-                val mine = async { runCatching { c.api.conditions() }.getOrDefault(MyConditions()) }
+                val catalog = async { attempt { c.api.conditionCatalog() }.getOrDefault(emptyList()) }
+                val mine = async { attempt { c.api.conditions() }.getOrDefault(MyConditions()) }
                 _state.update { it.copy(layout = c.fields.value, catalog = catalog.await(), mine = mine.await(), loading = false, error = if (c.fields.value == null) "Couldn't load your fields" else null) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your fields") }
             }
         }
@@ -78,7 +80,7 @@ class FieldsViewModel(private val c: Container) : ViewModel() {
                 c.refreshFields()
                 _state.update { it.copy(layout = c.fields.value) }
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "Couldn't save that")
             }
         }

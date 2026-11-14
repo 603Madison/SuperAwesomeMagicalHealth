@@ -8,6 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.health.app.attempt
 import com.health.app.container
 import java.util.concurrent.TimeUnit
 
@@ -16,7 +17,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val c = applicationContext.container
         if (!c.settings.value.signedIn) return Result.success()
-        runCatching { c.flushDoses() }
+        attempt { c.flushDoses() }
         c.sync.sync()
         return Result.success()
     }

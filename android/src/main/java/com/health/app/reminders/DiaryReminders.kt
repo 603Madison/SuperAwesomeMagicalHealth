@@ -1,6 +1,7 @@
 package com.health.app.reminders
 
 import com.health.api.BladderTraining
+import com.health.app.attempt
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -16,7 +17,7 @@ import java.time.temporal.ChronoUnit
 object BladderTrainingPlan {
     /** The interval on [date]: the start, plus a step every so many days, up to the goal. */
     fun interval(t: BladderTraining, date: LocalDate): Int {
-        val started = t.startedOn?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: date
+        val started = t.startedOn?.let { attempt { LocalDate.parse(it) }.getOrNull() } ?: date
         val steps = (ChronoUnit.DAYS.between(started, date).coerceAtLeast(0) / t.stepEveryDays.coerceAtLeast(1)).toInt()
         return (t.intervalMinutes + steps * t.stepMinutes).coerceAtMost(maxOf(t.goalMinutes, t.intervalMinutes))
     }

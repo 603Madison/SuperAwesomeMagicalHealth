@@ -27,6 +27,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
 /**
  * The weekly digest: once a week, after the day and hour the person chose (when the server makes
@@ -41,7 +42,7 @@ class DigestWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         if (!prefs.enabled) return Result.success()
         val digest = try {
             c.api.latestDigest()
-        } catch (e: Exception) {
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return if (runAttemptCount < 3) Result.retry() else Result.success()
         }
         val seen = applicationContext.getSharedPreferences("digest", Context.MODE_PRIVATE)

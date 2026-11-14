@@ -74,6 +74,7 @@ import com.health.api.AiConsent
 import com.health.api.AiStatus
 import com.health.api.Module
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.net.aiAudit
 import com.health.app.net.aiChat
 import com.health.app.net.aiStatus
@@ -92,6 +93,7 @@ import com.health.app.ui.components.Loading
 import com.health.app.ui.components.ProgressBar
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.theme.AppTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -122,7 +124,7 @@ class AiViewModel(private val c: Container) : ViewModel() {
             try {
                 // The assistant is only ever the person's own: never through a share.
                 _state.update { it.copy(status = c.api.aiStatus(), loading = false) }
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = AiText.error(e)) }
             }
         }
@@ -131,14 +133,14 @@ class AiViewModel(private val c: Container) : ViewModel() {
     fun choose(on: Boolean) = _state.update { it.copy(choosing = on) }
 
     fun agree(consent: AiConsent) = viewModelScope.launch {
-        runCatching { c.api.saveAiConsent(consent) }
+        attempt { c.api.saveAiConsent(consent) }
             .onSuccess { saved -> _state.update { it.copy(status = it.status?.copy(consent = saved), choosing = false) }; c.tell("Saved") }
             .onFailure { c.tell(AiText.error(it)) }
     }
 
     /** Stops the assistant for this person and forgets their choice (and the conversation here). */
     fun forget() = viewModelScope.launch {
-        runCatching { c.api.deleteAiConsent() }
+        attempt { c.api.deleteAiConsent() }
             .onSuccess { _state.update { it.copy(status = it.status?.copy(consent = null), turns = emptyList(), choosing = false, chatError = null) }; c.tell("Stopped. Your choice is forgotten.") }
             .onFailure { c.tell(AiText.error(it)) }
     }
@@ -166,7 +168,7 @@ class AiViewModel(private val c: Container) : ViewModel() {
                 }
                 // Logging something for the person changes what the screens show.
                 if (reply.looked.any { it.tool.startsWith("log_") || it.tool == "check_in" || it.tool == "tick_habit" }) c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(sending = false, chatError = AiText.error(e)) }
             }
         }
@@ -175,7 +177,7 @@ class AiViewModel(private val c: Container) : ViewModel() {
     fun newChat() = _state.update { it.copy(turns = emptyList(), chatError = null) }
 
     fun loadAudit() = viewModelScope.launch {
-        runCatching { c.api.aiAudit(30) }.onSuccess { list -> _state.update { it.copy(audit = list) } }.onFailure { c.tell(AiText.error(it)) }
+        attempt { c.api.aiAudit(30) }.onSuccess { list -> _state.update { it.copy(audit = list) } }.onFailure { c.tell(AiText.error(it)) }
     }
 }
 
@@ -280,11 +282,11 @@ fun AiConsentScreen(status: AiStatus, on: Set<Module>, onBack: () -> Unit, onAgr
             Point(Icons.Rounded.CloudUpload, "Where it goes") {
                 Text(status.dataNotice, style = MaterialTheme.typography.bodyMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { runCatching { uri.openUri(status.termsUrl) } }) {
+                    TextButton(onClick = { attempt { uri.openUri(status.termsUrl) } }) {
                         Text("${status.provider}'s commercial terms")
                         Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.padding(start = 4.dp).size(16.dp))
                     }
-                    TextButton(onClick = { runCatching { uri.openUri(status.privacyUrl) } }) {
+                    TextButton(onClick = { attempt { uri.openUri(status.privacyUrl) } }) {
                         Text("${status.provider}'s privacy policy")
                         Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.padding(start = 4.dp).size(16.dp))
                     }

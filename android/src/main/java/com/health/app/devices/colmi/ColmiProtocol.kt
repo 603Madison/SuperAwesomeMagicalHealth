@@ -1,5 +1,6 @@
 package com.health.app.devices.colmi
 
+import com.health.app.attempt
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -286,7 +287,7 @@ class StepsParser {
             return false
         }
         first = false
-        val date = runCatching {
+        val date = attempt {
             LocalDate.of(2000 + ColmiProtocol.fromBcd(packet[1]), ColmiProtocol.fromBcd(packet[2]), ColmiProtocol.fromBcd(packet[3]))
         }.getOrNull()
         val quarter = packet[4].toInt() and 0xFF

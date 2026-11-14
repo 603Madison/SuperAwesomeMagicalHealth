@@ -11,6 +11,7 @@ import android.media.AudioTrack
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
+import com.health.app.attempt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -84,7 +85,7 @@ class VoiceListener(private val speakingDb: () -> Double? = { null }) {
             val analyzer = VoiceAnalyzer()
             val meter = LiveMeter(speakingDb())
             val buffer = FloatArray(rate / 50)
-            val wav = recordTo?.let { runCatching { WavWriter(it, VoiceScale.RATE) }.getOrNull() }
+            val wav = recordTo?.let { attempt { WavWriter(it, VoiceScale.RATE) }.getOrNull() }
             try {
                 record.startRecording()
                 while (isActive) {
@@ -104,9 +105,9 @@ class VoiceListener(private val speakingDb: () -> Double? = { null }) {
                     }
                 }
             } finally {
-                runCatching { record.stop() }
+                attempt { record.stop() }
                 record.release()
-                runCatching { wav?.close() }
+                attempt { wav?.close() }
                 buffer.fill(0f)
             }
         }
@@ -135,7 +136,7 @@ class VoiceListener(private val speakingDb: () -> Double? = { null }) {
             for (rate in listOf(VoiceScale.RATE, 48_000, 44_100)) {
                 val min = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT)
                 if (min <= 0) continue
-                val record = runCatching {
+                val record = attempt {
                     AudioRecord(source, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT, maxOf(min, rate / 5 * 4))
                 }.getOrNull() ?: continue
                 if (record.state == AudioRecord.STATE_INITIALIZED) return record to rate
@@ -153,7 +154,7 @@ object TonePlayer {
     /** Plays [hz] for [seconds] and returns when it's done. */
     suspend fun play(hz: Double, seconds: Double = 1.2) = withContext(Dispatchers.Default) {
         val samples = ToneSynth.samples(hz, RATE, seconds)
-        val track = runCatching {
+        val track = attempt {
             AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
@@ -166,7 +167,7 @@ object TonePlayer {
             track.play()
             delay((seconds * 1000).toLong() + 60)
         } finally {
-            runCatching { track.stop() }
+            attempt { track.stop() }
             track.release()
         }
     }
@@ -254,7 +255,7 @@ class ClipPlayer {
     fun play(file: File) {
         stop()
         val p = MediaPlayer()
-        runCatching {
+        attempt {
             p.setDataSource(file.absolutePath)
             p.setOnCompletionListener { stop() }
             p.prepare()
@@ -265,7 +266,7 @@ class ClipPlayer {
     }
 
     fun stop() {
-        player?.let { runCatching { it.stop() }; it.release() }
+        player?.let { attempt { it.stop() }; it.release() }
         player = null
         _playing.value = null
     }

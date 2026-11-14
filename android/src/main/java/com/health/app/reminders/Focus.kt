@@ -15,6 +15,7 @@ import com.health.api.ApiJson
 import com.health.api.FocusKind
 import com.health.app.MainActivity
 import com.health.app.R
+import com.health.app.attempt
 import com.health.app.container
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,7 +55,7 @@ class FocusStore private constructor(context: Context) {
     private val _running = MutableStateFlow(read())
     val running: StateFlow<RunningFocus?> = _running.asStateFlow()
 
-    private fun read(): RunningFocus? = prefs.getString(KEY, null)?.let { runCatching { ApiJson.decodeFromString(RunningFocus.serializer(), it) }.getOrNull() }
+    private fun read(): RunningFocus? = prefs.getString(KEY, null)?.let { attempt { ApiJson.decodeFromString(RunningFocus.serializer(), it) }.getOrNull() }
 
     fun set(focus: RunningFocus?) {
         prefs.edit { if (focus == null) remove(KEY) else putString(KEY, ApiJson.encodeToString(RunningFocus.serializer(), focus)) }

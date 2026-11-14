@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.health.api.Device
 import com.health.app.Container
+import com.health.app.attempt
 import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.colmi.RingReadingsState
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
@@ -18,6 +19,7 @@ import com.health.app.sync.ConduitStatus
 import com.health.app.sync.PairedRing
 import com.health.app.ui.components.Sources
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,7 +72,7 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
                 val devices = c.api.devices()
                 _state.update { it.copy(serverDevices = devices, loading = false, error = null) }
                 loadOverlaps(devices)
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your devices") }
             }
         }
@@ -82,9 +84,9 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
      * can't say (or isn't reached) leaves the section out.
      */
     private suspend fun loadOverlaps(devices: List<Device>) {
-        val choices = runCatching { c.api.deviceChoices() }.getOrNull() ?: return _state.update { it.copy(overlaps = emptyList()) }
+        val choices = attempt { c.api.deviceChoices() }.getOrNull() ?: return _state.update { it.copy(overlaps = emptyList()) }
         val today = LocalDate.now(c.zone())
-        val days = listOf(today, today.minusDays(1)).mapNotNull { runCatching { c.api.day(it.toString()) }.getOrNull() }
+        val days = listOf(today, today.minusDays(1)).mapNotNull { attempt { c.api.day(it.toString()) }.getOrNull() }
         _state.update { it.copy(overlaps = Overlaps.of(days, choices, devices)) }
     }
 
@@ -99,7 +101,7 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
                 c.tell(Sources.chosen(overlap.reading, device))
                 // Today and Trends reload; so does this page (loadServer, on the revision).
                 c.dataChanged()
-            } catch (e: Exception) {
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 c.tell(e.message ?: "Couldn't save that")
                 loadServer()
             }
@@ -151,13 +153,13 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
 
     fun rename(device: Device, name: String) {
         viewModelScope.launch {
-            runCatching { c.api.renameDevice(device.id, name) }.onSuccess { loadServer() }.onFailure { c.tell(it.message ?: "Couldn't rename it") }
+            attempt { c.api.renameDevice(device.id, name) }.onSuccess { loadServer() }.onFailure { c.tell(it.message ?: "Couldn't rename it") }
         }
     }
 
     fun forget(device: Device, deleteData: Boolean) {
         viewModelScope.launch {
-            runCatching { c.api.forgetDevice(device.id, deleteData) }
+            attempt { c.api.forgetDevice(device.id, deleteData) }
                 .onSuccess {
                     c.tell(if (deleteData) "Forgot ${device.name} and its data" else "Forgot ${device.name}")
                     if (device.kind == com.health.api.DeviceKind.COLMI_RING && c.syncStore.ring.value?.address == device.identifier) {
