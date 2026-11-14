@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeftRight, Layers, Plus, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Droplet, Layers, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, isoDate, num } from "../lib/format";
 import { F, useFields } from "../lib/fields";
 import {
-  asChange, changeDraft, changeDue, kindWord, productPattern, putOnEntry, putOnOrder, recentPutOns, sinceLine, usualLine, wearable,
+  accidents, asChange, changeDraft, changeDue, kindWord, productPattern, putOnEntry, putOnOrder, recentPutOns, sinceLine, usualLine, wearable,
 } from "../lib/continence";
-import type { ContinenceEntry, ContinenceSettings, ContinenceWearing, ProductStats, Supply } from "../lib/types";
+import type { ContinenceEntry, ContinenceSettings, ContinenceWearing, Fullness, ProductStats, Supply } from "../lib/types";
+import { FULLNESS } from "../lib/types";
 import { Button, Card, Field, Modal, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { FullnessPicker, ScaleRow } from "../components/FieldKit";
 
@@ -22,26 +23,68 @@ export function tracksProducts(has: (key: string) => boolean, wearing?: Continen
   return has(F.CONTINENCE_PROTECTION) || has(F.CONTINENCE_SUPPLIES) || wearing?.since != null;
 }
 
-/** The diary's "Wearing now": what's on, since when and the usual, with Change; or "What are you wearing?" with a picker. */
-export function WearingCard({ wearing, supplies, settings, recent, readOnly, onChange, onPutOn }: {
+/** How full a product is, as a small pad that fills, with its word: "Wet", or "Dry so far" before anything's said. */
+export function FullnessBadge({ fullness, leakedThrough }: { fullness?: Fullness; leakedThrough?: boolean }) {
+  const f = FULLNESS.find((x) => x.id === fullness);
+  return (
+    <span className="fullness-badge">
+      <span className="fullness-pad" aria-hidden="true"><span className="fullness-fill" style={{ height: `${Math.min(100, (f?.level ?? 0) * 22)}%` }} />{fullness === "LEAKED" && <span className="fullness-drop" />}</span>
+      <span className="fullness-badge-text">
+        <span className="fullness-badge-word">{f?.label ?? "Dry so far"}</span>
+        {leakedThrough && fullness !== "LEAKED" && <span className="fullness-badge-note">Leaked through</span>}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The diary's "Wearing now": what's on, since when and the usual, how full it is, the accidents
+ * since it went on ([children]: the page draws them), with "Log an accident" and Change; or "What
+ * are you wearing?" with a picker.
+ */
+export function WearingCard({ wearing, supplies, settings, recent, readOnly, onChange, onPutOn, onAccident, onEditOn, children }: {
   wearing?: ContinenceWearing; supplies: Supply[]; settings?: ContinenceSettings; recent: string[]; readOnly: boolean;
   onChange: () => void; onPutOn: (supplyId: string) => void;
+  /** Logs an accident in what's on. */
+  onAccident?: () => void;
+  /** Opens the change that put it on, to fix its time or product. */
+  onEditOn?: () => void;
+  children?: ReactNode;
 }) {
   const now = Date.now();
   if (wearing?.supplyId) {
     const kind = kindWord(wearing.kind ?? supplies.find((s) => s.id === wearing.supplyId)?.kind);
     const usual = usualLine(wearing);
+    const wear = wearing.wear;
+    const n = wear?.accidents?.length ?? 0;
+    const title = (
+      <>
+        <p className="wearing-name">{wearing.name ?? "A product"}{kind && <span className="wearing-kind">{kind}</span>}</p>
+        <p className="wearing-since">{sinceLine(wearing, clock, now)}</p>
+      </>
+    );
     return (
       <Card title="Wearing now" icon={<Layers size={18} />} className="wearing-card span-2">
         <div className="wearing">
           <div className="wearing-text">
-            <p className="wearing-name">{wearing.name ?? "A product"}{kind && <span className="wearing-kind">{kind}</span>}</p>
-            <p className="wearing-since">{sinceLine(wearing, clock, now)}</p>
+            {onEditOn && !readOnly ? <button type="button" className="link-row wearing-edit" onClick={onEditOn} aria-label={`${wearing.name ?? "What's on"}: change when it went on`}>{title}</button> : title}
             {usual && <p className="wearing-usual">{usual}{changeDue(wearing, now) ? ". Time for a check when you're ready." : "."}</p>}
             {!usual && changeDue(wearing, now) && <p className="wearing-usual">Time for a check when you're ready.</p>}
           </div>
-          {!readOnly && <Button variant="primary" className="wearing-change" onClick={onChange}><ArrowLeftRight size={18} aria-hidden="true" /> Change</Button>}
+          {wear && <FullnessBadge fullness={wear.fullness} leakedThrough={wear.leakedThrough} />}
         </div>
+        {n > 0 && (
+          <div className="wear-while">
+            <p className="wear-while-title">{accidents(n)} since it went on</p>
+            {children}
+          </div>
+        )}
+        {!readOnly && (
+          <div className="wearing-actions">
+            {onAccident && <Button variant="tonal" onClick={onAccident}><Droplet size={18} aria-hidden="true" /> Log an accident</Button>}
+            <Button variant="primary" className="wearing-change" onClick={onChange}><ArrowLeftRight size={18} aria-hidden="true" /> Change</Button>
+          </div>
+        )}
       </Card>
     );
   }
@@ -76,12 +119,15 @@ const local = (ms: number) => { const d = new Date(ms); return `${isoDate(d)}T${
  * what went on (the same again, picked; the usual and the last used first; or nothing for now),
  * and when. Saving logs one change with all of it.
  */
-export function ChangeSheet({ initial, supplies, settings, recent, onClose, onSaved }: {
+export function ChangeSheet({ initial, supplies, settings, recent, onClose, onSaved, accidentsWhile = 0 }: {
   initial: ContinenceEntry; supplies: Supply[]; settings?: ContinenceSettings; recent: string[]; onClose: () => void; onSaved: () => void;
+  /** How many accidents there were while what's coming off was on (a new change only). */
+  accidentsWhile?: number;
 }) {
   const { has } = useFields();
   const [e, setE] = useState(() => asChange(initial));
   const [busy, setBusy] = useState(false);
+  const during = !initial.id && e.supplyId === initial.supplyId ? accidentsWhile : 0;
   const worn = wearable(supplies);
   // The one taken off may have been put away since: it's still shown.
   const offOptions = e.supplyId && !worn.some((s) => s.id === e.supplyId) ? [...worn, ...supplies.filter((s) => s.id === e.supplyId)] : worn;
@@ -115,6 +161,7 @@ export function ChangeSheet({ initial, supplies, settings, recent, onClose, onSa
     </>}>
       <section className="change-step" aria-label="Taking off">
         <h3 className="change-label">Taking off</h3>
+        {during > 0 && <p className="muted small change-while">{accidents(during)} while you wore it</p>}
         {offOptions.length > 0 ? (
           <div className="tag-list" role="radiogroup" aria-label="Taking off">
             {offOptions.map((s) => chip(s.id!, s.name, e.supplyId === s.id, () => setE({ ...e, supplyId: s.id })))}
@@ -175,7 +222,8 @@ export function QuickChange({ onClose, onSaved }: { onClose: () => void; onSaved
   }
   const [supplies, settings, entries, wearing] = data.data;
   const recent = recentPutOns(entries);
-  return <ChangeSheet initial={changeDraft(wearing, settings, supplies, recent)} supplies={supplies} settings={settings} recent={recent} onClose={onClose} onSaved={onSaved} />;
+  return <ChangeSheet initial={changeDraft(wearing, settings, supplies, recent)} supplies={supplies} settings={settings} recent={recent} onClose={onClose} onSaved={onSaved}
+    accidentsWhile={wearing.wear?.accidents?.length ?? 0} />;
 }
 
 /** Logs "put on" alone (from "What are you wearing?"). */

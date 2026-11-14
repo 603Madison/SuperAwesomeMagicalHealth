@@ -1,4 +1,4 @@
-import type { ContinenceEntry, ContinenceSettings, ContinenceWearing, Fullness, ProductStats, Supply, SupplyKind } from "./types";
+import type { ContinenceDiary, ContinenceDiaryItem, ContinenceEntry, ContinenceKind, ContinenceSettings, ContinenceWear, ContinenceWearing, Fullness, ProductStats, Supply, SupplyKind } from "./types";
 
 /*
  * What's being worn, and a change as one step (npm test covers these): the products a change
@@ -75,8 +75,81 @@ export function changeDraft(wearing: ContinenceWearing | undefined, settings: Co
   const off = wearing?.supplyId && ids.has(wearing.supplyId) ? wearing.supplyId : undefined;
   const usual = settings?.defaultSupplyId && ids.has(settings.defaultSupplyId) ? settings.defaultSupplyId : undefined;
   const on = off ?? usual ?? recent.find((id) => ids.has(id));
-  return { ...base(now), supplyId: off, putOnSupplyId: on, nothingOn: false };
+  // How it was: as the accidents while it was on left it.
+  const wear = off ? wearing?.wear : undefined;
+  return {
+    ...base(now), supplyId: off, putOnSupplyId: on, nothingOn: false,
+    ...(wear?.fullness ? { fullness: wear.fullness } : {}), ...(wear?.leakedThrough ? { leakedThrough: true } : {}),
+  };
 }
+
+/** The accidents: they belong to whatever was on at the time. */
+export const ACCIDENT_KINDS: ContinenceKind[] = ["LEAK", "BOWEL_LEAK", "BEDWETTING"];
+export const isAccident = (kind: ContinenceKind) => ACCIDENT_KINDS.includes(kind);
+
+/** What's on now, when something is (the product an accident logged now goes with). */
+export const onNow = (w?: ContinenceWearing): string | undefined => (w?.supplyId && !w.nothingOn ? w.supplyId : undefined);
+
+/**
+ * A new entry of [kind], now: an accident goes with what's on (or, with nothing known, the usual),
+ * and starts at how full that is already, so it only needs nudging up.
+ */
+export function newEntry(kind: ContinenceKind, wearing: ContinenceWearing | undefined, settings: ContinenceSettings | undefined, now = Date.now()): ContinenceEntry {
+  const e: ContinenceEntry = { at: now, kind, triggers: [], pain: false, blood: false, night: false };
+  if (!isAccident(kind)) return e;
+  const on = onNow(wearing);
+  if (on) return { ...e, supplyId: on, ...(wearing?.wear?.fullness ? { fullness: wearing.wear.fullness } : {}) };
+  return wearing?.nothingOn || !settings?.defaultSupplyId ? e : { ...e, supplyId: settings.defaultSupplyId };
+}
+
+/** Whether [e] is a new accident in what's on now (the sheet then says "In your …" and "How full it is now"). */
+export function inWhatsOn(e: ContinenceEntry, wearing?: ContinenceWearing): boolean {
+  const on = onNow(wearing);
+  return !e.id && isAccident(e.kind) && !!on && e.supplyId === on && (wearing?.since == null || e.at >= wearing.since - 10 * 60_000);
+}
+
+/** The Change sheet after an accident ("Save and change"): taking off what it was in, as it left it. */
+export function changeAfter(accident: ContinenceEntry, wearing: ContinenceWearing | undefined, settings: ContinenceSettings | undefined, supplies: Supply[], recent: string[], now = Date.now()): ContinenceEntry {
+  const draft = changeDraft(wearing, settings, supplies, recent, now);
+  const fullness = accident.fullness ?? draft.fullness;
+  return {
+    ...draft, supplyId: accident.supplyId ?? draft.supplyId,
+    ...(fullness ? { fullness } : {}), ...(accident.leakedThrough || draft.leakedThrough ? { leakedThrough: true } : {}),
+  };
+}
+
+/** Changes that took something off: a put-on alone isn't one. */
+export const changeCount = (entries: ContinenceEntry[]) => entries.filter((e) => e.kind === "PAD_CHANGE" && !!e.supplyId).length;
+
+/** "1 accident", "3 accidents". */
+export const accidents = (n: number) => `${n} ${n === 1 ? "accident" : "accidents"}`;
+
+/** A finished wear's line: "Wet · worn 3 h 12 min · then Day pants"; "on at 7:48 pm" when its removal isn't in the diary. */
+export function wearLine(w: ContinenceWear, clock: (ms: number) => string): string {
+  if (!w.off) return [w.start != null ? `on at ${clock(w.start)}` : "", w.leakedThrough ? "leaked through" : ""].filter(Boolean).join(" · ");
+  return [
+    w.fullness ? FULLNESS_WORD[w.fullness] : "",
+    w.minutes != null ? `worn ${wornFor(w.minutes)}` : "",
+    w.leakedThrough && w.fullness !== "LEAKED" ? "leaked through" : "",
+    w.off.nothingOn ? "then nothing on" : w.nextName ? `then ${w.nextName}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+/** What's on now, in a few words: "Wet · 2 accidents", "Dry so far". */
+export function wearState(w?: ContinenceWear): string {
+  if (!w) return "";
+  const n = w.accidents?.length ?? 0;
+  const state = w.fullness ? FULLNESS_WORD[w.fullness] : n === 0 ? "Dry so far" : "";
+  return [state, n > 0 ? accidents(n) : "", w.leakedThrough && w.fullness !== "LEAKED" ? "leaked through" : ""].filter(Boolean).join(" · ");
+}
+
+/** The diary's rows: what's on now is left out while the Wearing now card shows it. */
+export function diaryRows(diary: ContinenceDiary, wearingShown: boolean): ContinenceDiaryItem[] {
+  return diary.items.filter((i) => !(i.wear?.current && wearingShown));
+}
+
+/** A put-on alone that started a wear (a change from something else shows as that one's). */
+export const putOnAlone = (w: ContinenceWear): ContinenceEntry | undefined => (w.on && !w.on.supplyId ? w.on : undefined);
 
 /** "Put on" alone: what "What are you wearing?" logs. */
 export function putOnEntry(supplyId: string, now = Date.now()): ContinenceEntry {

@@ -5,7 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { clock, distance, hm, num, parseDate, today, weightValue, workoutLabel } from "../lib/format";
 import { useSession } from "../lib/session";
 import { mealsLogged } from "../lib/today";
-import { onFor, wornFor } from "../lib/continence";
+import { onFor, wearState, wornFor } from "../lib/continence";
 import { BP_TEXT, glucoseText } from "../lib/vitals";
 import type {
   CheckIn, ContinenceDay, CycleToday, DaySummary, Digest, FoodEntry, GlucoseUnit, HabitStatus, HormonesToday, LifeStageToday, MindDay, NeuroToday,
@@ -102,7 +102,11 @@ export function continenceLine(c?: ContinenceDay, now = Date.now()): Headline | 
     (c.catheters ?? 0) > 0 && count(c.catheters, "catheter"),
   ].filter(Boolean) as string[];
   // What's on, and for how long, leads; the day's counts follow.
-  if (w?.supplyId) return { value: w.name ?? "A product", unit: `for ${wornFor(onFor(w, now))}`, text: true, support: [trips, ...parts].filter(Boolean).slice(0, 3).join(" · ") || undefined };
+  if (w?.supplyId) {
+    // How it is, once there's something to say: "Wet · 2 accidents".
+    const state = w.wear && (w.wear.fullness || (w.wear.accidents?.length ?? 0) > 0) ? wearState(w.wear) : null;
+    return { value: w.name ?? "A product", unit: `for ${wornFor(onFor(w, now))}`, text: true, support: [state, trips, ...parts].filter(Boolean).slice(0, 3).join(" · ") || undefined };
+  }
   if (w?.nothingOn) return { value: "Nothing on for now", text: true, support: [trips, ...parts].filter(Boolean).slice(0, 3).join(" · ") || undefined };
   return { value: num(c.voids), unit: c.voids === 1 ? "trip" : "trips", support: parts.slice(0, 3).join(" · ") || undefined };
 }

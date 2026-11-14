@@ -1721,7 +1721,41 @@ button.score-item:hover { background: var(--surface-2); }
 .change-delete { margin-right: auto; color: var(--danger); }
 .products-card .row-sub.wraps { white-space: normal; }
 .products-count { flex: none; font-variant-numeric: tabular-nums; }
+/* How full it is: a small pad that fills, and its word. */
+.fullness-badge { display: inline-flex; align-items: center; gap: 10px; flex: none; color: var(--text); }
+.fullness-badge .fullness-pad { width: 22px; height: 34px; color: var(--muted); }
+.fullness-badge-text { display: flex; flex-direction: column; line-height: 1.2; }
+.fullness-badge-word { font-weight: var(--w-semibold); }
+.fullness-badge-note { font-size: 0.8rem; color: var(--danger); }
+.wearing-edit { display: flex; flex-direction: column; gap: 4px; border-radius: 10px; }
+.wearing-edit:hover .wearing-name { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--text) 30%, transparent); }
+.wear-while { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); }
+.wear-while-title { margin: 0 0 4px; font-size: 0.85rem; font-weight: var(--w-medium); color: var(--muted); }
+.wearing-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+.wearing-actions .btn { min-height: 44px; }
+/* The accidents under what was on. */
+.wear-accidents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wear-accident { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 6px; border-radius: 10px; min-width: 0; }
+.wear-accident:hover:not(:disabled) { background: var(--surface-2); }
+.wear-accident-icon { width: 26px; height: 26px; flex: none; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--c2) 16%, transparent); color: var(--c2); }
+.wear-accident-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.wear-accident-title { font-size: 0.92rem; font-weight: var(--w-medium); }
+.wear-accident-sub { font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wear-accident-full { flex: none; font-size: 0.78rem; color: var(--muted); padding: 2px 8px; border-radius: 999px; background: var(--surface-2); }
+.wear-row { align-items: flex-start; }
+.wear-row .row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.wear-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-width: 0; padding: 2px 0; }
+.wear-head-text { display: flex; flex-direction: column; min-width: 0; }
+.wear-head .row-title { display: flex; align-items: baseline; gap: 8px; }
+.wear-row .wear-accidents { margin: 4px 0 0 -6px; padding-left: 10px; border-left: 2px solid color-mix(in srgb, var(--primary) 22%, transparent); }
+.wear-puton { font-size: 0.8rem; color: var(--muted); padding: 6px 0 2px 10px; }
+.diary-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 16px; margin-bottom: 8px; }
+.diary-counts .stat-value { font-size: 1.3rem; }
+.diary-more { grid-column: 1 / -1; margin: 0; }
+.in-whats-on { margin: 0 0 4px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.change-while { margin: -4px 0 0; }
 @media (max-width: 760px) {
   .wearing-change { width: 100%; }
+  .wearing-actions .btn { flex: 1 1 0; }
   .change-toggles, .change-when { grid-template-columns: 1fr; }
 }

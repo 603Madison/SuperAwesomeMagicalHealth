@@ -4,10 +4,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  asChange, changeDetail, changeDraft, changeDue, changeLine, changeTitle, hoursShort, kindWord, productLine, putOnEntry, putOnOrder, recentPutOns, rough,
-  sinceLine, usualLine, wearable, wornFor,
+  asChange, changeAfter, changeCount, changeDetail, changeDraft, changeDue, changeLine, changeTitle, diaryRows, hoursShort, inWhatsOn, kindWord, newEntry,
+  productLine, putOnAlone, putOnEntry, putOnOrder, recentPutOns, rough, sinceLine, usualLine, wearable, wearLine, wearState, wornFor,
 } from "../src/lib/continence.ts";
-import type { ContinenceEntry, ContinenceSettings, ContinenceWearing, ProductStats, Supply } from "../src/lib/types.ts";
+import type { ContinenceDiary, ContinenceEntry, ContinenceSettings, ContinenceWear, ContinenceWearing, ProductStats, Supply } from "../src/lib/types.ts";
 
 const supply = (id: string, name: string, kind: Supply["kind"], active = true): Supply => ({ id, name, kind, onHand: 10, reusable: false, active });
 const NIGHT = supply("n", "Night briefs", "BRIEF");
@@ -116,4 +116,66 @@ test("a product's pattern in a line", () => {
   assert.equal(productLine(p), "Night briefs: usually 7 h, often full, leaked through 1 in 12, mostly at night");
   assert.equal(productLine({ ...p, name: "Day pants", avgWornMinutes: 300, typicalFullness: "WET", leakedThrough: 0, nightShare: 0 }), "Day pants: usually 5 h, often wet, never leaked through");
   assert.equal(productLine({ supplyId: "l", name: "Liners", changes: 1, leakedThroughPct: 0, nightShare: 0, leakedThrough: 0 }), "Liners: 1 change");
+});
+
+// ---- Accidents under what was on
+
+const leak = (at: number, extra: Partial<ContinenceEntry> = {}): ContinenceEntry => ({ at, kind: "LEAK", triggers: [], pain: false, blood: false, night: false, ...extra });
+const ON: ContinenceWearing = {
+  supplyId: "n", name: "Night briefs", kind: "BRIEF", since: SINCE, minutes: 430,
+  wear: { supplyId: "n", name: "Night briefs", current: true, start: SINCE, fullness: "WET", accidents: [leak(SINCE + 3_600_000, { id: "a1", fullness: "WET" })] },
+};
+const at12 = (h: number, m = 0) => new Date(`2026-11-13T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`).getTime();
+const time = (ms: number) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+test("an accident logged now goes with what's on, starting at how full it already is", () => {
+  const e = newEntry("LEAK", ON, settings("d"), NOW);
+  assert.equal(e.supplyId, "n");
+  assert.equal(e.fullness, "WET");
+  assert.ok(inWhatsOn(e, ON));
+  // Not this: a different product, or an entry already saved, reads as before.
+  assert.ok(!inWhatsOn({ ...e, supplyId: "d" }, ON));
+  assert.ok(!inWhatsOn({ ...e, id: "x" }, ON));
+  // A toilet trip carries no product; with nothing on, an accident carries none either.
+  assert.equal(newEntry("URINATION", ON, settings("d"), NOW).supplyId, undefined);
+  assert.equal(newEntry("LEAK", { since: SINCE, nothingOn: true }, settings("d"), NOW).supplyId, undefined);
+  // Nothing known: the usual.
+  assert.equal(newEntry("BEDWETTING", undefined, settings("d"), NOW).supplyId, "d");
+  assert.deepEqual(Object.keys(newEntry("LEAK", undefined, settings(), NOW)).sort(), ["at", "blood", "kind", "night", "pain", "triggers"]);
+});
+
+test("a change starts from how what's coming off is, and Save and change from the accident", () => {
+  const draft = changeDraft({ ...ON, wear: { ...ON.wear!, leakedThrough: true } }, settings(), ALL, [], NOW);
+  assert.equal(draft.fullness, "WET");
+  assert.equal(draft.leakedThrough, true);
+  const after = changeAfter(leak(NOW, { supplyId: "n", fullness: "SOAKED" }), ON, settings(), ALL, [], NOW);
+  assert.equal(after.supplyId, "n");
+  assert.equal(after.putOnSupplyId, "n");
+  assert.equal(after.fullness, "SOAKED");
+  // Nothing known about how it is: nothing preset.
+  assert.ok(!("fullness" in changeDraft({ supplyId: "n", since: SINCE }, settings(), ALL, [], NOW)));
+});
+
+test("a put-on alone isn't a change", () => {
+  assert.equal(changeCount([change(NOW, undefined, "n"), change(NOW, "n", "d"), change(NOW, "d", undefined, { nothingOn: true }), leak(NOW)]), 2);
+});
+
+test("a worn product reads as how it came off, how long, and what came next", () => {
+  const off: ContinenceWear = { supplyId: "n", name: "Night briefs", start: at12(1), end: at12(7), minutes: 432, fullness: "FULL", off: change(at12(7), "n", "d"), nextName: "Day pants" };
+  assert.equal(wearLine(off, time), "Full · worn 7 h 12 min · then Day pants");
+  assert.equal(wearLine({ ...off, off: change(at12(7), "n", undefined, { nothingOn: true }), fullness: "LEAKED", leakedThrough: true }, time), "Leaked through · worn 7 h 12 min · then nothing on");
+  assert.equal(wearLine({ ...off, off: undefined, end: undefined, fullness: undefined }, time), "on at 1:00");
+  assert.equal(wearState(ON.wear), "Wet · 1 accident");
+  assert.equal(wearState({ supplyId: "n", current: true, accidents: [] }), "Dry so far");
+  assert.equal(putOnAlone({ ...off, on: change(at12(1), undefined, "n") })?.at, at12(1));
+  assert.equal(putOnAlone({ ...off, on: change(at12(1), "d", "n") }), undefined);
+});
+
+test("what's on now is left out of the day's list while Wearing now shows it", () => {
+  const diary: ContinenceDiary = { date: "2026-11-13", items: [
+    { at: NOW, wear: { supplyId: "n", current: true } },
+    { at: at12(5), entry: { at: at12(5), kind: "URINATION", triggers: [], pain: false, blood: false, night: false } },
+  ] };
+  assert.equal(diaryRows(diary, true).length, 1);
+  assert.equal(diaryRows(diary, false).length, 2);
 });

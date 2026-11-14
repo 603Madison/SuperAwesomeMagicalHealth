@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity, ArrowDown, ArrowUp, ArrowUpDown, BellRing, Download, Droplet, Layers, Minus, Moon, Package, Plus, Printer, Settings as SettingsIcon, Sparkles,
@@ -7,7 +7,8 @@ import {
 import { api } from "../lib/api";
 import { clock, isoDate, num, shortDate, today } from "../lib/format";
 import type {
-  ContinenceCheckIn, ContinenceEntry, ContinenceKind, ContinenceProgress, ContinenceSettings, LeakSize, ProgressMetric, Supply, Verdict,
+  ContinenceCheckIn, ContinenceEntry, ContinenceKind, ContinenceProgress, ContinenceSettings, ContinenceWear, ContinenceWearing, LeakSize,
+  ProgressMetric, Supply, Verdict,
 } from "../lib/types";
 import { AWARENESS, FULLNESS, LEAK_CONTENTS, REACHED_TOILET, VERDICT_LABEL, supplyKindLabel } from "../lib/types";
 import { F, useFields } from "../lib/fields";
@@ -21,8 +22,11 @@ import { useWater } from "../lib/fields";
 import { useModules } from "../App";
 import { ChipPicker, CustomFieldInputs, CustomFieldsBuilder, FieldsEditor, FullnessPicker, OneOf, ScaleRow, WordList } from "../components/FieldKit";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
-import { changeDraft, changeDetail, changeTitle, recentPutOns } from "../lib/continence";
-import { ChangeSheet, ProductsCard, WearingCard, putOn, tracksProducts } from "./Wearing";
+import {
+  changeAfter, changeCount, changeDraft, changeDetail, changeTitle, diaryRows, inWhatsOn, isAccident, newEntry, putOnAlone, recentPutOns, wearLine,
+} from "../lib/continence";
+import { useScreenLayout } from "../lib/layout";
+import { ChangeSheet, FullnessBadge, ProductsCard, WearingCard, putOn, tracksProducts } from "./Wearing";
 
 export const KINDS: { id: ContinenceKind; label: string; short: string }[] = [
   { id: "URINATION", label: "Toilet trip", short: "Trip" },
@@ -48,8 +52,6 @@ const DEFAULT_SETTINGS: ContinenceSettings = {
   bladderTraining: { enabled: false, intervalMinutes: 60, from: "08:00", to: "21:00", stepMinutes: 15, stepEveryDays: 7, goalMinutes: 180 },
 };
 
-const blank = (kind: ContinenceKind, settings?: ContinenceSettings): ContinenceEntry =>
-  ({ at: Date.now(), kind, triggers: [], pain: false, blood: false, night: false, supplyId: kind === "PAD_CHANGE" || kind === "LEAK" ? settings?.defaultSupplyId : undefined });
 
 export function Continence() {
   const { has } = useFields();
@@ -62,11 +64,13 @@ export function Continence() {
   const progress = useLoad(() => api.continenceProgress(12).catch(() => null), []);
   const wearing = useLoad(() => api.continenceWearing().catch(() => undefined), []);
   const products = useLoad(() => api.continenceProducts(90).catch(() => []), []);
+  // Grouped by what was worn; an older server doesn't have it, and the day shows as a plain list.
+  const diaryDay = useLoad(() => api.continenceDiary().catch(() => null), []);
   const [detail, setDetail] = useState<ContinenceEntry | null>(null);
   const [changing, setChanging] = useState<ContinenceEntry | null>(null);
   const [exercise, setExercise] = useState(false);
   const [diary, setDiary] = useState(false);
-  const reload = () => { entries.reload(); summary.reload(); progress.reload(); supplies.reload(); wearing.reload(); products.reload(); };
+  const reload = () => { entries.reload(); summary.reload(); progress.reload(); supplies.reload(); wearing.reload(); products.reload(); diaryDay.reload(); };
   const s0 = settings.data ?? DEFAULT_SETTINGS;
   const recent = recentPutOns(entries.data ?? []);
   /** The Change sheet, starting from what's on now. */
@@ -74,24 +78,36 @@ export function Continence() {
   const quick = async (kind: ContinenceKind) => {
     // A change is one step with what came off and what went on: its sheet, quick to finish.
     if (kind === "PAD_CHANGE") { change(); return; }
-    try { await api.saveContinence(blank(kind, s0)); toast(`${kindLabel(kind)} logged`); reload(); } catch (e) { errorToast(e); }
+    // An accident goes with what's on.
+    try { await api.saveContinence(newEntry(kind, wearing.data, s0)); toast(`${kindLabel(kind)} logged`); reload(); } catch (e) { errorToast(e); }
   };
   const open = (e: ContinenceEntry) => (e.kind === "PAD_CHANGE" ? setChanging(e) : setDetail(e));
   const todays = (entries.data ?? []).filter((e) => e.date === today());
   const s = summary.data;
-  const buttons = s0.quickButtons.filter((k) => (k !== "BOWEL_LEAK" || has(F.CONTINENCE_BOWEL_ACCIDENTS)) && (k !== "CATHETER" || has(F.CONTINENCE_CATHETER)));
+  // While Wearing now shows what's on (with its own Change), the quick row leaves Change out.
+  const layout = useScreenLayout(layoutKey("bladder"));
+  const wearingShown = tracksProducts(has, wearing.data) && !(layout?.hidden ?? []).includes("wearing");
+  const somethingOn = wearingShown && !!wearing.data?.supplyId;
+  const buttons = s0.quickButtons.filter((k) => (k !== "BOWEL_LEAK" || has(F.CONTINENCE_BOWEL_ACCIDENTS)) && (k !== "CATHETER" || has(F.CONTINENCE_CATHETER)) && !(k === "PAD_CHANGE" && somethingOn));
+  const rows = diaryDay.data ? diaryRows(diaryDay.data, wearingShown) : null;
+  const sup = supplies.data ?? [];
+  const accidentRows = (list: ContinenceEntry[]) => <AccidentRows list={list} supplies={sup} readOnly={readOnly} onOpen={open} />;
   const lowSupplies = (supplies.data ?? []).filter((x) => x.active && !x.reusable && x.lowAt != null && x.onHand <= x.lowAt);
   const water = useWater(useModules());
   const hasDays = !!s && s.days.some((d) => d.voids + d.leaks > 0);
   const sections: Section[] = [
     { id: "wearing", label: "Wearing now", when: tracksProducts(has, wearing.data), node: wearing.data !== undefined || !wearing.loading ? (
-      <WearingCard wearing={wearing.data} supplies={supplies.data ?? []} settings={s0} recent={recent} readOnly={readOnly} onChange={change}
-        onPutOn={async (id) => { try { await putOn(id, supplies.data ?? []); reload(); } catch (e) { errorToast(e); } }} />
+      <WearingCard wearing={wearing.data} supplies={sup} settings={s0} recent={recent} readOnly={readOnly} onChange={change}
+        onPutOn={async (id) => { try { await putOn(id, sup); reload(); } catch (e) { errorToast(e); } }}
+        onAccident={() => setDetail(newEntry("LEAK", wearing.data, s0))}
+        onEditOn={wearing.data?.wear?.on ? () => setChanging(wearing.data!.wear!.on!) : undefined}>
+        {accidentRows(wearing.data?.wear?.accidents ?? [])}
+      </WearingCard>
     ) : null },
     { id: "quick", label: "Quick buttons", when: !readOnly, node: (
       <div className="quick span-2" role="group" aria-label="Log with one tap">
         {buttons.map((k) => <button key={k} className="chip" onClick={() => quick(k)}><Plus size={18} /> {kindLabel(k)}</button>)}
-        <button className="chip" onClick={() => setDetail(blank("URINATION", s0))}><Plus size={18} /> With details</button>
+        <button className="chip" onClick={() => setDetail(newEntry("URINATION", wearing.data, s0))}><Plus size={18} /> With details</button>
         {has(F.CONTINENCE_PELVIC_FLOOR) && <button className="chip" onClick={() => setExercise(true)}><Activity size={18} /> Pelvic floor exercise</button>}
       </div>
     ) },
@@ -104,22 +120,18 @@ export function Continence() {
     { id: "today", label: "Today", node: (
       <Card title="Today" icon={<Droplet size={18} />}>
         {entries.error && <ErrorNotice message={entries.error} onRetry={entries.reload} />}
-        {todays.length === 0 ? <p className="muted">Nothing logged today.</p> : (
+        {todays.length === 0 && !(rows ?? []).length ? <p className="muted">Nothing logged today.</p> : rows ? (
+          <>
+            <TodayCounts entries={todays} />
+            <ul className="rows diary-rows">
+              {rows.map((i) => (i.wear
+                ? <WearRow key={`w${i.wear.on?.id ?? i.wear.off?.id ?? i.at}`} w={i.wear} readOnly={readOnly} onOpen={open}>{accidentRows(i.wear.accidents ?? [])}</WearRow>
+                : i.entry && <EntryRow key={i.entry.id} e={i.entry} supplies={sup} readOnly={readOnly} onOpen={open} onDelete={reload} />))}
+            </ul>
+          </>
+        ) : (
           <ul className="rows">
-            {todays.map((e) => (
-              <li key={e.id} className="row">
-                <div className="row-icon">{e.night ? <Moon size={18} /> : e.kind === "PELVIC_FLOOR" ? <Activity size={18} /> : e.kind === "PAD_CHANGE" ? <Layers size={18} /> : <Droplet size={18} />}</div>
-                <button className="row-main link-row" onClick={() => !readOnly && open(e)} disabled={readOnly}>
-                  <div className="row-title">{e.kind === "PAD_CHANGE" ? changeTitle(e, supplies.data ?? []) : kindLabel(e.kind)}</div>
-                  <div className="row-sub">{clock(e.at)}{e.kind === "PAD_CHANGE" ? describeChange(e) : describe(e, supplies.data ?? [])}</div>
-                </button>
-                {!readOnly && (
-                  <div className="row-actions">
-                    <Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteContinence(e.id!); reload(); } catch (err) { errorToast(err); } }}><Trash2 size={16} /></Button>
-                  </div>
-                )}
-              </li>
-            ))}
+            {todays.map((e) => <EntryRow key={e.id} e={e} supplies={sup} readOnly={readOnly} onOpen={open} onDelete={reload} />)}
           </ul>
         )}
       </Card>
@@ -181,9 +193,11 @@ export function Continence() {
       {s && !s.days.some((d) => d.voids + d.leaks + d.bowel > 0) && (
         <p className="muted small section-gap">Log every toilet trip and any leaks for three days or more: it's the first thing any specialist asks for, and it shows patterns quickly.</p>
       )}
-      {detail && <EntryDialog entry={detail} settings={s0} supplies={supplies.data ?? []} onClose={() => setDetail(null)} onSaved={reload}
-        onPadChange={() => { setDetail(null); change(); }} />}
-      {changing && <ChangeSheet initial={changing} supplies={supplies.data ?? []} settings={s0} recent={recent} onClose={() => setChanging(null)} onSaved={reload} />}
+      {detail && <EntryDialog entry={detail} settings={s0} supplies={sup} wearing={wearing.data} onClose={() => setDetail(null)} onSaved={reload}
+        onPadChange={() => { setDetail(null); change(); }}
+        onSavedThenChange={(accident) => { setDetail(null); setChanging(changeAfter(accident, wearing.data, s0, sup, recent)); }} />}
+      {changing && <ChangeSheet initial={changing} supplies={sup} settings={s0} recent={recent} onClose={() => setChanging(null)} onSaved={reload}
+        accidentsWhile={wearing.data?.wear?.accidents?.length ?? 0} />}
       {exercise && <PelvicFloor onClose={() => setExercise(false)} onLogged={reload} />}
       {diary && <Diary onClose={() => setDiary(false)} />}
     </div>
@@ -224,18 +238,122 @@ function describe(e: ContinenceEntry, supplies: Supply[]): string {
   return parts.length ? ` · ${parts.join(" · ")}` : "";
 }
 
+/** Today's counts: trips, leaks and bowel movements, then the rest that happened. */
+function TodayCounts({ entries }: { entries: ContinenceEntry[] }) {
+  const n = (k: ContinenceKind) => entries.filter((e) => e.kind === k).length;
+  const leaks = n("LEAK") + n("BEDWETTING");
+  const say = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
+  const more = [
+    n("BOWEL_LEAK") > 0 && say(n("BOWEL_LEAK"), "bowel accident", "bowel accidents"),
+    changeCount(entries) > 0 && say(changeCount(entries), "change", "changes"),
+    n("CATHETER") > 0 && say(n("CATHETER"), "catheter", "catheters"),
+  ].filter(Boolean);
+  return (
+    <div className="diary-counts">
+      <Stat label={n("URINATION") === 1 ? "Toilet trip" : "Toilet trips"} value={String(n("URINATION"))} />
+      <Stat label={leaks === 1 ? "Leak" : "Leaks"} value={String(leaks)} />
+      <Stat label={n("BOWEL") === 1 ? "Bowel movement" : "Bowel movements"} value={String(n("BOWEL"))} />
+      {more.length > 0 && <p className="muted small diary-more">{more.join(" · ")}</p>}
+    </div>
+  );
+}
+
+/** "7:48 pm", or "Yesterday 11:30 pm" / "Tue 11:30 pm" for an accident on another day. */
+function when(ms: number): string {
+  const d = new Date(ms);
+  if (isoDate(d) === today()) return clock(ms);
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  return `${isoDate(d) === isoDate(y) ? "Yesterday" : d.toLocaleDateString(undefined, { weekday: "short" })} ${clock(ms)}`;
+}
+
+/** An entry on its own in the day's list. */
+function EntryRow({ e, supplies, readOnly, onOpen, onDelete }: { e: ContinenceEntry; supplies: Supply[]; readOnly: boolean; onOpen: (e: ContinenceEntry) => void; onDelete: () => void }) {
+  return (
+    <li className="row">
+      <div className="row-icon">{e.night ? <Moon size={18} /> : e.kind === "PELVIC_FLOOR" ? <Activity size={18} /> : e.kind === "PAD_CHANGE" ? <Layers size={18} /> : <Droplet size={18} />}</div>
+      <button className="row-main link-row" onClick={() => !readOnly && onOpen(e)} disabled={readOnly}>
+        <div className="row-title">{e.kind === "PAD_CHANGE" ? changeTitle(e, supplies) : kindLabel(e.kind)}</div>
+        <div className="row-sub">{clock(e.at)}{e.kind === "PAD_CHANGE" ? describeChange(e) : describe(e, supplies)}</div>
+      </button>
+      {!readOnly && (
+        <div className="row-actions">
+          <Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteContinence(e.id!); onDelete(); } catch (err) { errorToast(err); } }}><Trash2 size={16} /></Button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/** The accidents while something was on, small, under it: each opens to edit. */
+function AccidentRows({ list, supplies, readOnly, onOpen }: { list: ContinenceEntry[]; supplies: Supply[]; readOnly: boolean; onOpen: (e: ContinenceEntry) => void }) {
+  if (list.length === 0) return null;
+  return (
+    <ul className="wear-accidents">
+      {list.map((a) => (
+        <li key={a.id ?? a.at}>
+          <button type="button" className="link-row wear-accident" onClick={() => !readOnly && onOpen(a)} disabled={readOnly}>
+            <span className="wear-accident-icon" aria-hidden="true">{a.kind === "BEDWETTING" ? <Moon size={14} /> : <Droplet size={14} />}</span>
+            <span className="wear-accident-text">
+              <span className="wear-accident-title">{kindLabel(a.kind)}</span>
+              <span className="wear-accident-sub">{when(a.at)}{describe({ ...a, supplyId: undefined, fullness: undefined }, supplies)}</span>
+            </span>
+            {a.fullness && <span className="wear-accident-full">{FULLNESS.find((f) => f.id === a.fullness)?.label}</span>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A product worn, as one row: how it was when it came off, then the accidents while it was on. */
+function WearRow({ w, readOnly, onOpen, children }: { w: ContinenceWear; readOnly: boolean; onOpen: (e: ContinenceEntry) => void; children: ReactNode }) {
+  const head = w.off ?? w.on;
+  const alone = putOnAlone(w);
+  const badge = !!w.off || !!w.current;
+  // The pad beside it says how full it was; the line says the rest.
+  const shown: ContinenceWear = { ...w, off: w.current ? undefined : w.off, fullness: badge ? undefined : w.fullness, leakedThrough: !!w.leakedThrough && w.fullness !== "LEAKED" };
+  return (
+    <li className="row wear-row">
+      <div className="row-icon"><Layers size={18} /></div>
+      <div className="row-main">
+        <button type="button" className="link-row wear-head" onClick={() => !readOnly && head && onOpen(head)} disabled={readOnly || !head}>
+          <span className="wear-head-text">
+            <span className="row-title">{w.name ?? "A product"}{w.current && <span className="wearing-kind">On now</span>}</span>
+            <span className="row-sub wraps">{w.end != null && <>Off at {clock(w.end)} · </>}{wearLine(shown, clock)}</span>
+          </span>
+          {badge && <FullnessBadge fullness={w.fullness} />}
+        </button>
+        {children}
+        {alone && (
+          <button type="button" className="link-row wear-puton" onClick={() => !readOnly && onOpen(alone)} disabled={readOnly}>Put on at {clock(alone.at)}</button>
+        )}
+      </div>
+    </li>
+  );
+}
+
 /** Everything about one entry, showing only the fields this person uses. */
-function EntryDialog({ entry, settings, supplies, onClose, onSaved, onPadChange }: {
-  entry: ContinenceEntry; settings: ContinenceSettings; supplies: Supply[]; onClose: () => void; onSaved: () => void;
+function EntryDialog({ entry, settings, supplies, wearing, onClose, onSaved, onPadChange, onSavedThenChange }: {
+  entry: ContinenceEntry; settings: ContinenceSettings; supplies: Supply[]; wearing?: ContinenceWearing; onClose: () => void; onSaved: () => void;
   /** A change has its own sheet. */
   onPadChange: () => void;
+  /** "Save and change": the accident is saved, then the Change sheet opens from it. */
+  onSavedThenChange?: (saved: ContinenceEntry) => void;
 }) {
   const { has } = useFields();
   const [e, setE] = useState(entry);
   const [busy, setBusy] = useState(false);
-  const save = async () => {
+  // A new accident in what's on: one line says so, with the picker a tap away.
+  const [picking, setPicking] = useState(false);
+  const inOn = inWhatsOn(e, wearing) && !picking;
+  const save = async (then?: "change") => {
     setBusy(true);
-    try { await api.saveContinence(e); toast("Saved"); onSaved(); onClose(); } catch (err) { errorToast(err); setBusy(false); }
+    try {
+      const saved = await api.saveContinence(e);
+      toast("Saved");
+      onSaved();
+      if (then === "change" && onSavedThenChange) onSavedThenChange(saved); else onClose();
+    } catch (err) { errorToast(err); setBusy(false); }
   };
   const local = (ms: number) => { const d = new Date(ms); return `${isoDate(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
   const isLeak = e.kind === "LEAK" || e.kind === "BOWEL_LEAK" || e.kind === "BEDWETTING";
@@ -245,12 +363,44 @@ function EntryDialog({ entry, settings, supplies, onClose, onSaved, onPadChange 
   const supply = supplies.find((x) => x.id === e.supplyId);
   const lost = e.padWeightG != null && supply?.dryWeightG != null ? Math.max(0, e.padWeightG - supply.dryWeightG) : null;
   const wearable = supplies.filter((x) => x.active && ["LINER", "PAD", "BOOSTER", "PULL_UP", "BRIEF", "BED_PAD", "REUSABLE_UNDERWEAR", "OTHER"].includes(x.kind));
+  // What it was in: first, for an accident in what's on now; otherwise with the rest of the detail.
+  const product = worn && has(F.CONTINENCE_PROTECTION) ? (
+
+        <div className="subsection">
+          {inOn ? (
+            <p className="in-whats-on">In your <strong>{supply?.name ?? "product"}</strong> <button type="button" className="link-btn" onClick={() => setPicking(true)}>Not this</button></p>
+          ) : <h4 className="subsection-title">{e.kind === "PAD_CHANGE" ? "What you changed" : "What you were wearing"}</h4>}
+          {inOn ? null : wearable.length > 0 ? (
+            <Field label="Product">
+              <select value={e.supplyId ?? ""} onChange={(ev) => setE({ ...e, supplyId: ev.target.value || undefined })}>
+                <option value="">Nothing / not saying</option>
+                {wearable.map((x) => <option key={x.id} value={x.id}>{x.name} · {supplyKindLabel(x.kind)}{x.absorbency ? ` · ${x.absorbency}` : ""}</option>)}
+              </select>
+            </Field>
+          ) : <p className="muted small">Add your pads, briefs or pull-ups on the <Link to="/supplies">Supplies</Link> page to pick them here and count them down.</p>}
+          <FullnessPicker label={inOn ? "How full it is now" : undefined} value={e.fullness} onChange={(fullness) => setE({ ...e, fullness })} />
+          {e.kind === "PAD_CHANGE" && (
+            <Field label="How many"><input inputMode="numeric" value={e.count ?? 1} onChange={(ev) => setE({ ...e, count: Math.max(1, Number(ev.target.value) || 1) })} /></Field>
+          )}
+          {has(F.CONTINENCE_PAD_WEIGHT) && (
+            <Field label="Weighed (grams)" help={supply?.dryWeightG != null ? `Dry it weighs ${num(supply.dryWeightG)} g` : "Add the dry weight to the product to see what was lost"}>
+              <input inputMode="decimal" value={e.padWeightG ?? ""} onChange={(ev) => setE({ ...e, padWeightG: ev.target.value ? Number(ev.target.value.replace(",", ".")) : undefined })} />
+            </Field>
+          )}
+          {lost != null && <p className="loss-line" aria-live="polite">About <strong>{num(lost)} g</strong> lost (roughly {num(lost)} ml).</p>}
+        </div>
+  ) : null;
   return (
-    <Modal wide title={entry.id ? "Edit entry" : "Add to the diary"} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} onClick={save}>Save</Button></>}>
+    <Modal wide title={entry.id ? "Edit entry" : "Add to the diary"} onClose={onClose} footer={<>
+      <Button variant="ghost" onClick={onClose}>Cancel</Button>
+      {!entry.id && isAccident(e.kind) && !!e.supplyId && onSavedThenChange && <Button variant="tonal" disabled={busy} onClick={() => save("change")}>Save and change</Button>}
+      <Button variant="primary" busy={busy} onClick={() => save()}>Save</Button>
+    </>}>
       <div className="tag-list" role="radiogroup" aria-label="What happened">
         {kinds.map((k) => <button key={k.id} type="button" role="radio" aria-checked={e.kind === k.id} className={`chip ${e.kind === k.id ? "is-on" : ""}`} onClick={() => (k.id === "PAD_CHANGE" && !entry.id ? onPadChange() : setE({ ...e, kind: k.id }))}>{k.label}</button>)}
       </div>
       <Field label="When"><input type="datetime-local" value={local(e.at)} onChange={(ev) => setE({ ...e, at: new Date(ev.target.value).getTime() })} /></Field>
+      {inOn && product}
 
       {isLeak && e.kind !== "BEDWETTING" && <OneOf label="What leaked" options={LEAK_CONTENTS} value={e.contents} onChange={(contents) => setE({ ...e, contents })} />}
       {(isVoid || isLeak) && has(F.CONTINENCE_URGENCY) && (
@@ -281,29 +431,7 @@ function EntryDialog({ entry, settings, supplies, onClose, onSaved, onPadChange 
         <ChipPicker label="Where you were" multi={false} options={[...PLACES, ...settings.locations]} value={e.location ? [e.location] : []} onChange={(v) => setE({ ...e, location: v[0] })} />
       )}
 
-      {worn && has(F.CONTINENCE_PROTECTION) && (
-        <div className="subsection">
-          <h4 className="subsection-title">{e.kind === "PAD_CHANGE" ? "What you changed" : "What you were wearing"}</h4>
-          {wearable.length > 0 ? (
-            <Field label="Product">
-              <select value={e.supplyId ?? ""} onChange={(ev) => setE({ ...e, supplyId: ev.target.value || undefined })}>
-                <option value="">Nothing / not saying</option>
-                {wearable.map((x) => <option key={x.id} value={x.id}>{x.name} · {supplyKindLabel(x.kind)}{x.absorbency ? ` · ${x.absorbency}` : ""}</option>)}
-              </select>
-            </Field>
-          ) : <p className="muted small">Add your pads, briefs or pull-ups on the <Link to="/supplies">Supplies</Link> page to pick them here and count them down.</p>}
-          <FullnessPicker value={e.fullness} onChange={(fullness) => setE({ ...e, fullness })} />
-          {e.kind === "PAD_CHANGE" && (
-            <Field label="How many"><input inputMode="numeric" value={e.count ?? 1} onChange={(ev) => setE({ ...e, count: Math.max(1, Number(ev.target.value) || 1) })} /></Field>
-          )}
-          {has(F.CONTINENCE_PAD_WEIGHT) && (
-            <Field label="Weighed (grams)" help={supply?.dryWeightG != null ? `Dry it weighs ${num(supply.dryWeightG)} g` : "Add the dry weight to the product to see what was lost"}>
-              <input inputMode="decimal" value={e.padWeightG ?? ""} onChange={(ev) => setE({ ...e, padWeightG: ev.target.value ? Number(ev.target.value.replace(",", ".")) : undefined })} />
-            </Field>
-          )}
-          {lost != null && <p className="loss-line" aria-live="polite">About <strong>{num(lost)} g</strong> lost (roughly {num(lost)} ml).</p>}
-        </div>
-      )}
+      {!inOn && product}
       {(isLeak || e.kind === "PAD_CHANGE") && has(F.CONTINENCE_CHANGES) && (
         <div className="two-col">
           <Toggle label="Changed clothes" checked={!!e.changedClothes} onChange={(changedClothes) => setE({ ...e, changedClothes })} />

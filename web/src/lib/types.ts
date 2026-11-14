@@ -817,6 +817,44 @@ export interface ContinenceWearing {
   /** When a change reminder is due (ContinenceSettings.changeReminderHours). */
   changeDueAt?: number;
   nothingOn?: boolean;
+  /** What's on now as a wear: how full it is, and the accidents since it went on. */
+  wear?: ContinenceWear;
+}
+
+/** One product's time on, from the change that put it on to the one that took it off, with the accidents while it was on. */
+export interface ContinenceWear {
+  supplyId: string;
+  name?: string;
+  kind?: SupplyKind;
+  /** The change that put it on, when that's in the diary. */
+  on?: ContinenceEntry;
+  /** The change that took it off: missing while it's on, or when the diary skips its removal. */
+  off?: ContinenceEntry;
+  start?: number;
+  end?: number;
+  /** It's what's on now. */
+  current?: boolean;
+  minutes?: number;
+  /** How full it was when it came off, or, until then, as the latest accident left it. */
+  fullness?: Fullness;
+  leakedThrough?: boolean;
+  /** Leaks, bowel accidents and wet nights while it was on, oldest first. */
+  accidents?: ContinenceEntry[];
+  /** What went on after it, by name. */
+  nextName?: string;
+}
+
+/** A day of the diary, grouped (GET /api/continence/diary?date=), newest first. */
+export interface ContinenceDiary {
+  date: string;
+  items: ContinenceDiaryItem[];
+}
+
+/** A wear (with its changes and accidents) or an entry on its own. */
+export interface ContinenceDiaryItem {
+  at: number;
+  wear?: ContinenceWear;
+  entry?: ContinenceEntry;
 }
 
 /** How one product goes (GET /api/continence/products?days=90). */
