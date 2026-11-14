@@ -388,6 +388,23 @@ class TrackingTest {
     }
 
     @Test
+    fun `a day from before a habit began opens without it, and has no streak`() = runBlocking {
+        val s = services()
+        val id = s.admin()
+        // Begun today (a Friday); the 1st was a Sunday, its week long over before this one.
+        s.tracking.habits.save(id, Habit("Stretch", timesPerWeek = 3))
+        val early = today.minusDays(19)
+        assertNull(s.days.summary(id, early.toString()).modules.habits)
+        assertTrue(s.tracking.habits.statuses(id, early).isEmpty())
+        // Earlier the same week, too.
+        assertTrue(s.tracking.habits.statuses(id, today.minusDays(2)).isEmpty())
+        assertEquals(1, s.days.summary(id, today.toString()).modules.habits!!.size)
+        assertEquals(0, HabitsService.streakWeeks(3, today, early) { true })
+        assertEquals(0, HabitsService.streakWeeks(3, today, today.minusDays(2)) { true })
+        assertEquals(0, HabitsService.streakDays(today, early) { true })
+    }
+
+    @Test
     fun `habits tick by hand or from what's recorded, through the API`() = serverTest(services()) { s ->
         val admin = adminBrowser()
         val walk = admin.postJson("/api/habits", """{"name":"Walk","icon":"footprints","source":"STEPS_GOAL","timesPerWeek":5}""").obj()
