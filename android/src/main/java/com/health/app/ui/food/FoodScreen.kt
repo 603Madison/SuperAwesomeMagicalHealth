@@ -101,6 +101,8 @@ class FoodActions(
     /** Ideas: one logged with a tap, or ideas for another meal. */
     val addIdea: (FoodSuggestion) -> Unit = {},
     val ideasFor: (Meal) -> Unit = {},
+    /** Logs a recipe from Mealie's meal plan (its place in the plan): one serving, to its meal. */
+    val addPlanned: (Int) -> Unit = {},
 )
 
 @Composable
@@ -115,7 +117,7 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
             go = vm::go, retry = { vm.load() }, add = onAdd, delete = vm::delete, change = vm::change,
             addWater = vm::addWater, deleteWater = vm::deleteWater, copyYesterday = vm::copyYesterday,
             quickDrink = { vm.quickDrink(it) }, saveDrink = { vm.saveDrink(it) }, deleteDrink = { vm.deleteDrink(it) },
-            addIdea = vm::addIdea, ideasFor = vm::ideasFor,
+            addIdea = vm::addIdea, ideasFor = vm::ideasFor, addPlanned = vm::addPlanned,
         ),
         zone = c.zone(),
         water = showsField(Fields.NUTRITION_WATER),
@@ -132,6 +134,7 @@ fun showsMicros(): Boolean = showsField(Fields.NUTRITION_MICROS) && com.health.a
 object FoodSections {
     val KEY = Layouts.screen(Layouts.ANDROID, "food")
     const val IDEAS = "ideas"
+    const val MEALPLAN = "mealplan"
     const val TOTALS = "totals"
     const val WATER = "water"
     const val DRINKS = "drinks"
@@ -141,12 +144,13 @@ object FoodSections {
     fun meal(meal: Meal): String = meal.name.lowercase()
 
     /**
-     * The sections, in the default order; ideas only for today, water only while it's shown, the
-     * totals only while amounts of food show ([numbers]: not in eating disorder recovery), and
-     * vitamins and minerals while they show ([micros]).
+     * The sections, in the default order; ideas only for today, Mealie's meal plan while it's
+     * connected ([mealPlan]), water only while it's shown, the totals only while amounts of food
+     * show ([numbers]: not in eating disorder recovery), and vitamins and minerals while they show ([micros]).
      */
-    fun items(water: Boolean, ideas: Boolean = true, numbers: Boolean = true, micros: Boolean = false): List<ArrangeItem> = buildList {
+    fun items(water: Boolean, ideas: Boolean = true, numbers: Boolean = true, micros: Boolean = false, mealPlan: Boolean = false): List<ArrangeItem> = buildList {
         if (ideas) add(ArrangeItem(IDEAS, "Ideas"))
+        if (mealPlan) add(ArrangeItem(MEALPLAN, "Meal plan"))
         if (numbers) add(ArrangeItem(TOTALS, "Calories and nutrients"))
         if (numbers && micros) add(ArrangeItem(MICROS, "Vitamins & minerals"))
         Meal.entries.forEach { add(ArrangeItem(meal(it), it.label)) }
@@ -156,7 +160,8 @@ object FoodSections {
 }
 
 /**
- * The day's food: totals, each meal, water (unless it's hidden) and drinks, in the person's order.
+ * The day's food: totals, each meal, water (unless it's hidden) and drinks, in the person's order,
+ * with the day's meal plan from Mealie when it's connected (never while viewing a share).
  * Without [numbers] (eating disorder recovery), no calories, macros or targets anywhere: no
  * totals, meals by what's in them, water without its goal.
  */
@@ -168,7 +173,8 @@ fun FoodScreen(
     var editing by remember { mutableStateOf<FoodEntry?>(null) }
     var arranging by remember { mutableStateOf(false) }
     val day = state.day
-    val items = FoodSections.items(water, ideas = state.date == state.today, numbers = numbers, micros = micros)
+    val mealPlan = state.mealie && !com.health.app.ui.care.LocalReadOnly.current
+    val items = FoodSections.items(water, ideas = state.date == state.today, numbers = numbers, micros = micros, mealPlan = mealPlan)
     val shown = arranged(FoodSections.KEY, items)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         ScreenTitle("Food", Format.day(state.date, state.today)) {
@@ -187,6 +193,7 @@ fun FoodScreen(
                         val meal = Meal.entries.firstOrNull { FoodSections.meal(it) == id }
                         when {
                             id == FoodSections.IDEAS -> IdeasCard(state.ideas, state.ideasMeal, state.ideasError, actions, numbers)
+                            id == FoodSections.MEALPLAN -> state.plan?.takeIf { mealPlan && MealieText.shown(it) }?.let { MealPlanCard(it, numbers, actions.addPlanned) }
                             id == FoodSections.TOTALS -> if (numbers) Totals(day)
                             id == FoodSections.MICROS -> if (numbers && micros) MicrosCard(day, state.date == state.today)
                             meal != null -> MealCard(

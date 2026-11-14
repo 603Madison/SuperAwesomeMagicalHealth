@@ -45,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,6 +80,8 @@ class AddFoodActions(
     val create: (Food, Double) -> Unit = { _, _ -> },
     val dismissUnknown: () -> Unit = {},
     val snap: () -> Unit = {},
+    /** Opens a page (a Mealie recipe's) in the browser. */
+    val openLink: (String) -> Unit = {},
 )
 
 @Composable
@@ -88,13 +91,14 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
     val state by vm.state.collectAsState()
     LaunchedEffect(state.done) { if (state.done) onDone() }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result -> result.contents?.let(vm::barcode) }
+    val uri = LocalUriHandler.current
     var snapping by rememberSaveable { mutableStateOf(false) }
     if (snapping && !LocalReadOnly.current) {
         FoodPhotoRoute(date, meal, onBack = { snapping = false }, onDone = onDone)
         return
     }
     AddFoodScreen(
-        meal, if (LocalReadOnly.current) state.copy(photoOffer = null) else state,
+        meal, if (LocalReadOnly.current) state.copy(photoOffer = null, mealieOn = false) else state,
         AddFoodActions(
             back = onDone,
             query = vm::query,
@@ -113,6 +117,7 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
             create = vm::create,
             dismissUnknown = vm::dismissUnknown,
             snap = { snapping = true },
+            openLink = { link -> runCatching { uri.openUri(link) } },
         ),
         numbers = com.health.app.ui.components.foodNumbers(),
         micros = showsMicros(),
@@ -122,6 +127,8 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
 /**
  * Finding a food to add. Without [numbers] (eating disorder recovery), no calories or macros on the
  * foods; with [micros], the vitamins and minerals they carry, and "More nutrients" for new ones.
+ * With Mealie connected, its recipes are a group of their own ("Your Mealie"): those with
+ * nutrition add like any food, the rest show quietly.
  */
 @Composable
 fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numbers: Boolean = true, micros: Boolean = false) {
@@ -169,9 +176,22 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
                     items(state.recent.size) { i -> CardItem(i, state.recent.size) { FoodRow(state.recent[i], numbers, micros) { actions.pick(state.recent[i]) } } }
                 }
             } else {
-                if (results.mine.isNotEmpty()) {
+                val mealie = MealieText.group(state.mealieOn, state.query, state.mealie, state.mealieSearching)
+                val mine = MealieText.mine(results.mine, mealie)
+                if (mine.isNotEmpty()) {
                     item { SectionTitle("Your foods") }
-                    items(results.mine.size) { i -> CardItem(i, results.mine.size) { FoodRow(results.mine[i], numbers, micros) { actions.pick(results.mine[i]) } } }
+                    items(mine.size) { i -> CardItem(i, mine.size) { FoodRow(mine[i], numbers, micros) { actions.pick(mine[i]) } } }
+                }
+                if (mealie != null) {
+                    item { SectionTitle(MealieText.GROUP) }
+                    val recipes = mealie.recipes
+                    items(recipes.size) { i ->
+                        CardItem(i, recipes.size) {
+                            val food = recipes[i].food
+                            if (food != null) FoodRow(food, numbers, micros) { actions.pick(food) } else NoNutritionRow(recipes[i], actions.openLink)
+                        }
+                    }
+                    mealie.line?.let { line -> item { Hint(line, Modifier.padding(horizontal = 20.dp, vertical = if (recipes.isEmpty()) 0.dp else 8.dp)) } }
                 }
                 item { SectionTitle("Open Food Facts") }
                 when {
@@ -183,7 +203,9 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
         }
     }
 
-    state.picked?.let { food -> ServingsDialog(food, numbers, micros, onDismiss = { actions.pick(null) }) { actions.add(food, it) } }
+    state.picked?.let { food ->
+        ServingsDialog(food, numbers, micros, makes = MealieText.makes(food, state.mealie?.items.orEmpty()), onDismiss = { actions.pick(null) }) { actions.add(food, it) }
+    }
     state.unknownBarcode?.let { code ->
         AlertDialog(
             onDismissRequest = actions.dismissUnknown,
@@ -221,9 +243,12 @@ fun FoodRow(food: Food, numbers: Boolean = true, micros: Boolean = false, onClic
     }
 }
 
-/** How much of [food]: a stepper in quarter servings, with what that amount holds (unless amounts of food don't show: [numbers]). */
+/**
+ * How much of [food]: a stepper in quarter servings, with what that amount holds (unless amounts of
+ * food don't show: [numbers]). A Mealie recipe says how many servings it [makes], when known.
+ */
 @Composable
-fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
+fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false, makes: Double? = null, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
     var servings by remember { mutableDoubleStateOf(1.0) }
     var text by remember { mutableStateOf("1") }
     fun set(v: Double) {
@@ -236,7 +261,12 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false,
         title = { Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOfNotNull(food.brand, if (food.source == FoodSource.OPEN_FOOD_FACTS) "Open Food Facts" else null).takeIf { it.isNotEmpty() }?.let {
+                val from = when (food.source) {
+                    FoodSource.OPEN_FOOD_FACTS -> "Open Food Facts"
+                    FoodSource.MEALIE -> "Mealie"
+                    FoodSource.CUSTOM -> null
+                }
+                listOfNotNull(food.brand, from).takeIf { it.isNotEmpty() }?.let {
                     Hint(it.joinToString(" · "))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -250,7 +280,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false,
                     )
                     FilledTonalIconButton(onClick = { set(servings + 0.25) }) { Icon(Icons.Rounded.Add, "More") }
                 }
-                Hint("1 serving = ${food.serving}${food.servingGrams?.let { " (${Format.compact(it)} g)" } ?: ""}")
+                Hint(MealieText.servingLine(food, makes))
                 if (numbers) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {

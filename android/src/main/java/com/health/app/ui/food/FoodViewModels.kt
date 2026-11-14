@@ -12,6 +12,8 @@ import com.health.api.FoodEntryInput
 import com.health.api.FoodSearch
 import com.health.api.FoodSuggestion
 import com.health.api.FoodSuggestions
+import com.health.api.MealiePlan
+import com.health.api.MealieRecipes
 import com.health.api.toInput
 import com.health.app.net.foodSuggestions
 import com.health.api.Meal
@@ -22,8 +24,12 @@ import com.health.app.net.addDrink
 import com.health.app.net.aiStatus
 import com.health.app.net.deleteDrink
 import com.health.app.net.drinksDay
+import com.health.app.net.mealiePlan
+import com.health.app.net.mealieRecipes
+import com.health.app.net.mealieStatus
 import com.health.app.net.updateDrink
 import com.health.app.ui.tracking.quickDrink
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,12 +53,17 @@ data class FoodState(
     val ideasMeal: Meal? = null,
     /** Why there are no ideas: an older server, or no answer. */
     val ideasError: String? = null,
+    /** Mealie is connected (never asked while viewing a share): the day's meal plan shows. */
+    val mealie: Boolean = false,
+    /** The day's meal plan in Mealie, once it's come (or why it couldn't). */
+    val plan: MealiePlan? = null,
 )
 
 class FoodViewModel(private val c: Container) : ViewModel() {
     private val _state = MutableStateFlow(LocalDate.now(c.zone()).let { FoodState(it, it) })
     val state: StateFlow<FoodState> = _state.asStateFlow()
     private var job: Job? = null
+    private var planJob: Job? = null
 
     init {
         load()
@@ -64,6 +75,7 @@ class FoodViewModel(private val c: Container) : ViewModel() {
         val date = _state.value.date
         job?.cancel()
         _state.update { it.copy(today = today, loading = !quiet || it.day == null, error = null) }
+        loadPlan(date)
         job = viewModelScope.launch {
             try {
                 val day = c.ui.foodDay(date.toString())
@@ -77,8 +89,70 @@ class FoodViewModel(private val c: Container) : ViewModel() {
     }
 
     fun go(date: LocalDate) {
-        _state.update { it.copy(date = date, day = null, ideas = null, ideasError = null) }
+        _state.update { it.copy(date = date, day = null, ideas = null, ideasError = null, plan = null) }
         load()
+    }
+
+    /**
+     * The day's meal plan, when Mealie is connected: asked apart from the day, so a slow Mealie
+     * doesn't hold it up. Never while viewing a share (the plan is the person's own).
+     */
+    private fun loadPlan(date: LocalDate) {
+        planJob?.cancel()
+        if (c.viewing.value != null) {
+            _state.update { it.copy(mealie = false, plan = null) }
+            return
+        }
+        planJob = viewModelScope.launch {
+            val connected = try {
+                c.api.mealieStatus().connected
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            if (!connected) {
+                _state.update { it.copy(mealie = false, plan = null) }
+                return@launch
+            }
+            val plan = try {
+                c.api.mealiePlan(date.toString())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                MealiePlan(date.toString(), problem = MealieText.problem(e))
+            }
+            _state.update { if (it.date == date) it.copy(mealie = true, plan = plan) else it }
+        }
+    }
+
+    /** Logs one serving of a planned recipe to its meal, on the day shown, then offers Undo. */
+    fun addPlanned(index: Int) {
+        val s = _state.value
+        val plan = s.plan ?: return
+        val entry = plan.entries.getOrNull(index) ?: return
+        val food = entry.recipe?.food ?: return
+        if (entry.logged || c.viewing.value != null) return
+        // Marked at once, so a second tap doesn't add it twice; the reload brings the server's word.
+        _state.update { if (it.plan == plan) it.copy(plan = MealieText.logged(plan, index)) else it }
+        viewModelScope.launch {
+            val added = try {
+                c.api.addFood(FoodEntryInput(s.date.toString(), entry.meal, 1.0, food = food))
+            } catch (e: Exception) {
+                _state.update { st -> if (st.plan?.date == plan.date) st.copy(plan = plan) else st }
+                c.tell(e.message ?: "Couldn't add that")
+                return@launch
+            }
+            c.dataChanged()
+            c.tell("Added to ${com.health.app.ui.today.InsightLinks.mealWord(entry.meal)}: ${entry.title}", "Undo") {
+                c.scope.launch {
+                    runCatching { added.id?.let { id -> c.api.deleteFood(id) } }
+                        .onSuccess { c.tell("Taken back off") }
+                        .onFailure { c.tell(it.message ?: "Couldn't undo that") }
+                    c.dataChanged()
+                }
+            }
+        }
     }
 
     private suspend fun loadIdeas() {
@@ -172,20 +246,35 @@ data class AddFoodState(
     val done: Boolean = false,
     /** "Snap a photo" (FoodPhoto.kt), a line pointing to Settings, or nothing. */
     val photoOffer: PhotoOffer? = null,
+    /** Mealie is connected (and this isn't someone else's share): its recipes are searched too. */
+    val mealieOn: Boolean = false,
+    /** Mealie's recipes for [query], once they've come. */
+    val mealie: MealieRecipes? = null,
+    val mealieSearching: Boolean = false,
 )
 
 class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: Meal) : ViewModel() {
     private val _state = MutableStateFlow(AddFoodState())
     val state: StateFlow<AddFoodState> = _state.asStateFlow()
     private var searchJob: Job? = null
+    private var mealieJob: Job? = null
 
     init {
         viewModelScope.launch {
             runCatching { c.ui.recentFoods() }.onSuccess { recent -> _state.update { it.copy(recent = recent) } }
         }
-        // The assistant is only ever the person's own: nothing is offered while viewing a share.
+        // The assistant and Mealie are only ever the person's own: neither is asked while viewing a share.
         if (c.viewing.value == null) viewModelScope.launch {
             runCatching { c.api.aiStatus() }.onSuccess { s -> _state.update { it.copy(photoOffer = FoodPhotoText.offer(s, c.viewing.value != null)) } }
+        }
+        if (c.viewing.value == null) viewModelScope.launch {
+            runCatching { c.api.mealieStatus() }.onSuccess { s ->
+                if (s.connected && c.viewing.value == null) {
+                    _state.update { it.copy(mealieOn = true) }
+                    // Something typed before the answer came is looked for in Mealie too.
+                    if (_state.value.query.isNotBlank()) searchMealie(_state.value.query)
+                }
+            }
         }
     }
 
@@ -193,9 +282,12 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
         _state.update { it.copy(query = text, error = null) }
         searchJob?.cancel()
         if (text.isBlank()) {
-            _state.update { it.copy(results = null, searching = false) }
+            mealieJob?.cancel()
+            _state.update { it.copy(results = null, searching = false, mealie = null, mealieSearching = false) }
             return
         }
+        // Mealie is asked alongside the server's own search, and each shows when it comes.
+        searchMealie(text)
         searchJob = viewModelScope.launch {
             delay(350)
             _state.update { it.copy(searching = true) }
@@ -205,6 +297,28 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
             } catch (e: Exception) {
                 _state.update { it.copy(searching = false, error = e.message ?: "Couldn't search") }
             }
+        }
+    }
+
+    /** Mealie's recipes for [text], when it's connected and there's enough to look for. */
+    private fun searchMealie(text: String) {
+        mealieJob?.cancel()
+        val query = text.trim()
+        if (!_state.value.mealieOn || query.length < MealieText.MIN_QUERY) {
+            _state.update { it.copy(mealie = null, mealieSearching = false) }
+            return
+        }
+        _state.update { it.copy(mealie = null, mealieSearching = true) }
+        mealieJob = viewModelScope.launch {
+            delay(350)
+            val found = try {
+                c.api.mealieRecipes(query)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                MealieRecipes(problem = MealieText.problem(e))
+            }
+            _state.update { if (it.query == text) it.copy(mealie = found, mealieSearching = false) else it }
         }
     }
 
