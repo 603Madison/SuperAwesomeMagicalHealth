@@ -56,7 +56,9 @@ help, for the meal that's coming up, with one-tap Add. Features with nothing log
 one "Also today" card, and **+ Log** has every way to add something.
 
 **Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
-quick-add calories, make your own foods, copy yesterday's breakfast, and track water and
+quick-add calories, make your own foods, copy yesterday's breakfast, bring in your
+[Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections
+with an API token; each recipe's nutrition comes along, per serving), and track water and
 **drinks**: caffeine (and how much is likely still in you at bedtime) and alcohol, with how both
 went with your sleep and HRV. Calorie
 targets come from your resting energy (Mifflin–St Jeor, with the female or male formula, or the

@@ -65,6 +65,20 @@ the insight out while that card shows. The protein insight (today only) carries 
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
 | `GET /api/food/targets` · `PUT` | `NutrientTargets` / `NutrientTargetsChange`: each nutrient's reference intake, upper limit and the person's own target |
 | `POST /api/water` · `DELETE /api/water/{id}` | `WaterEntry` |
+| `GET /api/mealie` · `PUT` · `DELETE` | `MealieStatus` / `MealieConnect`: the person's Mealie (its address and an API token, checked with Mealie before it's saved; the token is never returned) |
+| `GET /api/mealie/recipes?q=` | `MealieRecipes`: recipes in Mealie (2+ characters, up to 10), each with one serving as a `Food` when it has nutrition there |
+| `GET /api/mealie/recipes/{slug}` | `MealieRecipe` |
+| `GET /api/mealie/plan?date=` | `MealiePlan`: the day's meal plan in Mealie, in meal order, each marked when it's already logged |
+
+**Mealie** (mealie.io, the self-hosted recipe manager) is each person's own. Its recipes' nutrition
+is free text per serving ("320 kcal", "12 g", "650 mg"; kilojoules become kilocalories, sodium and
+cholesterol are milligrams unless they say grams); without calories, they come from the
+macronutrients; with neither, there's nothing to log. A logged recipe joins the person's foods with
+`source: MEALIE` and `ref: "mealie:<id>"`, and takes the recipe's numbers as they are each time
+it's logged. Plan entries' meals: breakfast, lunch, dinner (and sides), and snacks (and desserts and
+drinks). Nothing is written to Mealie. `/api/mealie` is never reachable through a share. Private
+addresses follow the `webhooksPrivateNetworks` setting; any-address, cloud metadata and redirects
+are refused. Mealie before version 2 (no households) has its group's plan.
 
 Suggestions are single foods and whole meals the person has had (one day's meal of 2–5 things),
 ranked by how often they have them at that meal and overall, how lately, how much of the day's
