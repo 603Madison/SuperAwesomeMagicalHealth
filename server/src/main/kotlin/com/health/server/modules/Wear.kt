@@ -63,6 +63,109 @@ object Wear {
         return out
     }
 
+    /** The kinds of entry that are accidents: they belong to whatever was on at the time. */
+    val ACCIDENTS = setOf(ContinenceKind.LEAK, ContinenceKind.BOWEL_LEAK, ContinenceKind.BEDWETTING)
+
+    /** An accident logged this soon before the product it names went on still belongs to it (logged first, put on just after). */
+    const val GRACE_MS = 10 * 60_000L
+
+    /**
+     * One product's time on, before names are added: [start] to [end] (either null when the diary
+     * doesn't say), [current] when it's what's on now. Its accidents are the ones from [from]
+     * (exclusive) to [to] (inclusive).
+     */
+    data class Span(
+        val supplyId: String,
+        val on: ContinenceEntry?,
+        val off: ContinenceEntry?,
+        val start: Long?,
+        val end: Long?,
+        val current: Boolean,
+        val from: Long,
+        val to: Long,
+        val accidents: List<ContinenceEntry> = emptyList(),
+    ) {
+        /** How full it was when it came off, or, until then, as the latest accident left it. */
+        val fullness: Fullness? get() = off?.fullness ?: accidents.lastOrNull { it.fullness != null }?.fullness
+        val leakedThrough: Boolean
+            get() = (off?.let { it.leakedThrough || it.fullness == Fullness.LEAKED } ?: false) ||
+                accidents.any { it.leakedThrough || it.fullness == Fullness.LEAKED }
+
+        /** How long it was (or has been, up to [now]) worn. */
+        fun minutes(now: Long): Int? = when {
+            start == null -> off?.wornMinutes
+            end != null -> ((end - start) / 60_000).toInt()
+            current -> ((now - start) / 60_000).toInt().coerceAtLeast(0)
+            else -> null
+        }
+
+        /** The time it's listed at: when it came off, now while it's on, or when it went on. */
+        fun listedAt(now: Long): Long = end ?: if (current) now else start ?: to
+
+        /** Whether it was on at any time from [dayFrom] (inclusive) to [dayTo] (exclusive). */
+        fun overlaps(dayFrom: Long, dayTo: Long): Boolean = (start ?: to) < dayTo && to >= dayFrom
+    }
+
+    /**
+     * Every product's time on in [list] (any order), earliest first, each with the accidents while it
+     * was on. A wear runs from the change that put it on to the change that took it off. When the
+     * next change takes off something else, or puts something on without taking anything off, the
+     * wear ends there unrecorded ([Span.off] null); past [MAX_MINUTES] with no change, the diary has
+     * a gap and its end isn't known. A change that takes off something whose putting on isn't in the
+     * diary gathers the accidents since the change before (within a day).
+     *
+     * An accident belongs to the wear it happened in, and never to a product other than the one it
+     * names. At a change's moment it belongs to what came off; one logged up to [GRACE_MS] before the
+     * product it names went on belongs to that product.
+     */
+    fun spans(list: List<ContinenceEntry>, now: Long): List<Span> {
+        val sorted = list.sortedBy { it.at }
+        val max = MAX_MINUTES * 60_000L
+        val out = mutableListOf<Span>()
+        var current: ContinenceEntry? = null
+        var previous: ContinenceEntry? = null
+        // What's on ends here without its removal in the diary (or, past a day, at an unknown time).
+        fun close(at: Long) {
+            val on = current ?: return
+            val id = putOn(on) ?: return
+            val end = at.takeIf { it - on.at <= max }
+            out += Span(id, on, null, on.at, end, current = false, from = on.at, to = end ?: (on.at + max))
+        }
+        for (e in sorted) {
+            if (e.kind != ContinenceKind.PAD_CHANGE) continue
+            val off = e.supplyId
+            if (off != null) {
+                val on = current?.takeIf { putOn(it) == off && e.at - it.at in 0..max }
+                if (on == null) close(e.at)
+                val from = on?.at ?: previous?.at?.takeIf { e.at - it in 0..max } ?: (e.at - max)
+                out += Span(off, on, e, on?.at, e.at, current = false, from = from, to = e.at)
+                current = null
+            } else if (settles(e)) close(e.at).also { current = null }
+            if (settles(e)) current = e
+            previous = e
+        }
+        current?.let { on ->
+            val id = putOn(on) ?: return@let
+            if (now - on.at <= max) out += Span(id, on, null, on.at, null, current = true, from = on.at, to = maxOf(now, on.at) + 5 * 60_000L)
+            else out += Span(id, on, null, on.at, null, current = false, from = on.at, to = on.at + max)
+        }
+        // Each accident to the wear it happened in: inside one before at its edge, then the latest to start.
+        val byWear = mutableMapOf<Int, MutableList<ContinenceEntry>>()
+        for (a in sorted.filter { it.kind in ACCIDENTS }) {
+            val named = a.supplyId
+            val best = out.indices.filter { i -> out[i].let { s -> named == null || named == s.supplyId } }.mapNotNull { i ->
+                val s = out[i]
+                when {
+                    a.at > s.from && a.at <= s.to -> i to 0
+                    named != null && a.at in (s.from - GRACE_MS)..s.to -> i to 1
+                    else -> null
+                }
+            }.minWithOrNull(compareBy<Pair<Int, Int>> { it.second }.thenByDescending { out[it.first].from })?.first ?: continue
+            byWear.getOrPut(best) { mutableListOf() } += a
+        }
+        return out.mapIndexed { i, s -> byWear[i]?.let { s.copy(accidents = it) } ?: s }
+    }
+
     /** The latest change up to [now] that settles what's on, if it's recent enough to go on. */
     fun latest(list: List<ContinenceEntry>, now: Long): ContinenceEntry? =
         list.filter { settles(it) && it.at <= now + 5 * 60_000L }.maxByOrNull { it.at }?.takeIf { now - it.at <= MAX_MINUTES * 60_000L }

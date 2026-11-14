@@ -1140,7 +1140,7 @@ class McpServer(private val services: Services) {
         if (Module.CONTINENCE in scope) m.continence?.let {
             val w = it.wearing
             val wearing = when {
-                w?.supplyId != null -> "; wearing ${w.name ?: "a product"} for ${Wear.say(w.minutes ?: 0)}"
+                w?.supplyId != null -> "; wearing ${w.name ?: "a product"} for ${Wear.say(w.minutes ?: 0)}${wearState(w.wear)}"
                 w?.nothingOn == true -> "; nothing on for now"
                 else -> ""
             }
@@ -1507,7 +1507,7 @@ class McpServer(private val services: Services) {
         when {
             w.supplyId != null -> appendLine(
                 "Wearing now: ${w.name ?: "a product"}${w.kind?.let { " (${Wear.kindWord(it)})" } ?: ""}, on since ${formatTime(days, w.since!!)} " +
-                    "(${Wear.say(w.minutes ?: 0)})" + (w.typicalMinutes?.let { "; usually changed after about ${Wear.say(Wear.rough(it))}" } ?: "") + ".",
+                    "(${Wear.say(w.minutes ?: 0)})" + wearState(w.wear) + (w.typicalMinutes?.let { "; usually changed after about ${Wear.say(Wear.rough(it))}" } ?: "") + ".",
             )
             w.nothingOn -> appendLine("Wearing now: nothing, since ${formatTime(days, w.since!!)} (${Wear.say(w.minutes ?: 0)}).")
         }
@@ -1749,6 +1749,18 @@ class McpServer(private val services: Services) {
     private fun count(n: Long) = String.format(Locale.ROOT, "%,d", n)
 
     private fun num(v: Double) = if (v % 1.0 == 0.0) v.roundToInt().toString() else String.format(Locale.ROOT, "%.1f", v)
+
+    /** "; wet, 2 accidents since it went on, leaked through" (empty with nothing to add). */
+    private fun wearState(w: com.health.api.ContinenceWear?): String {
+        w ?: return ""
+        val n = w.accidents.size
+        val parts = listOfNotNull(
+            w.fullness?.label?.lowercase(),
+            if (n > 0) "$n ${if (n == 1) "accident" else "accidents"} since it went on" else null,
+            "leaked through".takeIf { w.leakedThrough && w.fullness != com.health.api.Fullness.LEAKED },
+        )
+        return if (parts.isEmpty()) "" else "; " + parts.joinToString(", ")
+    }
 
     private fun formatTime(days: Days, ms: Long) = MINUTE.format(Instant.ofEpochMilli(ms).atZone(days.zone))
 

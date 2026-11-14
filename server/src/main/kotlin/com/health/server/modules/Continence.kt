@@ -7,7 +7,11 @@ import com.health.api.ContinenceKind
 import com.health.api.ContinenceProgress
 import com.health.api.ContinenceSettings
 import com.health.api.ContinenceSummary
+import com.health.api.ContinenceDiary
+import com.health.api.ContinenceDiaryItem
+import com.health.api.ContinenceWear
 import com.health.api.ContinenceWearing
+import com.health.api.Supply
 import com.health.api.Insight
 import com.health.api.LeakSize
 import com.health.api.ProductStats
@@ -112,7 +116,7 @@ class ContinenceService(
         val zone = profiles.days(userId)
         val now = clock()
         val today = zone.today(now)
-        val recent = entries.list(userId, EntryKind.CONTINENCE, today.minusDays(1), today.plusDays(1), ContinenceEntry.serializer()).map { it.value }
+        val recent = entries.list(userId, EntryKind.CONTINENCE, today.minusDays(1), today.plusDays(1), ContinenceEntry.serializer()).map { it.value.copy(id = it.id, date = it.date.toString()) }
         val latest = Wear.latest(recent, now) ?: return ContinenceWearing()
         val minutes = ((now - latest.at) / 60_000).toInt().coerceAtLeast(0)
         val id = Wear.putOn(latest) ?: return ContinenceWearing(since = latest.at, minutes = minutes, nothingOn = true)
@@ -122,7 +126,36 @@ class ContinenceService(
             Wear.dueAt(latest.at, hours, zone, minuteOf(own.nightFrom, 23 * 60), minuteOf(own.nightTo, 6 * 60), own.changeReminderAtNight)
         }
         val usual = if (typical) Wear.typical(worn(userId, today.minusDays(TYPICAL_DAYS), today), id) else null
-        return ContinenceWearing(id, supply?.name, supply?.kind, latest.at, minutes, usual, due)
+        val wear = Wear.spans(recent, now).lastOrNull { it.current && it.on?.id == latest.id }?.let { named(it, now, supply?.let { s -> mapOf(id to s) } ?: emptyMap()) }
+        return ContinenceWearing(id, supply?.name, supply?.kind, latest.at, minutes, usual, due, wear = wear)
+    }
+
+    /**
+     * A day of the diary, grouped: each product worn that day (on at any time in it) with the
+     * accidents while it was on, and every other entry of the day on its own, newest first.
+     */
+    suspend fun diary(userId: String, date: LocalDate): ContinenceDiary {
+        val zone = profiles.days(userId)
+        val now = clock()
+        val list = worn(userId, date.minusDays(1), date.plusDays(1))
+        val from = zone.start(date)
+        val to = zone.start(date.plusDays(1))
+        val spans = Wear.spans(list, now).filter { it.overlaps(from, to) }
+        val names = supplies?.list(userId, all = true).orEmpty().filter { it.id != null }.associateBy { it.id!! }
+        val grouped = spans.flatMap { s -> listOfNotNull(s.on?.id, s.off?.id) + s.accidents.mapNotNull { it.id } }.toSet()
+        val own = list.filter { it.date == date.toString() && it.id !in grouped }
+        val items = spans.map { ContinenceDiaryItem(it.listedAt(now), wear = named(it, now, names)) } + own.map { ContinenceDiaryItem(it.at, entry = it) }
+        return ContinenceDiary(date.toString(), items.sortedByDescending { it.at })
+    }
+
+    private fun named(s: Wear.Span, now: Long, names: Map<String, Supply>): ContinenceWear {
+        val supply = names[s.supplyId]
+        val next = s.off?.takeIf { !it.nothingOn }?.let { Wear.putOn(it) }
+        return ContinenceWear(
+            supplyId = s.supplyId, name = supply?.name, kind = supply?.kind, on = s.on, off = s.off, start = s.start, end = s.end,
+            current = s.current, minutes = s.minutes(now), fullness = s.fullness, leakedThrough = s.leakedThrough, accidents = s.accidents,
+            nextName = next?.let { names[it]?.name },
+        )
     }
 
     /** How each product went from [from] to [to]: from the changes that took it off. */

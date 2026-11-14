@@ -222,6 +222,117 @@ class ContinenceWearTest {
         now = at(today, 15)
     }
 
+    private fun leak(at: Long, product: Supply? = null, fullness: Fullness? = null, through: Boolean = false, id: String? = null) =
+        ContinenceEntry(at, ContinenceKind.LEAK, supplyId = product?.id, fullness = fullness, leakedThrough = through, id = id)
+
+    @Test
+    fun `accidents belong to what was on when they happened`() {
+        val a = Supply("Night briefs", SupplyKind.BRIEF, id = "a")
+        val b = Supply("Day pants", SupplyKind.PULL_UP, id = "b")
+        val list = listOf(
+            // Logged just before the brief it names went on: still that brief's.
+            leak(at(today, 7, 45), a, Fullness.DAMP, id = "l1"),
+            change(at(today, 7, 48), null, a).copy(id = "on-a"),
+            leak(at(today, 9), null, Fullness.WET, id = "l2"),
+            // Naming another product: not this wear's.
+            leak(at(today, 9, 30), b, id = "l3"),
+            // At the change's moment: what came off.
+            leak(at(today, 10), null, Fullness.FULL, id = "l4"),
+            change(at(today, 10), a, b, Fullness.SOAKED).copy(id = "a-b"),
+            leak(at(today, 12), null, Fullness.DAMP, id = "l5"),
+            leak(at(today, 13), b, Fullness.WET, through = true, id = "l6"),
+            ContinenceEntry(at(today, 12, 30), ContinenceKind.URINATION, id = "t1"),
+        )
+        val spans = Wear.spans(list, at(today, 15))
+        assertEquals(listOf("a", "b"), spans.map { it.supplyId })
+        val (first, second) = spans
+        assertEquals(listOf("l1", "l2", "l4"), first.accidents.map { it.id })
+        assertEquals(Fullness.SOAKED, first.fullness)
+        assertEquals(132, first.minutes(at(today, 15)))
+        assertFalse(first.current)
+        assertEquals(listOf("l5", "l6"), second.accidents.map { it.id })
+        assertTrue(second.current)
+        // While it's on, how full it is comes from the latest accident, and leaking through shows.
+        assertEquals(Fullness.WET, second.fullness)
+        assertTrue(second.leakedThrough)
+        assertEquals(300, second.minutes(at(today, 15)))
+    }
+
+    @Test
+    fun `a wear ends where the diary moves on, even without its removal`() {
+        val a = Supply("Night briefs", SupplyKind.BRIEF, id = "a")
+        val b = Supply("Day pants", SupplyKind.PULL_UP, id = "b")
+        val list = listOf(
+            change(at(today, 6), null, a).copy(id = "on-a"),
+            leak(at(today, 7), id = "l1"),
+            // Put on without taking anything off: the brief's wear ends here, unrecorded.
+            change(at(today, 8), null, b).copy(id = "on-b"),
+            leak(at(today, 9), id = "l2"),
+            // Took off something that never went on in the diary: it gathers since the change before.
+            change(at(today, 11), a, null, Fullness.WET, nothingOn = true).copy(id = "off-a"),
+            leak(at(today, 12), id = "l3"),
+        )
+        val spans = Wear.spans(list, at(today, 15))
+        assertEquals(3, spans.size)
+        assertEquals(listOf("l1"), spans[0].accidents.map { it.id })
+        assertNull(spans[0].off)
+        assertEquals(at(today, 8), spans[0].end)
+        // Pants: on at 8, never taken off in the diary, and a different product came off at 11.
+        assertEquals("b", spans[1].supplyId)
+        assertEquals(at(today, 11), spans[1].end)
+        assertEquals("a", spans[2].supplyId)
+        assertNull(spans[2].start)
+        assertEquals(listOf("l2"), (spans[1].accidents + spans[2].accidents).map { it.id })
+        // Nothing on: the last accident is on its own.
+        assertTrue(spans.none { s -> s.accidents.any { it.id == "l3" } })
+    }
+
+    @Test
+    fun `the diary groups each product with its accidents, and what's on has its state`() = serverTest(services()) { s ->
+        val me = s.admin()
+        val c = s.modules.continence
+        val browser = adminBrowser()
+        val night = s.supplies.save(me, Supply("Night briefs", SupplyKind.BRIEF, onHand = 20))
+        val day = s.supplies.save(me, Supply("Day pants", SupplyKind.PULL_UP, onHand = 20))
+        // Night briefs on last night, a leak before midnight and one in the night, changed this morning.
+        c.save(me, change(at(today.minusDays(1), 22), null, night))
+        c.save(me, leak(at(today.minusDays(1), 23, 30), night, Fullness.DAMP))
+        c.save(me, leak(at(today, 3), null, Fullness.WET))
+        c.save(me, change(at(today, 7), night, day, Fullness.FULL))
+        c.save(me, ContinenceEntry(at(today, 9), ContinenceKind.URINATION, volumeMl = 300))
+        c.save(me, leak(at(today, 11), day, Fullness.DAMP))
+        c.save(me, leak(at(today, 13), day, Fullness.WET))
+
+        val diary = browser.get("/api/continence/diary").obj()
+        assertEquals(today.toString(), diary.str("date"))
+        val items = diary["items"]!!.jsonArray.map { it.jsonObject }
+        // Newest first: what's on now, the toilet trip, the night's briefs. Nothing else on its own.
+        assertEquals(3, items.size)
+        val on = items[0]["wear"]!!.jsonObject
+        assertTrue(on["current"]!!.jsonPrimitive.boolean)
+        assertEquals("Day pants", on.str("name"))
+        assertEquals("WET", on.str("fullness"))
+        assertEquals(2, on["accidents"]!!.jsonArray.size)
+        assertEquals("URINATION", items[1]["entry"]!!.jsonObject.str("kind"))
+        val off = items[2]["wear"]!!.jsonObject
+        assertEquals("Night briefs", off.str("name"))
+        assertEquals("FULL", off.str("fullness"))
+        assertEquals("Day pants", off.str("nextName"))
+        assertEquals(540, off["minutes"]!!.jsonPrimitive.int)
+        // Both of the night's accidents, the one from before midnight too.
+        assertEquals(listOf(at(today.minusDays(1), 23, 30), at(today, 3)), off["accidents"]!!.jsonArray.map { it.jsonObject["at"]!!.jsonPrimitive.long })
+
+        // Yesterday: the night's briefs went on then, so they show there too.
+        val yesterday = browser.get("/api/continence/diary?date=${today.minusDays(1)}").obj()["items"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("Night briefs"), yesterday.map { it["wear"]!!.jsonObject.str("name") })
+
+        // What's on now carries its state for the Wearing now card.
+        val wearing = browser.get("/api/continence/wearing").obj()["wear"]!!.jsonObject
+        assertEquals("WET", wearing.str("fullness"))
+        assertEquals(2, wearing["accidents"]!!.jsonArray.size)
+        assertEquals(at(today, 7), wearing["on"]!!.jsonObject["at"]!!.jsonPrimitive.long)
+    }
+
     @Test
     fun `Today shows what's on even before anything's logged today`() = runBlocking {
         val s = services()

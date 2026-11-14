@@ -83,6 +83,12 @@ fun Route.moduleRoutes(services: Services) {
         }
         get("/summary") { call.respond(m.continence.summary(call.requireUser(services).id, call.days(14))) }
         get("/wearing") { call.respond(m.continence.wearing(call.requireUser(services).id)) }
+        get("/diary") {
+            val user = call.requireUser(services)
+            val zone = services.profiles.days(user.id)
+            val date = call.request.queryParameters["date"]?.let { zone.parse(it, services.clock()) } ?: zone.today(services.clock())
+            call.respond(m.continence.diary(user.id, date))
+        }
         get("/products") { call.respond(m.continence.products(call.requireUser(services).id, call.days(90))) }
     }
 

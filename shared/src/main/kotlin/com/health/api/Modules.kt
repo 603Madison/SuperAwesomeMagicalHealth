@@ -457,6 +457,54 @@ data class ContinenceWearing(
     val changeDueAt: Long? = null,
     /** Taken off, with nothing on for now. */
     val nothingOn: Boolean = false,
+    /** What's on now as a wear: how full it is, and the accidents since it went on (null with nothing on). */
+    val wear: ContinenceWear? = null,
+)
+
+/**
+ * One product's time on: from the change that put it on ([on]) to the one that took it off
+ * ([off]), with the accidents while it was on. Accidents belong to what was on at the time (and
+ * never to a different product than the one they name).
+ */
+@Serializable
+data class ContinenceWear(
+    val supplyId: String,
+    val name: String? = null,
+    val kind: SupplyKind? = null,
+    /** The change that put it on, when that's in the diary (within a day). */
+    val on: ContinenceEntry? = null,
+    /** The change that took it off: null while it's on, or when the diary skips its removal. */
+    val off: ContinenceEntry? = null,
+    /** When it went on and came off (null when not known). */
+    val start: Long? = null,
+    val end: Long? = null,
+    /** It's what's on now. */
+    val current: Boolean = false,
+    /** How long it was worn (or, while it's on, has been). */
+    val minutes: Int? = null,
+    /** How full it was when it came off, or, until then, as the latest accident left it. */
+    val fullness: Fullness? = null,
+    /** It leaked through: at the change, or in an accident while it was on. */
+    val leakedThrough: Boolean = false,
+    /** Leaks, bowel accidents and wet nights while it was on, oldest first. */
+    val accidents: List<ContinenceEntry> = emptyList(),
+    /** What went on after it, by name, when something did. */
+    val nextName: String? = null,
+)
+
+/** A day of the diary, grouped (GET /api/continence/diary?date=): each product worn with its accidents, and the rest on its own, newest first. */
+@Serializable
+data class ContinenceDiary(
+    val date: String,
+    val items: List<ContinenceDiaryItem> = emptyList(),
+)
+
+/** One row of the grouped diary: a [wear] (with its changes and accidents) or an [entry] on its own. */
+@Serializable
+data class ContinenceDiaryItem(
+    val at: Long,
+    val wear: ContinenceWear? = null,
+    val entry: ContinenceEntry? = null,
 )
 
 /** How one product goes (GET /api/continence/products?days=90): from the changes that took it off. */
