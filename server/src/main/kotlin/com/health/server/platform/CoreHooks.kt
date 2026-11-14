@@ -174,10 +174,11 @@ private class OverviewHooks(private val services: Services) : FeatureHooks {
         val key = "morning:$today"
         val scheduler = services.platform.scheduler
         if (scheduler.wasSent(userId, key)) return emptyList()
-        if (now >= zone.start(today) + 18 * 3_600_000L) return emptyList()
+        // By the clock (right on the days the clocks change): nothing after 18:00, and 10:00 without a night.
+        if (now >= zone.at(today, LocalTime.of(18, 0))) return emptyList()
         val stats = services.days.stats(userId, today, today, zone).lastOrNull()
         val sleepEnd = stats?.sleep?.end?.takeIf { it <= now && zone.dateOf(it) == today }
-        val tenAm = zone.start(today) + 10 * 3_600_000L
+        val tenAm = zone.at(today, LocalTime.of(10, 0))
         val eventAt = sleepEnd ?: tenAm.takeIf { now >= it } ?: return emptyList()
         val at = eventAt.coerceIn(from, now)
         val day = services.days.summary(userId, today.toString())

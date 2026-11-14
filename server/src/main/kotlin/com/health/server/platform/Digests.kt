@@ -12,6 +12,7 @@ import com.health.server.util.Days
 import org.slf4j.LoggerFactory
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.temporal.TemporalAdjusters
 
 /** The weekly digest: Monday to Sunday against the week before, kept sealed, and emailed if asked. */
@@ -91,7 +92,7 @@ class DigestService(private val services: Services) {
         val zone = Days(Days.zoneOf(profile.timezone))
         val today = zone.today(now)
         val digestDay = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).plusDays((prefs.day.coerceIn(1, 7) - 1).toLong())
-        val dueAt = zone.start(digestDay) + prefs.hour.coerceIn(0, 23) * 3_600_000L
+        val dueAt = zone.at(digestDay, LocalTime.of(prefs.hour.coerceIn(0, 23), 0))
         if (now < dueAt || digestDay.isAfter(today)) return null
         // On a Sunday, the week just ending; on any other day, the week that ended last Sunday.
         val weekEnd = if (prefs.day == 7) digestDay else digestDay.with(TemporalAdjusters.previous(DayOfWeek.SUNDAY))

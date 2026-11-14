@@ -214,6 +214,30 @@ class PlatformTest {
     }
 
     @Test
+    fun `the morning and the digest come by the clock on the days it changes`() = runBlocking {
+        val zone = java.time.ZoneId.of("America/New_York")
+        fun local(text: String) = java.time.LocalDateTime.parse(text).atZone(zone).toInstant().toEpochMilli()
+        var now = local("2026-03-08T09:59")
+        val (services, userId) = setUp({ now })
+        services.profiles.put(userId, services.profiles.get(userId).copy(timezone = zone.id, digest = DigestPrefs(day = 7, hour = 18)))
+        val profile = services.profiles.get(userId)
+        suspend fun morning(at: Long) = services.platform.scheduler.collect(userId, profile, at - 15 * 60_000, at + 60_000).filter { it.event == WebhookEvent.MORNING }
+
+        // Clocks went forward at 2: 10:00 is 10:00, not 11:00.
+        assertTrue(morning(now).isEmpty())
+        now = local("2026-03-08T10:00")
+        assertEquals(now, morning(now).single().at)
+        // Clocks went back at 2: 17:30 is still before the 18:00 cut-off.
+        assertEquals(1, morning(local("2026-11-01T17:30")).size)
+        assertTrue(morning(local("2026-11-01T18:00")).isEmpty())
+
+        // The digest (Sundays at 18:00) waits for 18:00 by the clock that day.
+        val user = services.users.byId(userId)!!
+        assertNull(services.platform.digests.dueReminder(user, profile, local("2026-11-01T17:30")))
+        assertNotNull(services.platform.digests.dueReminder(user, profile, local("2026-11-01T18:00")))
+    }
+
+    @Test
     fun `push encryption matches RFC 8291 and VAPID tokens verify`() {
         // RFC 8291, Appendix A.
         val d = WebPushCrypto::decode

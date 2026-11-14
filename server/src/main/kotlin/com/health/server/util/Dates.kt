@@ -3,6 +3,7 @@ package com.health.server.util
 import com.health.server.ApiError
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
 
@@ -15,6 +16,13 @@ class Days(val zone: ZoneId) {
 
     /** When [date] ends (the next day begins). */
     fun end(date: LocalDate): Long = start(date.plusDays(1))
+
+    /**
+     * When the clock shows [time] on [date]: right on days the clocks change, unlike midnight plus
+     * a fixed number of hours. A time the clocks skip comes as much later as they jump; a time
+     * they repeat is the first one.
+     */
+    fun at(date: LocalDate, time: LocalTime): Long = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
 
     /** The hour of the day (0–23) at [ms]. */
     fun hourOf(ms: Long): Int = Instant.ofEpochMilli(ms).atZone(zone).hour

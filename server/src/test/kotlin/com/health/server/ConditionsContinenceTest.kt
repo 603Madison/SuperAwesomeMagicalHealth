@@ -22,6 +22,7 @@ import com.health.api.SupplyAdjustment
 import com.health.api.SupplyKind
 import com.health.api.SupplyReason
 import com.health.api.Verdict
+import com.health.api.WebhookEvent
 import com.health.server.conditions.ConditionCatalog
 import com.health.server.conditions.ConditionsService
 import com.health.server.modules.BladderTrainingPlan
@@ -299,6 +300,39 @@ class ConditionsContinenceTest {
             assertEquals("Reminder", due.privateTitle)
             assertFalse(due.privateBody.contains("toilet"))
         }
+    }
+
+    @Test
+    fun `reminders keep to the clock on the days it changes`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)
+        val me = s.admin()
+        val profile = s.profiles.get(me)
+        val spring = LocalDate.of(2026, 3, 8)
+        val autumn = LocalDate.of(2026, 11, 1)
+        fun around(date: LocalDate, hour: Int, minute: Int = 0) = at(date, hour, minute).let { it - 15 * 60_000 to it + 60_000 }
+
+        // The cycle's daily nudge at 20:30, the evening the clocks went forward.
+        s.modules.cycle.putSettings(me, CycleSettings(dailyReminder = "20:30"))
+        val cycle = s.hooks.filterIsInstance<CycleHooks>().single()
+        val (eveningFrom, eveningTo) = around(spring, 20, 30)
+        assertEquals(at(spring, 20, 30), cycle.reminders(me, profile, eveningFrom, eveningTo).single { it.key == "cycle:daily:$spring" }.at)
+
+        // Supplies running low, at the 10:00 refill time, the morning the clocks went back.
+        s.supplies.save(me, Supply("Briefs", SupplyKind.BRIEF, onHand = 0))
+        val supplies = s.hooks.filterIsInstance<com.health.server.modules.SuppliesHooks>().single()
+        val (morningFrom, morningTo) = around(autumn, 10)
+        assertEquals(at(autumn, 10), supplies.reminders(me, profile, morningFrom, morningTo).single().at)
+
+        // Bladder training every half hour from midnight to 3: each time by the clock, once, with its own key.
+        val hooks = s.hooks.filterIsInstance<ContinenceHooks>().single()
+        suspend fun training(date: LocalDate): List<String> {
+            s.modules.continence.putSettings(me, ContinenceSettings(bladderTraining = BladderTraining(enabled = true, intervalMinutes = 30, from = "00:00", to = "04:00", stepMinutes = 0, startedOn = date.toString())))
+            return hooks.reminders(me, profile, at(date, 0), at(date.plusDays(1), 0)).filter { it.event == WebhookEvent.BLADDER_TRAINING }.map { it.key.removePrefix("bladder:$date:") }
+        }
+        // 1:00 and 1:30 come round twice in the autumn: one reminder each.
+        assertEquals(listOf("00:30", "01:00", "01:30", "02:00", "02:30", "03:00", "03:30", "04:00"), training(autumn))
+        // 2:00 and 2:30 never happen in the spring: they're the 3:00 and 3:30 ones.
+        assertEquals(listOf("00:30", "01:00", "01:30", "03:00", "03:30", "04:00"), training(spring))
     }
 
     // ---- Cycle ----

@@ -27,6 +27,7 @@ import com.health.server.insights.Combine.withReading
 import com.health.server.util.Days
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
+import java.time.LocalTime
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
@@ -72,7 +73,7 @@ data class DayStats(
 ) {
     companion object {
         /** Raised whenever the way days are worked out changes, so kept ones are worked out again. */
-        const val VERSION = 3
+        const val VERSION = 4
     }
 }
 
@@ -337,7 +338,7 @@ class DayService(
         val windows = stressWindows(
             listOf(Metric.HEART_RATE, Metric.HRV, Metric.STRESS).fold(today) { list, m -> Combine.pick(list, m, ctx.chosen(m)) },
             workouts.map { it.start until it.end }, sessions.map { it.start until it.end },
-            wakeStart = main?.end?.takeIf { it in start until end } ?: (start + 7 * HOUR),
+            wakeStart = main?.end?.takeIf { it in start until end } ?: days.at(date, LocalTime.of(7, 0)),
             wakeEnd = minOf(end, clock(), tonight ?: Long.MAX_VALUE),
             dayStart = start,
         )
