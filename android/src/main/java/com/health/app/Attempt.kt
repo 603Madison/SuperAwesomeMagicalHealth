@@ -17,6 +17,6 @@ inline fun <R> attempt(block: () -> R): Result<R> =
         Result.failure(e)
     }
 
-/** Whether [message] is only a coroutine's cancellation ("StandaloneCoroutine was cancelled", "Job was cancelled"). */
+/** Whether [message] is only a coroutine's cancellation ("StandaloneCoroutine was cancelled", "Job was cancelled", "Parent job is Cancelling"). */
 fun isCancellationMessage(message: String?): Boolean =
-    message != null && Regex("""^\w*(Coroutine|[Jj]ob)\b.*\b(was cancelled|is cancelling)$""", RegexOption.IGNORE_CASE).matches(message.trim())
+    message != null && Regex("""^(\w+ )?\w*(Coroutine|Job)\b.*\b(was cancelled|is cancelling)$""", RegexOption.IGNORE_CASE).matches(message.trim())
