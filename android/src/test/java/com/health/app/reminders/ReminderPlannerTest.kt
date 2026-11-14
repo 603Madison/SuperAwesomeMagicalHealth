@@ -6,6 +6,7 @@ import com.health.api.MedForm
 import com.health.api.MedSchedule
 import com.health.api.Medication
 import com.health.api.ScheduleKind
+import com.health.app.net.ServerException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -143,22 +144,75 @@ class ReminderPlannerTest {
     @get:Rule
     val folder = TemporaryFolder()
 
+    private val me = "aaaa1111"
+
     @Test
     fun `doses taken offline wait in the outbox and go oldest first`() = runBlocking {
         val outbox = DoseOutbox(folder.newFolder("outbox"))
-        outbox.add(DoseLog("e", 1_000, scheduledFor = 900))
-        outbox.add(DoseLog("s", 2_000, scheduledFor = 1_900))
-        outbox.add(DoseLog("w", 3_000, site = "Left thigh"))
-        assertEquals(3, outbox.size())
+        outbox.add(me, DoseLog("e", 1_000, scheduledFor = 900))
+        outbox.add(me, DoseLog("s", 2_000, scheduledFor = 1_900))
+        outbox.add(me, DoseLog("w", 3_000, site = "Left thigh"))
+        assertEquals(3, outbox.size(me))
 
         val sent = mutableListOf<String>()
         // The second send fails: the first is gone, the rest wait for next time.
-        outbox.flush { json -> val dose = decode(json); if (dose.medicationId == "s") error("offline") else sent += dose.medicationId }
+        outbox.flush(me, { json -> val dose = decode(json); if (dose.medicationId == "s") throw ServerException(0, "offline") else sent += dose.medicationId })
         assertEquals(listOf("e"), sent)
-        assertEquals(2, outbox.size())
+        assertEquals(2, outbox.size(me))
 
-        assertEquals(2, outbox.flush { sent += decode(it).medicationId })
+        assertEquals(2, outbox.flush(me, { sent += decode(it).medicationId }))
         assertEquals(listOf("e", "s", "w"), sent)
-        assertEquals(0, outbox.size())
+        assertEquals(0, outbox.size(me))
+    }
+
+    @Test
+    fun `a dose the server refuses is dropped, so it can't hold up the rest`() = runBlocking {
+        val outbox = DoseOutbox(folder.newFolder("refused"))
+        outbox.add(me, DoseLog("gone", 1_000))
+        outbox.add(me, DoseLog("bad", 2_000))
+        outbox.add(me, DoseLog("e", 3_000))
+        val sent = mutableListOf<String>()
+        val count = outbox.flush(me, { json ->
+            when (decode(json).medicationId) {
+                "gone" -> throw ServerException(404, "No such medication", fromServer = true)
+                "bad" -> throw ServerException(400, "That request isn't right", fromServer = true)
+                else -> sent += decode(json).medicationId
+            }
+        })
+        assertEquals(1, count)
+        assertEquals(listOf("e"), sent)
+        assertEquals(0, outbox.size(me))
+    }
+
+    @Test
+    fun `a proxy's or portal's answer keeps doses waiting`() = runBlocking {
+        val outbox = DoseOutbox(folder.newFolder("proxy"))
+        outbox.add(me, DoseLog("e", 1_000))
+        // A 404 page from a proxy, a portal's 200, the sign-in no longer good: none is the server refusing the dose.
+        listOf(ServerException(404, "The server answered HTTP 404"), ServerException(200, "The server's answer didn't make sense"), ServerException(401, "Sign in first", fromServer = true))
+            .forEach { failure -> assertEquals(0, outbox.flush(me, { throw failure })) }
+        assertEquals(1, outbox.size(me))
+    }
+
+    @Test
+    fun `doses wait for the account that marked them, and only go to it`() = runBlocking {
+        val outbox = DoseOutbox(folder.newFolder("accounts"))
+        outbox.add(me, DoseLog("e", 1_000))
+        val sent = mutableListOf<String>()
+        assertEquals(0, outbox.flush("bbbb2222", { sent += decode(it).medicationId }))
+        assertTrue(sent.isEmpty())
+        assertEquals(0, outbox.size(null))
+        assertEquals(1, outbox.flush(me, { sent += decode(it).medicationId }))
+        assertEquals(listOf("e"), sent)
+    }
+
+    @Test
+    fun `doses kept by an older version go to whoever is signed in`() = runBlocking {
+        val dir = folder.newFolder("legacy")
+        java.io.File(dir, "0000000001000-0000.json").writeText(ApiJson.encodeToString(DoseLog.serializer(), DoseLog("e", 1_000)))
+        val outbox = DoseOutbox(dir)
+        outbox.adopt(me)
+        assertEquals(1, outbox.size(me))
+        assertEquals(0, outbox.size("bbbb2222"))
     }
 }

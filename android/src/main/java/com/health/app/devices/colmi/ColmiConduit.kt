@@ -65,6 +65,9 @@ class ColmiConduit(
         val offered = RingReading.entries.filter { it != RingReading.SKIN_TEMPERATURE || temperature }.toSet()
         val answers = HashMap<RingReading, Answer>()
         var measuring = false
+        // Problems before the ring's readings (its clock, battery and settings), and with today's stress.
+        var readsFrom = 0
+        var stressProblems = 0
         try {
             val client = ColmiRing(gatt)
             client.start()
@@ -80,6 +83,8 @@ class ColmiConduit(
                 }
                 measuring = true
             }
+            // From here on the ring's readings: if any can't be read, the next sync starts from the same day.
+            readsFrom = problems.size
             for (offset in days downTo 0) {
                 val date = today.minusDays(offset.toLong())
                 attempt(problems, "heart rate") {
@@ -99,11 +104,14 @@ class ColmiConduit(
             // connection) can't cost the readings above.
             val fromMs = from.atStartOfDay(zone).toInstant().toEpochMilli()
             val extras = RingExtras(problems, answers)
+            // Stress is only ever today's, which the next sync reads anyway: it can't hold the others back.
+            val beforeStress = problems.size
             extras.read(RingReading.STRESS) {
                 val reply = client.stress()
                 reply.value?.let { samples += ColmiMapping.stress(today, it, zone, now) }
                 reply.answer
             }
+            stressProblems = problems.size - beforeStress
             extras.read(RingReading.HRV) {
                 // Newest first, so a ring that doesn't keep HRV is found out with the first ask.
                 var first: Answer? = null
@@ -147,7 +155,8 @@ class ColmiConduit(
             sleep = sleep,
         )
         val note = if (problems.isEmpty()) null else "Couldn't read the ring's ${problems.distinct().joinToString(", ")} this time"
-        return Collected(listOf(batch), now, note)
+        val readFailed = problems.size - readsFrom - stressProblems > 0
+        return Collected(listOf(batch), cursorAfter(since, now, readFailed), note)
     }
 
     /** Runs one part of a sync; a ring that doesn't do it (or hiccups) shouldn't stop the rest. */
@@ -215,6 +224,12 @@ class ColmiConduit(
             ColmiProtocol.writeHrvSettings(true),
             ColmiProtocol.writeTemperatureSettings(true).takeIf { temperature },
         )
+
+        /**
+         * Where the next sync starts: [now]; but if any of the ring's readings couldn't be read, where
+         * this one did ([since]), so what it missed is asked for again (the ring keeps about a week).
+         */
+        fun cursorAfter(since: Long?, now: Long, readFailed: Boolean): Long? = if (readFailed) since else now
 
         /** The permissions Bluetooth needs on this phone. */
         fun permissions(): Array<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

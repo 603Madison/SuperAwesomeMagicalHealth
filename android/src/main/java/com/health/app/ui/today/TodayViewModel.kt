@@ -128,10 +128,11 @@ class TodayViewModel(private val c: Container) : ViewModel() {
 
     /**
      * Logs a food idea from the protein insight: each of its items today, at its meal (as the Food
-     * tab logs a past entry again), then offers Undo. Half-logged, it takes back what it added.
+     * tab logs a past entry again), then offers Undo. Half-logged, it takes back what it added. In
+     * the app's scope, so leaving Today can't stop it halfway.
      */
     fun addIdea(idea: FoodSuggestion) {
-        viewModelScope.launch {
+        c.scope.launch {
             val date = _state.value.today.toString()
             val added = mutableListOf<FoodEntry>()
             try {

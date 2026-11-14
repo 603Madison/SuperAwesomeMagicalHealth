@@ -3,6 +3,9 @@ package com.health.app.ui.signin
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Login
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,6 +30,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.health.api.AuthConfig
 import com.health.app.R
+import com.health.app.net.ServerAddress
 import com.health.app.net.ServerApi
 import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.Backdrop
@@ -75,6 +81,23 @@ fun SignInRoute(finishing: Boolean, error: String?) {
             passwordSignIn = { s, u, p -> c.signIn.signInWithPassword(s, u, p) },
         ),
     )
+}
+
+/** A calm note that a plain http address out on the internet isn't encrypted; signing in still works. */
+@Composable
+private fun UnencryptedNotice() {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.Top) {
+            Icon(Icons.Rounded.LockOpen, null, Modifier.padding(top = 1.dp).size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(ServerAddress.WARNING, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
 }
 
 /** Sign-in: the server's address, then single sign-on in a browser tab, or a password. */
@@ -177,6 +200,7 @@ fun SignInScreen(
                             }
                             else -> {
                                 val (server, auth) = current
+                                if (ServerAddress.unencrypted(server)) UnencryptedNotice()
                                 auth.oidc?.let { oidc ->
                                     Button(onClick = { actions.browserSignIn(server) }, modifier = Modifier.fillMaxWidth()) {
                                         Icon(Icons.Rounded.Login, null, Modifier.size(18.dp))

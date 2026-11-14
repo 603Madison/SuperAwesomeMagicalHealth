@@ -274,7 +274,7 @@ private fun BladderTrainingSection(t: BladderTraining, today: LocalDate, canNoti
         ValueRow("From", t.from, onClick = { onPick("trainingFrom") })
         ValueRow("Until", t.to, onClick = { onPick("trainingTo") })
         if (t.enabled) Hint(BladderTrainingPlan.today(t, today) + ".")
-        Hint("Reminders come on this phone and wherever else you get them. On a locked screen they only say \"Time for your planned break\".")
+        Hint("Reminders come on this phone and wherever else you get them. Unless names are on in Settings › Reminders, they only say \"Time for your planned break\".")
         if (t.startedOn != null) OutlinedButton(onClick = { onChange(t.copy(startedOn = today.toString())) }) { Text("Start again from today") }
     }
 }

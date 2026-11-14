@@ -51,6 +51,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -59,12 +60,18 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
-/** An error from the server, with a message meant for people; [code] 0 means it wasn't reached. */
-class ServerException(val code: Int, message: String) : IOException(message)
+/**
+ * An error from the server, with a message meant for people; [code] 0 means it wasn't reached.
+ * [fromServer] says the answer was the server's own JSON error (`{"error": …}`), not a page from
+ * something in between (a proxy's 404 or 413, a captive portal, a sign-in gateway's 401): only
+ * the server's own word signs the app out or makes it drop something waiting to be sent.
+ */
+class ServerException(val code: Int, message: String, val fromServer: Boolean = false) : IOException(message)
 
 /**
  * The server's API (docs/API.md), as the app uses it. [base] is the server's address and [token]
- * the app's sign-in; [onSignedOut] is told when the server says the sign-in is no longer good.
+ * the app's sign-in; [onSignedOut] is told when the server says the sign-in is no longer good (its
+ * own 401, never a proxy's).
  * With [viewAs] (an owner's account id, from a share), reads show that person's data
  * (`X-SAMH-View`) and nothing can be changed: writes are refused here, before they leave.
  */
@@ -310,12 +317,7 @@ class ServerApi(
             throw ServerException(0, "Can't reach the server (${e.message ?: e.javaClass.simpleName})")
         }
         response.use {
-            if (!it.isSuccessful) {
-                if (it.code == 401 && token() != null) onSignedOut()
-                val text = it.body?.string().orEmpty()
-                val message = attempt { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
-                throw ServerException(it.code, message ?: "The server answered HTTP ${it.code}")
-            }
+            if (!it.isSuccessful) throw failure(it.code, it.body?.string().orEmpty(), auth = true)
             it.body?.bytes() ?: ByteArray(0)
         }
     }
@@ -354,18 +356,25 @@ class ServerApi(
 
     private fun <T> parse(response: okhttp3.Response, serializer: KSerializer<T>, auth: Boolean): T {
         val text = response.body?.string().orEmpty()
-        if (!response.isSuccessful) {
-            if (response.code == 401 && auth && token() != null) onSignedOut()
-            val message = attempt { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
-            throw ServerException(response.code, message ?: "The server answered HTTP ${response.code}")
-        }
+        if (!response.isSuccessful) throw failure(response.code, text, auth)
         @Suppress("UNCHECKED_CAST")
         if (serializer == Unit.serializer()) return Unit as T
         return try {
-            ApiJson.decodeFromString(serializer, text)
+            AppJson.decodeFromString(serializer, text)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             throw ServerException(response.code, "The server's answer didn't make sense (${e.message?.substringBefore('\n')})")
         }
+    }
+
+    /**
+     * The error for an answer that isn't a success. Only the server's own "sign in first" (a 401
+     * with its JSON error) signs the app out: a sign-in gateway, a proxy or a captive portal in
+     * between answers with a page of its own, and that's no reason to forget the sign-in.
+     */
+    private fun failure(code: Int, text: String, auth: Boolean): ServerException {
+        val message = attempt { ApiJson.decodeFromString(ErrorBody.serializer(), text).error }.getOrNull()
+        if (code == 401 && auth && token() != null && message != null) onSignedOut()
+        return ServerException(code, message ?: "The server answered HTTP $code", fromServer = message != null)
     }
 
     internal fun enc(value: String) = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
@@ -378,6 +387,13 @@ class ServerApi(
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * How the app reads the server's answers: [ApiJson], and a value this app doesn't know (a
+         * newer server's feature, page or supply kind) falls back to the field's default, or null,
+         * instead of the whole profile or day failing to load.
+         */
+        internal val AppJson: Json = Json(ApiJson) { coerceInputValues = true }
 
         /** The header that asks for a shared account's data (GET only). */
         const val VIEW_HEADER = "X-SAMH-View"

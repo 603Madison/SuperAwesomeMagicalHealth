@@ -233,12 +233,15 @@ class FoodPhotoViewModel(private val c: Container, val date: LocalDate, val meal
 
     fun add() = _state.update { s -> s.copy(rows = s.rows + FoodPhotoText.added(nextKey++)) }
 
-    /** Logs each row with the food-logging API, one at a time; what's logged leaves the list if one fails. */
+    /**
+     * Logs each row with the food-logging API, one at a time; what's logged leaves the list if one
+     * fails. In the app's scope, so leaving the screen partway doesn't stop it halfway through.
+     */
     fun log() {
         val ready = FoodPhotoText.ready(_state.value.rows)
         if (ready.isEmpty() || _state.value.logging) return
         _state.update { it.copy(logging = true) }
-        viewModelScope.launch {
+        c.scope.launch {
             var done = 0
             try {
                 ready.forEach { row ->

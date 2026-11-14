@@ -7,11 +7,11 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
 import com.health.api.ApiJson
+import com.health.api.Module
 import com.health.api.Routine
 import com.health.api.RoutineRun
 import com.health.app.MainActivity
@@ -39,8 +39,29 @@ import java.time.ZoneId
 @Serializable
 data class RoutineAlarm(val id: String, val name: String, val time: String, val days: List<Int> = emptyList(), val steps: Int = 0, val minutes: Int = 0)
 
+/** What to do with the routines' reminders when the profile or the data changes. */
+enum class RoutineAction {
+    /** Leave them as they are: signed out, viewing someone else's data, or the profile not loaded yet. */
+    KEEP,
+    /** Autism & ADHD is off: forget them. */
+    CLEAR,
+    /** Bring them in step with the server. */
+    REFRESH,
+}
+
 /** When routines remind: pure, so it can be tested. */
 object RoutinePlanner {
+    /**
+     * What to do with the routines kept on the phone. Before the profile loads ([modules] null, as
+     * on every cold start, and while the server can't be reached) nothing is known to be off, so
+     * the routines stay: a routine's alarm can start the app before anything loads.
+     */
+    fun action(signedIn: Boolean, viewing: Boolean, modules: Set<Module>?): RoutineAction = when {
+        !signedIn || viewing || modules == null -> RoutineAction.KEEP
+        Module.NEURO !in modules -> RoutineAction.CLEAR
+        else -> RoutineAction.REFRESH
+    }
+
     fun alarmsOf(routines: List<Routine>): List<RoutineAlarm> = routines.filter { it.active && it.reminder != null && it.id != null }.mapNotNull { r ->
         val time = attempt { LocalTime.parse(r.reminder) }.getOrNull() ?: return@mapNotNull null
         RoutineAlarm(r.id!!, r.name, time.toString(), r.days, r.steps.size, r.steps.mapNotNull { it.minutes }.sum())
@@ -78,6 +99,33 @@ object RoutinePlanner {
         }
     }
 
+    /** The routines due from [from] until just before [until] that aren't done that day: each once, however many days it spans. */
+    fun dueBetween(alarms: List<RoutineAlarm>, done: Map<String, Set<String>>, from: Long, until: Long, zone: ZoneId): List<RoutineAlarm> {
+        if (until <= from) return emptyList()
+        val out = LinkedHashMap<String, RoutineAlarm>()
+        var date = Instant.ofEpochMilli(from).atZone(zone).toLocalDate()
+        val last = Instant.ofEpochMilli(until).atZone(zone).toLocalDate()
+        while (!date.isAfter(last)) {
+            val day = date
+            alarms.filter { a ->
+                on(a, day) && a.id !in done[day.toString()].orEmpty() &&
+                    day.atTime(LocalTime.parse(a.time)).atZone(zone).toInstant().toEpochMilli() in from until until
+            }.forEach { out[it.id] = it }
+            date = date.plusDays(1)
+        }
+        return out.values.toList()
+    }
+
+    /**
+     * A routine reminder's title and text: with names on, the routine's; off, words that don't name
+     * it, so its name shows only in the app.
+     */
+    fun words(a: RoutineAlarm, showNames: Boolean): Pair<String, String> =
+        if (showNames) "Time for: ${a.name}" to body(a) else PRIVATE_TITLE to PRIVATE_BODY
+
+    const val PRIVATE_TITLE = "A routine reminder"
+    const val PRIVATE_BODY = "One of your routines is ready when you are."
+
     /** "3 steps, about 20 minutes. One step at a time." */
     fun body(a: RoutineAlarm): String =
         "${a.steps} ${if (a.steps == 1) "step" else "steps"}${if (a.minutes > 0) ", about ${a.minutes} minutes" else ""}. One step at a time."
@@ -108,18 +156,17 @@ class RoutineReminders(private val context: Context) {
         reschedule(zone, now)
     }
 
-    /** Fetches the routines and the last week's runs, and keeps them. */
-    suspend fun refresh(api: ServerApi, zone: ZoneId) = update(api.routines(), api.routineRuns(8), zone)
+    /** Fetches the routines and the last week's runs, and keeps them; if either can't be loaded, it throws and what's kept stays as it was. */
+    suspend fun refresh(api: ServerApi, zone: ZoneId) {
+        val routines = api.routines()
+        val runs = api.routineRuns(8)
+        update(routines, runs, zone)
+    }
 
     fun reschedule(zone: ZoneId, now: Long = System.currentTimeMillis()) {
         alarms.cancel(fireIntent(0))
         val (at, _) = RoutinePlanner.next(alarms(), done(), now, zone) ?: return
-        val intent = fireIntent(at)
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
-        } else {
-            alarms.setWindow(AlarmManager.RTC_WAKEUP, at, 10 * 60_000L, intent)
-        }
+        alarms.setReminder(at, fireIntent(at))
     }
 
     /** Forgets everything (signing out, or Autism & ADHD turned off). */
@@ -128,9 +175,14 @@ class RoutineReminders(private val context: Context) {
         prefs.edit { clear() }
     }
 
-    /** Shows the routines due at [at]. */
-    fun fire(at: Long, zone: ZoneId, showNames: Boolean, canNotify: Boolean) {
-        val due = RoutinePlanner.dueAt(alarms(), done(), at, zone)
+    /**
+     * Shows the routines due when an alarm set for [at] goes off at [now]; if Android held it back,
+     * those that came due since the last one too (within two hours, as the other reminders).
+     */
+    fun fire(at: Long, zone: ZoneId, showNames: Boolean, canNotify: Boolean, now: Long = System.currentTimeMillis()) {
+        val from = CarePlanner.catchUpFrom(prefs.getLong(LAST_FIRED, 0L).takeIf { it > 0 }, at, now)
+        val due = RoutinePlanner.dueBetween(alarms(), done(), from, maxOf(at, now) + 1, zone)
+        prefs.edit { putLong(LAST_FIRED, maxOf(at, now)) }
         if (due.isEmpty() || !canNotify) return
         val manager = context.getSystemService(NotificationManager::class.java)
         if (manager.getNotificationChannel(CHANNEL) == null) {
@@ -145,20 +197,21 @@ class RoutineReminders(private val context: Context) {
                     .putExtra(MainActivity.EXTRA_OPEN, "neuro/routines"),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
+            val (title, text) = RoutinePlanner.words(a, showNames)
             val builder = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Time for: ${a.name}")
-                .setContentText(RoutinePlanner.body(a))
+                .setContentTitle(title)
+                .setContentText(text)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setContentIntent(open)
                 .setAutoCancel(true)
             if (showNames) {
-                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            } else {
                 builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(
                     NotificationCompat.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_notification)
-                        .setContentTitle("A routine reminder").setContentText("One of your routines is ready when you are.").build(),
+                        .setContentTitle(RoutinePlanner.PRIVATE_TITLE).setContentText(RoutinePlanner.PRIVATE_BODY).build(),
                 )
+            } else {
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             }
             @Suppress("MissingPermission") // the caller checked
             NotificationManagerCompat.from(context).notify(("routine:" + a.id).hashCode(), builder.build())
@@ -178,10 +231,11 @@ class RoutineReminders(private val context: Context) {
         private const val REQUEST = 4200
         private const val ALARMS = "alarms"
         private const val DONE = "done."
+        private const val LAST_FIRED = "lastFired"
     }
 }
 
-/** Where routine reminders' alarms land; a restart, an update or a new time zone sets the alarm again. */
+/** Where routine reminders' alarms land; a restart, an update, a new time zone or being allowed exact alarms sets the alarm again. */
 class RoutineReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val c = context.container
@@ -189,10 +243,10 @@ class RoutineReminderReceiver : BroadcastReceiver() {
         when (intent.action) {
             RoutineReminders.ACTION_FIRE -> {
                 val at = intent.getLongExtra(RoutineReminders.EXTRA_AT, 0)
-                if (at > 0) routines.fire(at, c.zone(), c.reminderCache.prefs().showNames, c.reminders.canNotify())
+                if (at > 0) routines.fire(at, c.zone(), c.showNames(), c.reminders.canNotify())
                 routines.reschedule(c.zone())
             }
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED ->
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED, EXACT_ALARMS_CHANGED ->
                 routines.reschedule(c.zone())
         }
     }

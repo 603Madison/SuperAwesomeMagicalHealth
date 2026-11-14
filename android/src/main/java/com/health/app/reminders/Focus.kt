@@ -24,8 +24,9 @@ import kotlinx.serialization.Serializable
 
 /*
  * The focus timer (Autism & ADHD) while it runs: kept on the phone so it survives the app
- * closing, shown in an ongoing notification with the time so far, and (if the person wants)
- * a gentle chime every so often suggesting a break. Nothing is sent until it's finished.
+ * closing, shown in an ongoing notification with the time so far (naming the task only when the
+ * person shows names in reminders), and (if the person wants) a gentle chime every so often
+ * suggesting a break. Nothing is sent until it's finished.
  */
 
 /** A focus session under way. */
@@ -87,11 +88,25 @@ object FocusAlerts {
     private const val REQUEST_CHIME = 4303
     const val ACTION_CHIME = "com.health.app.reminders.FOCUS_CHIME"
 
-    /** Starts (or updates) the session: its notification and its next chime. */
-    fun start(context: Context, focus: RunningFocus, canNotify: Boolean, now: Long = System.currentTimeMillis()) {
+    /** Starts (or updates) the session: its notification (with the task's name only when [showNames]) and its next chime. */
+    fun start(context: Context, focus: RunningFocus, canNotify: Boolean, showNames: Boolean, now: Long = System.currentTimeMillis()) {
         FocusStore.of(context).set(focus)
-        if (canNotify) showOngoing(context, focus)
+        if (canNotify) showOngoing(context, focus, showNames)
         scheduleChime(context, focus, now)
+    }
+
+    /**
+     * The ongoing notification's title and text: the task's name only with names on (as the
+     * reminders), else what kind of session it is.
+     */
+    fun words(focus: RunningFocus, showNames: Boolean): Pair<String, String> {
+        val task = focus.task?.takeIf { it.isNotBlank() && showNames }
+        val text = listOfNotNull(
+            focus.kind.label.takeIf { task != null },
+            focus.estimateMinutes?.let { "you guessed $it min" },
+            focus.chimeEveryMinutes?.let { "a chime every $it min" },
+        ).joinToString(" · ").ifEmpty { "Tap to finish when you're ready." }
+        return (task ?: focus.kind.label) to text
     }
 
     /** Ends it here: the notification and chimes go. */
@@ -129,14 +144,9 @@ object FocusAlerts {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun showOngoing(context: Context, focus: RunningFocus) {
+    private fun showOngoing(context: Context, focus: RunningFocus, showNames: Boolean) {
         channels(context)
-        val title = focus.task?.takeIf { it.isNotBlank() } ?: focus.kind.label
-        val text = listOfNotNull(
-            focus.kind.label.takeIf { focus.task != null },
-            focus.estimateMinutes?.let { "you guessed $it min" },
-            focus.chimeEveryMinutes?.let { "a chime every $it min" },
-        ).joinToString(" · ").ifEmpty { "Tap to finish when you're ready." }
+        val (title, text) = words(focus, showNames)
         val notification = NotificationCompat.Builder(context, CHANNEL_ONGOING)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)

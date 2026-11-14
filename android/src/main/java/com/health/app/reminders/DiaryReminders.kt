@@ -11,8 +11,8 @@ import java.time.temporal.ChronoUnit
 /**
  * Bladder training, as the server plans it (modules/DiaryHooks.kt, BladderTrainingPlan): a trip
  * every so often while awake, the gap stretched a step every so many days up to the goal. The
- * phone plans the same reminders itself, so they come offline too; on a locked screen they say
- * only "Time for your planned break", as the server's do.
+ * phone plans the same reminders itself, so they come offline too; unless the person shows names
+ * in reminders, they say only "Time for your planned break", as the server's do.
  */
 object BladderTrainingPlan {
     /** The interval on [date]: the start, plus a step every so many days, up to the goal. */

@@ -119,6 +119,13 @@ fun RemindersScreen(profile: Profile?, onBack: () -> Unit, canNotify: Boolean = 
                 ErrorCard("Notifications are off for this app, so reminders can't show.", actionLabel = "Turn on", onAction = onAllow)
             }
             Hint("These go for every device: this phone, your browsers, your watch and your webhooks.", Modifier.padding(horizontal = 4.dp))
+            SectionCard("Privacy") {
+                LabeledSwitch(
+                    "Show names in reminders", r.showNames, { save(r.copy(showNames = it)) },
+                    subtitle = if (r.showNames) "Reminders name your medications, habits, routines and appointments. Anyone who sees your phone can read them."
+                    else "Reminders say \"Time for your 8:00 medications\". Names show only in the app.",
+                )
+            }
             SectionCard("Doses") {
                 Text("If a dose isn't marked, remind again", style = MaterialTheme.typography.bodyLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -141,10 +148,6 @@ fun RemindersScreen(profile: Profile?, onBack: () -> Unit, canNotify: Boolean = 
                     }
                 }
                 Hint("For webhooks and Home Assistant, which can tell you or someone else.")
-                LabeledSwitch(
-                    "Show medication names on a locked screen", r.showNames, { save(r.copy(showNames = it)) },
-                    subtitle = if (r.showNames) "Anyone who sees your phone can read them." else "A locked screen says \"Time for your 8:00 medications\".",
-                )
             }
             SectionCard("Refills") {
                 Text("Remind me when doses left will last", style = MaterialTheme.typography.bodyLarge)

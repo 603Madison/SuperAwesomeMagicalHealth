@@ -27,6 +27,7 @@ import com.health.app.reminders.DoseOutbox
 import com.health.app.reminders.HabitReminder
 import com.health.app.reminders.MedsCache
 import com.health.app.reminders.ReminderCache
+import com.health.app.reminders.ReminderRefresh
 import com.health.app.reminders.Reminders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -72,7 +73,7 @@ class Container(val context: Context) {
         .addInterceptor(ServerApi.authInterceptor({ settings.value.server }, { settings.value.token }))
         .build()
 
-    val api = ServerApi(http, { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { signOut(callServer = false) } })
+    val api = ServerApi(http, { settings.value.server }, { settings.value.token }, onSignedOut = { scope.launch { signOut(requested = false) } })
 
     val signIn = SignIn(context, api, prefs)
 
@@ -93,6 +94,7 @@ class Container(val context: Context) {
         upload = { api.ingest(it) },
         uploadJson = { api.ingestJson(it) },
         onNewData = { dataChanged() },
+        account = { settings.value.account },
     )
 
     /** Medications kept on the phone for reminders, the reminders themselves, and doses waiting to be sent. */
@@ -100,6 +102,18 @@ class Container(val context: Context) {
     val reminderCache = ReminderCache(context)
     val reminders = Reminders(context, medsCache, ::zone, reminderCache)
     val doseOutbox = DoseOutbox(File(context.filesDir, "dose-outbox"))
+
+    /** One voice sender at a time, however many of the trainer's pages are open (ui/modules/transition/voice). */
+    val voiceSending = kotlinx.coroutines.sync.Mutex()
+
+    init {
+        // What an older version kept waiting (not yet under an account) is the signed-in account's.
+        settings.value.account?.let { account ->
+            attempt { outbox.adopt(account) }
+            attempt { doseOutbox.adopt(account) }
+            attempt { com.health.app.ui.modules.transition.voice.VoiceStore(context).adopt(account) }
+        }
+    }
 
     // ---- Viewing someone else's data, from a share (read-only) ----
 
@@ -221,20 +235,39 @@ class Container(val context: Context) {
     /** The modules the person has on (the defaults until the profile has loaded). */
     fun modules(): Set<Module> = profile.value?.modules ?: Module.DEFAULT
 
+    /** Whether reminders (and the focus timer) name what they're for: the person's choice, kept for when the profile hasn't loaded. */
+    fun showNames(): Boolean = profile.value?.reminders?.showNames ?: reminderCache.prefs().showNames
+
+    /** The features reminders follow: the profile's, or before it loads the ones kept with the reminders. */
+    private fun reminderModules(): Set<Module> = profile.value?.modules ?: reminderCache.modules()
+
     /**
-     * Brings the phone's copy of the medications up to date and sets the next reminder; with
-     * Medications off, forgets them and takes any reminders away.
+     * Brings the phone's copy of the medications (and the rest reminders need) up to date and sets
+     * the next reminder; with Medications off, forgets them and takes any reminders away. Before
+     * the profile loads (an alarm, a restart or the background sync can start the app while the
+     * server can't be reached) it works from the features last known and forgets nothing; with
+     * none known, the reminders kept here carry on. A load that fails keeps what was kept.
      */
     suspend fun refreshReminders() {
-        val modules = modules()
+        val plan = ReminderRefresh.of(profile.value?.modules, reminderCache.modules())
+        if (plan == null) {
+            reminders.reschedule()
+            return
+        }
+        val modules = plan.modules
         val today = java.time.LocalDate.now(zone())
         profile.value?.let { reminderCache.savePrefs(it.reminders, modules) }
-        val any = Module.MEDICATIONS in modules || Module.HABITS in modules || Module.APPOINTMENTS in modules ||
-            Module.CONTINENCE in modules // Bladder training (bladder and bowel detail)
-        if (!any) {
-            medsCache.clear()
-            reminderCache.clear()
-            reminders.cancelAll()
+        if (!plan.any) {
+            if (plan.forget) {
+                // Every feature that reminds is off: forget what's kept for them (the zone and choices stay).
+                reminders.cancelAll()
+                medsCache.clear()
+                reminderCache.clear()
+                profile.value?.let {
+                    reminderCache.savePrefs(it.reminders, modules)
+                    reminderCache.saveZone(it.timezone)
+                }
+            }
             return
         }
         if (Module.MEDICATIONS in modules) {
@@ -247,7 +280,7 @@ class Container(val context: Context) {
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 Log.w(TAG, "Couldn't load the medications; reminders use the ones kept", e)
             }
-        } else {
+        } else if (plan.forgets(Module.MEDICATIONS)) {
             medsCache.clear()
         }
         // Habits with a reminder time, and whether each is done today.
@@ -258,19 +291,19 @@ class Container(val context: Context) {
                         .map { HabitReminder(it.habit.id!!, it.habit.name, it.habit.reminderTime!!, it.date, it.done) },
                 )
             }
-        } else {
+        } else if (plan.forgets(Module.HABITS)) {
             reminderCache.saveHabits(emptyList())
         }
         if (Module.APPOINTMENTS in modules) {
             attempt { api.appointments(days = 60, upcoming = true) }.getOrNull()?.let(reminderCache::saveAppointments)
-        } else {
+        } else if (plan.forgets(Module.APPOINTMENTS)) {
             reminderCache.saveAppointments(emptyList())
         }
         // Bladder training (bladder and bowel detail): its settings, kept for the phone's own reminders.
         if (Module.CONTINENCE in modules) {
             attempt { api.continenceSettings() }.getOrNull()?.let { reminderCache.saveBladder(it.bladderTraining.takeIf { t -> t.enabled }) }
             saveChangeDue()
-        } else {
+        } else if (plan.forgets(Module.CONTINENCE)) {
             reminderCache.saveBladder(null)
             reminderCache.saveChangeDue(null, null)
         }
@@ -286,21 +319,30 @@ class Container(val context: Context) {
 
     /** After a change is logged: the next check moves, so the phone's reminder does too. */
     suspend fun continenceChanged() {
-        if (com.health.api.Module.CONTINENCE !in modules()) return
+        if (com.health.api.Module.CONTINENCE !in reminderModules()) return
         saveChangeDue()
         reminders.reschedule()
     }
 
-    /** Sends doses marked from notifications while offline. */
+    /** Sends doses marked from notifications while offline (the signed-in account's only). */
     suspend fun flushDoses() {
-        if (doseOutbox.size() == 0) return
-        val sent = doseOutbox.flush { api.logDoseJson(it) }
+        val account = settings.value.account ?: return
+        if (doseOutbox.size(account) == 0) return
+        val sent = doseOutbox.flush(account, { api.logDoseJson(it) })
         if (sent > 0) dataChanged()
     }
 
-    /** The person's time zone: the profile's, else the phone's. */
-    fun zone(): ZoneId = profile.value?.timezone?.takeIf { it.isNotBlank() }
-        ?.let { attempt { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+    /**
+     * The person's time zone: the profile's; before it loads, the one kept with the reminders (what
+     * they were planned in, so an alarm that starts the app finds what's due); else the phone's.
+     */
+    fun zone(): ZoneId = ReminderRefresh.zone(profile.value?.timezone, reminderCache.zone())
+
+    /** Shows [p] as the person's profile, and keeps its time zone for the reminders. */
+    private fun setProfile(p: Profile) {
+        _profile.value = p
+        reminderCache.saveZone(p.timezone)
+    }
 
     fun start() {
         scope.launch {
@@ -344,7 +386,7 @@ class Container(val context: Context) {
     suspend fun loadProfile(): Profile? = try {
         var p = api.profile()
         if (p.timezone.isBlank()) p = api.saveProfile(p.copy(timezone = ZoneId.systemDefault().id))
-        _profile.value = p
+        setProfile(p)
         prefs.update { it.copy(units = p.units) }
         refreshFields()
         refreshLayout()
@@ -357,7 +399,7 @@ class Container(val context: Context) {
     suspend fun saveProfile(profile: Profile): Profile {
         val before = _profile.value?.modules
         val saved = api.saveProfile(profile)
-        _profile.value = saved
+        setProfile(saved)
         prefs.update { it.copy(units = saved.units) }
         if (before != saved.modules) refreshFields()
         dataChanged()
@@ -386,15 +428,33 @@ class Container(val context: Context) {
         }
     }
 
-    suspend fun signOut(callServer: Boolean = true) {
-        if (callServer) api.logout()
+    /**
+     * Signs out. When the person asks ([requested]), the server is told, and what this account had
+     * waiting to be sent goes with the rest. When the server says the sign-in is no longer good (a
+     * revoked or expired sign-in), what's waiting to be sent stays, kept under its account: it goes
+     * once the same person signs in to the same server again, and never to anyone else.
+     */
+    suspend fun signOut(requested: Boolean = true) {
+        val account = settings.value.account
+        if (requested) {
+            api.logout()
+        } else if (!settings.value.signedIn) {
+            return // Already signed out: several requests can come back refused at once.
+        }
         prefs.signOut()
         syncStore.clear()
-        outbox.clear()
-        doseOutbox.clear()
+        if (requested && account != null) {
+            outbox.clear(account)
+            doseOutbox.clear(account)
+        }
+        // The practice reminder, and what the voice trainer kept (recordings too; unsent sessions as above).
+        com.health.app.ui.modules.transition.voice.VoiceReminders.forget(context, dropUnsentOf = account.takeIf { requested })
+        // Snoozed doses' alarms are found from the reminders kept, so they go first.
+        reminders.cancelAll()
         medsCache.clear()
         reminderCache.clear()
-        reminders.cancelAll()
+        // Nothing personal stays in the notification shade.
+        androidx.core.app.NotificationManagerCompat.from(context).cancelAll()
         monitors.clear()
         attempt { DigestWorker.schedule(context, null, zone()) }
         _viewing.value = null
@@ -413,11 +473,17 @@ class Container(val context: Context) {
 
     val routineReminders = com.health.app.reminders.RoutineReminders(context)
 
-    /** Keeps the routines' reminders on the phone in step with the server (only the person's own). */
+    /**
+     * Keeps the routines' reminders on the phone in step with the server (only the person's own).
+     * Until the profile loads nothing is known to be off, so what's kept stays; and a refresh that
+     * fails keeps it too.
+     */
     suspend fun refreshRoutineReminders() {
-        if (!settings.value.signedIn || _viewing.value != null) return
-        if (Module.NEURO !in modules()) return routineReminders.clear()
-        routineReminders.refresh(api, zone())
+        when (com.health.app.reminders.RoutinePlanner.action(settings.value.signedIn, _viewing.value != null, profile.value?.modules)) {
+            com.health.app.reminders.RoutineAction.KEEP -> Unit
+            com.health.app.reminders.RoutineAction.CLEAR -> routineReminders.clear()
+            com.health.app.reminders.RoutineAction.REFRESH -> routineReminders.refresh(api, zone())
+        }
     }
 
     @OptIn(FlowPreview::class)
@@ -447,13 +513,9 @@ class Container(val context: Context) {
     }
 
     // ---- Voice trainer (ui/modules/transition/voice): its practice reminder follows the plan and
-    // Transition being on; signing out cancels it and deletes what the trainer kept here, recordings included ----
+    // Transition being on; signing out (in signOut) cancels it and deletes what the trainer kept here,
+    // recordings included ----
     init {
-        scope.launch {
-            settings.map { it.signedIn }.distinctUntilChanged().drop(1).collect { signedIn ->
-                if (!signedIn) com.health.app.ui.modules.transition.voice.VoiceReminders.forget(context)
-            }
-        }
         scope.launch {
             profile.map { it?.modules?.contains(Module.TRANSITION) }.distinctUntilChanged().collect { on ->
                 if (on != null && _viewing.value == null) attempt { com.health.app.ui.modules.transition.voice.VoiceReminders.refresh(context, api, on, zone()) }

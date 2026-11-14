@@ -171,9 +171,12 @@ class FoodViewModel(private val c: Container) : ViewModel() {
         viewModelScope.launch { loadIdeas() }
     }
 
-    /** Logs an idea's items on the day shown, at the ideas' meal, then offers Undo. */
+    /**
+     * Logs an idea's items on the day shown, at the ideas' meal, then offers Undo. In the app's
+     * scope, so leaving the screen can't stop it with half the items logged.
+     */
     fun addIdea(idea: FoodSuggestion) {
-        viewModelScope.launch {
+        c.scope.launch {
             val date = _state.value.date.toString()
             val meal = _state.value.ideas?.meal ?: idea.meal
             val added = mutableListOf<com.health.api.FoodEntry>()
@@ -350,8 +353,9 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
         c.ui.addFood(FoodEntryInput(date.toString(), meal, servings, food = saved))
     }
 
+    /** Saves in the app's scope: a new food and its entry go together even if the screen closes between them. */
     private fun save(block: suspend () -> Unit) {
-        viewModelScope.launch {
+        c.scope.launch {
             try {
                 block()
                 c.dataChanged()
