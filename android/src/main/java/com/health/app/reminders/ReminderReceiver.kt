@@ -16,8 +16,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Where reminders' alarms and buttons land: an alarm shows the doses due and sets the next one;
- * Taken records the dose (or keeps it to send later); Snooze brings it back in ten minutes; a
- * restart, an update or a new time zone sets the alarm again.
+ * Taken records the dose (or keeps it to send later); Snooze brings it back in ten minutes (unless
+ * it's marked by then); a restart, an update, a new time zone or being allowed exact alarms sets
+ * the alarm again.
  */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -28,7 +29,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 if (at > 0) c.reminders.fire(at)
                 c.reminders.reschedule()
             }
-            ACTION_SNOOZED -> doseOf(intent)?.let { c.reminders.notify(listOf(it)) }
+            ACTION_SNOOZED -> doseOf(intent)?.let { c.reminders.snoozeOver(it, c.settings.value.signedIn) }
             ACTION_SNOOZE -> doseOf(intent)?.let { c.reminders.snooze(it) }
             ACTION_TAKEN -> {
                 val dose = doseOf(intent) ?: return
@@ -50,7 +51,7 @@ class ReminderReceiver : BroadcastReceiver() {
                     }
                 }
             }
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED ->
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED, EXACT_ALARMS_CHANGED ->
                 c.reminders.reschedule()
         }
     }

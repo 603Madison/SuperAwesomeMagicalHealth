@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
@@ -19,6 +18,8 @@ import com.health.app.attempt
 import com.health.app.container
 import com.health.app.net.ServerApi
 import com.health.app.net.voicePlan
+import com.health.app.reminders.EXACT_ALARMS_CHANGED
+import com.health.app.reminders.setReminder
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import java.time.LocalDate
@@ -58,12 +59,7 @@ class VoiceReminders(private val context: Context) {
     fun reschedule(zone: ZoneId, now: Long = System.currentTimeMillis()) {
         alarms.cancel(fireIntent(0))
         val at = VoiceReminderPlan.next(time(), restDays(), practisedOn(), now, zone) ?: return
-        val intent = fireIntent(at)
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
-        } else {
-            alarms.setWindow(AlarmManager.RTC_WAKEUP, at, 10 * 60_000L, intent)
-        }
+        alarms.setReminder(at, fireIntent(at))
     }
 
     /** Forgets the reminder (signing out, or Transition turned off). */
@@ -140,14 +136,15 @@ class VoiceReminders(private val context: Context) {
         }
 
         private const val REQUEST = 4300
-        private const val NOTIFICATION = 4301
+        /** Its own: the focus timer's are 4301 and 4302. */
+        private const val NOTIFICATION = 4310
         private const val TIME = "time"
         private const val REST = "rest"
         private const val PRACTISED = "practised"
     }
 }
 
-/** Where the practice reminder's alarm lands; a restart, an update or a new time zone sets it again. */
+/** Where the practice reminder's alarm lands; a restart, an update, a new time zone or being allowed exact alarms sets it again. */
 class VoiceReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val c = context.container
@@ -158,7 +155,7 @@ class VoiceReminderReceiver : BroadcastReceiver() {
                 if (at > 0 && c.settings.value.signedIn) reminders.fire(at, c.zone(), c.reminders.canNotify())
                 reminders.reschedule(c.zone())
             }
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED ->
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED, EXACT_ALARMS_CHANGED ->
                 reminders.reschedule(c.zone())
         }
     }

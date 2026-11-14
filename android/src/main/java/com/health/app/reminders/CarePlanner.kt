@@ -103,6 +103,40 @@ object CarePlanner {
     fun dueAt(inputs: ReminderInputs, at: Long, zone: ZoneId): List<PlannedAlarm> =
         plan(inputs, at, at + MINUTE, zone).filter { it.at == at }
 
+    /** How far back an alarm that came late looks: a phone that was off all night doesn't bring the night's reminders. */
+    const val CATCH_UP = 2 * 60 * MINUTE
+
+    /**
+     * Where an alarm set for [at], going off at [now], starts looking: just after reminders last
+     * went off ([lastFired]; [at] when that isn't known), but no more than [CATCH_UP] back.
+     */
+    fun catchUpFrom(lastFired: Long?, at: Long, now: Long): Long = maxOf(lastFired?.plus(1) ?: at, now - CATCH_UP)
+
+    /**
+     * The reminders to show when an alarm set for [at] goes off at [now]: those due at [at], and,
+     * if it came late (Android can hold an alarm back), whatever came due since reminders last went
+     * off, within [CATCH_UP]. Only the latest for each dose, appointment or kind of nudge, so a late
+     * alarm never brings a pile.
+     */
+    fun catchUp(inputs: ReminderInputs, lastFired: Long?, at: Long, now: Long, zone: ZoneId): List<PlannedAlarm> {
+        val from = catchUpFrom(lastFired, at, now)
+        val until = maxOf(at, now) + 1
+        return plan(inputs, from, until, zone).groupBy(::slot).map { (_, alarms) -> alarms.last() }
+            .sortedWith(compareBy({ it.at }, { it.kind.ordinal }, { it.key }))
+    }
+
+    /** What one notification stands for: a dose (and its reminders again), an appointment, a medication's refill, bladder training, a change. */
+    private fun slot(alarm: PlannedAlarm): String = alarm.dose?.let { "dose:" + doseKey(it.medicationId, it.at) } ?: when (alarm.kind) {
+        AlarmKind.BLADDER, AlarmKind.CHANGE -> alarm.kind.name
+        AlarmKind.APPOINTMENT, AlarmKind.REFILL -> alarm.key.substringBeforeLast(':')
+        else -> alarm.key
+    }
+
+    /** Whether a snoozed [dose] still wants reminding: not marked meanwhile, and its medication still reminds. */
+    fun stillDue(dose: PlannedDose, inputs: ReminderInputs): Boolean =
+        doseKey(dose.medicationId, dose.at) !in inputs.marked && Module.MEDICATIONS in inputs.modules &&
+            inputs.meds.any { it.id == dose.medicationId && it.active && it.reminders }
+
     // ---- Doses ----
 
     private fun doses(inputs: ReminderInputs, from: Long, until: Long, zone: ZoneId): List<PlannedAlarm> {

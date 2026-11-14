@@ -27,6 +27,7 @@ import com.health.app.reminders.DoseOutbox
 import com.health.app.reminders.HabitReminder
 import com.health.app.reminders.MedsCache
 import com.health.app.reminders.ReminderCache
+import com.health.app.reminders.ReminderRefresh
 import com.health.app.reminders.Reminders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
@@ -221,20 +222,36 @@ class Container(val context: Context) {
     /** The modules the person has on (the defaults until the profile has loaded). */
     fun modules(): Set<Module> = profile.value?.modules ?: Module.DEFAULT
 
+    /** The features reminders follow: the profile's, or before it loads the ones kept with the reminders. */
+    private fun reminderModules(): Set<Module> = profile.value?.modules ?: reminderCache.modules()
+
     /**
-     * Brings the phone's copy of the medications up to date and sets the next reminder; with
-     * Medications off, forgets them and takes any reminders away.
+     * Brings the phone's copy of the medications (and the rest reminders need) up to date and sets
+     * the next reminder; with Medications off, forgets them and takes any reminders away. Before
+     * the profile loads (an alarm, a restart or the background sync can start the app while the
+     * server can't be reached) it works from the features last known and forgets nothing; with
+     * none known, the reminders kept here carry on. A load that fails keeps what was kept.
      */
     suspend fun refreshReminders() {
-        val modules = modules()
+        val plan = ReminderRefresh.of(profile.value?.modules, reminderCache.modules())
+        if (plan == null) {
+            reminders.reschedule()
+            return
+        }
+        val modules = plan.modules
         val today = java.time.LocalDate.now(zone())
         profile.value?.let { reminderCache.savePrefs(it.reminders, modules) }
-        val any = Module.MEDICATIONS in modules || Module.HABITS in modules || Module.APPOINTMENTS in modules ||
-            Module.CONTINENCE in modules // Bladder training (bladder and bowel detail)
-        if (!any) {
-            medsCache.clear()
-            reminderCache.clear()
-            reminders.cancelAll()
+        if (!plan.any) {
+            if (plan.forget) {
+                // Every feature that reminds is off: forget what's kept for them (the zone and choices stay).
+                reminders.cancelAll()
+                medsCache.clear()
+                reminderCache.clear()
+                profile.value?.let {
+                    reminderCache.savePrefs(it.reminders, modules)
+                    reminderCache.saveZone(it.timezone)
+                }
+            }
             return
         }
         if (Module.MEDICATIONS in modules) {
@@ -247,7 +264,7 @@ class Container(val context: Context) {
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 Log.w(TAG, "Couldn't load the medications; reminders use the ones kept", e)
             }
-        } else {
+        } else if (plan.forgets(Module.MEDICATIONS)) {
             medsCache.clear()
         }
         // Habits with a reminder time, and whether each is done today.
@@ -258,19 +275,19 @@ class Container(val context: Context) {
                         .map { HabitReminder(it.habit.id!!, it.habit.name, it.habit.reminderTime!!, it.date, it.done) },
                 )
             }
-        } else {
+        } else if (plan.forgets(Module.HABITS)) {
             reminderCache.saveHabits(emptyList())
         }
         if (Module.APPOINTMENTS in modules) {
             attempt { api.appointments(days = 60, upcoming = true) }.getOrNull()?.let(reminderCache::saveAppointments)
-        } else {
+        } else if (plan.forgets(Module.APPOINTMENTS)) {
             reminderCache.saveAppointments(emptyList())
         }
         // Bladder training (bladder and bowel detail): its settings, kept for the phone's own reminders.
         if (Module.CONTINENCE in modules) {
             attempt { api.continenceSettings() }.getOrNull()?.let { reminderCache.saveBladder(it.bladderTraining.takeIf { t -> t.enabled }) }
             saveChangeDue()
-        } else {
+        } else if (plan.forgets(Module.CONTINENCE)) {
             reminderCache.saveBladder(null)
             reminderCache.saveChangeDue(null, null)
         }
@@ -286,7 +303,7 @@ class Container(val context: Context) {
 
     /** After a change is logged: the next check moves, so the phone's reminder does too. */
     suspend fun continenceChanged() {
-        if (com.health.api.Module.CONTINENCE !in modules()) return
+        if (com.health.api.Module.CONTINENCE !in reminderModules()) return
         saveChangeDue()
         reminders.reschedule()
     }
@@ -298,9 +315,17 @@ class Container(val context: Context) {
         if (sent > 0) dataChanged()
     }
 
-    /** The person's time zone: the profile's, else the phone's. */
-    fun zone(): ZoneId = profile.value?.timezone?.takeIf { it.isNotBlank() }
-        ?.let { attempt { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+    /**
+     * The person's time zone: the profile's; before it loads, the one kept with the reminders (what
+     * they were planned in, so an alarm that starts the app finds what's due); else the phone's.
+     */
+    fun zone(): ZoneId = ReminderRefresh.zone(profile.value?.timezone, reminderCache.zone())
+
+    /** Shows [p] as the person's profile, and keeps its time zone for the reminders. */
+    private fun setProfile(p: Profile) {
+        _profile.value = p
+        reminderCache.saveZone(p.timezone)
+    }
 
     fun start() {
         scope.launch {
@@ -344,7 +369,7 @@ class Container(val context: Context) {
     suspend fun loadProfile(): Profile? = try {
         var p = api.profile()
         if (p.timezone.isBlank()) p = api.saveProfile(p.copy(timezone = ZoneId.systemDefault().id))
-        _profile.value = p
+        setProfile(p)
         prefs.update { it.copy(units = p.units) }
         refreshFields()
         refreshLayout()
@@ -357,7 +382,7 @@ class Container(val context: Context) {
     suspend fun saveProfile(profile: Profile): Profile {
         val before = _profile.value?.modules
         val saved = api.saveProfile(profile)
-        _profile.value = saved
+        setProfile(saved)
         prefs.update { it.copy(units = saved.units) }
         if (before != saved.modules) refreshFields()
         dataChanged()
@@ -392,9 +417,12 @@ class Container(val context: Context) {
         syncStore.clear()
         outbox.clear()
         doseOutbox.clear()
+        // Snoozed doses' alarms are found from the reminders kept, so they go first.
+        reminders.cancelAll()
         medsCache.clear()
         reminderCache.clear()
-        reminders.cancelAll()
+        // Nothing personal stays in the notification shade.
+        androidx.core.app.NotificationManagerCompat.from(context).cancelAll()
         monitors.clear()
         attempt { DigestWorker.schedule(context, null, zone()) }
         _viewing.value = null
@@ -413,11 +441,17 @@ class Container(val context: Context) {
 
     val routineReminders = com.health.app.reminders.RoutineReminders(context)
 
-    /** Keeps the routines' reminders on the phone in step with the server (only the person's own). */
+    /**
+     * Keeps the routines' reminders on the phone in step with the server (only the person's own).
+     * Until the profile loads nothing is known to be off, so what's kept stays; and a refresh that
+     * fails keeps it too.
+     */
     suspend fun refreshRoutineReminders() {
-        if (!settings.value.signedIn || _viewing.value != null) return
-        if (Module.NEURO !in modules()) return routineReminders.clear()
-        routineReminders.refresh(api, zone())
+        when (com.health.app.reminders.RoutinePlanner.action(settings.value.signedIn, _viewing.value != null, profile.value?.modules)) {
+            com.health.app.reminders.RoutineAction.KEEP -> Unit
+            com.health.app.reminders.RoutineAction.CLEAR -> routineReminders.clear()
+            com.health.app.reminders.RoutineAction.REFRESH -> routineReminders.refresh(api, zone())
+        }
     }
 
     @OptIn(FlowPreview::class)

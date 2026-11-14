@@ -14,8 +14,9 @@ import kotlinx.serialization.builtins.serializer
 
 /**
  * What reminders need besides the medications ([MedsCache]): how the person likes them, which
- * features are on, doses already marked, today's habits and the appointments ahead. Kept on the
- * phone so reminders still go off offline and after a restart.
+ * features are on, the time zone they're planned in, doses already marked or snoozed, today's
+ * habits and the appointments ahead. Kept on the phone so reminders still go off offline and
+ * after a restart, before the profile has loaded.
  */
 class ReminderCache(context: Context) {
     private val prefs = context.getSharedPreferences("reminders", Context.MODE_PRIVATE)
@@ -23,6 +24,25 @@ class ReminderCache(context: Context) {
     fun prefs(): ReminderPrefs = read(PREFS) { ApiJson.decodeFromString(ReminderPrefs.serializer(), it) } ?: ReminderPrefs()
 
     fun modules(): Set<Module> = read(MODULES) { ApiJson.decodeFromString(SetSerializer(Module.serializer()), it) } ?: emptySet()
+
+    /** The profile's time zone, as last loaded: reminders are planned in it, so they're found in it before the profile loads. */
+    fun zone(): String? = prefs.getString(ZONE, null)
+
+    fun saveZone(zone: String?) = prefs.edit { if (zone.isNullOrBlank()) remove(ZONE) else putString(ZONE, zone) }
+
+    /** When reminders last went off, so a late alarm can bring what came due since. */
+    fun lastFired(): Long? = prefs.getLong(LAST_FIRED, 0L).takeIf { it > 0 }
+
+    fun saveLastFired(at: Long) = prefs.edit { putLong(LAST_FIRED, at) }
+
+    /** Doses snoozed from a notification ([CarePlanner.doseKey]), so their alarms can be taken away. */
+    fun snoozed(): Set<String> = prefs.getStringSet(SNOOZED, emptySet()).orEmpty().toSet()
+
+    fun snooze(key: String) = prefs.edit { putStringSet(SNOOZED, snoozed() + key) }
+
+    fun unsnooze(key: String) = prefs.edit { putStringSet(SNOOZED, snoozed() - key) }
+
+    fun clearSnoozed() = prefs.edit { remove(SNOOZED) }
 
     fun marked(): Set<String> = prefs.getStringSet(MARKED, emptySet()).orEmpty()
 
@@ -88,5 +108,8 @@ class ReminderCache(context: Context) {
         const val BLADDER = "bladder"
         const val CHANGE_DUE = "changeDue"
         const val WORN_SINCE = "wornSince"
+        const val ZONE = "zone"
+        const val LAST_FIRED = "lastFired"
+        const val SNOOZED = "snoozed"
     }
 }

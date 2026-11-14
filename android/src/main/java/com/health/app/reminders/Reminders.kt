@@ -16,16 +16,18 @@ import com.health.api.MedForm
 import com.health.api.Module
 import com.health.app.MainActivity
 import com.health.app.R
+import com.health.app.attempt
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Reminders: one alarm for the next moment anything is due (exact where Android allows it, else
- * within ten minutes), a notification for each reminder due then, and the next alarm set when one
- * goes off. Doses come with Taken and Snooze, and again while they aren't marked; refills, habits
- * and appointments have their own channels. On a locked screen, names only show when the person
- * says so. Works from [MedsCache] and [ReminderCache], so it needs no network.
+ * Reminders: one alarm for the next moment anything is due (exact where Android allows it, else as
+ * near as the phone's idle mode lets), a notification for each reminder due then (and, if the alarm
+ * came late, for what came due meanwhile), and the next alarm set when one goes off. Doses come
+ * with Taken and Snooze, and again while they aren't marked; refills, habits and appointments have
+ * their own channels. On a locked screen, names only show when the person says so. Works from
+ * [MedsCache] and [ReminderCache], so it needs no network.
  */
 class Reminders(
     private val context: Context,
@@ -66,13 +68,29 @@ class Reminders(
         set(at, fireIntent(at))
     }
 
+    /**
+     * Takes the reminders away: the next alarm, snoozed doses' alarms, and the reminders showing.
+     * Only these: the focus timer, routines, practice and the digest are left as they are.
+     */
     fun cancelAll() {
         alarms.cancel(fireIntent(0))
-        NotificationManagerCompat.from(context).cancelAll()
+        extra?.snoozed()?.forEach { key -> doseOfKey(key)?.let { alarms.cancel(doseIntent(ReminderReceiver.ACTION_SNOOZED, it)) } }
+        extra?.clearSnoozed()
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val ours = CHANNELS.map { it.id }.toSet()
+        attempt { manager.activeNotifications }.getOrNull().orEmpty()
+            .filter { it.notification.channelId in ours }
+            .forEach { manager.cancel(it.tag, it.id) }
     }
 
-    /** Shows the reminders due when an alarm goes off at [at]. */
-    fun fire(at: Long) = show(CarePlanner.dueAt(inputs(), at, zone()))
+    /**
+     * Shows the reminders due when an alarm set for [at] goes off at [now]; if Android held it
+     * back, what came due since reminders last went off too (within two hours).
+     */
+    fun fire(at: Long, now: Long = System.currentTimeMillis()) {
+        show(CarePlanner.catchUp(inputs(), extra?.lastFired(), at, now, zone()))
+        extra?.saveLastFired(maxOf(at, now))
+    }
 
     /** Shows a notification for each of [doses] (a snoozed one coming back). */
     fun notify(doses: List<PlannedDose>) = show(
@@ -131,25 +149,29 @@ class Reminders(
     /** Takes the notification away and shows it again in [minutes]. */
     fun snooze(dose: PlannedDose, minutes: Int = 10, now: Long = System.currentTimeMillis()) {
         dismiss(dose)
+        extra?.snooze(CarePlanner.doseKey(dose.medicationId, dose.at))
         set(now + minutes * 60_000L, doseIntent(ReminderReceiver.ACTION_SNOOZED, dose))
+    }
+
+    /** A snoozed dose's time is up: it shows again, unless it's been marked meanwhile or its medication no longer reminds. */
+    fun snoozeOver(dose: PlannedDose, signedIn: Boolean) {
+        extra?.unsnooze(CarePlanner.doseKey(dose.medicationId, dose.at))
+        if (signedIn && CarePlanner.stillDue(dose, inputs())) notify(listOf(dose))
     }
 
     fun dismiss(dose: PlannedDose) = NotificationManagerCompat.from(context).cancel(notificationId(dose))
 
     /** A dose marked (from a notification): no more reminders for it. */
     fun marked(dose: PlannedDose) {
-        extra?.mark(CarePlanner.doseKey(dose.medicationId, dose.at))
+        val key = CarePlanner.doseKey(dose.medicationId, dose.at)
+        extra?.mark(key)
+        extra?.unsnooze(key)
+        alarms.cancel(doseIntent(ReminderReceiver.ACTION_SNOOZED, dose))
         dismiss(dose)
         reschedule()
     }
 
-    private fun set(at: Long, intent: PendingIntent) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
-        } else {
-            alarms.setWindow(AlarmManager.RTC_WAKEUP, at, 10 * 60_000L, intent)
-        }
-    }
+    private fun set(at: Long, intent: PendingIntent) = alarms.setReminder(at, intent)
 
     private fun openIntent(alarm: PlannedAlarm): PendingIntent = PendingIntent.getActivity(
         context, alarm.kind.ordinal + 1,
@@ -218,6 +240,12 @@ class Reminders(
         }
 
         fun notificationId(dose: PlannedDose): Int = (dose.medicationId + dose.at).hashCode()
+
+        /** A dose from its [CarePlanner.doseKey], enough to find its notification and alarms again. */
+        fun doseOfKey(key: String): PlannedDose? {
+            val at = key.substringAfterLast('@', "").toLongOrNull() ?: return null
+            return PlannedDose(key.substringBeforeLast('@'), "", null, MedForm.OTHER, at)
+        }
 
         /** A dose and its reminders again share one notification, so each replaces the last. */
         fun notificationId(alarm: PlannedAlarm): Int = alarm.dose?.let(::notificationId) ?: alarm.key.hashCode()
