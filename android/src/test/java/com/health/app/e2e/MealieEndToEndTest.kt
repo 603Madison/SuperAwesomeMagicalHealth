@@ -95,7 +95,7 @@ class MealieEndToEndTest {
     @Before
     fun start() {
         mealie.start()
-        val config = ServerConfig(dataDir = Files.createTempDirectory("samh-mealie-e2e").toFile(), adminPassword = "e2e-password")
+        val config = ServerConfig(dataDir = Files.createTempDirectory("samh-mealie-e2e").toFile(), adminPassword = "e2e-password", outboundLoopback = true)
         val db = Database.inMemory()
         Schema.migrate(db)
         val services = Services(config, db, SecretBox(ByteArray(32) { it.toByte() }), passwords = Passwords(iterations = 1_000))
