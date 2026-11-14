@@ -29,6 +29,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonPrimitive
@@ -247,6 +248,19 @@ class NeuroTransitionPhotosTest {
         }) { csrf() }
 
     private fun ByteArray.has(text: String) = String(this, Charsets.ISO_8859_1).contains(text)
+
+    @Test
+    fun `a photo the size a phone takes is kept`() = serverTest(services()) { _ ->
+        val admin = adminBrowser()
+        val random = java.util.Random(3)
+        val img = BufferedImage(2000, 1500, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until img.height) for (x in 0 until img.width) img.setRGB(x, y, random.nextInt(0xFFFFFF))
+        val big = java.io.ByteArrayOutputStream().also { ImageIO.write(img, "jpeg", it) }.toByteArray()
+        assertTrue("the test photo is phone-sized (${big.size} bytes)", big.size > 500_000)
+        val made = admin.upload(big)
+        assertEquals(made.bodyAsText(), HttpStatusCode.OK, made.status)
+        assertEquals(2000, made.obj()["width"]!!.jsonPrimitive.int)
+    }
 
     @Test
     fun `a photo is turned upright, loses its location and camera details, and is sealed on disk`() = serverTest(services()) { s ->

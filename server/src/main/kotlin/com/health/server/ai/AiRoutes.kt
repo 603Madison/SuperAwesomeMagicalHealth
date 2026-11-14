@@ -80,7 +80,8 @@ fun Route.aiRoutes(services: Services) {
             var photo: ByteArray? = null
             var meal: Meal? = null
             var note: String? = null
-            call.receiveMultipart(formFieldLimit = 64 * 1024).forEachPart { part ->
+            // Ktor's limit is for every part, the picture too: the picture's own limit is checked as it's read.
+            call.receiveMultipart(formFieldLimit = Images.MAX_BYTES + 256 * 1024L).forEachPart { part ->
                 try {
                     when {
                         part is PartData.FileItem && part.name == "photo" -> {

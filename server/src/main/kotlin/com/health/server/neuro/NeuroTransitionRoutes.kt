@@ -146,7 +146,8 @@ fun Route.neuroTransitionRoutes(services: Services) {
             }
             var bytes: ByteArray? = null
             var meta: Photo? = null
-            call.receiveMultipart(formFieldLimit = 256 * 1024).forEachPart { part ->
+            // Ktor's limit is for every part, the picture too: the picture's own limit is checked as it's read.
+            call.receiveMultipart(formFieldLimit = Images.MAX_BYTES + 256 * 1024L).forEachPart { part ->
                 try {
                     when {
                         part is PartData.FileItem && part.name == "file" -> {

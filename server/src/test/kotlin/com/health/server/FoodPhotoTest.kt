@@ -165,6 +165,26 @@ class FoodPhotoTest {
         assertTrue(requests.isEmpty())
     }
 
+    /** A photo the size a phone sends: full of detail, so about a megabyte as JPEG. */
+    private fun bigJpeg(): ByteArray {
+        val random = java.util.Random(7)
+        val img = BufferedImage(2000, 1500, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until img.height) for (x in 0 until img.width) img.setRGB(x, y, random.nextInt(0xFFFFFF))
+        return ByteArrayOutputStream().also { ImageIO.write(img, "jpeg", it) }.toByteArray()
+    }
+
+    @Test
+    fun `a photo the size a phone sends is estimated`() = serverTest { s ->
+        s.useFakeAnthropic()
+        val admin = adminBrowser()
+        admin.turnOn()
+        admin.consent("\"NUTRITION\"")
+        val big = bigJpeg()
+        assertTrue("the test photo is phone-sized (${big.size} bytes)", big.size > 500_000)
+        val answer = admin.snap(bytes = big)
+        assertEquals(answer.bodyAsText(), HttpStatusCode.OK, answer.status)
+    }
+
     @Test
     fun `someone viewing a share can't send a photo for the owner`() = serverTest { s ->
         s.useFakeAnthropic()
