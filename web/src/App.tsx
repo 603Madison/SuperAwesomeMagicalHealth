@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useToday } from "./lib/format";
 import { safeReturn } from "./lib/paths";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
@@ -141,6 +142,8 @@ function Shell() {
   const items = useNavItems();
   const shown = useNavShown(items);
   const [arranging, setArranging] = useState(false);
+  // A new day (at midnight, or when the tab comes back) draws every page again, so "today" moves on everywhere.
+  useToday();
   // Which fields show is the shown person's: lib/fields.ts loads them afresh when that changes.
   const link = (i: NavItem) => (
     <NavLink key={i.id} to={i.to} className={`nav-link ${i.tab ? `nav-tab nav-${i.id.toLowerCase()}` : "nav-optional"}`} title={i.short === i.label ? undefined : i.label}>

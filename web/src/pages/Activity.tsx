@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Activity as ActivityIcon, Dumbbell, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, distance, hm, isoDate, num, shortDate, today, useUnits, workoutLabel } from "../lib/format";
+import { clock, distance, hm, isoDate, num, shortDate, useToday, useUnits, workoutLabel } from "../lib/format";
 import { useSession } from "../lib/session";
 import type { Workout } from "../lib/types";
 import { BarChart, LineChart, scoreFloor } from "../components/charts";
@@ -18,7 +18,8 @@ export function Activity() {
   const trends = useLoad(() => api.trends(days), [days]);
   const workouts = useLoad(() => api.workouts(days), [days]);
   // Today's counts, for where they came from when more than one device counted them.
-  const day = useLoad(() => api.day(today()).catch(() => null), []);
+  const now = useToday();
+  const day = useLoad(() => api.day(now).catch(() => null), [now]);
   const [editing, setEditing] = useState<Workout | "new" | null>(null);
   const reload = () => { trends.reload(); workouts.reload(); day.reload(); };
   const rows = trends.data?.days ?? [];

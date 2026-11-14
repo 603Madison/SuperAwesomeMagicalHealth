@@ -1,4 +1,9 @@
+import { useState } from "react";
+import { create } from "zustand";
+import { api } from "./api";
 import { useSession } from "./session";
+import { dateIn, startOfDayIn, todayIn, zonedTime } from "./today";
+import { useViewing } from "./viewing";
 import type { Units } from "./types";
 
 /** The person's units: metric until they choose otherwise. */
@@ -50,10 +55,86 @@ export function clock(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-/** Today's date where the person is, as YYYY-MM-DD. */
-export function today(): string {
-  return isoDate(new Date());
+/*
+ * Days follow the person's time zone (their profile's, as the server's do), or, while viewing
+ * someone's share, that person's once it's known. "Today" moves on by itself: checked every
+ * minute, and straight away when the tab comes back, so nothing is logged to yesterday.
+ */
+
+/** While viewing a share: the owner's time zone, once it's known. */
+let shownZone: { owner: string; zone: string | null } | null = null;
+
+/** The time zone the days showing are in; undefined for the browser's own. */
+export function dayZone(): string | undefined {
+  const share = useViewing.getState().share;
+  if (share && shownZone?.owner === share.ownerId && shownZone.zone) return shownZone.zone;
+  return useSession.getState().profile?.timezone || undefined;
 }
+
+/** Today's date where the person is, as YYYY-MM-DD. In a component, [useToday] follows it as it changes. */
+export function today(): string {
+  return todayIn(dayZone());
+}
+
+/** The day [ms] falls on where the person is, as YYYY-MM-DD. */
+export const dayOf = (ms: number): string => dateIn(ms, dayZone());
+
+/** When [date] begins where the person is. */
+export const dayStart = (date: string): number => startOfDayIn(date, dayZone());
+
+/** The moment it's [time] ("HH:mm") on [date] where the person is. */
+export const timeOn = (date: string, time: string): number => zonedTime(date, time, dayZone());
+
+const useDay = create<{ today: string }>(() => ({ today: today() }));
+
+function checkDay() {
+  const now = today();
+  if (now !== useDay.getState().today) useDay.setState({ today: now });
+}
+
+/** Today's date (YYYY-MM-DD), changing at midnight where the person is. */
+export function useToday(): string {
+  return useDay((s) => s.today);
+}
+
+/**
+ * A page's day: today until another is picked. Left on today, it moves on to the new day by
+ * itself; a picked day stays. Returns the day, a way to pick one, and today.
+ */
+export function useDayPicker(): [string, (date: string) => void, string] {
+  const now = useToday();
+  const [picked, setPicked] = useState<string | null>(null);
+  return [picked ?? now, (date: string) => setPicked(date === now ? null : date), now];
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("focus", checkDay);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkDay(); });
+  window.setInterval(checkDay, 60_000);
+}
+useSession.subscribe((s, before) => { if (s.profile?.timezone !== before.profile?.timezone) checkDay(); });
+
+// While viewing someone's share, their days: their time zone comes with their profile as shared.
+let zoneAsk = 0;
+let zoneFor: string | null = null;
+function followShown() {
+  const share = useViewing.getState().share;
+  const user = useSession.getState().user;
+  const owner = share && user && share.viewerId === user.id ? share.ownerId : null;
+  if (owner === zoneFor) return;
+  zoneFor = owner;
+  const mine = ++zoneAsk;
+  shownZone = null;
+  checkDay();
+  if (!owner) return;
+  api.viewedProfile().then((p) => {
+    if (mine !== zoneAsk) return;
+    shownZone = { owner, zone: p.timezone || null };
+    checkDay();
+  }, () => undefined);
+}
+useViewing.subscribe(followShown);
+useSession.subscribe((s, before) => { if (s.user?.id !== before.user?.id) followShown(); });
 
 export function isoDate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

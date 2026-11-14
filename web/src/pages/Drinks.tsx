@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Beer, Coffee, CupSoda, GlassWater, Leaf, Martini, Plus, Trash2, Wine, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, localInput, num, today } from "../lib/format";
+import { clock, localInput, num, timeOn, today } from "../lib/format";
 import type { Drink, DrinkKind, DrinksDay } from "../lib/types";
 import { Button, Card, CardAction, Field, Modal, errorToast, toast } from "../components/ui";
 import { useModules } from "../App";
@@ -38,7 +38,7 @@ export function drinkFor(kind: DrinkKind, ml?: number, at = Date.now()): Drink {
 
 /** A drink logged with one tap: now, or at noon on another day. */
 export async function quickDrink(kind: DrinkKind, date: string): Promise<void> {
-  const at = date === today() ? Date.now() : new Date(`${date}T12:00`).getTime();
+  const at = date === today() ? Date.now() : timeOn(date, "12:00");
   await api.saveDrink(drinkFor(kind, undefined, at));
   toast(`${DRINKS[kind].label} logged`);
 }
@@ -101,7 +101,7 @@ export function DrinkDialog({ date, onClose, onSaved }: { date: string; onClose:
   const [caffeine, setCaffeine] = useState(String(drinkFor("COFFEE").caffeineMg));
   const [alcohol, setAlcohol] = useState("0");
   const [name, setName] = useState("");
-  const [at, setAt] = useState(localInput(date === today() ? Date.now() : new Date(`${date}T12:00`).getTime()));
+  const [at, setAt] = useState(localInput(date === today() ? Date.now() : timeOn(date, "12:00")));
   const [busy, setBusy] = useState(false);
   const choose = (k: DrinkKind, volume = DRINKS[k].ml) => {
     const d = drinkFor(k, volume);

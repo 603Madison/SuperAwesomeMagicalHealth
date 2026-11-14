@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Baby, Footprints, Hourglass, Milk, Play, Sparkles, Square, ThermometerSun, Timer, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, dayLabel, hm, isoDate, num, parseDate, shortDate, today } from "../lib/format";
+import { clock, dayLabel, dayOf, hm, isoDate, num, parseDate, shortDate, today } from "../lib/format";
 import type { Contraction, Feed, FeedKind, KickSession, LifeStage, LifeStageInfo, LifeStageOverview } from "../lib/types";
 import { Meter } from "../components/charts";
 import { Button, Card, Field, Modal, Stat, Toggle, errorToast, toast } from "../components/ui";
@@ -201,7 +201,7 @@ function AfterBirth({ overview }: { overview: LifeStageOverview }) {
     <Card title="After the birth" icon={<Baby size={18} />} className="span-2">
       <div className="stats">
         {overview.weeksSinceBirth != null && <Stat label="Weeks since the birth" value={overview.weeksSinceBirth} />}
-        <Stat label="Feeds today" value={overview.feeds.filter((f) => isoDate(new Date(f.start)) === today()).length} />
+        <Stat label="Feeds today" value={overview.feeds.filter((f) => dayOf(f.start) === today()).length} />
       </div>
       <p className="muted small">Go gently. Bleeding, tiredness and big feelings are all common in the first weeks. If your mood stays low or you feel unlike yourself, Mind has a check-in made for this time, and your midwife, health visitor or doctor can help.</p>
     </Card>
@@ -268,7 +268,7 @@ function FeedAmountDialog({ feed, onClose, onSaved }: { feed: Feed; onClose: () 
 
 function HotFlashes({ overview, readOnly, onChanged }: { overview: LifeStageOverview; readOnly: boolean; onChanged: () => void }) {
   const [night, setNight] = useState(() => { const h = new Date().getHours(); return h >= 22 || h < 7; });
-  const todays = overview.hotFlashes.filter((h) => isoDate(new Date(h.at)) === today());
+  const todays = overview.hotFlashes.filter((h) => dayOf(h.at) === today());
   const months = overview.monthsSinceLastPeriod;
   const log = async (intensity: number) => {
     try { await api.addHotFlash({ at: Date.now(), intensity, night }); toast("Logged"); onChanged(); } catch (e) { errorToast(e); }

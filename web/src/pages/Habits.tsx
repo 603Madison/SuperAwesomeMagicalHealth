@@ -6,7 +6,7 @@ import {
   Music, Pause, Pencil, PenLine, Pill, Play, Plus, Smile, Sparkles, Sun, Trash2, Wind, WineOff,
 } from "lucide-react";
 import { api } from "../lib/api";
-import { dayLabel, today } from "../lib/format";
+import { dayLabel, useDayPicker } from "../lib/format";
 import { useReadOnly } from "../lib/viewing";
 import type { Habit, HabitSource, HabitStatus } from "../lib/types";
 import { Meter } from "../components/charts";
@@ -43,7 +43,8 @@ export function habitIcon(name: string): LucideIcon {
 }
 
 export function Habits() {
-  const [date, setDate] = useState(today());
+  // Today until another day is picked; left open overnight, it moves on.
+  const [date, setDate, now] = useDayPicker();
   const readOnly = useReadOnly();
   const status = useLoad(() => api.habitsToday(date), [date]);
   const all = useLoad(() => api.habits(true), []);
@@ -87,7 +88,7 @@ export function Habits() {
   return (
     <div className="page">
       <PageHeader title="Habits" subtitle="Small things, most days. A rest day never breaks a streak." actions={<>
-        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={today()} />
+        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={now} />
         {!readOnly && <Button variant="primary" onClick={() => setEditing("new")}><Plus size={18} /> New habit</Button>}
         {arranged.button}
       </>} />
