@@ -54,7 +54,7 @@ class DeviceStore(private val db: Database, private val clock: () -> Long = Syst
         ) { row ->
             Device(
                 id = row.string("id"),
-                kind = DeviceKind.valueOf(row.string("kind")),
+                kind = runCatching { DeviceKind.valueOf(row.string("kind")) }.getOrDefault(DeviceKind.OTHER),
                 identifier = row.string("identifier"),
                 name = row.string("name"),
                 model = row.stringOrNull("model"),
@@ -105,18 +105,23 @@ class Records(private val db: Database, private val clock: () -> Long = System::
                WHERE s.user_id = ? AND s.start >= ? AND s.start < ?$filter ORDER BY s.start""",
             userId, from, to,
         ) { row ->
-            StoredSample(
-                id = row.long("id"),
-                deviceId = row.string("device_id"),
-                deviceName = row.string("device_name"),
-                manual = row.string("device_kind") == DeviceKind.MANUAL.name,
-                metric = Metric.valueOf(row.string("metric")),
-                start = row.long("start"),
-                end = row.longOrNull("end"),
-                value = row.double("value"),
-            )
-        }
+            metricOf(row)?.let { metric ->
+                StoredSample(
+                    id = row.long("id"),
+                    deviceId = row.string("device_id"),
+                    deviceName = row.string("device_name"),
+                    manual = row.string("device_kind") == DeviceKind.MANUAL.name,
+                    metric = metric,
+                    start = row.long("start"),
+                    end = row.longOrNull("end"),
+                    value = row.double("value"),
+                )
+            }
+        }.filterNotNull()
     }
+
+    /** A reading's metric; null (and the reading left out) for one no longer known. */
+    private fun metricOf(row: Row): Metric? = runCatching { Metric.valueOf(row.string("metric")) }.getOrNull()
 
     /** The latest reading of [metric] before [before]. */
     suspend fun latest(userId: String, metric: Metric, before: Long): StoredSample? =
@@ -129,11 +134,13 @@ class Records(private val db: Database, private val clock: () -> Long = System::
                WHERE s.user_id = ? AND s.metric = ? AND s.start < ? ORDER BY s.start DESC LIMIT ?""",
             userId, metric, before, limit,
         ) { row ->
-            StoredSample(
-                row.long("id"), row.string("device_id"), row.string("device_name"), row.string("device_kind") == DeviceKind.MANUAL.name,
-                Metric.valueOf(row.string("metric")), row.long("start"), row.longOrNull("end"), row.double("value"),
-            )
-        }
+            metricOf(row)?.let { known ->
+                StoredSample(
+                    row.long("id"), row.string("device_id"), row.string("device_name"), row.string("device_kind") == DeviceKind.MANUAL.name,
+                    known, row.long("start"), row.longOrNull("end"), row.double("value"),
+                )
+            }
+        }.filterNotNull()
     }
 
     /** Deletes a reading the person entered (not one a device recorded). Returns when it was. */

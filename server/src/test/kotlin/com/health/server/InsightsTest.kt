@@ -243,6 +243,26 @@ class InsightsTest {
     }
 
     @Test
+    fun `stored rows with a name no longer known are skipped or fall back, never crash`() = runBlocking {
+        val s = services()
+        val user = s.users.byUsername("admin")!!
+        val day = LocalDate.of(2026, 3, 9)
+        s.ingest.manualSample(user.id, Sample(Metric.WEIGHT, at(day, 7), value = 64.0))
+        val food = s.foods.log(user.id, FoodEntryInput(day.toString(), Meal.LUNCH, 1.0, name = "Soup", nutrients = Nutrients(300.0, 10.0, 30.0, 5.0)))
+        s.db.tx {
+            val device = one("SELECT id FROM devices WHERE user_id = ?", user.id) { it.string("id") }!!
+            update("INSERT INTO samples (user_id, device_id, metric, start, value) VALUES (?, ?, 'RETIRED_METRIC', ?, 1.0)", user.id, device, at(day, 8))
+            update("UPDATE devices SET kind = 'RETIRED_KIND' WHERE id = ?", device)
+            update("UPDATE food_entries SET meal = 'ELEVENSES' WHERE id = ?", food.id)
+        }
+        s.days.changedAll(user.id)
+        assertEquals(listOf(Metric.WEIGHT), s.records.samples(user.id, at(day, 0), at(day.plusDays(1), 0)).map { it.metric })
+        assertEquals(64.0, s.days.summary(user.id, day.toString()).weightKg!!, 0.0)
+        assertEquals(DeviceKind.OTHER, s.devices.list(user.id).single().kind)
+        assertEquals(Meal.SNACK, s.foods.day(user.id, day).first.single().meal)
+    }
+
+    @Test
     fun `trends give a row a day over the API`() = serverTest(services()) {
         val admin = adminBrowser()
         val user = it.users.byUsername("admin")!!
