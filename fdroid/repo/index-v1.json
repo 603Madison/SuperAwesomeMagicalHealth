@@ -1,0 +1,612 @@
+{
+  "repo": {
+    "timestamp": 1794636740000,
+    "version": 20002,
+    "name": "SuperAwesomeMagicalHealth",
+    "icon": "repo-icon.png",
+    "address": "https://603madison.github.io/SuperAwesomeMagicalHealth/fdroid/repo",
+    "description": "The SuperAwesomeMagicalHealth app, signed and published from each release on GitHub. You need your own SuperAwesomeMagicalHealth server to sign in to."
+  },
+  "requests": {
+    "install": [],
+    "uninstall": []
+  },
+  "apps": [
+    {
+      "categories": [
+        "Sports & Health"
+      ],
+      "changelog": "https://github.com/603Madison/SuperAwesomeMagicalHealth/releases",
+      "suggestedVersionName": "0.6.2",
+      "suggestedVersionCode": "10",
+      "issueTracker": "https://github.com/603Madison/SuperAwesomeMagicalHealth/issues",
+      "license": "GPL-3.0-only",
+      "sourceCode": "https://github.com/603Madison/SuperAwesomeMagicalHealth",
+      "webSite": "https://github.com/603Madison/SuperAwesomeMagicalHealth",
+      "added": 1794636725000,
+      "packageName": "app.superawesomemagical.health",
+      "lastUpdated": 1794636729000,
+      "localized": {
+        "en-US": {
+          "description": "<p>The phone app for <b>SuperAwesomeMagicalHealth</b>, a health server you run yourself. Your data stays on your server, and the private parts are encrypted there.</p>\n<p><b>Scores like Oura's.</b> Readiness, sleep and activity against your own baseline, with plain-English insights, stress and resilience, and trends over weeks and months.</p>\n<p><b>Your wearables, on your server.</b> Colmi rings over Bluetooth, Pebble and Garmin through Gadgetbridge, anything in Health Connect, and blood pressure monitors and glucose meters. The app carries their readings to your server.</p>\n<p><b>Log what matters to you.</b> Food (with barcode scanning), water, coffee and alcohol, weight, workouts, and how you feel. Turn on what else you want to keep track of:</p>\n<ul>\n<li>Mood, a private journal, check-ins (PHQ-9, GAD-7) and calming tools, with support lines one tap away</li>\n<li>Your cycle, with predictions, and pregnancy, after a birth, perimenopause and menopause</li>\n<li>A bladder and bowel diary with pelvic floor exercises</li>\n<li>Medications with reminders, injection-site rotation and lab results</li>\n<li>Blood pressure and glucose, symptoms and migraines, habits, hormone therapy and appointments</li>\n</ul>\n<p><b>Reminders that work offline</b>, a weekly digest, reports for your doctor, and read-only sharing with someone who cares for you.</p>\n<p>You need a SuperAwesomeMagicalHealth server to sign in to: it runs in Podman or Docker (see the source code's README).</p>\n",
+          "icon": "icon_9sXDTVQICS9NiyEF7AecLA9lURdJki5iat6dTMjaJxE=.png",
+          "name": "SuperAwesomeMagicalHealth",
+          "phoneScreenshots": [
+            "1.png",
+            "2.png",
+            "3.png",
+            "4.png",
+            "5.png",
+            "6.png",
+            "7.png",
+            "8.png"
+          ],
+          "summary": "Your own health server's app: scores, wearables, food, mood, cycle and more",
+          "whatsNew": "SuperAwesomeMagicalHealth 0.6.2: safer, steadier, and reminders you can count on\n\nA careful review of the server, the web app and the phone app, and fixes for what it found.\n\nYour reminders\n- The phone app kept clearing reminders. If it couldn't reach your server when it started\n  (out of the house, on a plane, the server restarting), it cleared medication, habit, appointment\n  and bladder reminders. Routine reminders were cleared on every cold start. Now they stay put.\n- On\u2026 (more in the releas"
+        }
+      }
+    }
+  ],
+  "packages": {
+    "app.superawesomemagical.health": [
+      {
+        "added": 1794636725000,
+        "apkName": "app.superawesomemagical.health_10.apk",
+        "hash": "28199807d114a4bd078f5f38e20257ca26814c4c558be0aa55b6cf0c707a03a2",
+        "hashType": "sha256",
+        "minSdkVersion": 28,
+        "nativecode": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86",
+          "x86_64"
+        ],
+        "packageName": "app.superawesomemagical.health",
+        "sig": "f7b93ee6c8f541d34ad4557adae9a1eb",
+        "signer": "0e7544d531e710f53aa540d01256556ad42a62d7abdc64cf0424339ffbebb580",
+        "size": 68792814,
+        "targetSdkVersion": 36,
+        "uses-permission": [
+          [
+            "android.permission.INTERNET",
+            null
+          ],
+          [
+            "android.permission.ACCESS_NETWORK_STATE",
+            null
+          ],
+          [
+            "android.permission.BLUETOOTH",
+            30
+          ],
+          [
+            "android.permission.BLUETOOTH_ADMIN",
+            30
+          ],
+          [
+            "android.permission.ACCESS_FINE_LOCATION",
+            30
+          ],
+          [
+            "android.permission.BLUETOOTH_SCAN",
+            null
+          ],
+          [
+            "android.permission.BLUETOOTH_CONNECT",
+            null
+          ],
+          [
+            "android.permission.health.READ_STEPS",
+            null
+          ],
+          [
+            "android.permission.health.READ_DISTANCE",
+            null
+          ],
+          [
+            "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+            null
+          ],
+          [
+            "android.permission.health.READ_FLOORS_CLIMBED",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEART_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_RESTING_HEART_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEART_RATE_VARIABILITY",
+            null
+          ],
+          [
+            "android.permission.health.READ_OXYGEN_SATURATION",
+            null
+          ],
+          [
+            "android.permission.health.READ_RESPIRATORY_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_SLEEP",
+            null
+          ],
+          [
+            "android.permission.health.READ_EXERCISE",
+            null
+          ],
+          [
+            "android.permission.health.READ_WEIGHT",
+            null
+          ],
+          [
+            "android.permission.health.READ_BODY_FAT",
+            null
+          ],
+          [
+            "android.permission.health.READ_BLOOD_PRESSURE",
+            null
+          ],
+          [
+            "android.permission.health.READ_BLOOD_GLUCOSE",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEALTH_DATA_HISTORY",
+            null
+          ],
+          [
+            "android.permission.POST_NOTIFICATIONS",
+            null
+          ],
+          [
+            "android.permission.SCHEDULE_EXACT_ALARM",
+            null
+          ],
+          [
+            "android.permission.RECEIVE_BOOT_COMPLETED",
+            null
+          ],
+          [
+            "android.permission.RECORD_AUDIO",
+            null
+          ],
+          [
+            "android.permission.CAMERA",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_WEIGHT",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BODY_FAT",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BLOOD_PRESSURE",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BLOOD_GLUCOSE",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_HYDRATION",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_NUTRITION",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_EXERCISE",
+            null
+          ],
+          [
+            "android.permission.USE_BIOMETRIC",
+            null
+          ],
+          [
+            "android.permission.USE_FINGERPRINT",
+            null
+          ],
+          [
+            "android.permission.WAKE_LOCK",
+            null
+          ],
+          [
+            "android.permission.FOREGROUND_SERVICE",
+            null
+          ],
+          [
+            "app.superawesomemagical.health.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+            null
+          ]
+        ],
+        "versionCode": 10,
+        "versionName": "0.6.2"
+      },
+      {
+        "added": 1794636727000,
+        "apkName": "app.superawesomemagical.health_9.apk",
+        "hash": "88fd1f47ff660e1ad8de2f65637997c0bab0d3edb2ced52045664854187fc8dd",
+        "hashType": "sha256",
+        "minSdkVersion": 28,
+        "nativecode": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86",
+          "x86_64"
+        ],
+        "packageName": "app.superawesomemagical.health",
+        "sig": "f7b93ee6c8f541d34ad4557adae9a1eb",
+        "signer": "0e7544d531e710f53aa540d01256556ad42a62d7abdc64cf0424339ffbebb580",
+        "size": 68743622,
+        "targetSdkVersion": 36,
+        "uses-permission": [
+          [
+            "android.permission.INTERNET",
+            null
+          ],
+          [
+            "android.permission.ACCESS_NETWORK_STATE",
+            null
+          ],
+          [
+            "android.permission.BLUETOOTH",
+            30
+          ],
+          [
+            "android.permission.BLUETOOTH_ADMIN",
+            30
+          ],
+          [
+            "android.permission.ACCESS_FINE_LOCATION",
+            30
+          ],
+          [
+            "android.permission.BLUETOOTH_SCAN",
+            null
+          ],
+          [
+            "android.permission.BLUETOOTH_CONNECT",
+            null
+          ],
+          [
+            "android.permission.health.READ_STEPS",
+            null
+          ],
+          [
+            "android.permission.health.READ_DISTANCE",
+            null
+          ],
+          [
+            "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+            null
+          ],
+          [
+            "android.permission.health.READ_FLOORS_CLIMBED",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEART_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_RESTING_HEART_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEART_RATE_VARIABILITY",
+            null
+          ],
+          [
+            "android.permission.health.READ_OXYGEN_SATURATION",
+            null
+          ],
+          [
+            "android.permission.health.READ_RESPIRATORY_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_SLEEP",
+            null
+          ],
+          [
+            "android.permission.health.READ_EXERCISE",
+            null
+          ],
+          [
+            "android.permission.health.READ_WEIGHT",
+            null
+          ],
+          [
+            "android.permission.health.READ_BODY_FAT",
+            null
+          ],
+          [
+            "android.permission.health.READ_BLOOD_PRESSURE",
+            null
+          ],
+          [
+            "android.permission.health.READ_BLOOD_GLUCOSE",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEALTH_DATA_HISTORY",
+            null
+          ],
+          [
+            "android.permission.POST_NOTIFICATIONS",
+            null
+          ],
+          [
+            "android.permission.SCHEDULE_EXACT_ALARM",
+            null
+          ],
+          [
+            "android.permission.RECEIVE_BOOT_COMPLETED",
+            null
+          ],
+          [
+            "android.permission.RECORD_AUDIO",
+            null
+          ],
+          [
+            "android.permission.CAMERA",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_WEIGHT",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BODY_FAT",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BLOOD_PRESSURE",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BLOOD_GLUCOSE",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_HYDRATION",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_NUTRITION",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_EXERCISE",
+            null
+          ],
+          [
+            "android.permission.USE_BIOMETRIC",
+            null
+          ],
+          [
+            "android.permission.USE_FINGERPRINT",
+            null
+          ],
+          [
+            "android.permission.WAKE_LOCK",
+            null
+          ],
+          [
+            "android.permission.FOREGROUND_SERVICE",
+            null
+          ],
+          [
+            "app.superawesomemagical.health.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+            null
+          ]
+        ],
+        "versionCode": 9,
+        "versionName": "0.6.1"
+      },
+      {
+        "added": 1794636729000,
+        "apkName": "app.superawesomemagical.health_8.apk",
+        "hash": "f089fd24030ae977a31cd8ed2d66190a5d441af1525587113ed499725ae4bf5f",
+        "hashType": "sha256",
+        "minSdkVersion": 28,
+        "nativecode": [
+          "arm64-v8a",
+          "armeabi-v7a",
+          "x86",
+          "x86_64"
+        ],
+        "packageName": "app.superawesomemagical.health",
+        "sig": "f7b93ee6c8f541d34ad4557adae9a1eb",
+        "signer": "0e7544d531e710f53aa540d01256556ad42a62d7abdc64cf0424339ffbebb580",
+        "size": 68743626,
+        "targetSdkVersion": 36,
+        "uses-permission": [
+          [
+            "android.permission.INTERNET",
+            null
+          ],
+          [
+            "android.permission.ACCESS_NETWORK_STATE",
+            null
+          ],
+          [
+            "android.permission.BLUETOOTH",
+            30
+          ],
+          [
+            "android.permission.BLUETOOTH_ADMIN",
+            30
+          ],
+          [
+            "android.permission.ACCESS_FINE_LOCATION",
+            30
+          ],
+          [
+            "android.permission.BLUETOOTH_SCAN",
+            null
+          ],
+          [
+            "android.permission.BLUETOOTH_CONNECT",
+            null
+          ],
+          [
+            "android.permission.health.READ_STEPS",
+            null
+          ],
+          [
+            "android.permission.health.READ_DISTANCE",
+            null
+          ],
+          [
+            "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+            null
+          ],
+          [
+            "android.permission.health.READ_FLOORS_CLIMBED",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEART_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_RESTING_HEART_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEART_RATE_VARIABILITY",
+            null
+          ],
+          [
+            "android.permission.health.READ_OXYGEN_SATURATION",
+            null
+          ],
+          [
+            "android.permission.health.READ_RESPIRATORY_RATE",
+            null
+          ],
+          [
+            "android.permission.health.READ_SLEEP",
+            null
+          ],
+          [
+            "android.permission.health.READ_EXERCISE",
+            null
+          ],
+          [
+            "android.permission.health.READ_WEIGHT",
+            null
+          ],
+          [
+            "android.permission.health.READ_BODY_FAT",
+            null
+          ],
+          [
+            "android.permission.health.READ_BLOOD_PRESSURE",
+            null
+          ],
+          [
+            "android.permission.health.READ_BLOOD_GLUCOSE",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND",
+            null
+          ],
+          [
+            "android.permission.health.READ_HEALTH_DATA_HISTORY",
+            null
+          ],
+          [
+            "android.permission.POST_NOTIFICATIONS",
+            null
+          ],
+          [
+            "android.permission.SCHEDULE_EXACT_ALARM",
+            null
+          ],
+          [
+            "android.permission.RECEIVE_BOOT_COMPLETED",
+            null
+          ],
+          [
+            "android.permission.RECORD_AUDIO",
+            null
+          ],
+          [
+            "android.permission.CAMERA",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_WEIGHT",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BODY_FAT",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BLOOD_PRESSURE",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_BLOOD_GLUCOSE",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_HYDRATION",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_NUTRITION",
+            null
+          ],
+          [
+            "android.permission.health.WRITE_EXERCISE",
+            null
+          ],
+          [
+            "android.permission.USE_BIOMETRIC",
+            null
+          ],
+          [
+            "android.permission.USE_FINGERPRINT",
+            null
+          ],
+          [
+            "android.permission.WAKE_LOCK",
+            null
+          ],
+          [
+            "android.permission.FOREGROUND_SERVICE",
+            null
+          ],
+          [
+            "app.superawesomemagical.health.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+            null
+          ]
+        ],
+        "versionCode": 8,
+        "versionName": "0.6.0"
+      }
+    ]
+  }
+}

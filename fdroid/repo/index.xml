@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<fdroid>
+	<repo icon="repo-icon.png" name="SuperAwesomeMagicalHealth" pubkey="3082052930820311a00302010202083edf9a18431fae19300d06092a864886f70d01010c05003042311c301a060355040a13135375706572417765736f6d654d61676963616c31223020060355040313195375706572417765736f6d654d61676963616c4865616c74683020170d3236313131323230303831335a180f32313236313031393230303831335a3042311c301a060355040a13135375706572417765736f6d654d61676963616c31223020060355040313195375706572417765736f6d654d61676963616c4865616c746830820222300d06092a864886f70d01010105000382020f003082020a0282020100ba0f0db143068ae0d7101809f58711ecdb41ca90c852341b8dea6b323444ca36658dcad2b282ccb1ab4579ff60f72e592148d9f97e37f7f7dfb4f9c6a495e85100d14afe4c79453b2087f2a938b481690d9e5d17dfbd216bad61fd9e179dd996e54e01ac02a90ab54aa34b121bcb313be979406380168780839747626fa1a3f555a685e01b88efcd45e6148b926c8a8f2fe29077752f2146c1c90f2d2093d7536c95c2e0198ba7288b98d4356f308778b2eece667bd56596894ce7721bb7d6be1907184bdb81273d51d7838e895e8a45b07df1694f7da35a90fa0b878ab12beb377274be8682f364f59c50683ccc604fa5bd8363099666adc090ed7e6db79a97bd77ed5d808b55033ec65f0dbe5d6b1c84d13f0c32f92fe9ee47fa7679820be0c2aad3ee8e6f3a9d1fb67afc3c2cf11cc00899a731087de96b4c141d510b1f740bba527864004aceef140efc9b2a0b54be948ff8de9b614a59eabacb7de46f54ebe9d96c12c2f44c89ccb31b2b00ff6d6032a512f9d86af27198acb4864fb8501950e55d5c4e9859e50feec3cdb39333d33edd7ce602d6cfa68e5383d06503c838706800d812b68fe485bab698be9b3fd5131a55349273a0602539593c10616c5e4cfbe4eb15870f11a1714177dd7a0445bc307165d2ad95d79d757609b24237325504fa411abbbeedc9b37dbc17250f3c7ca41b49714efe5e771b2a0c0d01990203010001a321301f301d0603551d0e041604143dd45ac44fc4e747d95981bb88b1a7d461f9444f300d06092a864886f70d01010c050003820201006f6eee5b4af607d83ba7dd9c5d7a3ae19103e0f5cba53dc389542300acc58b0e370e7720be312ea71b936d2600c49e93f3d73f5803ed2b8ab63cbdacdf97ad998b17ef6457e5b4c9b5d305db18d5afa7aa287e11af6c7d2c28b0e71e09bc9ad2e92d3f254023630eca176126d6df84b8b49d2dcc1555279ccb1f777e431f9a75d4687b0c8f752917214cb4b7e2d809c21edc22f8ad78178de5ad2531c29b3ab11b559933b2ae7855ef7ad63fa5b86badf2b5e2131bd23d2b01bd847a761072cfa5d56635ccf8b2322de1ed74f4a3e13e99a2563237304e27cad5e85eb1a2445a2d3ac6e8b0cb686e3ee7c9a481a5a18f9ed3b8d4f224d083482bfe3241c869d3fcc1a7dea30c1cb4837c4300948ef9b7988a171e17a78baa3921d9f11caa028f82d9f3076d9d38593b74d7ef40441be3721a0136003ff15af16353e6e32d895621d42c9f131bb8ba7cc78e0d9abdefa14b8a253194102b8e89fc80a48a92ea36ac9b47e8f7e2489f19e2589e79a8337045a92f2feec5d5c83cc4cf75315b280d9d1f8469fb3f351c6304e2d2d2db9cfedecd6d64756926f30295870346dec46a3e5b916e53dba5363daa37ae455eb136373295af51e36226c202fe554d163afd51b1aed1324b38ab03bc8909019efe53df744694c44af062aac3415a7b590907ce72468389ff1523968f7454fd9bfaa8fc169503a4983a2f9ae36089d5915279" timestamp="1794636740" url="https://603madison.github.io/SuperAwesomeMagicalHealth/fdroid/repo" version="20002">
+		<description>The SuperAwesomeMagicalHealth app, signed and published from each release on GitHub. You need your own SuperAwesomeMagicalHealth server to sign in to.</description>
+	</repo>
+	<application id="app.superawesomemagical.health">
+		<id>app.superawesomemagical.health</id>
+		<added>2026-11-14</added>
+		<lastupdated>2026-11-14</lastupdated>
+		<name>SuperAwesomeMagicalHealth</name>
+		<summary>Your own health server's app: scores, wearables, food, mood, cycle and more</summary>
+		<desc>&lt;p&gt;The phone app for &lt;b&gt;SuperAwesomeMagicalHealth&lt;/b&gt;, a health server you run yourself. Your data stays on your server, and the private parts are encrypted there.&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;Scores like Oura's.&lt;/b&gt; Readiness, sleep and activity against your own baseline, with plain-English insights, stress and resilience, and trends over weeks and months.&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;Your wearables, on your server.&lt;/b&gt; Colmi rings over Bluetooth, Pebble and Garmin through Gadgetbridge, anything in Health Connect, and blood pressure monitors and glucose meters. The app carries their readings to your server.&lt;/p&gt;
+&lt;p&gt;&lt;b&gt;Log what matters to you.&lt;/b&gt; Food (with barcode scanning), water, coffee and alcohol, weight, workouts, and how you feel. Turn on what else you want to keep track of:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Mood, a private journal, check-ins (PHQ-9, GAD-7) and calming tools, with support lines one tap away&lt;/li&gt;
+&lt;li&gt;Your cycle, with predictions, and pregnancy, after a birth, perimenopause and menopause&lt;/li&gt;
+&lt;li&gt;A bladder and bowel diary with pelvic floor exercises&lt;/li&gt;
+&lt;li&gt;Medications with reminders, injection-site rotation and lab results&lt;/li&gt;
+&lt;li&gt;Blood pressure and glucose, symptoms and migraines, habits, hormone therapy and appointments&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;b&gt;Reminders that work offline&lt;/b&gt;, a weekly digest, reports for your doctor, and read-only sharing with someone who cares for you.&lt;/p&gt;
+&lt;p&gt;You need a SuperAwesomeMagicalHealth server to sign in to: it runs in Podman or Docker (see the source code's README).&lt;/p&gt;
+</desc>
+		<license>GPL-3.0-only</license>
+		<categories>Sports &amp; Health</categories>
+		<category>Sports &amp; Health</category>
+		<web>https://github.com/603Madison/SuperAwesomeMagicalHealth</web>
+		<source>https://github.com/603Madison/SuperAwesomeMagicalHealth</source>
+		<tracker>https://github.com/603Madison/SuperAwesomeMagicalHealth/issues</tracker>
+		<changelog>https://github.com/603Madison/SuperAwesomeMagicalHealth/releases</changelog>
+		<marketversion>0.6.2</marketversion>
+		<marketvercode>10</marketvercode>
+		<package>
+			<version>0.6.2</version>
+			<versioncode>10</versioncode>
+			<apkname>app.superawesomemagical.health_10.apk</apkname>
+			<hash type="sha256">28199807d114a4bd078f5f38e20257ca26814c4c558be0aa55b6cf0c707a03a2</hash>
+			<size>68792814</size>
+			<sdkver>28</sdkver>
+			<targetSdkVersion>36</targetSdkVersion>
+			<added>2026-11-14</added>
+			<sig>f7b93ee6c8f541d34ad4557adae9a1eb</sig>
+			<permissions>ACCESS_FINE_LOCATION,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,CAMERA,FOREGROUND_SERVICE,INTERNET,POST_NOTIFICATIONS,RECEIVE_BOOT_COMPLETED,RECORD_AUDIO,SCHEDULE_EXACT_ALARM,USE_BIOMETRIC,USE_FINGERPRINT,WAKE_LOCK,app.superawesomemagical.health.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION,health.READ_ACTIVE_CALORIES_BURNED,health.READ_BLOOD_GLUCOSE,health.READ_BLOOD_PRESSURE,health.READ_BODY_FAT,health.READ_DISTANCE,health.READ_EXERCISE,health.READ_FLOORS_CLIMBED,health.READ_HEALTH_DATA_HISTORY,health.READ_HEALTH_DATA_IN_BACKGROUND,health.READ_HEART_RATE,health.READ_HEART_RATE_VARIABILITY,health.READ_OXYGEN_SATURATION,health.READ_RESPIRATORY_RATE,health.READ_RESTING_HEART_RATE,health.READ_SLEEP,health.READ_STEPS,health.READ_WEIGHT,health.WRITE_BLOOD_GLUCOSE,health.WRITE_BLOOD_PRESSURE,health.WRITE_BODY_FAT,health.WRITE_EXERCISE,health.WRITE_HYDRATION,health.WRITE_NUTRITION,health.WRITE_WEIGHT</permissions>
+			<uses-permission maxSdkVersion="30" name="android.permission.ACCESS_FINE_LOCATION"/>
+			<uses-permission maxSdkVersion="30" name="android.permission.BLUETOOTH"/>
+			<uses-permission maxSdkVersion="30" name="android.permission.BLUETOOTH_ADMIN"/>
+			<nativecode>arm64-v8a,armeabi-v7a,x86,x86_64</nativecode>
+		</package>
+		<package>
+			<version>0.6.1</version>
+			<versioncode>9</versioncode>
+			<apkname>app.superawesomemagical.health_9.apk</apkname>
+			<hash type="sha256">88fd1f47ff660e1ad8de2f65637997c0bab0d3edb2ced52045664854187fc8dd</hash>
+			<size>68743622</size>
+			<sdkver>28</sdkver>
+			<targetSdkVersion>36</targetSdkVersion>
+			<added>2026-11-14</added>
+			<sig>f7b93ee6c8f541d34ad4557adae9a1eb</sig>
+			<permissions>ACCESS_FINE_LOCATION,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,CAMERA,FOREGROUND_SERVICE,INTERNET,POST_NOTIFICATIONS,RECEIVE_BOOT_COMPLETED,RECORD_AUDIO,SCHEDULE_EXACT_ALARM,USE_BIOMETRIC,USE_FINGERPRINT,WAKE_LOCK,app.superawesomemagical.health.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION,health.READ_ACTIVE_CALORIES_BURNED,health.READ_BLOOD_GLUCOSE,health.READ_BLOOD_PRESSURE,health.READ_BODY_FAT,health.READ_DISTANCE,health.READ_EXERCISE,health.READ_FLOORS_CLIMBED,health.READ_HEALTH_DATA_HISTORY,health.READ_HEALTH_DATA_IN_BACKGROUND,health.READ_HEART_RATE,health.READ_HEART_RATE_VARIABILITY,health.READ_OXYGEN_SATURATION,health.READ_RESPIRATORY_RATE,health.READ_RESTING_HEART_RATE,health.READ_SLEEP,health.READ_STEPS,health.READ_WEIGHT,health.WRITE_BLOOD_GLUCOSE,health.WRITE_BLOOD_PRESSURE,health.WRITE_BODY_FAT,health.WRITE_EXERCISE,health.WRITE_HYDRATION,health.WRITE_NUTRITION,health.WRITE_WEIGHT</permissions>
+			<uses-permission maxSdkVersion="30" name="android.permission.ACCESS_FINE_LOCATION"/>
+			<uses-permission maxSdkVersion="30" name="android.permission.BLUETOOTH"/>
+			<uses-permission maxSdkVersion="30" name="android.permission.BLUETOOTH_ADMIN"/>
+			<nativecode>arm64-v8a,armeabi-v7a,x86,x86_64</nativecode>
+		</package>
+		<package>
+			<version>0.6.0</version>
+			<versioncode>8</versioncode>
+			<apkname>app.superawesomemagical.health_8.apk</apkname>
+			<hash type="sha256">f089fd24030ae977a31cd8ed2d66190a5d441af1525587113ed499725ae4bf5f</hash>
+			<size>68743626</size>
+			<sdkver>28</sdkver>
+			<targetSdkVersion>36</targetSdkVersion>
+			<added>2026-11-14</added>
+			<sig>f7b93ee6c8f541d34ad4557adae9a1eb</sig>
+			<permissions>ACCESS_FINE_LOCATION,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,CAMERA,FOREGROUND_SERVICE,INTERNET,POST_NOTIFICATIONS,RECEIVE_BOOT_COMPLETED,RECORD_AUDIO,SCHEDULE_EXACT_ALARM,USE_BIOMETRIC,USE_FINGERPRINT,WAKE_LOCK,app.superawesomemagical.health.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION,health.READ_ACTIVE_CALORIES_BURNED,health.READ_BLOOD_GLUCOSE,health.READ_BLOOD_PRESSURE,health.READ_BODY_FAT,health.READ_DISTANCE,health.READ_EXERCISE,health.READ_FLOORS_CLIMBED,health.READ_HEALTH_DATA_HISTORY,health.READ_HEALTH_DATA_IN_BACKGROUND,health.READ_HEART_RATE,health.READ_HEART_RATE_VARIABILITY,health.READ_OXYGEN_SATURATION,health.READ_RESPIRATORY_RATE,health.READ_RESTING_HEART_RATE,health.READ_SLEEP,health.READ_STEPS,health.READ_WEIGHT,health.WRITE_BLOOD_GLUCOSE,health.WRITE_BLOOD_PRESSURE,health.WRITE_BODY_FAT,health.WRITE_EXERCISE,health.WRITE_HYDRATION,health.WRITE_NUTRITION,health.WRITE_WEIGHT</permissions>
+			<uses-permission maxSdkVersion="30" name="android.permission.ACCESS_FINE_LOCATION"/>
+			<uses-permission maxSdkVersion="30" name="android.permission.BLUETOOTH"/>
+			<uses-permission maxSdkVersion="30" name="android.permission.BLUETOOTH_ADMIN"/>
+			<nativecode>arm64-v8a,armeabi-v7a,x86,x86_64</nativecode>
+		</package>
+	</application>
+</fdroid>

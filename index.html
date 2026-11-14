@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SuperAwesomeMagicalHealth for F-Droid</title>
+<meta name="description" content="Add the SuperAwesomeMagicalHealth repository to F-Droid to install the app and get its updates.">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #ffffff; --text: #182033; --muted: #5b667d; --line: #e2e7f0;
+    --accent: #5b3fd1; --accent-2: #0f9d77; --accent-text: #ffffff; --chip: #eef0fb;
+    --glow-1: rgba(124, 92, 255, 0.28); --glow-2: rgba(15, 157, 119, 0.22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d111c; --card: #161c2b; --text: #e8ecf5; --muted: #9aa5bd; --line: #263049;
+      --accent: #9b87ff; --accent-2: #35c99a; --accent-text: #0d111c; --chip: #1f2740;
+      --glow-1: rgba(124, 92, 255, 0.30); --glow-2: rgba(53, 201, 154, 0.18);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: Lexend, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text);
+    line-height: 1.55; min-height: 100vh;
+    background-image: radial-gradient(60rem 28rem at 15% -8rem, var(--glow-1), transparent 70%), radial-gradient(50rem 26rem at 90% -10rem, var(--glow-2), transparent 70%);
+    background-repeat: no-repeat;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  header { display: flex; gap: 18px; align-items: center; margin-bottom: 28px; }
+  header img { width: 72px; height: 72px; border-radius: 18px; box-shadow: 0 8px 24px rgba(40, 30, 90, .18); }
+  h1 { font-size: clamp(1.45rem, 4.5vw, 2rem); line-height: 1.2; margin: 0; font-weight: 600; }
+  .lede { margin: 4px 0 0; color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(20, 30, 60, .04); }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; font-weight: 600; }
+  .add { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+  .button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 12px 22px;
+    border-radius: 999px; font: inherit; font-weight: 600; text-decoration: none; border: 0; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-text);
+  }
+  .button.quiet { background: var(--chip); color: var(--text); font-weight: 500; }
+  .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .qr { width: 168px; height: 168px; border-radius: 12px; background: #fff; padding: 6px; border: 1px solid var(--line); }
+  ol { margin: 0; padding-left: 1.3em; } li { margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: .9rem; }
+  .field { display: flex; gap: 8px; align-items: center; margin: 6px 0 14px; }
+  .field .button { flex: none; }
+  code {
+    flex: 1; min-width: 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .85rem; background: var(--chip);
+    padding: 10px 12px; border-radius: 12px; overflow-wrap: anywhere;
+  }
+  .links { display: flex; flex-wrap: wrap; gap: 10px; }
+  a { color: var(--accent); }
+  footer { text-align: center; margin-top: 28px; }
+  @media (max-width: 560px) {
+    main { padding-top: 28px; }
+    .add { grid-template-columns: 1fr; }
+    .qr { justify-self: center; }
+    .add .button { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon.png" alt="">
+    <div>
+      <h1>SuperAwesome<wbr>Magical<wbr>Health</h1>
+      <p class="lede">Get the app with F-Droid, and every update after.</p>
+    </div>
+  </header>
+
+  <section class="card add" aria-labelledby="add">
+    <div>
+      <h2 id="add">Add it to F-Droid</h2>
+      <p class="muted">On your phone, with <a href="https://f-droid.org/">F-Droid</a> installed, tap the button. F-Droid asks to add the repository; then find SuperAwesomeMagicalHealth and install it.</p>
+      <a class="button" href="fdroidrepos://603madison.github.io/SuperAwesomeMagicalHealth/fdroid/repo?fingerprint=0E7544D531E710F53AA540D01256556AD42A62D7ABDC64CF0424339FFBEBB580">Add to F-Droid</a>
+    </div>
+    <img class="qr" src="qr.png" alt="QR code for the repository address, to scan with F-Droid">
+  </section>
+
+  <section class="card" aria-labelledby="manual">
+    <h2 id="manual">Or add it by hand</h2>
+    <ol>
+      <li>In F-Droid, open <b>Settings › Repositories</b> and tap <b>+</b>.</li>
+      <li>Scan the QR code above, or paste this address:</li>
+    </ol>
+    <div class="field"><code id="address">https://603madison.github.io/SuperAwesomeMagicalHealth/fdroid/repo?fingerprint=0E7544D531E710F53AA540D01256556AD42A62D7ABDC64CF0424339FFBEBB580</code><button class="button quiet" type="button" data-copy="address">Copy</button></div>
+    <p class="small muted">F-Droid checks the repository by its fingerprint, which should be:</p>
+    <div class="field"><code id="fingerprint">0E75 44D5 31E7 10F5 3AA5 40D0 1256 556A D42A 62D7 ABDC 64CF 0424 339F FBEB B580</code></div>
+    <p class="small muted">The app is signed with the same key, so updates from here and from the GitHub releases are the same app.</p>
+  </section>
+
+  <section class="card" aria-labelledby="more">
+    <h2 id="more">Also</h2>
+    <p class="muted">The app signs in to your own SuperAwesomeMagicalHealth server, which runs in Podman or Docker.</p>
+    <div class="links">
+      <a class="button quiet" href="fdroid/repo/app.superawesomemagical.health_9.apk">Download the APK</a>
+      <a class="button quiet" href="https://github.com/603Madison/SuperAwesomeMagicalHealth/releases/download/v0.6.2/SuperAwesomeMagicalHealth-watch-v0.6.2.pbw">Pebble watch app</a>
+      <a class="button quiet" href="https://github.com/603Madison/SuperAwesomeMagicalHealth#running-it">Run the server</a>
+      <a class="button quiet" href="https://github.com/603Madison/SuperAwesomeMagicalHealth">Source code</a>
+    </div>
+  </section>
+
+  <footer class="small muted">
+    SuperAwesomeMagicalHealth is free software under the GPL-3.0. <a href="https://github.com/603Madison/SuperAwesomeMagicalHealth/releases">Releases</a>
+  </footer>
+</main>
+<script>
+  document.querySelectorAll("[data-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var text = document.getElementById(button.getAttribute("data-copy")).textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = "Copied";
+        setTimeout(function () { button.textContent = "Copy"; }, 2000);
+      });
+    });
+  });
+</script>
+</body>
+</html>
