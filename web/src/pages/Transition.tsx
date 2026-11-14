@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Camera, Check, Flag, Heart, Mic, Pencil, Plus, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { isoDate, localInput, num, shortDate, today, useUnits, when } from "../lib/format";
+import { isoDate, num, shortDate, today, useUnits, when } from "../lib/format";
 import type {
   BodyChange, GenderMoment, HairRemovalSession, Milestone, MilestoneArea, MilestoneStatus, MilestoneTemplate, MomentKind, TransitionProfile, VoiceSession,
 } from "../lib/types";
@@ -12,7 +12,7 @@ import { useReadOnly } from "../lib/viewing";
 import { LineChart } from "../components/charts";
 import { MeasurementsCard } from "../components/Measurements";
 import { PitchMeter, type PitchResult } from "../components/PitchMeter";
-import { Button, Card, CardAction, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, DateTimeInput, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
 import { ChipPicker, OneOf, ScaleRow } from "../components/FieldKit";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
@@ -325,7 +325,7 @@ function VoiceDialog({ target, onClose, onSaved }: { target?: number; onClose: (
       </div>
       <div className="two-col">
         <Field label="Minutes"><input inputMode="numeric" value={v.minutes} onChange={(e) => setV({ ...v, minutes: Number(e.target.value) || 0 })} /></Field>
-        <Field label="When"><input type="datetime-local" value={localInput(v.at)} onChange={(e) => setV({ ...v, at: new Date(e.target.value).getTime() })} /></Field>
+        <Field label="When"><DateTimeInput value={v.at} onChange={(at) => setV({ ...v, at })} /></Field>
       </div>
       <ChipPicker label="Exercises" options={VOICE_EXERCISES} value={v.exercises} onChange={(exercises) => setV({ ...v, exercises })} />
       <ScaleRow label="How it felt" low="Hard" high="Great" value={v.feeling} onChange={(feeling) => setV({ ...v, feeling })} />
@@ -376,7 +376,7 @@ function HairDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       </div>
       <Field label="Where, or who"><input value={h.provider ?? ""} onChange={(e) => setH({ ...h, provider: e.target.value || undefined })} /></Field>
       <ScaleRow label="Pain" min={0} max={10} value={h.pain} onChange={(pain) => setH({ ...h, pain })} />
-      <Field label="When"><input type="datetime-local" value={localInput(h.at)} onChange={(e) => setH({ ...h, at: new Date(e.target.value).getTime() })} /></Field>
+      <Field label="When"><DateTimeInput value={h.at} onChange={(at) => setH({ ...h, at })} /></Field>
     </Modal>
   );
 }

@@ -86,7 +86,10 @@ export function SourcesPanel({ values, sleep, onClose, onChanged }: { values: Co
     if (readOnly) return;
     setBusy(true);
     try {
-      const current = await api.deviceChoices().catch(() => ({ choices: [] }) as DeviceChoices);
+      // The other choices are kept as they are: without them, nothing is saved (it would lose them).
+      const current = await api.deviceChoices().catch(() => {
+        throw new Error("Your device choices couldn't be read, so nothing changed. Try again in a moment.");
+      });
       await api.saveDeviceChoices(patch({ choices: current.choices ?? [], sleepDeviceId: current.sleepDeviceId }));
       toast(said);
       onChanged();

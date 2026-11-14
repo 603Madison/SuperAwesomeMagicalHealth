@@ -1,8 +1,9 @@
-import { Children, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Children, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { create } from "zustand";
+import { localInput } from "../lib/format";
 
 // ---- Buttons ----
 
@@ -33,6 +34,58 @@ export function Field({ label, help, children }: { label: string; help?: ReactNo
       {children}
       {help && <span className="field-help">{help}</span>}
     </label>
+  );
+}
+
+/** A typed number: null for nothing, undefined for something that isn't a number (yet). A comma works as the point. */
+export function readNumber(text: string): number | null | undefined {
+  const t = text.trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * A number field that keeps what's typed as it is ("7.", "0,5") while it's being typed, passing
+ * on each value that reads as a number (null when emptied), and shows [format]ted [value] again
+ * once it's left.
+ */
+export function NumberInput({ value, onChange, format = String, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
+  value: number | null | undefined; onChange: (n: number | null) => void; format?: (n: number) => string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = value == null || !Number.isFinite(value) ? "" : format(value);
+  return (
+    <input inputMode="decimal" {...rest} value={text ?? shown}
+      onFocus={(e) => { setText(shown); rest.onFocus?.(e); }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = readNumber(e.target.value);
+        if (n !== undefined) onChange(n);
+      }}
+      onBlur={(e) => { setText(null); rest.onBlur?.(e); }} />
+  );
+}
+
+/**
+ * A date and time field for a moment ([value], ms): what's typed stays while it's being typed,
+ * each complete date and time is passed on, and an emptied or half-typed one is left alone (the
+ * last good one shows again once the field is left).
+ */
+export function DateTimeInput({ value, onChange, ...rest }: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
+  value: number; onChange: (ms: number) => void;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = Number.isFinite(value) ? localInput(value) : "";
+  return (
+    <input type="datetime-local" {...rest} value={text ?? shown}
+      onFocus={(e) => { setText(shown); rest.onFocus?.(e); }}
+      onChange={(e) => {
+        setText(e.target.value);
+        const ms = e.target.value ? new Date(e.target.value).getTime() : Number.NaN;
+        if (Number.isFinite(ms)) onChange(ms);
+      }}
+      onBlur={(e) => { setText(null); rest.onBlur?.(e); }} />
   );
 }
 

@@ -5,7 +5,7 @@ import { localInput, shortDate, useUnits, weight } from "../lib/format";
 import type { Photo, Pose } from "../lib/types";
 import { POSES } from "../lib/types";
 import { useReadOnly, useViewing } from "../lib/viewing";
-import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, DateTimeInput, Empty, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
 import { ChipPicker, OneOf } from "../components/FieldKit";
@@ -225,7 +225,7 @@ function PhotoDialog({ photo, caption, readOnly, albums, onClose, onSaved }: { p
               <input list="photo-albums-edit" value={p.album} onChange={(e) => setP({ ...p, album: e.target.value })} />
               <datalist id="photo-albums-edit">{albums.map((a) => <option key={a} value={a} />)}</datalist>
             </Field>
-            <Field label="When"><input type="datetime-local" value={localInput(p.at)} onChange={(e) => setP({ ...p, at: new Date(e.target.value).getTime() })} /></Field>
+            <Field label="When"><DateTimeInput value={p.at} onChange={(at) => setP({ ...p, at })} /></Field>
           </div>
           <OneOf<Pose> label="Pose" options={POSES} value={p.pose} onChange={(pose) => setP({ ...p, pose: pose ?? "FRONT" })} />
           <ChipPicker label="Tags" options={[]} value={p.tags} onChange={(tags) => setP({ ...p, tags })} />

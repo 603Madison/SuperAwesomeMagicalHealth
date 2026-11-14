@@ -17,10 +17,12 @@ export function PlacePicker() {
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) { setResults(null); return; }
+    // Only the latest search's answer shows: an earlier one that comes back late is dropped.
+    let cancelled = false;
     const timer = setTimeout(() => {
-      api.places(q).then(setResults, () => setResults([]));
+      api.places(q).then((r) => { if (!cancelled) setResults(r); }, () => { if (!cancelled) setResults([]); });
     }, 350);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [query]);
   if (!profile) return null;
   const save = async (place: Place | null) => {

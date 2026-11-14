@@ -10,7 +10,7 @@ import { resetAllScreens, useLayoutStore, useScreenLayout } from "../lib/layout"
 import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
 import { LAYOUT_NAV, SENSITIVE, layoutKey, type Goals, type Profile as ProfileModel } from "../lib/types";
-import { Button, Field, IconButton, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Field, IconButton, NumberInput, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
 import { useArrange, type Section } from "../components/Arrange";
@@ -327,13 +327,16 @@ function ProfileForm({ initial, water }: { initial: ProfileModel; water: boolean
         <Field label="Active calories a day"><input inputMode="numeric" value={g.activeCalories} onChange={(e) => setGoals({ activeCalories: Number(e.target.value) || 0 })} /></Field>
       </div>
       <div className="two-col">
-        <Field label="Sleep (hours)"><input inputMode="decimal" value={g.sleepMinutes / 60} onChange={(e) => setGoals({ sleepMinutes: Math.round((Number(e.target.value) || 8) * 60) })} /></Field>
+        <Field label="Sleep (hours)">
+          <NumberInput value={g.sleepMinutes / 60} format={(h) => String(Math.round(h * 100) / 100)}
+            onChange={(h) => { if (h != null && h > 0 && h <= 24) setGoals({ sleepMinutes: Math.round(h * 60) }); }} />
+        </Field>
         <Field label="Workouts a week"><input inputMode="numeric" value={g.workoutsPerWeek} onChange={(e) => setGoals({ workoutsPerWeek: Number(e.target.value) || 0 })} /></Field>
       </div>
       <div className="two-col">
         <Field label={imperial ? "Target weight (lb)" : "Target weight (kg)"} help="Optional">
-          <input inputMode="decimal" value={g.targetWeightKg != null ? (imperial ? (g.targetWeightKg / KG_PER_LB).toFixed(1) : g.targetWeightKg.toFixed(1)) : ""}
-            onChange={(e) => { const v = numOrNull(e.target.value); setGoals({ targetWeightKg: v == null ? null : Math.round(toKg(v, p.units) * 10) / 10 }); }} />
+          <NumberInput value={g.targetWeightKg != null ? (imperial ? g.targetWeightKg / KG_PER_LB : g.targetWeightKg) : null} format={(v) => v.toFixed(1)}
+            onChange={(v) => { if (v == null || v > 0) setGoals({ targetWeightKg: v == null ? null : Math.round(toKg(v, p.units) * 100) / 100 }); }} />
         </Field>
         <Field label="Aim to">
           <select value={g.weeklyChangeKg} onChange={(e) => setGoals({ weeklyChangeKg: Number(e.target.value) })}>

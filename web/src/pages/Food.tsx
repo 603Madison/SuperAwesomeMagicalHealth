@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ArrowRightLeft, Barcode, Copy, GlassWater, Lightbulb, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
 import { api } from "../lib/api";
-import { dayLabel, num, shiftDate, today } from "../lib/format";
+import { dayLabel, num, shiftDate, useToday } from "../lib/format";
 import type { Food as FoodItem, FoodDay, FoodEntry, Meal } from "../lib/types";
 import { Meter } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
@@ -27,8 +27,10 @@ const MEALS: { id: Meal; label: string }[] = [
 
 export function Food() {
   const [params, setParams] = useSearchParams();
-  const date = params.get("date") ?? today();
-  const setDate = (d: string) => setParams(d === today() ? {} : { date: d }, { replace: true });
+  // Today unless the address names a day; left open overnight, today moves on.
+  const now = useToday();
+  const date = params.get("date") ?? now;
+  const setDate = (d: string) => setParams(d === now ? {} : { date: d }, { replace: true });
   const { data, error, loading, reload, setData } = useLoad(() => api.foodDay(date), [date]);
   const drinks = useLoad(() => api.drinksDay(date).catch(() => undefined), [date]);
   const readOnly = useReadOnly();
@@ -45,9 +47,9 @@ export function Food() {
 
   const sections: Section[] = [
     // Ideas from what's been eaten before, for the meal it is now: today only.
-    { id: "ideas", label: "Ideas", when: date === today(), node: data && <Ideas date={date} readOnly={readOnly} numbers={numbers} onChanged={reload} /> },
-    // What's planned in Mealie for the day, when it's connected.
-    { id: "mealplan", label: "Meal plan", when: !!mealie?.connected, node: <MealPlanCard date={date} numbers={numbers} readOnly={readOnly} onChanged={reload} /> },
+    { id: "ideas", label: "Ideas", when: date === now, node: data && <Ideas date={date} readOnly={readOnly} numbers={numbers} onChanged={reload} /> },
+    // What's planned in Mealie for the day, when it's connected: a card of its own for each day.
+    { id: "mealplan", label: "Meal plan", when: !!mealie?.connected, node: <MealPlanCard key={date} date={date} numbers={numbers} readOnly={readOnly} onChanged={reload} /> },
     { id: "totals", label: "Totals", when: numbers, node: data && <Totals day={data} /> },
     { id: "micros", label: "Vitamins & minerals", when: micros, node: data && <MicrosCard day={data} /> },
     { id: "water", label: "Water", when: water, node: data && <WaterCard day={data} readOnly={readOnly} onChanged={reload} /> },
@@ -72,7 +74,7 @@ export function Food() {
           <p className="page-subtitle">{numbers ? "What you eat, against what you burn" : "What you eat, meal by meal"}</p>
         </div>
         <div className="page-actions">
-          <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(today(), 1)} />
+          <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(now, 1)} />
           {arranged.button}
         </div>
       </header>
@@ -277,7 +279,8 @@ function SearchFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: 
   const isBarcode = /^\d{8,14}$/.test(query.trim());
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2 || isBarcode) { setResults(null); return; }
+    // Too short (or a barcode): no search, so nothing is busy (an earlier one's answer is dropped below).
+    if (q.length < 2 || isBarcode) { setResults(null); setBusy(false); return; }
     let cancelled = false;
     setBusy(true);
     const timer = setTimeout(() => {
