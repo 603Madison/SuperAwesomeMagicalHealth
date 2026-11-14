@@ -19,13 +19,18 @@
   condition turns on), `neuro/` (Autism & ADHD), `transition/`, `photos/` (sealed files under the
   data folder), `ai/` (the optional assistant). Each feature plugs into digests, reports,
   exports, reminders and appointment questions through `platform/FeatureHooks`, listed in
-  `Services.hooks`. `IntegrationTest` covers the features working together. A person's own
-  settings go in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature).
+  `Services.hooks`. `IntegrationTest` covers the features working together. Food's outside sources
+  are in `food/`: Open Food Facts, and each person's Mealie (`Mealie.kt`: its token sealed in
+  `UserSettingsStore` under `food.mealie`, never sent back; `/api/mealie` is never shared; nothing
+  is written to Mealie). A person's own settings go in `UserSettingsStore` (sealed, one row per
+  key; keys are prefixed by feature).
 - `web/`: React + Vite + TypeScript, built into the server's jar.
 - `pebble/`: the Pebble watch app (C + PebbleKit JS, `node --test pebble/test/*.test.js`).
 - `fdroid/`: the F-Droid repository's listing, build script and page (see Releases).
 - `android/`: Jetpack Compose, signs in to the server; device conduits in `devices/`, sync in
-  `sync/`.
+  `sync/`. Use `attempt { }`, never `runCatching`, and rethrow `CancellationException` before any
+  catch-all: a screen reloading cancels its earlier work, which must never show as an error
+  ("StandaloneCoroutine was cancelled"). `CancellationGuardTest` checks it.
 - Health modules (`Module` in `shared/…/Modules.kt`, `server/…/modules/`): each person turns them
   on in `Profile.modules`, or their conditions do. The sensitive ones (mind, cycle, continence,
   medications, symptoms, hormones, appointments, neuro, transition, photos) keep their entries
