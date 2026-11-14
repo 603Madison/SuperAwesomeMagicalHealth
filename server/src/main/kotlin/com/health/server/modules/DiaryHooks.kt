@@ -82,7 +82,8 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
     }
 
     override suspend fun digest(userId: String, profile: Profile, from: LocalDate, to: LocalDate): DigestSection? {
-        val progress = continence.progress(userId, 8)
+        // The weeks up to the digest's last day, whenever it's worked out.
+        val progress = continence.progress(userId, 8, to)
         val week = progress.weeks.lastOrNull { it.weekStart <= to.toString() && it.days > 0 } ?: return null
         val lines = mutableListOf<String>()
         week.leaksPerDay?.let { lines += "Leaks: ${say(it)} a day on the ${week.days} days you logged." }
@@ -99,7 +100,7 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
 
     override suspend fun report(userId: String, profile: Profile, from: LocalDate, to: LocalDate): ReportSection? {
         val weeks = (ChronoUnit.WEEKS.between(from, to).toInt() + 1).coerceIn(2, 52)
-        val progress = continence.progress(userId, weeks)
+        val progress = continence.progress(userId, weeks, to)
         if (progress.weeks.none { it.days > 0 }) return null
         val summary = mutableListOf(progress.headline)
         progress.metrics.filter { it.before != null || it.after != null }.forEach { m ->
@@ -170,7 +171,7 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
     }
 
     override suspend fun questions(userId: String, profile: Profile, since: LocalDate, to: LocalDate): List<SuggestedQuestion> {
-        val progress = continence.progress(userId, 8)
+        val progress = continence.progress(userId, 8, to)
         val out = mutableListOf<SuggestedQuestion>()
         val leaks = progress.metrics.firstOrNull { it.key == "leaks" }
         when (progress.verdict) {

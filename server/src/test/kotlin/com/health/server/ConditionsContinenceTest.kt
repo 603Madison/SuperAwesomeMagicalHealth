@@ -11,6 +11,7 @@ import com.health.api.FieldChoices
 import com.health.api.Fields
 import com.health.api.Flow
 import com.health.api.Fullness
+import com.health.api.LeakSize
 import com.health.api.Module
 import com.health.api.MyCondition
 import com.health.api.MyConditions
@@ -24,6 +25,7 @@ import com.health.api.Verdict
 import com.health.server.conditions.ConditionCatalog
 import com.health.server.conditions.ConditionsService
 import com.health.server.modules.BladderTrainingPlan
+import com.health.server.modules.ContinenceHooks
 import com.health.server.modules.CycleHooks
 import com.health.server.modules.CycleMath
 import com.health.server.modules.Progress
@@ -203,6 +205,28 @@ class ConditionsContinenceTest {
     }
 
     // ---- Bladder and bowel ----
+
+    @Test
+    fun `a past period's report and digest look at that period's weeks`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE)
+        val me = s.admin()
+        // A diary kept last autumn, and not since.
+        var d = LocalDate.of(2025, 10, 6)
+        while (d.isBefore(LocalDate.of(2025, 11, 30))) {
+            s.modules.continence.save(me, ContinenceEntry(at(d, 10), ContinenceKind.LEAK, leak = LeakSize.SMALL))
+            s.modules.continence.save(me, ContinenceEntry(at(d, 11), ContinenceKind.URINATION))
+            d = d.plusDays(1)
+        }
+        val hooks = s.hooks.filterIsInstance<ContinenceHooks>().single()
+        val profile = s.profiles.get(me)
+        val report = hooks.report(me, profile, LocalDate.of(2025, 10, 6), LocalDate.of(2025, 11, 29))!!
+        val weeks = report.tables.first { it.title == "Week by week" }.rows
+        assertEquals(8, weeks.size)
+        assertEquals(listOf("2025-10-06", "7"), weeks.first().take(2))
+        assertEquals(listOf("2025-11-24", "6"), weeks.last().take(2))
+        val digest = hooks.digest(me, profile, LocalDate.of(2025, 11, 17), LocalDate.of(2025, 11, 23))!!
+        assertEquals("Leaks: 1 a day on the 7 days you logged.", digest.lines.first())
+    }
 
     @Test
     fun `the detail is kept, checked, and counted`() = runBlocking {

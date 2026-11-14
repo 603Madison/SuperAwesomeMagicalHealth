@@ -276,10 +276,13 @@ class ContinenceService(
         )
     }
 
-    /** Whether things are getting better: the last weeks against the ones before, week by week. */
-    suspend fun progress(userId: String, weekCount: Int): ContinenceProgress {
+    /**
+     * Whether things are getting better: the last weeks against the ones before, week by week,
+     * up to [end] (today unless given: a past digest or report gives its own last day).
+     */
+    suspend fun progress(userId: String, weekCount: Int, end: LocalDate? = null): ContinenceProgress {
         val zone = profiles.days(userId)
-        val today = zone.today(clock())
+        val today = zone.today(clock()).let { now -> end?.let { minOf(it, now) } ?: now }
         val weeks = weekCount.coerceIn(2, 52)
         val firstWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks((weeks - 1).toLong())
         val all = withNight(userId, entries.list(userId, EntryKind.CONTINENCE, firstWeek, today, ContinenceEntry.serializer()).map { it.value.copy(date = it.date.toString()) })
