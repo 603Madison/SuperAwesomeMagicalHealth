@@ -103,6 +103,9 @@ class Container(val context: Context) {
     val reminders = Reminders(context, medsCache, ::zone, reminderCache)
     val doseOutbox = DoseOutbox(File(context.filesDir, "dose-outbox"))
 
+    /** One voice sender at a time, however many of the trainer's pages are open (ui/modules/transition/voice). */
+    val voiceSending = kotlinx.coroutines.sync.Mutex()
+
     init {
         // What an older version kept waiting (not yet under an account) is the signed-in account's.
         settings.value.account?.let { account ->

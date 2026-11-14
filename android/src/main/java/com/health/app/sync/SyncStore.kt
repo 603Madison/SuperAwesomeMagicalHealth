@@ -51,6 +51,14 @@ class SyncStore(context: Context) {
         if (cursor == null) remove("cursor.$id") else putLong("cursor.$id", cursor)
     }
 
+    /** Where one kind of [id]'s data got to ([Collected.parts]), or null when it hasn't its own yet. */
+    fun partCursor(id: String, part: String): Long? = prefs.getLong("part.$id.$part", -1).takeIf { it >= 0 }
+
+    fun setPartCursors(id: String, parts: Map<String, Long>) {
+        if (parts.isEmpty()) return
+        prefs.edit { parts.forEach { (part, at) -> putLong("part.$id.$part", at) } }
+    }
+
     fun setStatus(id: String, status: ConduitStatus) {
         prefs.edit { putString("status.$id", ApiJson.encodeToString(ConduitStatus.serializer(), status)) }
         _statuses.value = _statuses.value + (id to status)

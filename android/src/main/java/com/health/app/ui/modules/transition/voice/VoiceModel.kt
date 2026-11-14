@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
 import java.time.LocalDate
@@ -132,6 +134,34 @@ class VoiceStore(context: Context) {
     }
 }
 
+/**
+ * Sends [account]'s waiting sessions with [send], one sender at a time ([lock], one for the whole
+ * app: each of the trainer's pages asks whenever data changes). What's waiting is read under the
+ * lock, and what went (or the server refused as wrong) is taken out of what's waiting by then, so
+ * nothing goes twice and a session kept meanwhile isn't lost. Returns how many went.
+ */
+internal suspend fun sendWaiting(store: VoiceStore, account: String, lock: Mutex, send: suspend (VoiceSession) -> Unit): Int = lock.withLock {
+    val waiting = store.pending(account)
+    if (waiting.isEmpty()) return@withLock 0
+    var sent = 0
+    val done = waiting.filter { session ->
+        val failure = attempt { send(session) }.exceptionOrNull()
+        if (failure == null) sent++
+        failure == null || (failure is Exception && SyncManager.isRefused(failure))
+    }
+    if (done.isNotEmpty()) {
+        val left = store.pending(account).toMutableList()
+        done.forEach { left.remove(it) }
+        store.savePending(account, left)
+    }
+    sent
+}
+
+/** Keeps [session] to send later, under the same [lock] as [sendWaiting], so a send going on can't overwrite it. */
+internal suspend fun keepWaiting(store: VoiceStore, account: String, lock: Mutex, session: VoiceSession) = lock.withLock {
+    store.savePending(account, store.pending(account) + session)
+}
+
 data class VoiceState(
     val program: VoiceProgram? = null,
     val plan: VoicePlan? = null,
@@ -236,7 +266,7 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
                 if (account == null || SyncManager.isRefused(e)) {
                     c.tell(e.message ?: "The practice didn't save")
                 } else {
-                    store.savePending(account, store.pending(account) + session)
+                    keepWaiting(store, account, c.voiceSending, session)
                     set { it.copy(pending = store.pending(account).size) }
                     c.tell("Saved on this phone; it'll be sent when the server can be reached")
                 }
@@ -249,14 +279,7 @@ class VoiceViewModel(private val c: Container) : ViewModel() {
     private suspend fun sendPending() {
         if (c.viewing.value != null) return
         val account = c.settings.value.account ?: return
-        val waiting = store.pending(account)
-        if (waiting.isEmpty()) return
-        val left = waiting.filter { session ->
-            val failure = attempt { c.api.addVoiceSession(session) }.exceptionOrNull()
-            failure != null && !(failure is Exception && SyncManager.isRefused(failure))
-        }
-        store.savePending(account, left)
-        if (left.size < waiting.size) c.dataChanged()
+        if (sendWaiting(store, account, c.voiceSending) { c.api.addVoiceSession(it) } > 0) c.dataChanged()
     }
 
     companion object {

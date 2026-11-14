@@ -42,6 +42,22 @@ import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
 /**
+ * Where Health Connect reads each kind of record from: pure, so it can be tested. A kind's own
+ * cursor (where it got to) wins over the sync's; readings can arrive late (a watch syncing hours
+ * after), so each read looks back a little.
+ */
+object HealthConnectCursors {
+    const val OVERLAP_MS = 6 * 3_600_000L
+    const val FIRST_SYNC_MS = 30 * 86_400_000L
+
+    /** Where to read a kind from: a little before where it ([part]) or the whole sync ([since]) got to; the first time, a month back. */
+    fun from(part: Long?, since: Long?, now: Long): Long = (part ?: since)?.let { it - OVERLAP_MS } ?: (now - FIRST_SYNC_MS)
+
+    /** Where a kind read from [from] got to: [now] once read; if it couldn't be, where it was, so next time starts from [from] again. */
+    fun after(read: Boolean, from: Long, now: Long): Long = if (read) now else from + OVERLAP_MS
+}
+
+/**
  * Health Connect, Android's shared health store: what Garmin Connect, Gadgetbridge, the Pebble
  * app, Fitbit, Samsung Health and others write there comes to the server, one device per app.
  */
@@ -82,9 +98,6 @@ class HealthConnectConduit(
         val client = client() ?: throw IllegalStateException("Health Connect isn't available on this phone")
         val granted = granted()
         val now = clock()
-        // Readings can arrive late (a watch syncing hours after), so each sync looks back a little.
-        val start = since?.let { it - OVERLAP_MS } ?: (now - FIRST_SYNC_MS)
-        val range = TimeRangeFilter.between(Instant.ofEpochMilli(start), Instant.ofEpochMilli(now))
         val own = context.packageName
         val builders = LinkedHashMap<String, Builder>()
         fun builder(record: Record): Builder? {
@@ -94,22 +107,33 @@ class HealthConnectConduit(
             return builders.getOrPut(origin) { Builder(origin) }
         }
         val problems = ArrayList<String>()
+        // Each kind of record keeps where it got to: one that can't be read this time starts from
+        // the same place next time, rather than its readings being skipped for good.
+        val parts = LinkedHashMap<String, Long>()
 
         suspend fun <T : Record> each(type: KClass<T>, label: String, take: (T) -> Unit) {
             if (HealthPermission.getReadPermission(type) !in granted) return
-            try {
+            val start = HealthConnectCursors.from(store.partCursor(ID, label), since, now)
+            val range = TimeRangeFilter.between(Instant.ofEpochMilli(start), Instant.ofEpochMilli(now))
+            // What's read goes in only once all of it is: a kind that fails halfway brings nothing.
+            val read = ArrayList<T>()
+            val ok = try {
                 var page: String? = null
                 do {
                     val response = client.readRecords(ReadRecordsRequest(type, range, pageSize = 2_000, pageToken = page))
-                    response.records.forEach(take)
+                    read += response.records
                     page = response.pageToken
                 } while (!page.isNullOrEmpty())
+                true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Reading $label failed", e)
                 problems += label
+                false
             }
+            if (ok) read.forEach(take)
+            parts[label] = HealthConnectCursors.after(ok, start, now)
         }
 
         each(StepsRecord::class, "steps") { r ->
@@ -180,8 +204,8 @@ class HealthConnectConduit(
         }
 
         val batches = builders.values.map { it.build() }
-        val note = if (problems.isEmpty()) null else "Couldn't read ${problems.joinToString(", ")}"
-        return Collected(batches, now, note)
+        val note = if (problems.isEmpty()) null else "Couldn't read ${problems.joinToString(", ")} this time; the next sync tries again"
+        return Collected(batches, now, note, parts)
     }
 
     private class Builder(val origin: String) {
@@ -208,8 +232,6 @@ class HealthConnectConduit(
     companion object {
         const val ID = "health_connect"
         private const val TAG = "HealthConnect"
-        private const val OVERLAP_MS = 6 * 3_600_000L
-        private const val FIRST_SYNC_MS = 30 * 86_400_000L
 
         val RECORD_TYPES: List<KClass<out Record>> = listOf(
             StepsRecord::class, DistanceRecord::class, ActiveCaloriesBurnedRecord::class, FloorsClimbedRecord::class,

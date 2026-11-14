@@ -99,6 +99,7 @@ class SyncManager(
                 }
             }
             store.setCursor(conduit.id, collected.cursor)
+            store.setPartCursors(conduit.id, collected.parts)
             ConduitStatus(
                 lastSyncAt = now,
                 ok = true,

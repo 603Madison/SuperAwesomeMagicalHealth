@@ -18,11 +18,18 @@ interface Conduit {
     /**
      * What's new since [since] (epoch ms; null the first time), as batches for the server, and
      * where to start next time. Overlapping what was sent before is fine: the server replaces it.
+     * Data that couldn't be read must not be moved past: the cursor stays where it was for it.
      */
     suspend fun collect(since: Long?): Collected
 }
 
-data class Collected(val batches: List<IngestBatch>, val cursor: Long, val note: String? = null)
+/**
+ * What a sync collected: [batches], and where to start next time: [cursor] (null to start again
+ * from the beginning), and for a source that reads each kind of data apart (Health Connect's record
+ * types), where each [parts] got to. Both are saved only once the batches are with the server (or
+ * waiting in the outbox).
+ */
+data class Collected(val batches: List<IngestBatch>, val cursor: Long?, val note: String? = null, val parts: Map<String, Long> = emptyMap())
 
 /** How many readings a batch carries, so the server's limit (20,000) is never reached. */
 const val MAX_SAMPLES_PER_BATCH = 5_000
