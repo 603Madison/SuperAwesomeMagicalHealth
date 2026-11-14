@@ -43,12 +43,12 @@ import com.health.app.ui.theme.AppTheme
  * words, so nothing hangs on the colour.
  */
 @Composable
-fun FullnessGauge(value: Fullness?, onChange: (Fullness?) -> Unit, modifier: Modifier = Modifier) {
+fun FullnessGauge(value: Fullness?, onChange: (Fullness?) -> Unit, modifier: Modifier = Modifier, title: String = "How full it was") {
     val fill = AppTheme.data.water
     val over = AppTheme.status.warn
     Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("How full it was", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             Text(
                 value?.let { "${it.label} · ${it.level} of 5" } ?: "Not noted",
                 style = MaterialTheme.typography.bodyMedium,
@@ -109,20 +109,29 @@ private fun Cup(level: Int, active: Boolean, selected: Boolean, fill: Color, wid
     }
 }
 
-/** A small read-only gauge for lists: five steps, filled to the level, with its name beside. */
+/**
+ * A small read-only gauge for lists: five steps, filled to the level, with its name ([label])
+ * beside. [large] is the Wearing now card's: wider, with the word in the body's size.
+ */
 @Composable
-fun FullnessMeter(value: Fullness, modifier: Modifier = Modifier) {
+fun FullnessMeter(value: Fullness, modifier: Modifier = Modifier, label: String = value.label, large: Boolean = false) {
     val fill = if (value == Fullness.LEAKED) AppTheme.status.warn else AppTheme.data.water
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    Row(modifier.semantics(mergeDescendants = true) { contentDescription = "${value.label}, ${value.level} of 5" }, verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(width = 44.dp, height = 8.dp)) {
-            val gap = 2.dp.toPx()
+    Row(modifier.semantics(mergeDescendants = true) { contentDescription = "$label, ${value.level} of 5" }, verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.size(width = if (large) 80.dp else 44.dp, height = if (large) 12.dp else 8.dp)) {
+            val gap = (if (large) 3 else 2).dp.toPx()
             val w = (size.width - gap * 4) / 5
+            val r = (if (large) 3 else 2).dp.toPx()
             for (i in 0 until 5) {
-                drawRoundRect(if (i < value.level) fill else track, Offset(i * (w + gap), 0f), Size(w, size.height), CornerRadius(2.dp.toPx(), 2.dp.toPx()))
+                drawRoundRect(if (i < value.level) fill else track, Offset(i * (w + gap), 0f), Size(w, size.height), CornerRadius(r, r))
             }
         }
-        Spacer(Modifier.width(6.dp))
-        Text(value.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clearAndSetSemantics { })
+        Spacer(Modifier.width(if (large) 10.dp else 6.dp))
+        Text(
+            label,
+            style = if (large) MaterialTheme.typography.titleSmall else MaterialTheme.typography.labelSmall,
+            color = if (large) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clearAndSetSemantics { },
+        )
     }
 }

@@ -17,9 +17,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.LocalHospital
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,6 +47,7 @@ import com.health.api.Awareness
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
 import com.health.api.ContinenceSettings
+import com.health.api.ContinenceWearing
 import com.health.api.Fields
 import com.health.api.LeakContents
 import com.health.api.LeakSize
@@ -58,11 +62,13 @@ import com.health.app.ui.modules.CustomFieldInputs
 import com.health.app.ui.modules.StepScale
 import com.health.app.ui.theme.AppTheme
 
-/** What the diary's form needs besides the entry: which fields show, the person's own words, and their supplies. */
+/** What the diary's form needs besides the entry: which fields show, the person's own words, their supplies, and what's on now. */
 data class FormContext(
     val fields: Set<String> = Fields.DEFAULTS,
     val settings: ContinenceSettings = ContinenceSettings(),
     val supplies: List<Supply> = emptyList(),
+    /** What's on now (with how full it is and its accidents): a new accident is in it, and a change takes it off. */
+    val wearing: ContinenceWearing? = null,
 )
 
 /**
@@ -78,6 +84,8 @@ fun EntryForm(
     onDelete: (() -> Unit)?,
     /** Picking "Change": a change has its own sheet (what came off, what went on). */
     onPadChange: (() -> Unit)? = null,
+    /** "Save and change", for a new accident in a product: saves it, then the Change sheet takes that product off. */
+    onSaveAndChange: ((ContinenceEntry) -> Unit)? = null,
 ) {
     // A change is one step with its own sheet.
     if (initial.kind == ContinenceKind.PAD_CHANGE) {
@@ -93,10 +101,19 @@ fun EntryForm(
     var reps by remember { mutableStateOf(initial.reps?.toString().orEmpty()) }
     var hold by remember { mutableStateOf(initial.holdSeconds?.toString().orEmpty()) }
     var minutesAgo by remember { mutableIntStateOf(0) }
+    // "Not this": the accident wasn't in what's on, so the products to pick from show.
+    var picking by remember { mutableStateOf(false) }
     val kind = e.kind
     val accident = ContinenceText.isAccident(kind)
     val supplies = ContinenceText.suppliesFor(kind, context.supplies)
     val supply = supplies.firstOrNull { it.id == e.supplyId }
+    val inWhatsOn = WearText.inWhatsOn(e, context.wearing) && !picking
+    // With products kept track of, a change is its own step ("Save and change"), never a toggle here.
+    val tracks = WearText.tracksProducts(fields, context.wearing)
+    fun done(): ContinenceEntry {
+        val at = if (initial.id == null) System.currentTimeMillis() - minutesAgo * 60_000L else e.at
+        return finish(e.copy(at = at), volume, weight, reps, hold)
+    }
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -107,7 +124,14 @@ fun EntryForm(
                 ContinenceText.kinds(fields).forEach { k ->
                     FilterChip(
                         selected = kind == k,
-                        onClick = { if (k == ContinenceKind.PAD_CHANGE && onPadChange != null) onPadChange() else { e = withDefaultSupply(e.copy(kind = k), context) } },
+                        onClick = {
+                            when {
+                                k == ContinenceKind.PAD_CHANGE && onPadChange != null -> onPadChange()
+                                // One accident to another keeps the product picked.
+                                accident && ContinenceText.isAccident(k) -> e = e.copy(kind = k)
+                                else -> e = withDefaultSupply(e.copy(kind = k), context)
+                            }
+                        },
                         label = { Text(k.label) },
                     )
                 }
@@ -185,8 +209,12 @@ fun EntryForm(
 
         // ---- What was worn or used
         val productFields = shows(Fields.CONTINENCE_PROTECTION) || shows(Fields.CONTINENCE_SUPPLIES)
-        val picksSupply = (ContinenceText.usesProduct(kind) && productFields) || (kind == ContinenceKind.CATHETER && (productFields || shows(Fields.CONTINENCE_CATHETER)))
-        if (picksSupply && supplies.isNotEmpty()) {
+        val picksSupply = (ContinenceText.usesProduct(kind) && productFields) || (kind == ContinenceKind.CATHETER && (productFields || shows(Fields.CONTINENCE_CATHETER))) ||
+            (accident && picking)
+        if (inWhatsOn) {
+            // A new accident is in what's on now: one line, and "Not this" for anything else.
+            InWhatsOn(context.wearing?.name ?: supply?.name ?: "what you have on") { picking = true }
+        } else if (picksSupply && supplies.isNotEmpty()) {
             Section(if (kind == ContinenceKind.CATHETER) "Catheter" else if (kind == ContinenceKind.PAD_CHANGE) "What you changed" else "What you were wearing") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(selected = e.supplyId == null, onClick = { e = e.copy(supplyId = null, count = if (kind == ContinenceKind.PAD_CHANGE) e.count else null) }, label = { Text("Nothing listed") })
@@ -204,14 +232,17 @@ fun EntryForm(
             Stepper(if (kind == ContinenceKind.PAD_CHANGE) "How many" else "Catheters used", e.count ?: 1, 1..20) { e = e.copy(count = it) }
             if (supply != null && !supply.reusable) Hint("These come off what you have on hand (${supply.onHand} now).")
         }
-        if (accident && e.supplyId != null) {
+        if (accident && e.supplyId != null && !tracks) {
             LabeledSwitch(
                 "Changed it afterwards", e.count != null, { e = e.copy(count = if (it) 1 else null) },
                 subtitle = if (supply?.reusable == false) "Takes one off what you have on hand." else null,
             )
         }
         if (ContinenceText.usesProduct(kind) && shows(Fields.CONTINENCE_PROTECTION)) {
-            FullnessGauge(e.fullness, { e = e.copy(fullness = it, leakedThrough = if (it == com.health.api.Fullness.LEAKED) true else e.leakedThrough) })
+            FullnessGauge(
+                e.fullness, { e = e.copy(fullness = it, leakedThrough = if (it == com.health.api.Fullness.LEAKED) true else e.leakedThrough) },
+                title = if (WearText.inWhatsOn(e, context.wearing)) "How full it is now" else "How full it was",
+            )
         }
         if (ContinenceText.usesProduct(kind) && shows(Fields.CONTINENCE_PAD_WEIGHT)) {
             val loss = ContinenceText.loss(Format.parse(weight), supply)
@@ -270,22 +301,38 @@ fun EntryForm(
             ChipPicker(emptyList(), e.tags.toSet(), { e = e.copy(tags = it.toList()) }, addLabel = "Add a tag")
         }
         OutlinedTextField(e.note.orEmpty(), { e = e.copy(note = it.ifBlank { null }) }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp))
-        Button(
-            onClick = {
-                val at = if (initial.id == null) System.currentTimeMillis() - minutesAgo * 60_000L else e.at
-                onSave(finish(e.copy(at = at), volume, weight, reps, hold))
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Save") }
+        if (onSaveAndChange != null && initial.id == null && accident && tracks && e.supplyId != null) {
+            // Saving, or saving and changing straight after: the Change sheet takes this product off, as the accident left it.
+            ButtonPair(
+                { FilledTonalButton(onClick = { onSaveAndChange(done()) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Save and change", softWrap = false) } },
+                { Button(onClick = { onSave(done()) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Save", softWrap = false) } },
+            )
+        } else {
+            Button(onClick = { onSave(done()) }, modifier = Modifier.fillMaxWidth()) { Text("Save") }
+        }
         if (onDelete != null) OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Delete") }
     }
 }
 
-/** The usual product, chosen already for a new entry that uses one. */
+/** "In your Night briefs", with "Not this": a new accident's product when something's on. */
+@Composable
+private fun InWhatsOn(name: String, onNotThis: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Layers, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Text("In your $name", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(start = 10.dp, end = 4.dp))
+            TextButton(onClick = onNotThis) { Text("Not this") }
+        }
+    }
+}
+
+/**
+ * A new entry's product, chosen already: an accident is in what's on now (as full as it is so far),
+ * or in nothing with nothing on; otherwise the usual. An entry being edited keeps its own.
+ */
 private fun withDefaultSupply(e: ContinenceEntry, context: FormContext): ContinenceEntry {
-    if (e.id != null || !ContinenceText.usesProduct(e.kind)) return if (e.id == null && e.kind != ContinenceKind.CATHETER) e.copy(supplyId = null) else e
-    val default = context.settings.defaultSupplyId?.takeIf { id -> ContinenceText.suppliesFor(e.kind, context.supplies).any { it.id == id } }
-    return e.copy(supplyId = e.supplyId ?: default)
+    val usual = context.settings.defaultSupplyId?.takeIf { id -> ContinenceText.suppliesFor(e.kind, context.supplies).any { it.id == id } }
+    return WearText.entryDraft(e, context.wearing, usual)
 }
 
 /** The form's typed numbers into the entry; fields left over from another kind are dropped. */

@@ -2,6 +2,7 @@ package com.health.app.net
 
 import com.health.api.ApiJson
 import com.health.api.ContinenceCheckIn
+import com.health.api.ContinenceDiary
 import com.health.api.ContinenceProgress
 import com.health.api.ContinenceSettings
 import com.health.api.ContinenceWearing
@@ -41,6 +42,13 @@ suspend fun ServerApi.deleteContinenceCheckIn(id: String) = delete("/api/contine
 
 /** What's on now: every field null when nothing is known. */
 suspend fun ServerApi.continenceWearing(): ContinenceWearing = get("${base()}/api/continence/wearing", ContinenceWearing.serializer())
+
+/**
+ * A day of the diary, grouped ([date] as YYYY-MM-DD; the server's today without one): each product
+ * worn that day with its accidents, and every other entry on its own, newest first.
+ */
+suspend fun ServerApi.continenceDiary(date: String? = null): ContinenceDiary =
+    get("${base()}/api/continence/diary" + date?.let { "?date=${enc(it)}" }.orEmpty(), ContinenceDiary.serializer())
 
 /** How each product goes, from the last [days] days of changes. */
 suspend fun ServerApi.continenceProducts(days: Int = 90): List<ProductStats> =

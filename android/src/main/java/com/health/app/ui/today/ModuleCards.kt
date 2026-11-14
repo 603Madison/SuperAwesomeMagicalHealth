@@ -64,7 +64,7 @@ fun CycleTodayCard(cycle: CycleToday, plain: Boolean, onLog: () -> Unit, onOpen:
     }
 }
 
-/** What's being worn and for how long (or toilet trips today), with leaks and night trips under; "+" logs one. */
+/** What's being worn, for how long and how it is (or toilet trips today), with leaks and night trips under; "+" logs one. */
 @Composable
 fun ContinenceTodayCard(day: ContinenceDay, onLog: () -> Unit, now: Long = System.currentTimeMillis(), onOpen: () -> Unit) {
     val readOnly = LocalReadOnly.current
@@ -73,17 +73,23 @@ fun ContinenceTodayCard(day: ContinenceDay, onLog: () -> Unit, now: Long = Syste
         action = if (readOnly) null else CardAction(Icons.Rounded.Add, "Log bladder and bowel", onClick = onLog),
     ) {
         val trips = day.voids
+        val leaks = day.leaks.takeIf { it > 0 }?.let { if (it == 1) "1 leak" else "$it leaks" }
         val rest = listOfNotNull(
-            day.leaks.takeIf { it > 0 }?.let { if (it == 1) "1 leak" else "$it leaks" },
+            leaks,
             day.nightVoids.takeIf { it > 0 }?.let { "$it at night" },
             day.bowel.takeIf { it > 0 }?.let { if (it == 1) "1 bowel movement" else "$it bowel movements" },
             day.pelvicFloor.takeIf { it > 0 }?.let { "pelvic floor ${if (it == 1) "once" else "$it times"}" },
         )
         val w = day.wearing
-        val counts = (listOfNotNull(trips.takeIf { it > 0 }?.let { if (it == 1) "1 trip" else "$it trips" }) + rest).take(3).joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null }
+        val tripsText = trips.takeIf { it > 0 }?.let { if (it == 1) "1 trip" else "$it trips" }
+        val counts = (listOfNotNull(tripsText) + rest).take(3).joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null }
         when {
-            // What's on, and for how long, leads; the day's counts follow.
-            w?.supplyId != null -> Figure(w.name ?: "A product", "for ${WearText.wornFor(WearText.onFor(w, now))}", counts)
+            // What's on, for how long and how it is ("Wet · 2 accidents") lead; the day's other counts follow.
+            w?.supplyId != null -> {
+                val state = WearText.stateLine(w.wear?.takeIf { it.supplyId == w.supplyId })
+                val others = if (state == null) counts else (listOfNotNull(tripsText) + (rest - setOfNotNull(leaks))).take(2).joinToString(" · ").ifEmpty { null }
+                Figure(w.name ?: "A product", "for ${WearText.wornFor(WearText.onFor(w, now))}", listOfNotNull(state, others).joinToString(" · ").ifEmpty { null })
+            }
             w?.nothingOn == true -> Headline("Nothing on for now", supporting = counts)
             else -> Figure("$trips", if (trips == 1) "toilet trip" else "toilet trips", rest.joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null })
         }
