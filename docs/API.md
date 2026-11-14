@@ -240,7 +240,8 @@ from `at`, in the person's time zone.
 |---|---|
 | `GET /api/continence/entries?days=7` · `POST` · `PUT /{id}` · `DELETE /{id}` | `ContinenceEntry` |
 | `GET /api/continence/summary?days=14` | `ContinenceSummary`: per-day counts, averages, triggers, patterns |
-| `GET /api/continence/wearing` | `ContinenceWearing`: what's on now, since when, the usual wear time, and when a change reminder is due |
+| `GET /api/continence/wearing` | `ContinenceWearing`: what's on now, since when, the usual wear time, when a change reminder is due, and its `wear` (how full, the accidents since it went on) |
+| `GET /api/continence/diary?date=` | `ContinenceDiary`: a day grouped, newest first: each product worn with the accidents while it was on, and every other entry on its own |
 | `GET /api/continence/products?days=90` | `[ProductStats]`: how each product goes (wear time, how full, leaks through, nights) |
 
 ### Medications
@@ -408,6 +409,16 @@ off**, `putOnSupplyId` what was **put on**, and `nothingOn` says it came off wit
   `changeReminderHours` after it went on, moved to the end of the night (`nightFrom`/`nightTo`,
   11 pm to 6 am by default) unless `changeReminderAtNight`. Today's `ModulesToday.continence.wearing`
   carries the same, on today only (a card even before anything else is logged).
+- **Wears** (`ContinenceWear`) run from the change that put a product on to the one that took it off.
+  When the next change takes off something else, or puts something on without taking anything off,
+  the wear ends there with no `off`; past a day with no change, its end isn't known. An accident
+  (`LEAK`, `BOWEL_LEAK`, `BEDWETTING`) belongs to the wear it happened in: never to a product other
+  than the one it names (`supplyId`), at a change's moment to what came off, and up to 10 minutes
+  before the product it names went on to that product. A wear's `fullness` is the change's, or, while
+  it's on, the latest accident's; `leakedThrough` is the change's or any accident's.
+- **`GET /api/continence/diary`** lists each wear that was on at any time that day (what's on now has
+  `current`) and every other entry of the day on its own; a listed wear's changes and accidents aren't
+  repeated as entries, and an overnight wear shows on both days with all its accidents.
 - **`GET /api/continence/products`** groups the changes that took each product off: `changes`,
   `avgWornMinutes`, `typicalFullness` (the most common), `leakedThrough` and `leakedThroughPct`
   (leaked through, or `LEAKED`), and `nightShare` (wears whose middle was in the night), most-changed
