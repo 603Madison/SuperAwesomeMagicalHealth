@@ -1473,6 +1473,8 @@ export interface PushMessage {
   scheduledFor?: number;
   /** When it's for (in /api/reminders/upcoming). */
   at?: number;
+  /** Whose it is: a browser acts on it only while that account is signed in. */
+  userId?: string;
 }
 
 export type ReportSectionKey =

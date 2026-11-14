@@ -204,6 +204,8 @@ data class PushMessage(
     val scheduledFor: Long? = null,
     /** When it's for (in /api/reminders/upcoming). */
     val at: Long? = null,
+    /** Whose it is: a browser's reminder acts only while that account is signed in there. */
+    val userId: String? = null,
 )
 
 // ---------------------------------------------------------------- Reports and export

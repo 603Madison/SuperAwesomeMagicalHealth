@@ -245,7 +245,7 @@ class PushService(
         }
         if (targets.isEmpty()) return 0
         val keys = keys()
-        val payload = ApiJson.encodeToString(PushMessage.serializer(), message).toByteArray()
+        val payload = ApiJson.encodeToString(PushMessage.serializer(), message.copy(userId = userId)).toByteArray()
         val subject = subject()
         var delivered = 0
         for (target in targets) {
