@@ -56,7 +56,7 @@ data class ReminderPrefs(
     val refillDays: Int = 7,
     /** "HH:mm": when refill reminders come. */
     val refillTime: String = "10:00",
-    /** Show medication names on a locked screen; off shows "Time for your 8:00 medications". */
+    /** Names in reminders (medications, habits, routines, appointments); off, they say only "Time for your 8:00 medications". */
     val showNames: Boolean = false,
     /** "HH:mm" to "HH:mm": no sound for reminders other than doses (habits, refills) in this window. */
     val quietFrom: String? = "22:00",

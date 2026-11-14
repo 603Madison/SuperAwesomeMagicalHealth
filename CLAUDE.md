@@ -14,16 +14,20 @@
 - Server features by package: `modules/` (mind, cycle, continence, medications), `tracking/`
   (vitals, drinks, symptoms with the weather, habits; stress in `insights/Stress.kt`), `care/`
   (hormone therapy, life stages, appointments, sharing via the `X-SAMH-View` header, allowlisted
-  per path in `SharedView`), `platform/` (scheduler, web push, webhooks, Home Assistant and watch
-  keys, digest and mail, PDF report, CSV/FHIR/FIT export), `conditions/` (the catalog and what each
-  condition turns on), `neuro/` (Autism & ADHD), `transition/`, `photos/` (sealed files under the
-  data folder), `ai/` (the optional assistant). Each feature plugs into digests, reports,
-  exports, reminders and appointment questions through `platform/FeatureHooks`, listed in
-  `Services.hooks`. `IntegrationTest` covers the features working together. Food's outside sources
-  are in `food/`: Open Food Facts, and each person's Mealie (`Mealie.kt`: its token sealed in
-  `UserSettingsStore` under `food.mealie`, never sent back; `/api/mealie` is never shared; nothing
-  is written to Mealie). A person's own settings go in `UserSettingsStore` (sealed, one row per
-  key; keys are prefixed by feature).
+  per path in `SharedView`; every route a share can reach filters what it returns by
+  `call.viewScope`, never only by the owner's features), `platform/` (scheduler, web push,
+  webhooks, Home Assistant and watch keys, digest and mail, PDF report, CSV/FHIR/FIT export),
+  `conditions/` (the catalog and what each condition turns on), `neuro/` (Autism & ADHD),
+  `transition/`, `photos/` (sealed files under the data folder), `ai/` (the optional assistant).
+  Each feature plugs into digests, reports, exports, reminders and appointment questions through
+  `platform/FeatureHooks`, listed in `Services.hooks`. `IntegrationTest` covers the features
+  working together. Food's outside sources are in `food/`: Open Food Facts, and each person's
+  Mealie (`Mealie.kt`: its token sealed in `UserSettingsStore` under `food.mealie`, never sent
+  back; `/api/mealie` is never shared; nothing is written to Mealie). A person's own settings go
+  in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature). Anything the
+  server calls on someone's behalf (webhooks, Mealie, push) uses an OkHttp client with
+  `util/OutboundDns` (checked addresses only) and no redirects; `ServerConfig.outboundLoopback` is
+  for tests only. Logs never carry what someone wrote.
 - `web/`: React + Vite + TypeScript, built into the server's jar.
 - `pebble/`: the Pebble watch app (C + PebbleKit JS, `node --test pebble/test/*.test.js`).
 - `fdroid/`: the F-Droid repository's listing, build script and page (see Releases).

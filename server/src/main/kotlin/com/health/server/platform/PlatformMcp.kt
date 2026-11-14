@@ -48,7 +48,7 @@ object PlatformMcp {
             appendLine("Webhooks: ${hooks.size} (${hooks.count { it.enabled }} on)" + (hooks.mapNotNull { it.lastDelivery }.maxByOrNull { it.at }?.let { "; last call ${Say.dateTime(it.at, zone)} ${if (it.ok) "OK" else "failed: ${it.error ?: it.status}"}" } ?: ""))
             appendLine(
                 "Settings: remind again after ${prefs.remindAgainMinutes} min (${prefs.remindAgainTimes}×), missed after ${prefs.missedAfterMinutes} min, " +
-                    "refills at ${prefs.refillDays} days left, quiet ${prefs.quietFrom ?: "–"}–${prefs.quietTo ?: "–"}, names on locked screens ${if (prefs.showNames) "shown" else "hidden"}",
+                    "refills at ${prefs.refillDays} days left, quiet ${prefs.quietFrom ?: "–"}–${prefs.quietTo ?: "–"}, names in reminders ${if (prefs.showNames) "shown" else "hidden"}",
             )
             appendLine("Next 24 hours: ${upcoming.size} reminders" + upcoming.take(10).joinToString("") { "\n- ${Say.dateTime(it.at, zone)} ${it.event.key}: ${it.privateTitle}" })
             appendLine("Email: " + if (services.settings.get().smtp.ready) "set up" else "not set up on this server")

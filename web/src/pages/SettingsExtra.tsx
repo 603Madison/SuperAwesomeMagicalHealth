@@ -75,7 +75,7 @@ export function NotificationSettings() {
               </div>
             </Field>
           </div>
-          <Toggle label="Show medication names on a locked screen" help={p.showNames ? "e.g. “Time for Estradiol 2 mg”." : "Off: “Time for your 8:00 medications”, so nobody nearby sees what you take."} checked={p.showNames} onChange={(showNames) => setP({ ...p, showNames })} />
+          <Toggle label="Show names in reminders" help={p.showNames ? "Reminders name your medications, habits and appointments: “Time for Estradiol 2 mg”. Anyone who sees your screen can read them." : "Off: reminders say “Time for your 8:00 medications”. Names show only in the app."} checked={p.showNames} onChange={(showNames) => setP({ ...p, showNames })} />
         </>
       )}
       {on.includes("HABITS") && <Toggle label="Habit nudges" help="At a habit's nudge time, if it isn't done yet." checked={p.habits} onChange={(habits) => setP({ ...p, habits })} />}
