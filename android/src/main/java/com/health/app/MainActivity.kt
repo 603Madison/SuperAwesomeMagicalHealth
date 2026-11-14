@@ -13,13 +13,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.lifecycleScope
 import com.health.app.ui.MainScaffold
 import com.health.app.ui.signin.SignInRoute
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.theme.isAppInDarkTheme
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 
 /** The scrims Android's default edge-to-edge puts behind three-button navigation. */
 private val LIGHT_SCRIM = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
@@ -27,19 +24,20 @@ private val DARK_SCRIM = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x1b)
 
 /** A FragmentActivity, so the progress photos' lock can ask for biometrics (androidx.biometric). */
 class MainActivity : androidx.fragment.app.FragmentActivity() {
-    private val finishing = mutableStateOf(false)
-    private val signInError = mutableStateOf<String?>(null)
-
     /** A page a notification asked to open ("meds", "appointments", "digest"). */
     private val openRoute = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handle(intent)
+        // Only on a fresh start: turning the phone recreates the activity with the same intent, and
+        // the sign-in link (and a notification's page) must be used once.
+        if (savedInstanceState == null) handle(intent)
         val c = container
         setContent {
             val settings by c.settings.collectAsState()
+            val finishing by c.signIn.finishing.collectAsState()
+            val signInError by c.signIn.error.collectAsState()
             // The status and navigation bars' icons follow the app's theme, which may not be the phone's.
             val dark = isAppInDarkTheme(settings.themeMode)
             LaunchedEffect(dark) {
@@ -50,10 +48,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             }
             HealthTheme(settings.themeMode, settings.wallpaperColors, settings.boldText, settings.palette) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    if (settings.signedIn && !finishing.value) {
+                    if (settings.signedIn && !finishing) {
                         MainScaffold(open = openRoute.value, onOpened = { openRoute.value = null })
                     } else {
-                        SignInRoute(finishing.value, signInError.value)
+                        SignInRoute(finishing, signInError)
                     }
                 }
             }
@@ -77,16 +75,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         intent?.getStringExtra(EXTRA_OPEN)?.takeIf { it.matches(Regex("[a-z/?=&-]{1,40}")) }?.let { openRoute.value = it }
         val link = intent?.data ?: return
         if (link.scheme != "samhealth" || link.host != "signed-in") return
-        finishing.value = true
-        signInError.value = null
-        lifecycleScope.launch {
-            try {
-                container.signIn.finish(link)
-            } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                signInError.value = e.message ?: "Couldn't finish signing in"
-            }
-            finishing.value = false
-        }
+        // Used once: the activity keeps the intent without it, and reopening from Recents (which
+        // replays the intent that started the app) doesn't finish it again.
+        setIntent(Intent(intent).setData(null))
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        // In the app's scope, so turning the phone or leaving the screen can't cut the exchange short.
+        val c = container
+        c.signIn.finishInBackground(link, c.scope)
     }
 
     companion object {

@@ -51,6 +51,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -359,7 +360,7 @@ class ServerApi(
         @Suppress("UNCHECKED_CAST")
         if (serializer == Unit.serializer()) return Unit as T
         return try {
-            ApiJson.decodeFromString(serializer, text)
+            AppJson.decodeFromString(serializer, text)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             throw ServerException(response.code, "The server's answer didn't make sense (${e.message?.substringBefore('\n')})")
         }
@@ -386,6 +387,13 @@ class ServerApi(
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * How the app reads the server's answers: [ApiJson], and a value this app doesn't know (a
+         * newer server's feature, page or supply kind) falls back to the field's default, or null,
+         * instead of the whole profile or day failing to load.
+         */
+        internal val AppJson: Json = Json(ApiJson) { coerceInputValues = true }
 
         /** The header that asks for a shared account's data (GET only). */
         const val VIEW_HEADER = "X-SAMH-View"

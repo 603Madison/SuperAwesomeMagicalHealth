@@ -79,6 +79,20 @@ class ServerApiTest {
     }
 
     @Test
+    fun `a newer server's values this app doesn't know fall back, rather than the day failing`() = runBlocking {
+        server.enqueue(json("""{"date":"2026-11-12","steps":4200,"goals":{},"insights":[{"tone":"info","title":"New","body":"From a newer server","module":"TELEPATHY","link":"A_NEW_PAGE"}]}"""))
+        val day = api.day("2026-11-12")
+        assertEquals(4200, day.steps)
+        assertNull(day.insights.single().module)
+        assertNull(day.insights.single().link)
+
+        server.enqueue(json("""{"units":"FURLONGS","energyProfile":"SOMETHING_NEW","timezone":"Europe/London"}"""))
+        val profile = api.profile()
+        assertEquals(com.health.api.Units.METRIC, profile.units)
+        assertEquals("Europe/London", profile.timezone)
+    }
+
+    @Test
     fun `a 401 page from something in between doesn't sign out`() = runBlocking {
         // A sign-in gateway or proxy in front of the server, with a page of its own.
         server.enqueue(MockResponse().setResponseCode(401).setHeader("Content-Type", "text/html").setBody("<html><body>Please sign in</body></html>"))

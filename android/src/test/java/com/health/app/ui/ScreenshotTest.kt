@@ -438,6 +438,13 @@ class ScreenshotTest {
         save("sign_in_sso_dark")
     }
 
+    @Test
+    fun signInOverPlainHttp() {
+        val config = AuthConfig("Health", "0.6.1", localLogin = true, oidc = OidcButton("Sign in with Authentik"))
+        render { SignInScreen("http://health.example.com", finishing = false, error = null, actions = noSignIn, initialConfig = "http://health.example.com" to config) }
+        save("sign_in_http")
+    }
+
     // ---- Health modules ----
 
     private val allModules = Module.entries.toSet()
