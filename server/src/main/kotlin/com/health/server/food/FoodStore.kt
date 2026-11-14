@@ -215,7 +215,8 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
 
     private fun toEntry(row: Row) = FoodEntry(
         date = row.string("date"),
-        meal = Meal.valueOf(row.string("meal")),
+        // A meal no longer known (renamed, say) still shows, with the snacks.
+        meal = runCatching { Meal.valueOf(row.string("meal")) }.getOrDefault(Meal.SNACK),
         name = row.string("name"),
         nutrients = ApiJson.decodeFromString(Nutrients.serializer(), row.string("nutrients")),
         servings = row.double("servings"),

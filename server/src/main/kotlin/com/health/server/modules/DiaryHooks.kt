@@ -82,7 +82,8 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
     }
 
     override suspend fun digest(userId: String, profile: Profile, from: LocalDate, to: LocalDate): DigestSection? {
-        val progress = continence.progress(userId, 8)
+        // The weeks up to the digest's last day, whenever it's worked out.
+        val progress = continence.progress(userId, 8, to)
         val week = progress.weeks.lastOrNull { it.weekStart <= to.toString() && it.days > 0 } ?: return null
         val lines = mutableListOf<String>()
         week.leaksPerDay?.let { lines += "Leaks: ${say(it)} a day on the ${week.days} days you logged." }
@@ -99,7 +100,7 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
 
     override suspend fun report(userId: String, profile: Profile, from: LocalDate, to: LocalDate): ReportSection? {
         val weeks = (ChronoUnit.WEEKS.between(from, to).toInt() + 1).coerceIn(2, 52)
-        val progress = continence.progress(userId, weeks)
+        val progress = continence.progress(userId, weeks, to)
         if (progress.weeks.none { it.days > 0 }) return null
         val summary = mutableListOf(progress.headline)
         progress.metrics.filter { it.before != null || it.after != null }.forEach { m ->
@@ -170,7 +171,7 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
     }
 
     override suspend fun questions(userId: String, profile: Profile, since: LocalDate, to: LocalDate): List<SuggestedQuestion> {
-        val progress = continence.progress(userId, 8)
+        val progress = continence.progress(userId, 8, to)
         val out = mutableListOf<SuggestedQuestion>()
         val leaks = progress.metrics.firstOrNull { it.key == "leaks" }
         when (progress.verdict) {
@@ -212,13 +213,15 @@ object BladderTrainingPlan {
             // The first reminder is one interval after the day's start: the start itself is when the day begins.
             var minute = start.toSecondOfDay() / 60 + interval
             while (minute <= end.toSecondOfDay() / 60) {
-                val at = days.start(date) + minute * 60_000L
+                // By the clock, so the times are right on the days the clocks change.
+                val at = days.at(date, LocalTime.of(minute / 60, minute % 60))
                 if (at in from until to) out += at to interval
                 minute += interval
             }
             date = date.plusDays(1)
         }
-        return out
+        // A time the clocks skip in spring lands on the next one: it's one reminder, not two.
+        return out.distinctBy { it.first }
     }
 
     fun say(minutes: Int): String = when {
@@ -237,8 +240,8 @@ class SuppliesHooks(private val supplies: SuppliesService, private val profiles:
         if (categories.isEmpty()) return emptyList()
         val days = Days(Days.zoneOf(profile.timezone))
         val time = runCatching { LocalTime.parse(profile.reminders.refillTime) }.getOrNull() ?: LocalTime.of(10, 0)
-        val at = days.start(days.dateOf(to)) + time.toSecondOfDay() * 1000L
-        val due = listOf(at, at - 86_400_000L).firstOrNull { it in from until to } ?: return emptyList()
+        val today = days.dateOf(to)
+        val due = listOf(days.at(today, time), days.at(today.minusDays(1), time)).firstOrNull { it in from until to } ?: return emptyList()
         val low = supplies.low(userId, categories)
         if (low.isEmpty()) return emptyList()
         val names = low.joinToString(", ") { it.supply.name }
@@ -295,9 +298,10 @@ class CycleHooks(private val cycle: CycleService, private val clock: () -> Long)
         val settings = cycle.settings(userId)
         val days = Days(Days.zoneOf(profile.timezone))
         val out = mutableListOf<Reminder>()
+        // By the clock on the day (or the day before, just after midnight), right on the days the clocks change.
         fun timeToday(t: LocalTime): Long? {
-            val at = days.start(days.dateOf(to)) + t.toSecondOfDay() * 1000L
-            return listOf(at, at - 86_400_000L).firstOrNull { it in from until to }
+            val today = days.dateOf(to)
+            return listOf(days.at(today, t), days.at(today.minusDays(1), t)).firstOrNull { it in from until to }
         }
         // Before and after a period: at 9 in the morning, worked out only when that's now.
         val morning = timeToday(LocalTime.of(9, 0))

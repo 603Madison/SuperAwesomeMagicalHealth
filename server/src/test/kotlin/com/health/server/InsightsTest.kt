@@ -3,14 +3,20 @@ package com.health.server
 import com.health.api.DeviceInfo
 import com.health.api.DeviceKind
 import com.health.api.EnergyProfile
+import com.health.api.FoodEntryInput
 import com.health.api.Goals
 import com.health.api.IngestBatch
+import com.health.api.Meal
 import com.health.api.Metric
+import com.health.api.Nutrients
 import com.health.api.Profile
 import com.health.api.Sample
 import com.health.api.SleepSession
 import com.health.api.SleepStage
 import com.health.api.StageSpan
+import com.health.api.Workout
+import com.health.api.WorkoutType
+import com.health.server.insights.DayService
 import com.health.server.insights.DayStats
 import com.health.server.insights.Energy
 import com.health.server.insights.Scoring
@@ -21,6 +27,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -188,6 +195,71 @@ class InsightsTest {
         assertTrue(day.nutritionTarget!!.basis.startsWith("About"))
         s.ingest.deleteSample(user.id, weight.id!!)
         assertNull(s.days.summary(user.id, "2026-03-09").weightKg)
+    }
+
+    @Test
+    fun `a day changed while it's being worked out isn't kept stale`() = runBlocking {
+        val date = LocalDate.of(2026, 3, 10)
+        var armed = false
+        var userId = ""
+        lateinit var s: Services
+        s = testServices(clock = {
+            // Partway through working the day out (its food already read), a meal is logged, as the food diary does it.
+            if (armed && Thread.currentThread().stackTrace.any { it.className == DayService::class.java.name && it.methodName == "compute" }) {
+                armed = false
+                runBlocking {
+                    s.foods.log(userId, FoodEntryInput(date.toString(), Meal.LUNCH, 1.0, name = "Soup", nutrients = Nutrients(500.0, 20.0, 50.0, 10.0)))
+                    s.days.changedDate(userId, date)
+                }
+            }
+            now
+        })
+        s.bootstrap()
+        userId = s.users.byUsername("admin")!!.id
+        s.profiles.put(userId, Profile(timezone = "America/New_York"))
+        s.days.summary(userId, date.toString())
+        s.days.changedDate(userId, date)
+        armed = true
+        // Worked out from before the meal: right for that moment, but not kept.
+        assertEquals(0.0, s.days.summary(userId, date.toString()).nutrition.calories, 0.0)
+        assertFalse(armed)
+        assertEquals(500.0, s.days.summary(userId, date.toString()).nutrition.calories, 0.01)
+    }
+
+    @Test
+    fun `a workout moved onto another's start is refused plainly`() = runBlocking {
+        val s = services()
+        val user = s.users.byUsername("admin")!!
+        val day = LocalDate.of(2026, 3, 9)
+        val run = s.ingest.manualWorkout(user.id, Workout(WorkoutType.RUN, at(day, 7), at(day, 8)))
+        val walk = s.ingest.manualWorkout(user.id, Workout(WorkoutType.WALK, at(day, 12), at(day, 13)))
+        val error = runCatching { s.ingest.manualWorkout(user.id, walk.copy(start = run.start, end = run.end)) }.exceptionOrNull()
+        assertEquals(HttpStatusCode.BadRequest, (error as ApiError).status)
+        assertTrue(error.message!!.startsWith("Another workout you entered starts at that time"))
+        // Both are as they were; moving it anywhere else is fine.
+        assertEquals(WorkoutType.WALK, s.records.workout(user.id, walk.id!!)!!.type)
+        assertEquals(at(day, 12), s.records.workout(user.id, walk.id!!)!!.start)
+        assertEquals(at(day, 14), s.ingest.manualWorkout(user.id, walk.copy(start = at(day, 14), end = at(day, 15))).start)
+    }
+
+    @Test
+    fun `stored rows with a name no longer known are skipped or fall back, never crash`() = runBlocking {
+        val s = services()
+        val user = s.users.byUsername("admin")!!
+        val day = LocalDate.of(2026, 3, 9)
+        s.ingest.manualSample(user.id, Sample(Metric.WEIGHT, at(day, 7), value = 64.0))
+        val food = s.foods.log(user.id, FoodEntryInput(day.toString(), Meal.LUNCH, 1.0, name = "Soup", nutrients = Nutrients(300.0, 10.0, 30.0, 5.0)))
+        s.db.tx {
+            val device = one("SELECT id FROM devices WHERE user_id = ?", user.id) { it.string("id") }!!
+            update("INSERT INTO samples (user_id, device_id, metric, start, value) VALUES (?, ?, 'RETIRED_METRIC', ?, 1.0)", user.id, device, at(day, 8))
+            update("UPDATE devices SET kind = 'RETIRED_KIND' WHERE id = ?", device)
+            update("UPDATE food_entries SET meal = 'ELEVENSES' WHERE id = ?", food.id)
+        }
+        s.days.changedAll(user.id)
+        assertEquals(listOf(Metric.WEIGHT), s.records.samples(user.id, at(day, 0), at(day.plusDays(1), 0)).map { it.metric })
+        assertEquals(64.0, s.days.summary(user.id, day.toString()).weightKg!!, 0.0)
+        assertEquals(DeviceKind.OTHER, s.devices.list(user.id).single().kind)
+        assertEquals(Meal.SNACK, s.foods.day(user.id, day).first.single().meal)
     }
 
     @Test

@@ -45,7 +45,9 @@ class CycleService(
         check(day.products.size <= 10 && day.products.all { it.count in 1..20 }, "Up to 10 products, 1 to 20 of each")
         check(day.details.size <= 30, "Up to 30 of your own fields")
         fun words(list: List<String>, max: Int = 30) = list.map { it.trim().lowercase().take(40) }.filter { it.isNotEmpty() }.distinct().take(max)
-        day.products.mapNotNull { it.supplyId }.forEach { id -> check(supplies == null || supplies!!.get(userId, id) != null, "No such supply") }
+        // Only products new to the day must still be kept: one since deleted doesn't lock the day.
+        val kept = entries.list(userId, EntryKind.CYCLE_DAY, date, date, CycleDay.serializer()).flatMap { it.value.products.mapNotNull { p -> p.supplyId } }.toSet()
+        day.products.mapNotNull { it.supplyId }.filter { it !in kept }.forEach { id -> check(supplies == null || supplies!!.get(userId, id) != null, "No such supply") }
         val clean = day.copy(
             date = date.toString(),
             symptoms = words(day.symptoms),
@@ -59,12 +61,10 @@ class CycleService(
             sex = day.sex?.let { it.copy(note = it.note?.trim()?.take(500)?.ifBlank { null }) },
             details = day.details.entries.associate { (k, v) -> k.trim().take(40) to v.trim().take(500) }.filterKeys { it.isNotEmpty() },
         )
-        entries.deleteDay(userId, EntryKind.CYCLE_DAY, date)
         val empty = clean == CycleDay(date = clean.date)
         val noon = profiles.days(userId).let { it.start(date) + 12 * 3_600_000L }
-        if (!empty) {
-            entries.put(userId, EntryKind.CYCLE_DAY, null, date, noon, clean, CycleDay.serializer())
-        }
+        // The day's entry replaced (or cleared) all at once, so two saves at once leave one day, not two.
+        entries.replaceDay(userId, EntryKind.CYCLE_DAY, date, noon, clean.takeIf { !empty }, CycleDay.serializer())
         supplies?.syncUse(userId, source(date), usesOf(clean), noon)
         return clean
     }

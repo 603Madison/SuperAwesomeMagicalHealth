@@ -11,6 +11,7 @@ import com.health.api.FieldChoices
 import com.health.api.Fields
 import com.health.api.Flow
 import com.health.api.Fullness
+import com.health.api.LeakSize
 import com.health.api.Module
 import com.health.api.MyCondition
 import com.health.api.MyConditions
@@ -21,9 +22,11 @@ import com.health.api.SupplyAdjustment
 import com.health.api.SupplyKind
 import com.health.api.SupplyReason
 import com.health.api.Verdict
+import com.health.api.WebhookEvent
 import com.health.server.conditions.ConditionCatalog
 import com.health.server.conditions.ConditionsService
 import com.health.server.modules.BladderTrainingPlan
+import com.health.server.modules.ContinenceHooks
 import com.health.server.modules.CycleHooks
 import com.health.server.modules.CycleMath
 import com.health.server.modules.Progress
@@ -32,7 +35,11 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -174,7 +181,81 @@ class ConditionsContinenceTest {
         assertTrue(hooks.reminders(me, profile, at(today, 12), at(today, 12, 15)).isEmpty())
     }
 
+    @Test
+    fun `supplies used and restocked at the same moment all count, and too big a restock logs nothing`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)
+        val me = s.admin()
+        val pads = s.supplies.save(me, Supply("Night pads", SupplyKind.PAD, onHand = 100))
+        withContext(Dispatchers.Default) {
+            (1..20).map { i -> async { s.modules.continence.save(me, ContinenceEntry(now - i * 60_000L, ContinenceKind.PAD_CHANGE, putOnSupplyId = pads.id)) } }.awaitAll()
+            (1..10).map { async { s.supplies.adjust(me, pads.id!!, SupplyAdjustment(now, 5, SupplyReason.RESTOCKED)) } }.awaitAll()
+        }
+        assertEquals(100 - 20 + 50, s.supplies.get(me, pads.id!!)!!.onHand)
+        val logged = s.supplies.log(me, pads.id!!, 30).size
+        assertEquals(30, logged)
+        val error = runCatching { s.supplies.adjust(me, pads.id!!, SupplyAdjustment(now, 100_000, SupplyReason.RESTOCKED)) }.exceptionOrNull()
+        assertEquals(HttpStatusCode.BadRequest, (error as ApiError).status)
+        assertEquals(logged, s.supplies.log(me, pads.id!!, 30).size)
+        assertEquals(130, s.supplies.get(me, pads.id!!)!!.onHand)
+
+        // A cycle day saved twice at once is still one day.
+        withContext(Dispatchers.Default) {
+            (1..10).map { n -> async { s.modules.cycle.put(me, CycleDay(today.toString(), flow = Flow.LIGHT, pain = n)) } }.awaitAll()
+        }
+        assertEquals(1, s.modules.cycle.logged(me, today, today).size)
+    }
+
+    @Test
+    fun `a deleted supply doesn't lock the entries and settings that name it`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)
+        val me = s.admin()
+        val pads = s.supplies.save(me, Supply("Pads", SupplyKind.PAD, onHand = 20, dryWeightG = 30.0))
+        val tampons = s.supplies.save(me, Supply("Tampons", SupplyKind.TAMPON, onHand = 10))
+        val leak = s.modules.continence.save(me, ContinenceEntry(now - 3_600_000, ContinenceKind.LEAK, supplyId = pads.id, padWeightG = 50.0))
+        val change = s.modules.continence.save(me, ContinenceEntry(now - 1_800_000, ContinenceKind.PAD_CHANGE, putOnSupplyId = pads.id))
+        val period = listOf(ProductUse(SupplyKind.TAMPON, 2, supplyId = tampons.id))
+        s.modules.cycle.put(me, CycleDay(today.toString(), flow = Flow.MEDIUM, products = period))
+        s.modules.continence.putSettings(me, ContinenceSettings(defaultSupplyId = pads.id))
+        s.supplies.delete(me, pads.id!!)
+        s.supplies.delete(me, tampons.id!!)
+
+        // Each can still be changed, and keeps what it names (and the loss worked out while the product was kept).
+        val edited = s.modules.continence.save(me, leak.copy(note = "On the bus"), leak.id)
+        assertEquals(pads.id, edited.supplyId)
+        assertEquals(20.0, edited.lossG!!, 0.01)
+        assertEquals("At home", s.modules.continence.save(me, change.copy(note = "At home"), change.id).note)
+        assertEquals(Flow.HEAVY, s.modules.cycle.put(me, CycleDay(today.toString(), flow = Flow.HEAVY, products = period)).flow)
+        assertEquals("22:00", s.modules.continence.putSettings(me, s.modules.continence.settings(me).copy(nightFrom = "22:00")).nightFrom)
+        // A product that's gone can't be named anew.
+        val error = runCatching { s.modules.continence.save(me, ContinenceEntry(now, ContinenceKind.LEAK, supplyId = pads.id)) }.exceptionOrNull()
+        assertEquals("No such supply", (error as ApiError).message)
+        val cycleError = runCatching { s.modules.cycle.put(me, CycleDay(today.minusDays(1).toString(), flow = Flow.LIGHT, products = period)) }.exceptionOrNull()
+        assertEquals("No such supply", (cycleError as ApiError).message)
+    }
+
     // ---- Bladder and bowel ----
+
+    @Test
+    fun `a past period's report and digest look at that period's weeks`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE)
+        val me = s.admin()
+        // A diary kept last autumn, and not since.
+        var d = LocalDate.of(2025, 10, 6)
+        while (d.isBefore(LocalDate.of(2025, 11, 30))) {
+            s.modules.continence.save(me, ContinenceEntry(at(d, 10), ContinenceKind.LEAK, leak = LeakSize.SMALL))
+            s.modules.continence.save(me, ContinenceEntry(at(d, 11), ContinenceKind.URINATION))
+            d = d.plusDays(1)
+        }
+        val hooks = s.hooks.filterIsInstance<ContinenceHooks>().single()
+        val profile = s.profiles.get(me)
+        val report = hooks.report(me, profile, LocalDate.of(2025, 10, 6), LocalDate.of(2025, 11, 29))!!
+        val weeks = report.tables.first { it.title == "Week by week" }.rows
+        assertEquals(8, weeks.size)
+        assertEquals(listOf("2025-10-06", "7"), weeks.first().take(2))
+        assertEquals(listOf("2025-11-24", "6"), weeks.last().take(2))
+        val digest = hooks.digest(me, profile, LocalDate.of(2025, 11, 17), LocalDate.of(2025, 11, 23))!!
+        assertEquals("Leaks: 1 a day on the 7 days you logged.", digest.lines.first())
+    }
 
     @Test
     fun `the detail is kept, checked, and counted`() = runBlocking {
@@ -247,6 +328,39 @@ class ConditionsContinenceTest {
             assertEquals("Reminder", due.privateTitle)
             assertFalse(due.privateBody.contains("toilet"))
         }
+    }
+
+    @Test
+    fun `reminders keep to the clock on the days it changes`() = runBlocking {
+        val s = services(Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)
+        val me = s.admin()
+        val profile = s.profiles.get(me)
+        val spring = LocalDate.of(2026, 3, 8)
+        val autumn = LocalDate.of(2026, 11, 1)
+        fun around(date: LocalDate, hour: Int, minute: Int = 0) = at(date, hour, minute).let { it - 15 * 60_000 to it + 60_000 }
+
+        // The cycle's daily nudge at 20:30, the evening the clocks went forward.
+        s.modules.cycle.putSettings(me, CycleSettings(dailyReminder = "20:30"))
+        val cycle = s.hooks.filterIsInstance<CycleHooks>().single()
+        val (eveningFrom, eveningTo) = around(spring, 20, 30)
+        assertEquals(at(spring, 20, 30), cycle.reminders(me, profile, eveningFrom, eveningTo).single { it.key == "cycle:daily:$spring" }.at)
+
+        // Supplies running low, at the 10:00 refill time, the morning the clocks went back.
+        s.supplies.save(me, Supply("Briefs", SupplyKind.BRIEF, onHand = 0))
+        val supplies = s.hooks.filterIsInstance<com.health.server.modules.SuppliesHooks>().single()
+        val (morningFrom, morningTo) = around(autumn, 10)
+        assertEquals(at(autumn, 10), supplies.reminders(me, profile, morningFrom, morningTo).single().at)
+
+        // Bladder training every half hour from midnight to 3: each time by the clock, once, with its own key.
+        val hooks = s.hooks.filterIsInstance<ContinenceHooks>().single()
+        suspend fun training(date: LocalDate): List<String> {
+            s.modules.continence.putSettings(me, ContinenceSettings(bladderTraining = BladderTraining(enabled = true, intervalMinutes = 30, from = "00:00", to = "04:00", stepMinutes = 0, startedOn = date.toString())))
+            return hooks.reminders(me, profile, at(date, 0), at(date.plusDays(1), 0)).filter { it.event == WebhookEvent.BLADDER_TRAINING }.map { it.key.removePrefix("bladder:$date:") }
+        }
+        // 1:00 and 1:30 come round twice in the autumn: one reminder each.
+        assertEquals(listOf("00:30", "01:00", "01:30", "02:00", "02:30", "03:00", "03:30", "04:00"), training(autumn))
+        // 2:00 and 2:30 never happen in the spring: they're the 3:00 and 3:30 ones.
+        assertEquals(listOf("00:30", "01:00", "01:30", "03:00", "03:30", "04:00"), training(spring))
     }
 
     // ---- Cycle ----

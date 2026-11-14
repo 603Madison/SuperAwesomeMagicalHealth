@@ -116,16 +116,18 @@ class CoreQuestions(override val module: Module, private val ask: suspend (Strin
 
         private suspend fun medsQuestions(meds: MedsService, userId: String, profile: Profile, since: LocalDate, to: LocalDate, now: Long): List<SuggestedQuestion> {
             val out = mutableListOf<SuggestedQuestion>()
-            val list = meds.list(userId)
+            val scheduled = meds.scheduled(userId)
+            val list = scheduled.map { it.med }
             if (list.isEmpty()) return out
             val zone = Days(Days.zoneOf(profile.timezone))
             val logs = meds.doses(userId, since, to.plusDays(1))
-            list.forEach { med ->
+            scheduled.forEach { s ->
+                val med = s.med
                 var due = 0
                 var missed = 0
                 var date = since
                 while (!date.isAfter(to)) {
-                    Schedules.times(med.schedule, date, zone).filter { it <= now }.forEach { slot ->
+                    s.times(date, zone).filter { it <= now }.forEach { slot ->
                         due++
                         if (logs.none { it.medicationId == med.id && it.scheduledFor == slot && it.status == DoseStatus.TAKEN }) missed++
                     }

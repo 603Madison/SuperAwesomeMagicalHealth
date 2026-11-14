@@ -1,10 +1,13 @@
 package com.health.server
 
 import com.health.api.ApiJson
+import com.health.api.BloodPressure
 import com.health.api.DeviceInfo
 import com.health.api.DeviceKind
 import com.health.api.DigestPrefs
 import com.health.api.DoseLog
+import com.health.api.GlucoseContext
+import com.health.api.GlucoseReading
 import com.health.api.IngestBatch
 import com.health.api.LabResult
 import com.health.api.MedSchedule
@@ -194,6 +197,44 @@ class PlatformTest {
         assertTrue(Scheduler.quiet(prefs, 6 * 60 + 59))
         assertFalse(Scheduler.quiet(prefs, 7 * 60))
         assertFalse(Scheduler.quiet(ReminderPrefs(quietFrom = null), 23 * 60))
+    }
+
+    @Test
+    fun `low and high glucose and high blood pressure reach webhooks through the scheduler, once each`() = runBlocking {
+        var now = at("2026-11-14T12:00:00Z")
+        val (services, userId) = setUp({ now }, modules = Module.DEFAULT + Module.VITALS)
+        val platform = services.platform
+        platform.webhooks.create(userId, Webhook("Home Assistant", web.url("/hook").toString(), setOf(WebhookEvent.GLUCOSE_LOW, WebhookEvent.GLUCOSE_HIGH, WebhookEvent.BP_HIGH)))
+        services.tracking.vitals.saveGlucose(userId, GlucoseReading(now - 60_000, 3.0, GlucoseContext.OTHER))
+        services.tracking.vitals.saveGlucose(userId, GlucoseReading(now - 30_000, 15.0, GlucoseContext.OTHER))
+        services.tracking.vitals.saveBloodPressure(userId, BloodPressure(now - 60_000, 170, 105))
+        repeat(5) { now += 60_000; platform.scheduler.tick(now) }
+        val events = hooked.map { Regex("\"event\":\"([a-z.]+)\"").find(it.body.readUtf8())?.groupValues?.get(1) }
+        assertEquals(listOf("bp.high", "glucose.high", "glucose.low"), events.map { it.orEmpty() }.sorted())
+    }
+
+    @Test
+    fun `the morning and the digest come by the clock on the days it changes`() = runBlocking {
+        val zone = java.time.ZoneId.of("America/New_York")
+        fun local(text: String) = java.time.LocalDateTime.parse(text).atZone(zone).toInstant().toEpochMilli()
+        var now = local("2026-03-08T09:59")
+        val (services, userId) = setUp({ now })
+        services.profiles.put(userId, services.profiles.get(userId).copy(timezone = zone.id, digest = DigestPrefs(day = 7, hour = 18)))
+        val profile = services.profiles.get(userId)
+        suspend fun morning(at: Long) = services.platform.scheduler.collect(userId, profile, at - 15 * 60_000, at + 60_000).filter { it.event == WebhookEvent.MORNING }
+
+        // Clocks went forward at 2: 10:00 is 10:00, not 11:00.
+        assertTrue(morning(now).isEmpty())
+        now = local("2026-03-08T10:00")
+        assertEquals(now, morning(now).single().at)
+        // Clocks went back at 2: 17:30 is still before the 18:00 cut-off.
+        assertEquals(1, morning(local("2026-11-01T17:30")).size)
+        assertTrue(morning(local("2026-11-01T18:00")).isEmpty())
+
+        // The digest (Sundays at 18:00) waits for 18:00 by the clock that day.
+        val user = services.users.byId(userId)!!
+        assertNull(services.platform.digests.dueReminder(user, profile, local("2026-11-01T17:30")))
+        assertNotNull(services.platform.digests.dueReminder(user, profile, local("2026-11-01T18:00")))
     }
 
     @Test

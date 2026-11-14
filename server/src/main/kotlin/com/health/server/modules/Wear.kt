@@ -186,8 +186,10 @@ object Wear {
         val due = since + hours * 3_600_000L
         if (atNight || !inNight(days.minuteOfDay(due), nightFrom, nightTo)) return due
         val date = days.dateOf(due)
-        val end = days.start(date) + nightTo * 60_000L
-        return if (end > due) end else days.start(date.plusDays(1)) + nightTo * 60_000L
+        // By the clock, so the night ends at the right time on the days the clocks change.
+        val until = java.time.LocalTime.of(nightTo / 60 % 24, nightTo % 60)
+        val end = days.at(date, until)
+        return if (end > due) end else days.at(date.plusDays(1), until)
     }
 
     fun inNight(minute: Int, nightFrom: Int, nightTo: Int): Boolean =

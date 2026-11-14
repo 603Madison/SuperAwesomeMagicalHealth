@@ -18,6 +18,7 @@ import com.health.server.platform.Reminder
 import com.health.server.platform.ReportChart
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
+import com.health.server.platform.Scheduler
 import com.health.server.util.Days
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -184,12 +185,14 @@ class VitalsHooks(private val vitals: VitalsService, private val clock: () -> Lo
         val (bp, glucose) = vitals.arrived(userId, from, to)
         val t = profile.vitalsTargets
         val zone = zoneOf(profile)
+        // A reading that just arrived is due now: the scheduler sends only what's due by the end of its round.
+        fun dueAt(readingAt: Long) = minOf(readingAt, to - Scheduler.WINDOW_AFTER).coerceAtLeast(from)
         return buildList {
             bp.filter { VitalsService.category(it.systolic, it.diastolic) >= BpCategory.STAGE_2 }.forEach { r ->
                 val category = VitalsService.category(r.systolic, r.diastolic)
                 val data = buildJsonObject { put("systolic", r.systolic); put("diastolic", r.diastolic); put("category", category.name.lowercase()) }
                 add(Reminder(
-                    key = "bp:${r.id}", at = minOf(r.at, to - 1).coerceAtLeast(from), event = WebhookEvent.BP_HIGH,
+                    key = "bp:${r.id}", at = dueAt(r.at), event = WebhookEvent.BP_HIGH,
                     title = "Blood pressure ${r.systolic}/${r.diastolic}", body = category.label,
                     privateTitle = "A blood pressure reading", privateBody = "Open the app to see it.", url = "/vitals",
                     data = data, push = false,
@@ -198,7 +201,7 @@ class VitalsHooks(private val vitals: VitalsService, private val clock: () -> Lo
             glucose.filter { it.mmolL < t.glucoseLow }.groupBy { it.at / (30 * 60_000L) }.forEach { (slot, list) ->
                 val r = list.minBy { it.mmolL }
                 add(Reminder(
-                    key = "glucose-low:$slot", at = to - 1, event = WebhookEvent.GLUCOSE_LOW,
+                    key = "glucose-low:$slot", at = dueAt(r.at), event = WebhookEvent.GLUCOSE_LOW,
                     title = "Low glucose: ${VitalsService.glucoseText(r.mmolL, t.glucoseUnit)}",
                     body = "If you feel shaky or unwell, have something sugary and check again in 15 minutes.",
                     privateTitle = "Check your glucose", privateBody = "A reading was below your range.", url = "/vitals",
@@ -208,7 +211,7 @@ class VitalsHooks(private val vitals: VitalsService, private val clock: () -> Lo
             glucose.filter { it.mmolL > t.glucoseHigh }.groupBy { it.at / 3_600_000L }.forEach { (hour, list) ->
                 val r = list.maxBy { it.mmolL }
                 add(Reminder(
-                    key = "glucose-high:$hour", at = to - 1, event = WebhookEvent.GLUCOSE_HIGH,
+                    key = "glucose-high:$hour", at = dueAt(r.at), event = WebhookEvent.GLUCOSE_HIGH,
                     title = "Glucose above your range: ${VitalsService.glucoseText(r.mmolL, t.glucoseUnit)}", body = "At ${stamp(zone, r.at).substringAfter(' ')}.",
                     privateTitle = "A glucose reading", privateBody = "Open the app to see it.", url = "/vitals",
                     data = buildJsonObject { put("mmol_l", r.mmolL); put("time", stamp(zone, r.at)) }, push = false,

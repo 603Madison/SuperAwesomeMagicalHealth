@@ -14,7 +14,6 @@ import com.health.server.db.Database
 import com.health.server.health.ProfileStore
 import com.health.server.insights.DayService
 import com.health.server.modules.ModuleService
-import com.health.server.modules.Schedules
 import com.health.server.util.Days
 import com.health.server.util.Random
 import java.time.LocalDate
@@ -115,7 +114,8 @@ class HabitsService(
         val profile = profiles.get(userId)
         val zone = Days(Days.zoneOf(profile.timezone))
         val day = date ?: zone.today(clock())
-        val habits = kept(userId, all = false)
+        // A habit begun after the day isn't part of it.
+        val habits = kept(userId, all = false).filter { !it.since.isAfter(day) }
         if (habits.isEmpty()) return emptyList()
         val first = habits.minOf { it.since }
         // Two months is usually enough; a streak that reaches back that far is followed further.
@@ -173,10 +173,10 @@ class HabitsService(
             out[HabitSource.PELVIC_FLOOR] = modules.continence.daysOf(userId, from, to).filterValues { it.pelvicFloor > 0 }.keys
         }
         if (HabitSource.MEDS_TAKEN in sources) {
-            val meds = modules.meds.list(userId)
+            val meds = modules.meds.scheduled(userId)
             val logs = modules.meds.doses(userId, from, to.plusDays(1))
             out[HabitSource.MEDS_TAKEN] = range.filter { d ->
-                val slots = meds.flatMap { m -> Schedules.times(m.schedule, d, zone).map { m.id to it } }
+                val slots = meds.flatMap { s -> s.times(d, zone).map { s.med.id to it } }
                 slots.all { (id, slot) -> logs.any { it.medicationId == id && it.scheduledFor == slot && it.status == DoseStatus.TAKEN } }
             }.toSet()
         }
@@ -229,10 +229,11 @@ class HabitsService(
             )
         }
 
-        /** A week's target: the habit's days a week, or its share of the days left in the week it began. */
+        /** A week's target: the habit's days a week, its share of the days left in the week it began, or 0 for a week before it. */
         private fun target(timesPerWeek: Int, weekStart: LocalDate, since: LocalDate): Int {
             val first = maxOf(weekStart, since)
             val available = ChronoUnit.DAYS.between(first, weekStart.plusDays(7)).toInt()
+            if (available <= 0) return 0
             if (available >= 7) return timesPerWeek
             return ((timesPerWeek * available + 6) / 7).coerceIn(1, available)
         }
@@ -242,6 +243,7 @@ class HabitsService(
          * still can be, it doesn't break the streak; once it can't, the streak is over.
          */
         fun streakWeeks(timesPerWeek: Int, since: LocalDate, date: LocalDate, done: (LocalDate) -> Boolean): Int {
+            if (since.isAfter(date)) return 0
             val ws = weekStart(date)
             val thisWeek = generateSequence(maxOf(ws, since)) { it.plusDays(1) }.takeWhile { !it.isAfter(date) }.count(done)
             val left = ChronoUnit.DAYS.between(date, ws.plusDays(6)).toInt() + if (done(date)) 0 else 1

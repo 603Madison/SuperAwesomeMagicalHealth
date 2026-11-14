@@ -1,5 +1,6 @@
 package com.health.server
 
+import com.health.api.ApiJson
 import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
 import com.health.api.CycleDay
@@ -25,7 +26,11 @@ import com.health.server.util.Days
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
@@ -239,6 +244,72 @@ class ModulesTest {
         // It opens Medications, and is left out while Today's Medications card shows the doses.
         assertEquals(com.health.api.AppPage.MEDS, todo.link)
         assertEquals(com.health.api.TodaySection.MEDS, todo.shownBy)
+    }
+
+    @Test
+    fun `every few days counts from the day it's saved, or for one kept before, the day it was added`() = runBlocking {
+        val s = services()
+        val id = s.admin()
+        // What the editors send when the start date isn't touched.
+        val b12 = s.modules.meds.save(id, Medication("Vitamin B12", schedule = MedSchedule(ScheduleKind.EVERY_N_DAYS, listOf("09:00"), everyDays = 3)))
+        assertEquals(today.toString(), b12.schedule.startDate)
+        assertEquals(listOf(1, 0, 0, 1, 0, 0, 1), (0L..6L).map { s.modules.meds.day(id, today.plusDays(it)).due.size })
+
+        // One kept from before start dates were filled in: every 2 days from the day it was added (the 15th).
+        val iron = Medication("Iron", schedule = MedSchedule(ScheduleKind.EVERY_N_DAYS, listOf("09:00"), everyDays = 2))
+        val added = at(today.minusDays(5), 8)
+        s.db.tx {
+            update(
+                "INSERT INTO medications (id, user_id, data, active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)",
+                "iron", id, s.box.seal(ApiJson.encodeToString(Medication.serializer(), iron), "medication:$id:iron"), added, added,
+            )
+        }
+        suspend fun ironDue(date: LocalDate) = s.modules.meds.day(id, date).due.count { it.medicationId == "iron" }
+        assertEquals(listOf(0, 1, 0, 1), (18..21).map { ironDue(LocalDate.of(2026, 3, it)) })
+        // Saved again without a start date, it keeps to the same days.
+        assertEquals("2026-03-15", s.modules.meds.save(id, iron.copy(dose = "65 mg"), "iron").schedule.startDate)
+        assertEquals(listOf(0, 1, 0, 1), (18..21).map { ironDue(LocalDate.of(2026, 3, it)) })
+    }
+
+    @Test
+    fun `doses from before a medication was added don't count as missed`() = runBlocking {
+        val s = services()
+        val id = s.admin()
+        val vitaminD = s.modules.meds.save(id, Medication("Vitamin D", schedule = MedSchedule(times = listOf("09:00"))))
+        s.modules.meds.logDose(id, DoseLog(vitaminD.id!!, at(today, 9, 5), scheduledFor = at(today, 9)))
+        assertEquals(100, s.modules.meds.day(id, today).adherence7d)
+        val week = s.days.trends(id, today.minusDays(6), today, null).days
+        assertEquals(listOf(null, null, null, null, null, null, 1), week.map { it.dosesDue })
+        assertEquals(1, week.last().dosesTaken)
+        assertTrue(s.modules.meds.day(id, today.minusDays(1)).due.isEmpty())
+        val digest = s.hooks.filter { it.module == Module.MEDICATIONS }.mapNotNull { it.digest(id, s.profiles.get(id), today.minusDays(6), today) }.flatMap { it.lines }
+        assertTrue(digest.toString(), "1 of 1 scheduled doses taken (100%)." in digest)
+        // Nor before the day it's started, when that's still to come.
+        val later = s.modules.meds.save(id, Medication("Iron", schedule = MedSchedule(times = listOf("09:00")), startedOn = today.plusDays(2).toString()))
+        assertEquals(listOf(0, 0, 1), (0L..2L).map { ahead -> s.modules.meds.day(id, today.plusDays(ahead)).due.count { it.medicationId == later.id } })
+    }
+
+    @Test
+    fun `doses marked at the same moment all count off the stock`() = runBlocking {
+        val s = services()
+        val id = s.admin()
+        val pain = s.modules.meds.save(id, Medication("Paracetamol", schedule = MedSchedule(ScheduleKind.AS_NEEDED, emptyList()), stock = 100))
+        withContext(Dispatchers.Default) {
+            (1..20).map { i -> async { s.modules.meds.logDose(id, DoseLog(pain.id!!, now - i * 60_000L)) } }.awaitAll()
+        }
+        assertEquals(80, s.modules.meds.get(id, pain.id!!).stock)
+        val logged = s.modules.meds.doses(id, today, today)
+        assertEquals(20, logged.size)
+        withContext(Dispatchers.Default) { logged.map { d -> async { s.modules.meds.deleteDose(id, d.id!!) } }.awaitAll() }
+        assertEquals(100, s.modules.meds.get(id, pain.id!!).stock)
+
+        // The same dose marked twice at once is one dose, taken once.
+        val pill = s.modules.meds.save(id, Medication("Spironolactone", schedule = MedSchedule(times = listOf("08:00")), stock = 10))
+        withContext(Dispatchers.Default) {
+            (1..10).map { async { s.modules.meds.logDose(id, DoseLog(pill.id!!, at(today, 8, 5), scheduledFor = at(today, 8))) } }.awaitAll()
+        }
+        assertEquals(1, s.modules.meds.doses(id, today, today).count { it.medicationId == pill.id })
+        assertEquals(9, s.modules.meds.get(id, pill.id!!).stock)
     }
 
     // ---- Profile, today and the AI connector ----
