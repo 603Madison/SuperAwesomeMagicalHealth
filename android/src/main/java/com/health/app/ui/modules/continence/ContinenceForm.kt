@@ -145,6 +145,17 @@ fun EntryForm(
             }
         }
 
+        // ---- An accident in what's on now: what it's in, and how full it is now, come first.
+        if (inWhatsOn) {
+            InWhatsOn(context.wearing?.name ?: supply?.name ?: "what you have on") { picking = true }
+            if (ContinenceText.usesProduct(kind) && shows(Fields.CONTINENCE_PROTECTION)) {
+                FullnessGauge(
+                    e.fullness, { e = e.copy(fullness = it, leakedThrough = if (it == com.health.api.Fullness.LEAKED) true else e.leakedThrough) },
+                    title = "How full it is now",
+                )
+            }
+        }
+
         // ---- What happened
         if (kind == ContinenceKind.BOWEL_LEAK || (accident && shows(Fields.CONTINENCE_BOWEL_ACCIDENTS))) {
             Section("What leaked") {
@@ -211,10 +222,8 @@ fun EntryForm(
         val productFields = shows(Fields.CONTINENCE_PROTECTION) || shows(Fields.CONTINENCE_SUPPLIES)
         val picksSupply = (ContinenceText.usesProduct(kind) && productFields) || (kind == ContinenceKind.CATHETER && (productFields || shows(Fields.CONTINENCE_CATHETER))) ||
             (accident && picking)
-        if (inWhatsOn) {
-            // A new accident is in what's on now: one line, and "Not this" for anything else.
-            InWhatsOn(context.wearing?.name ?: supply?.name ?: "what you have on") { picking = true }
-        } else if (picksSupply && supplies.isNotEmpty()) {
+        // (A new accident in what's on now has its product at the top: "Not this" opens this picker.)
+        if (!inWhatsOn && picksSupply && supplies.isNotEmpty()) {
             Section(if (kind == ContinenceKind.CATHETER) "Catheter" else if (kind == ContinenceKind.PAD_CHANGE) "What you changed" else "What you were wearing") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(selected = e.supplyId == null, onClick = { e = e.copy(supplyId = null, count = if (kind == ContinenceKind.PAD_CHANGE) e.count else null) }, label = { Text("Nothing listed") })
@@ -238,7 +247,7 @@ fun EntryForm(
                 subtitle = if (supply?.reusable == false) "Takes one off what you have on hand." else null,
             )
         }
-        if (ContinenceText.usesProduct(kind) && shows(Fields.CONTINENCE_PROTECTION)) {
+        if (!inWhatsOn && ContinenceText.usesProduct(kind) && shows(Fields.CONTINENCE_PROTECTION)) {
             FullnessGauge(
                 e.fullness, { e = e.copy(fullness = it, leakedThrough = if (it == com.health.api.Fullness.LEAKED) true else e.leakedThrough) },
                 title = if (WearText.inWhatsOn(e, context.wearing)) "How full it is now" else "How full it was",
