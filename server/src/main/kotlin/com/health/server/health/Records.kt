@@ -93,7 +93,7 @@ class Records(private val db: Database, private val clock: () -> Long = System::
     fun putSamples(tx: Tx, userId: String, deviceId: String, samples: List<Sample>): Int = tx.batch(
         """INSERT INTO samples (user_id, device_id, metric, start, end, value) VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT (user_id, device_id, metric, start) DO UPDATE SET end = excluded.end, value = excluded.value""",
-        samples.map { arrayOf(userId, deviceId, it.metric, it.start, it.end, it.value) },
+        samples.map { arrayOf<Any?>(userId, deviceId, it.metric, it.start, it.end, it.value) },
     ).let { samples.size }
 
     /** Every reading that starts in [from, to), oldest first. */

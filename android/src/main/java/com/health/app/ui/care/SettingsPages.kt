@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -67,7 +68,6 @@ import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.TextStyle
-import java.util.Locale
 
 /** Settings' links to the pages for reminders, the digest, sharing, reports, the watch and integrations. */
 @Composable
@@ -251,7 +251,7 @@ fun DigestScreen(
                         Text("On", style = MaterialTheme.typography.bodyLarge)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             DayOfWeek.entries.forEach { day ->
-                                FilterChip(selected = d.day == day.value, onClick = { save(d.copy(day = day.value)) }, label = { Text(day.getDisplayName(TextStyle.SHORT, Locale.getDefault())) })
+                                FilterChip(selected = d.day == day.value, onClick = { save(d.copy(day = day.value)) }, label = { Text(day.getDisplayName(TextStyle.SHORT, LocalLocale.current.platformLocale)) })
                             }
                         }
                         OutlinedButton(onClick = { pickingHour = true }) { Text("At %d:00".format(d.hour)) }
