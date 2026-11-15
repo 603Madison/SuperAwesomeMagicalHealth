@@ -388,7 +388,7 @@ Settings › **AI connector** makes a link that gives an AI your data over the
 [Model Context Protocol](https://modelcontextprotocol.io). It's a sign-in of its own: listed with
 your devices and removable there.
 
-- **Claude**: Settings › Connectors › Add custom connector, and paste the link.
+- **Claude**: Settings › Connectors › Add custom connector, and paste the link
 - **Other MCP clients**: add it as a remote (Streamable HTTP) server. The token can be in the URL
   or sent as `Authorization: Bearer` to `/mcp`.
 - **Clients that only run local servers**: `npx mcp-remote <link>`.
