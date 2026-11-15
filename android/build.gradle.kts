@@ -16,8 +16,8 @@ android {
         minSdk = 28
         targetSdk = 36
         // The whole project's version: the server and its container image use it too.
-        versionCode = 10
-        versionName = "0.6.2"
+        versionCode = 11
+        versionName = "0.6.3"
     }
 
     // Release builds are signed with the permanent key when it's there (see CLAUDE.md).
@@ -73,6 +73,10 @@ kotlin {
 }
 
 dependencies {
+    // Guava with its security fix (CVE-2026-102554), over the older one AndroidX libraries ask for.
+    constraints {
+        implementation(libs.guava) { because("CVE-2026-102554") }
+    }
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(project(":shared"))
 
