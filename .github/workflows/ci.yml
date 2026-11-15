@@ -63,7 +63,7 @@ jobs:
           node-version: "22"
       - name: Watch app logic tests
         run: node --test pebble/test/*.test.js
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
       # The Pebble SDK from Core Devices (pebble-tool, then the SDK with its ARM toolchain),
       # pinned so builds are repeatable; raise both together.
       - name: Pebble SDK

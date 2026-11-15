@@ -79,7 +79,7 @@ jobs:
           cp android/build/outputs/apk/release/android-release.apk "SuperAwesomeMagicalHealth-$TAG.apk"
           sha256sum SuperAwesomeMagicalHealth-*.apk
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
       # The watch app carries the same version as everything else (major.minor on the watch).
       - name: Build the watch app
         run: |
