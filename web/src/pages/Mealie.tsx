@@ -6,7 +6,7 @@ import { canAdd, connectedLine, planLine, recipeLine } from "../lib/mealie";
 import type { Food, MealiePlan, MealieRecipes, MealieStatus } from "../lib/types";
 import { onUserChange } from "../lib/session";
 import { useReadOnly } from "../lib/viewing";
-import { Button, Card, Field, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, Field, PausedNote, Spinner, errorToast, toast, useLoad } from "../components/ui";
 
 /*
  * Mealie, the self-hosted recipe manager, in Food: connecting it (Settings › Connections), its
@@ -42,6 +42,13 @@ onUserChange(() => {
 function tell(s: MealieStatus) {
   known = s;
   listeners.forEach((l) => l(s));
+}
+
+/** Asks again (after it's paused or resumed in Where your data goes); an answer already on its way no longer counts. */
+export function refreshMealie(): Promise<MealieStatus> {
+  generation++;
+  asking = null;
+  return ask();
 }
 
 /** The person's Mealie: undefined until known; never connected while viewing a share. */
@@ -88,7 +95,9 @@ export function MealieSettings() {
     return (
       <>
         <p className="mealie-connected"><Check size={16} aria-hidden="true" /> {connectedLine(status)}</p>
-        <p className="muted small">Your recipes come up when you search for food, and the day's meal plan shows on <Link to="/food">Food</Link>. Nothing is ever changed in Mealie.</p>
+        {status.paused
+          ? <PausedNote />
+          : <p className="muted small">Your recipes come up when you search for food, and the day's meal plan shows on <Link to="/food">Food</Link>. Nothing is ever changed in Mealie.</p>}
         <div className="button-row">
           <Button variant="tonal" onClick={() => { setUrl(status.url ?? ""); setToken(""); setEditing(true); }}>Change address or token</Button>
           <Button variant="ghost" onClick={disconnect}>Disconnect</Button>
@@ -120,12 +129,17 @@ export function MealieSettings() {
  * by [date], so a card only ever shows, adds to and reloads its own day.
  */
 export function MealPlanCard({ date, numbers, readOnly, onChanged }: { date: string; numbers: boolean; readOnly: boolean; onChanged: () => void }) {
+  // Paused in Where your data goes: nothing is asked of Mealie, and the card says so.
+  const paused = !!useMealie()?.paused;
   // useLoad drops an answer that comes after the day has changed.
-  const { data: plan, reload } = useLoad<MealiePlan>(
-    () => api.mealiePlan(date).catch(() => ({ date, entries: [], problem: "The meal plan isn't available just now" })),
-    [date],
+  const { data: plan, reload } = useLoad<MealiePlan | null>(
+    () => (paused ? Promise.resolve(null) : api.mealiePlan(date).catch(() => ({ date, entries: [], problem: "The meal plan isn't available just now" }))),
+    [date, paused],
   );
   const [busy, setBusy] = useState<number | null>(null);
+  if (paused) {
+    return <Card id="mealplan" title="Meal plan" icon={<ChefHat size={18} />} className="span-2 mealplan-card"><PausedNote what="Mealie" /></Card>;
+  }
   if (!plan || plan.date !== date || (plan.entries.length === 0 && !plan.problem)) return null;
   const add = async (i: number) => {
     const e = plan.entries[i];
@@ -175,14 +189,17 @@ export function MealieResults({ query, numbers, onChoose, onFound }: {
   const [found, setFound] = useState<MealieRecipes | null>(null);
   const q = query.trim();
   useEffect(() => { onFound?.(!!found && found.items.length > 0); }, [found, onFound]);
+  const paused = !!status?.connected && !!status.paused;
   useEffect(() => {
-    if (!status?.connected || q.length < 2) { setFound(null); return; }
+    if (!status?.connected || paused || q.length < 2) { setFound(null); return; }
     let cancelled = false;
     const timer = setTimeout(() => {
       api.mealieRecipes(q).then((r) => { if (!cancelled) setFound(r); }, () => { if (!cancelled) setFound({ items: [], problem: "Mealie didn't answer just now" }); });
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [q, status?.connected]);
+  }, [q, status?.connected, paused]);
+  // Paused in Where your data goes: nothing is asked of Mealie, and the search says so.
+  if (paused && q.length >= 2) return <><div className="result-group-title">Your Mealie</div><PausedNote /></>;
   if (!found || (found.items.length === 0 && !found.problem)) return null;
   return (
     <>

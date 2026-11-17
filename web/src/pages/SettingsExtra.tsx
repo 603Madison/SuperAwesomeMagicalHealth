@@ -1,16 +1,21 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Bell, Copy, Eye, Home, Lock, LogOut, Mail, Pencil, Plus, Send, Trash2, UserPlus, Webhook as WebhookIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Bell, Clock, Copy, Eye, Home, Lock, LogOut, Mail, Pencil, Plus, Send, ShieldCheck, Trash2, UserPlus, Webhook as WebhookIcon } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
+import { countText, pausedToast, setUpSection, stateText, switchable, withPaused } from "../lib/privacy";
 import { disablePush, enablePush, pushEnabledHere, pushPermission, pushSupported, thisBrowserPushId } from "../lib/push";
 import { session, useSession } from "../lib/session";
 import { startViewing } from "../lib/viewing";
 import { when } from "../lib/format";
-import { SENSITIVE, type DigestPrefs, type IntegrationKey, type Module, type ReminderPrefs, type Share, type Webhook, type WebhookEvent } from "../lib/types";
+import {
+  SENSITIVE, type DataDestination, type DataPath, type DigestPrefs, type IntegrationKey, type Module, type ReminderPrefs, type Share, type Webhook, type WebhookEvent,
+} from "../lib/types";
 import { FEATURES, featureName } from "../components/features";
-import { Button, Field, IconButton, Menu, Modal, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, ErrorNotice, Field, IconButton, Menu, Modal, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { WEEKDAYS } from "./Digest";
+import { refreshMealie } from "./Mealie";
+import { loadAiStatus } from "./Assistant";
 
 const DEFAULT_REMINDERS: ReminderPrefs = {
   remindAgainMinutes: 30, remindAgainTimes: 2, missedAfterMinutes: 120, refillDays: 7, refillTime: "10:00",
@@ -483,4 +488,96 @@ async function yamlFor(key: IntegrationKey): Promise<string> {
     "    sensor:",
     ...fields.flatMap((f) => [`      - name: "Health ${title(f)}"`, `        value_template: "{{ value_json.${f} }}"`]),
   ].join("\n");
+}
+
+// ---------------------------------------------------------------- Where your data goes
+
+/** A section of Settings to point to: its id on the page and its name. */
+export interface SettingsPlace {
+  id: string;
+  label: string;
+}
+
+/**
+ * Every way something about the person can leave this server (GET /api/privacy): who's at the other
+ * end, the addresses, what goes and when, and a switch to pause each one (on: allowed). A pause shows
+ * at once and is saved; if the server says no, it goes back as it was. [where] finds the section a
+ * way out is set up in (null when this page doesn't have it).
+ */
+export function PrivacySettings({ where }: { where: (section: string) => SettingsPlace | null }) {
+  const { data, error, loading, reload, setData } = useLoad(() => api.privacy(), []);
+  const [saving, setSaving] = useState<DataPath | null>(null);
+  // The map as it is now, for putting one way out back if saving it fails while another changed.
+  const latest = useRef(data);
+  latest.current = data;
+  const toggle = async (d: DataDestination, allowed: boolean) => {
+    const now = latest.current;
+    if (!now) return;
+    const paused = !allowed;
+    setData(withPaused(now, d.path, paused));
+    setSaving(d.path);
+    try {
+      setData(await api.pausePrivacy(d.path, paused));
+      toast(pausedToast(d, paused));
+      // The pages that use it say so straight away.
+      if (d.path === "MEALIE") void refreshMealie();
+      if (d.path === "AI_ASSISTANT") void loadAiStatus(true);
+    } catch (e) {
+      if (latest.current) setData(withPaused(latest.current, d.path, !paused));
+      errorToast(e);
+    }
+    setSaving(null);
+  };
+  return (
+    <div className="form-stack">
+      <p className="muted">Everything you record is kept on this server. These are the only ways anything about you can leave it. Turn one off to pause it: what you've set up stays, and nothing goes until you turn it back on.</p>
+      {error && <ErrorNotice message={error} onRetry={reload} />}
+      {loading && !data && <Spinner />}
+      {data && (
+        <ul className="privacy-list">
+          {data.destinations.map((d) => (
+            <Destination key={d.path} d={d} saving={saving === d.path} where={where} onToggle={(allowed) => void toggle(d, allowed)} />
+          ))}
+        </ul>
+      )}
+      {data?.note && <p className="privacy-note"><ShieldCheck size={18} aria-hidden="true" /><span>{data.note}</span></p>}
+    </div>
+  );
+}
+
+function Destination({ d, saving, where, onToggle }: {
+  d: DataDestination; saving: boolean; where: (section: string) => SettingsPlace | null; onToggle: (allowed: boolean) => void;
+}) {
+  const hosts = d.hosts ?? [];
+  const count = countText(d);
+  const section = setUpSection(d);
+  const place = d.state === "NOT_SET_UP" && section ? where(section) : null;
+  return (
+    <li className={`privacy-row is-${d.state.toLowerCase().replace(/_/g, "-")}`}>
+      <div className="privacy-head">
+        <div className="privacy-title">
+          <span className="privacy-name">{d.name}</span>
+          <span className="privacy-who">{d.who}</span>
+        </div>
+        {switchable(d) ? (
+          <label className="toggle privacy-switch">
+            <span className="privacy-state" aria-hidden="true">{stateText(d)}</span>
+            <input type="checkbox" role="switch" checked={d.state === "ON"} disabled={saving} aria-label={`Allow ${d.name}`} onChange={(e) => onToggle(e.target.checked)} />
+            <span className="toggle-track" aria-hidden />
+          </label>
+        ) : (
+          <span className="tone-chip privacy-chip">{stateText(d)}</span>
+        )}
+      </div>
+      {hosts.length > 0 && (
+        <ul className="privacy-hosts" aria-label="Goes to">
+          {hosts.map((h) => <li key={h}><code>{h}</code></li>)}
+        </ul>
+      )}
+      <p className="privacy-what">{d.what}</p>
+      <p className="privacy-when"><Clock size={14} aria-hidden="true" /><span>{d.whenSent}{count ? ` · ${count}` : ""}</span></p>
+      {d.pausable === false && <p className="privacy-when">It's how you get in, so it can't be paused.</p>}
+      {place && <p className="privacy-when"><Link className="row-link" to={{ hash: place.id }}>Set up in {place.label}</Link></p>}
+    </li>
+  );
 }

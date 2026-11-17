@@ -7,7 +7,7 @@ import { num } from "../lib/format";
 import { useSession } from "../lib/session";
 import { useReadOnly } from "../lib/viewing";
 import type { EstimateConfidence, Food, FoodPhotoEstimate, FoodPhotoItem, Meal, Nutrients } from "../lib/types";
-import { Button, Field, IconButton, Modal, Spinner, errorToast, toast } from "../components/ui";
+import { Button, Field, IconButton, Modal, PausedNote, Spinner, errorToast, toast } from "../components/ui";
 import { useAiStatus } from "./Assistant";
 import { scaled } from "../lib/micros";
 
@@ -20,22 +20,27 @@ import { scaled } from "../lib/micros";
 
 const SIDE = 1024;
 
-/** Whether to offer a photo: "ready", "settings" (one line pointing there), or nothing. */
-export function usePhotoOffer(): "ready" | "settings" | null {
+/**
+ * Whether to offer a photo: "ready", "settings" (one line pointing there), "paused" (the person
+ * paused the assistant in Where your data goes: one line saying so), or nothing.
+ */
+export function usePhotoOffer(): "ready" | "settings" | "paused" | null {
   const status = useAiStatus();
   const readOnly = useReadOnly();
   if (readOnly || !status?.available) return null;
   if (!status.consent?.acknowledged || !status.consent.modules.includes("NUTRITION")) return "settings";
+  if (status.paused) return "paused";
   return "ready";
 }
 
-/** The add-food dialog's "Snap a photo", or a line saying where to turn it on. */
+/** The add-food dialog's "Snap a photo", or a line saying where to turn it on (or that it's paused). */
 export function SnapPhoto({ onSnap }: { onSnap: () => void }) {
   const offer = usePhotoOffer();
   if (offer === "ready") return <Button onClick={onSnap}><Camera size={18} /> Snap a photo</Button>;
   if (offer === "settings") {
     return <p className="muted small photo-links">To estimate a meal from a photo, let the assistant see Food in <Link to="/settings#assistant">Settings › AI assistant</Link>.</p>;
   }
+  if (offer === "paused") return <PausedNote what="Photo estimates" />;
   return null;
 }
 

@@ -89,7 +89,10 @@ export interface Workout {
   manual?: boolean;
 }
 
-export type DeviceKind = "COLMI_RING" | "PEBBLE" | "GARMIN" | "HEALTH_CONNECT" | "GADGETBRIDGE" | "FIT_FILE" | "PHONE" | "BP_MONITOR" | "GLUCOSE_METER" | "MANUAL" | "OTHER";
+/** Where data comes from. HEART_RATE_STRAP: any standard Bluetooth heart rate strap, worn on the chest. */
+export type DeviceKind =
+  | "COLMI_RING" | "PEBBLE" | "GARMIN" | "HEALTH_CONNECT" | "GADGETBRIDGE" | "FIT_FILE" | "PHONE" | "HEART_RATE_STRAP" | "BP_MONITOR" | "GLUCOSE_METER"
+  | "MANUAL" | "OTHER";
 
 export interface Device {
   id: string;
@@ -163,6 +166,67 @@ export interface RecentReadings {
   devices: RecentDevice[];
   sleep: SleepSession[];
   series: RecentSeries[];
+}
+
+// ---------------------------------------------------------------- Two devices side by side (Health.kt)
+
+/** What two devices are compared on (GET /api/devices/compare), in the server's order. Labels and units: lib/compare.ts. */
+export type CompareKey =
+  | "ASLEEP" | "DEEP" | "LIGHT" | "REM" | "AWAKE" | "BEDTIME" | "WAKE" | "NIGHT_HEART_RATE" | "LOWEST_HEART_RATE" | "HRV" | "SPO2"
+  | "RESPIRATORY_RATE" | "SKIN_TEMPERATURE" | "DAY_HEART_RATE" | "STEPS";
+
+/**
+ * Two devices' values for one thing on one night (or day). Readings are compared only over the
+ * time both measured, [pairs] being how many such spells there were; sleep and steps are each
+ * device's own (pairs 0). For BEDTIME and WAKE, minutes after 6 pm the evening before.
+ */
+export interface ComparedValue {
+  key: CompareKey;
+  a?: number;
+  b?: number;
+  pairs?: number;
+}
+
+/** One night: each device's own sleep (missing without one) and the values both had. [date] is the morning it ended. */
+export interface ComparedNight {
+  date: string;
+  a?: SleepSession;
+  b?: SleepSession;
+  values: ComparedValue[];
+}
+
+/** Over every night both measured: their averages and how far apart they were. */
+export interface ComparedMetric {
+  key: CompareKey;
+  /** Nights (for steps, days) both had it. */
+  count: number;
+  a: number;
+  b: number;
+  /** [b] minus [a], on average: how much higher (or, below 0, lower) b reads. */
+  difference: number;
+  /** How far apart they were on average, either way. */
+  apart: number;
+  /** The smallest and largest difference on a night: how steady it is. */
+  lowest: number;
+  highest: number;
+}
+
+/**
+ * Two devices side by side (GET /api/devices/compare?a=&b=&days=14): each night, and over them all
+ * how far apart they read. [a] is the one to compare against (a chest strap, say), [b] the one being
+ * checked. Without a and b, the server picks. [devices] are every device with readings in the time.
+ * Never reachable through a share.
+ */
+export interface DeviceComparison {
+  days: number;
+  from: string;
+  to: string;
+  a?: RecentDevice;
+  b?: RecentDevice;
+  devices: RecentDevice[];
+  metrics: ComparedMetric[];
+  /** Newest first; only nights either device recorded something in. */
+  nights: ComparedNight[];
 }
 
 // ---------------------------------------------------------------- Devices measuring the same thing (Devices.kt)
@@ -2301,6 +2365,8 @@ export interface AiStatus {
   dataNotice: string;
   termsUrl: string;
   privacyUrl: string;
+  /** Paused by the person in Settings › Where your data goes: nothing is sent while it is. */
+  paused?: boolean;
 }
 
 export interface AiMessage {
@@ -2446,6 +2512,8 @@ export interface MealieStatus {
   url?: string;
   user?: string;
   version?: string;
+  /** Paused in Settings › Where your data goes: still connected, but nothing is asked of it. */
+  paused?: boolean;
 }
 
 /** A recipe in Mealie: [food] is one serving, ready to log; missing when it has no nutrition there. */
@@ -2469,4 +2537,47 @@ export interface MealiePlanEntry {
   note?: string;
   /** Already in the diary that day. */
   logged?: boolean;
+}
+
+// ---------------------------------------------------------------- Where your data goes (Privacy.kt)
+
+/** Every way something about a person can leave the server (GET /api/privacy). */
+export type DataPath =
+  | "FOOD_DATABASE" | "WEATHER" | "MEALIE" | "AI_ASSISTANT" | "AI_CONNECTORS" | "WEBHOOKS" | "BROWSER_PUSH" | "EMAIL" | "SHARES"
+  | "HOME_ASSISTANT" | "SIGN_IN";
+
+/** ON: set up and in use. PAUSED: set up, but paused by the person. NOT_SET_UP: nothing goes. OFF_ON_SERVER: the admin turned it off for everyone. */
+export type DataPathState = "ON" | "PAUSED" | "NOT_SET_UP" | "OFF_ON_SERVER";
+
+/** One way out, said plainly. */
+export interface DataDestination {
+  path: DataPath;
+  /** "Open Food Facts". */
+  name: string;
+  /** Who's at the other end: "A non-profit food database", "Anthropic, who make Claude". */
+  who: string;
+  /** The addresses it goes to, where known. */
+  hosts?: string[];
+  /** What goes, and what never does. */
+  what: string;
+  /** When it goes. */
+  whenSent: string;
+  state: DataPathState;
+  /** How many are set up (links, webhooks, browsers, shares, keys), where that's a thing. */
+  count?: number;
+  /** Whether the person can pause it here (signing in can't be). */
+  pausable?: boolean;
+  /** Where it's set up in the apps: settings.connections, settings.ai, settings.sharing… */
+  setUp?: string;
+}
+
+export interface DataMap {
+  destinations: DataDestination[];
+  /** What stays put: everything else. */
+  note: string;
+}
+
+/** Pausing or resuming one way out (PUT /api/privacy/{path}). */
+export interface DataPathChange {
+  paused: boolean;
 }

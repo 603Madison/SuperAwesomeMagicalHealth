@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { create } from "zustand";
-import { AlertTriangle, Bot, Eraser, ExternalLink, FileSearch, KeyRound, Send, ShieldCheck, Trash2 } from "lucide-react";
+import { AlertTriangle, Bot, CirclePause, Eraser, ExternalLink, FileSearch, KeyRound, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { forgetConversations, loadConversation, saveConversation, type Conversation } from "../lib/assistant";
 import { when } from "../lib/format";
@@ -9,7 +9,7 @@ import { onUserChange, useSession } from "../lib/session";
 import type { AiConsent, AiMessage, AiSettings, AiStatus, Module } from "../lib/types";
 import { SENSITIVE } from "../lib/types";
 import { FEATURES, featureName } from "../components/features";
-import { Button, Card, Empty, Field, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, Empty, Field, Modal, PageHeader, PausedNote, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 
 /*
  * The optional AI assistant. Nothing here goes anywhere until the admin has turned it on and
@@ -61,10 +61,10 @@ export function useAiStatus(): AiStatus | null {
   return status;
 }
 
-/** Whether the assistant is on for this person: the admin turned it on and they said yes. */
+/** Whether the assistant is on for this person: the admin turned it on, they said yes, and they haven't paused it. */
 export function useAiAvailable(): boolean {
   const s = useAiStatus();
-  return !!s?.available && !!s.consent?.acknowledged;
+  return !!s?.available && !!s.consent?.acknowledged && !s.paused;
 }
 
 /** Features the assistant may be offered; photos never are. */
@@ -80,6 +80,19 @@ export function Assistant() {
       <div className="page">
         <PageHeader title="Assistant" />
         <Card><Empty icon={<Bot size={36} />} title="The assistant isn't on">Your server's admin can turn on an AI assistant. It's off unless they do, and even then it's off for you unless you choose it.</Empty></Card>
+      </div>
+    );
+  }
+  // Paused in Where your data goes: nothing can be sent, so there's nothing to ask it until it's resumed.
+  if (status.paused && !changing) {
+    return (
+      <div className="page">
+        <PageHeader title="Assistant" actions={status.consent?.acknowledged ? <Link className="btn btn-ghost" to="/assistant/sent"><FileSearch size={16} /> What it's sent</Link> : null} />
+        <Card>
+          <Empty icon={<CirclePause size={36} />} title="The assistant is paused">
+            <PausedNote />
+          </Empty>
+        </Card>
       </div>
     );
   }
@@ -324,7 +337,8 @@ export function AssistantSettingsCard() {
       <h2>AI assistant</h2>
       {consent?.acknowledged ? (
         <>
-          <p>On for you. It may look at: {consent.modules.map(featureName).join(", ") || "nothing"}. What it looks at goes to {status.provider}.</p>
+          <p>{status.paused ? "Turned on for you, and paused for now." : "On for you."} It may look at: {consent.modules.map(featureName).join(", ") || "nothing"}. What it looks at goes to {status.provider}.</p>
+          {status.paused && <PausedNote />}
           <div className="button-row">
             <Link className="btn btn-tonal" to="/assistant">Open</Link>
             <Link className="btn btn-ghost" to="/assistant/sent">What it's sent</Link>

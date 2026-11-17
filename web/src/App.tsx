@@ -46,6 +46,7 @@ import { Appointments } from "./pages/Appointments";
 import { Reports } from "./pages/Reports";
 import { DigestPage } from "./pages/Digest";
 import { Recent } from "./pages/Recent";
+import { Compare } from "./pages/Compare";
 
 export function App() {
   useEffect(() => { void session.start(); }, []);
@@ -233,6 +234,8 @@ function Shell() {
           {!viewing && <Route path="/devices" element={<Devices />} />}
           {/* The last 24 hours as recorded: never someone's share (the server says no to one). */}
           {!viewing && <Route path="/recent" element={<Recent />} />}
+          {/* Two devices side by side: never someone's share either (the server says no to one). */}
+          {!viewing && <Route path="/devices/compare" element={<Compare />} />}
           {!viewing && <Route path="/settings" element={<Settings />} />}
           {!viewing && user.role === "ADMIN" && <Route path="/admin" element={<Admin />} />}
           <Route path="*" element={<Navigate to="/" replace />} />

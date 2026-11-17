@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Battery, Clock, Copy, FileUp, HeartPulse, KeyRound, Layers, MoreHorizontal, Pencil, Smartphone, Trash2, Watch } from "lucide-react";
+import { Battery, Clock, Copy, FileUp, GitCompareArrows, HeartPulse, KeyRound, Layers, MoreHorizontal, Pencil, Smartphone, Trash2, Watch } from "lucide-react";
 import { api } from "../lib/api";
 import { num, shiftDate, today, when } from "../lib/format";
 import type { DaySummary, Device, DeviceChoices, DeviceKind, Metric, SleepSummary } from "../lib/types";
@@ -13,7 +13,8 @@ import { METRIC_LABELS } from "../lib/types";
 
 const KIND_LABEL: Record<string, string> = {
   COLMI_RING: "Colmi ring", PEBBLE: "Pebble", GARMIN: "Garmin", HEALTH_CONNECT: "Health Connect", GADGETBRIDGE: "Gadgetbridge",
-  FIT_FILE: "FIT files", PHONE: "Phone", MANUAL: "Entered by hand", OTHER: "Other device",
+  FIT_FILE: "FIT files", PHONE: "Phone", HEART_RATE_STRAP: "Heart rate strap", BP_MONITOR: "Blood pressure monitor", GLUCOSE_METER: "Glucose meter",
+  MANUAL: "Entered by hand", OTHER: "Other device",
 };
 
 /** Devices whose readings the last 24 hours doesn't show (blood pressure and glucose have pages of their own). */
@@ -34,7 +35,10 @@ export function Devices() {
           <ul className="rows">
             {data.map((d) => (
               <li key={d.id} className="row">
-                <div className={`device-icon kind-${d.kind}`}>{d.kind === "PHONE" || d.kind === "HEALTH_CONNECT" ? <Smartphone size={20} /> : d.kind === "MANUAL" ? <Pencil size={20} /> : <Watch size={20} />}</div>
+                <div className={`device-icon kind-${d.kind}`}>
+                  {d.kind === "PHONE" || d.kind === "HEALTH_CONNECT" ? <Smartphone size={20} /> : d.kind === "MANUAL" ? <Pencil size={20} />
+                    : d.kind === "HEART_RATE_STRAP" ? <HeartPulse size={20} /> : <Watch size={20} />}
+                </div>
                 <div className="row-main">
                   <div className="row-title">{d.name}</div>
                   <div className="row-sub">
@@ -57,6 +61,11 @@ export function Devices() {
               </li>
             ))}
           </ul>
+        )}
+        {data.filter((d) => !NO_READINGS.includes(d.kind)).length >= 2 && (
+          <div className="button-row">
+            <Link className="btn btn-tonal" to="/devices/compare"><GitCompareArrows size={18} /> Compare two devices</Link>
+          </div>
         )}
       </Card>
     ) },
