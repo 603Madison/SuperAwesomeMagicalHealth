@@ -81,6 +81,16 @@ fun Route.platformRoutes(services: Services) {
         call.respond(upcoming)
     }
 
+    // Where the person's data can go, and pausing each way out. Never shared (see SharedView).
+    route("/api/privacy") {
+        get { call.respond(services.privacyMap.map(call.requireUser(services))) }
+        put("/{path}") {
+            val user = call.requireUser(services)
+            val path = com.health.api.DataPath.entries.firstOrNull { it.name == call.parameters["path"] } ?: throw ApiError.notFound("No such way out")
+            call.respond(services.privacyMap.pause(user, path, call.receive<com.health.api.DataPathChange>().paused))
+        }
+    }
+
     route("/api/digest") {
         get {
             val user = call.requireUser(services)
@@ -152,6 +162,7 @@ fun Route.platformRoutes(services: Services) {
         }
         get("/state") {
             val user = call.keyUser(services, SessionKind.INTEGRATION) ?: throw ApiError.unauthorized("Use a Home Assistant key from Settings › Integrations")
+            if (!services.privacy.allows(user.id, com.health.api.DataPath.HOME_ASSISTANT)) throw ApiError.forbidden(PrivacyStore.pausedText("Home Assistant keys"))
             call.respond(platform.state(user.id))
         }
     }

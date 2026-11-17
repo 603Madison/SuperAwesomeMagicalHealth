@@ -34,6 +34,8 @@ class SymptomsService(
     private val cycle: CycleService,
     private val weather: Weather,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Whether the person lets the weather be asked (Settings › Where your data goes). */
+    private val weatherAllowed: suspend (String) -> Boolean = { true },
 ) {
     // ---- Symptoms ----
 
@@ -157,7 +159,7 @@ class SymptomsService(
         }
         // Falling air pressure, where the server may ask the weather.
         var usedWeather = false
-        profile.place?.let { place ->
+        profile.place?.takeIf { weatherAllowed(userId) }?.let { place ->
             val pressure = runCatching { weather.pressure(place, from.minusDays(1), to) }.getOrDefault(emptyMap())
             if (pressure.isNotEmpty()) {
                 usedWeather = true

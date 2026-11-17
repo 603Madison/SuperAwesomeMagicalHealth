@@ -102,6 +102,9 @@ fun Route.mcpRoutes(services: Services) {
     suspend fun ApplicationCall.serve(token: String?) {
         val (user, session) = token?.let { services.sessions.resolve(it) }?.takeIf { it.second.kind.isConnector }
             ?: return respond(HttpStatusCode.NotFound, ErrorBody("That connector link isn't valid (any more): make a new one in Settings"))
+        if (!services.privacy.allows(user.id, com.health.api.DataPath.AI_CONNECTORS)) {
+            return respond(HttpStatusCode.Forbidden, ErrorBody(com.health.server.platform.PrivacyStore.pausedText("AI connector links")))
+        }
         val everyone = session.kind == SessionKind.MCP_ALL && user.isAdmin
         val caller = McpServer.Caller(
             user,
@@ -1381,7 +1384,7 @@ class McpServer(private val services: Services) {
     private suspend fun searchFoods(user: User, query: String): String {
         if (query.length < 2) error("Search for at least two letters")
         val mine = services.foods.search(user.id, query)
-        val online = if (services.settings.get().foodDatabase) runCatching { services.foodDatabase.search(query) }.getOrDefault(emptyList()) else emptyList()
+        val online = if (services.foodDatabaseFor(user.id)) runCatching { services.foodDatabase.search(query) }.getOrDefault(emptyList()) else emptyList()
         fun line(f: Food) = "- ${f.name}${f.brand?.let { " ($it)" } ?: ""}, per ${f.serving}: ${nutrientText(f.nutrients)}${f.barcode?.let { ", barcode $it" } ?: ""}"
         return buildString {
             if (mine.isNotEmpty()) { appendLine("The person's foods:"); mine.forEach { appendLine(line(it)) } }
@@ -1396,7 +1399,7 @@ class McpServer(private val services: Services) {
         val servings = args.number("servings") ?: 1.0
         val barcode = args.string("barcode")
         val input = if (barcode != null) {
-            val food = services.foods.byBarcode(user.id, barcode) ?: services.foodDatabase.barcode(barcode) ?: error("No food with barcode $barcode; give its name and calories instead")
+            val food = services.foods.byBarcode(user.id, barcode) ?: (if (services.foodDatabaseFor(user.id)) services.foodDatabase.barcode(barcode) else null) ?: error("No food with barcode $barcode; give its name and calories instead")
             FoodEntryInput(date.toString(), meal, servings, food = food)
         } else {
             val calories = args.number("calories") ?: error("Give the calories (or a barcode)")
@@ -1689,7 +1692,10 @@ class McpServer(private val services: Services) {
         val name = args.string("account") ?: return caller.user
         if (name.equals(caller.user.username, ignoreCase = true)) return caller.user
         if (!caller.everyone) error("This link sees only ${caller.user.username}'s account (an admin's every-account link sees others)")
-        return services.users.byUsername(name) ?: error("No account named $name")
+        val other = services.users.byUsername(name) ?: error("No account named $name")
+        // Someone who paused AI connector links isn't read through anyone's link either.
+        if (!services.privacy.allows(other.id, com.health.api.DataPath.AI_CONNECTORS)) error("${other.username} has paused AI connector links")
+        return other
     }
 
     /** "2026-01-31T07:30" or "07:30" (today), in the person's time zone; or a date (its start). */

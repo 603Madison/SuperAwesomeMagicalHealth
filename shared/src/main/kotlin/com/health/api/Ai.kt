@@ -58,6 +58,8 @@ data class AiStatus(
     val dataNotice: String = "",
     val termsUrl: String = "https://www.anthropic.com/legal/commercial-terms",
     val privacyUrl: String = "https://www.anthropic.com/legal/privacy",
+    /** Paused by the person in Settings › Where your data goes: nothing is sent while it is. */
+    val paused: Boolean = false,
 )
 
 @Serializable

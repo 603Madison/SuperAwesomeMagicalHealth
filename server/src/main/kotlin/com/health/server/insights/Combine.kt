@@ -73,16 +73,19 @@ object Combine {
     // ---- Devices and how well each suits a reading ----
 
     /** Where a device is worn. */
-    enum class Placement(val noun: String?) { FINGER("ring"), WRIST("watch"), PHONE("phone"), OTHER(null) }
+    enum class Placement(val noun: String?) { FINGER("ring"), WRIST("watch"), CHEST("strap"), PHONE("phone"), OTHER(null) }
 
     fun placement(kind: DeviceKind?, name: String): Placement = when (kind) {
         DeviceKind.COLMI_RING -> Placement.FINGER
         DeviceKind.PEBBLE, DeviceKind.GARMIN -> Placement.WRIST
+        DeviceKind.HEART_RATE_STRAP -> Placement.CHEST
         DeviceKind.PHONE -> Placement.PHONE
         else -> {
             // Gadgetbridge, Health Connect and the rest pass on many devices: the name says which.
             val words = name.lowercase().split(Regex("[^a-z0-9]+")).toSet()
             when {
+                // Before the wrist: "Polar H10" is a strap, though Polar make watches too.
+                words.any { it in CHEST_WORDS || STRAP_MODEL.matches(it) } -> Placement.CHEST
                 "ring" in words || "oura" in words || "colmi" in words -> Placement.FINGER
                 words.any { it in WRIST_WORDS } -> Placement.WRIST
                 else -> Placement.OTHER
@@ -90,35 +93,41 @@ object Combine {
         }
     }
 
+    private val CHEST_WORDS = setOf("strap", "chest", "hrm", "tickr")
+    /** Strap models: Polar H7, H9 and H10, Coospo H6 and H808S, Magene H64 and the like. */
+    private val STRAP_MODEL = Regex("h[0-9]{1,3}s?")
     private val WRIST_WORDS = setOf("watch", "band", "pebble", "garmin", "fitbit", "amazfit", "bip", "gtr", "gts", "huawei", "polar", "suunto", "withings", "bangle", "pinetime")
 
-    /** How well a device on a finger, a wrist, in a pocket or elsewhere suits a reading, 0–1. */
-    data class Suits(val finger: Double, val wrist: Double, val phone: Double, val other: Double) {
+    /** How well a device on a finger, a wrist, the chest, in a pocket or elsewhere suits a reading. */
+    data class Suits(val finger: Double, val wrist: Double, val phone: Double, val other: Double, val chest: Double) {
         fun of(p: Placement) = when (p) {
             Placement.FINGER -> finger
             Placement.WRIST -> wrist
+            Placement.CHEST -> chest
             Placement.PHONE -> phone
             Placement.OTHER -> other
         }
     }
 
     /**
-     * The weights, in one place. A ring sits on a finger, where the pulse is strong and the hand is
-     * still at night: best for night-time HRV, blood oxygen and temperature. A watch is on the
-     * wrist, better in the day (it moves less with the hands and is worn while active).
+     * The weights, in one place: 1 is a good fit. A ring sits on a finger, where the pulse is strong
+     * and the hand is still at night: best for night-time HRV, blood oxygen and temperature. A watch
+     * is on the wrist, better in the day (it moves less with the hands and is worn while active). A
+     * chest strap reads the heart's own electrical beat, not the pulse through skin, so for heart rate
+     * and HRV it counts for twice a good fit; it reads nothing else well.
      */
     val SUITS: Map<Metric, Suits> = mapOf(
-        Metric.RESTING_HEART_RATE to Suits(finger = 1.0, wrist = 0.8, phone = 0.2, other = 0.6),
-        Metric.HRV to Suits(finger = 1.0, wrist = 0.6, phone = 0.1, other = 0.5),
-        Metric.SPO2 to Suits(finger = 1.0, wrist = 0.5, phone = 0.1, other = 0.5),
-        Metric.RESPIRATORY_RATE to Suits(finger = 0.9, wrist = 0.7, phone = 0.2, other = 0.6),
-        Metric.SKIN_TEMPERATURE to Suits(finger = 1.0, wrist = 0.5, phone = 0.1, other = 0.5),
-        Metric.TEMPERATURE_DEVIATION to Suits(finger = 1.0, wrist = 0.5, phone = 0.1, other = 0.5),
-        Metric.STRESS to Suits(finger = 0.6, wrist = 1.0, phone = 0.2, other = 0.7),
+        Metric.RESTING_HEART_RATE to Suits(finger = 1.0, wrist = 0.8, phone = 0.2, other = 0.6, chest = 2.0),
+        Metric.HRV to Suits(finger = 1.0, wrist = 0.6, phone = 0.1, other = 0.5, chest = 2.0),
+        Metric.SPO2 to Suits(finger = 1.0, wrist = 0.5, phone = 0.1, other = 0.5, chest = 0.2),
+        Metric.RESPIRATORY_RATE to Suits(finger = 0.9, wrist = 0.7, phone = 0.2, other = 0.6, chest = 1.0),
+        Metric.SKIN_TEMPERATURE to Suits(finger = 1.0, wrist = 0.5, phone = 0.1, other = 0.5, chest = 0.3),
+        Metric.TEMPERATURE_DEVIATION to Suits(finger = 1.0, wrist = 0.5, phone = 0.1, other = 0.5, chest = 0.3),
+        Metric.STRESS to Suits(finger = 0.6, wrist = 1.0, phone = 0.2, other = 0.7, chest = 1.0),
     )
 
-    /** For time asleep. */
-    val SLEEP_SUITS = Suits(finger = 1.0, wrist = 0.9, phone = 0.4, other = 0.7)
+    /** For time asleep: a strap knows the heart, not sleep. */
+    val SLEEP_SUITS = Suits(finger = 1.0, wrist = 0.9, phone = 0.4, other = 0.7, chest = 0.3)
 
     /** How far from its own usual a device can be before it counts for less (for HRV, as a share of the usual). */
     val FAR: Map<Metric, Double> = mapOf(
@@ -130,7 +139,7 @@ object Combine {
         Metric.STRESS to 25.0,
     )
 
-    fun suits(metric: Metric, kind: DeviceKind?, name: String): Double = (SUITS[metric] ?: Suits(1.0, 1.0, 1.0, 1.0)).of(placement(kind, name))
+    fun suits(metric: Metric, kind: DeviceKind?, name: String): Double = (SUITS[metric] ?: Suits(1.0, 1.0, 1.0, 1.0, 1.0)).of(placement(kind, name))
 
     /** Short names for devices among [refs]: "ring", "watch" where that tells them apart, the device's own name otherwise. */
     fun shortNames(refs: Collection<DeviceRef>): Map<String, String> {
@@ -304,10 +313,16 @@ object Combine {
      * of the devices that had readings. One that samples every minute doesn't outweigh one that
      * samples every five.
      */
-    fun line(samples: List<StoredSample>, width: Long = HEART_MS): List<Point> =
+    fun line(samples: List<StoredSample>, width: Long = HEART_MS, prefer: Set<String> = emptySet()): List<Point> =
         samples.groupBy { it.start.floorDiv(width) }.toSortedMap().map { (bucket, list) ->
-            Point(bucket * width, list.groupBy { it.deviceId }.values.map { l -> l.sumOf { it.value } / l.size }.average())
+            // Where a chest strap measured, it alone: it reads the heart itself.
+            val used = if (prefer.isEmpty()) list else list.filter { it.deviceId in prefer }.ifEmpty { list }
+            Point(bucket * width, used.groupBy { it.deviceId }.values.map { l -> l.sumOf { it.value } / l.size }.average())
         }
+
+    /** The chest straps among [devices]: their heart rate is used wherever they measured (see [line]). */
+    fun straps(devices: Map<String, DeviceRef>): Set<String> =
+        devices.values.filter { placement(it.kind, it.name) == Placement.CHEST }.mapTo(mutableSetOf()) { it.id }
 
     /** The day's heart rate: average, lowest and highest. */
     class Heart(val avg: Double?, val min: Double?, val max: Double?, val combined: CombinedValue?)
@@ -318,7 +333,8 @@ object Combine {
         if (byDevice.isEmpty()) return Heart(null, null, null, null)
         val choice = choice(chosen, byDevice.keys)
         val used = if (choice == Choice.USED) byDevice.filterKeys { it == chosen } else byDevice
-        val values: List<Double> = if (used.size == 1) used.values.single().map { it.value } else line(used.values.flatten()).map { it.v }
+        val straps = straps(devices).filterTo(mutableSetOf()) { it in used }
+        val values: List<Double> = if (used.size == 1) used.values.single().map { it.value } else line(used.values.flatten(), prefer = straps).map { it.v }
         val heart = Heart(values.average(), values.min(), values.max(), null)
         if (byDevice.size < 2 && choice != Choice.FALLBACK) return heart
         val names = Names(byDevice.keys.mapNotNull { devices[it] } + listOfNotNull(chosen?.let { devices[it] }))
@@ -327,6 +343,7 @@ object Combine {
         val how = when {
             choice == Choice.USED -> "Your choice: ${names.theirs(chosen)} heart rate"
             byDevice.size == 1 -> "${capital(names.theirs(sources.first().deviceId))} heart rate"
+            straps.size == 1 -> "Merged every 5 minutes: ${names.the(straps.single())} where it measured (it reads the heart itself), otherwise their average"
             else -> "Merged every 5 minutes: where ${if (byDevice.size == 2) "both" else "more than one"} measured, their average"
         }
         return Heart(heart.avg, heart.min, heart.max, CombinedValue(Metric.HEART_RATE, heart.avg!!, sources, if (choice == Choice.FALLBACK) fallback(how, chosen, names) else how, chosen))
@@ -356,8 +373,8 @@ object Combine {
     }
 
     /** A night's heart rate: one device's readings as they are, or more than one's merged. */
-    fun nightHeart(samples: List<StoredSample>): List<Double> =
-        if (samples.map { it.deviceId }.distinct().size >= 2) line(samples).map { it.v } else samples.map { it.value }
+    fun nightHeart(samples: List<StoredSample>, prefer: Set<String> = emptySet()): List<Double> =
+        if (samples.map { it.deviceId }.distinct().size >= 2) line(samples, prefer = prefer).map { it.v } else samples.map { it.value }
 
     /**
      * Resting heart rate: the devices' own resting figures where they give them (weighted to the
@@ -386,7 +403,7 @@ object Combine {
             else "The average of ${allOf(values.size)} devices' own resting figures${weightedTo(weights, names)}"
             Triple(value, sourcesOf(values, stated, devices, choice, chosen, weights), how)
         } else {
-            val value = lowest(nightHeart(night))!!
+            val value = lowest(nightHeart(night, straps(devices)))!!
             val buckets = overnight.mapValues { (_, l) -> l.map { it.start.floorDiv(HEART_MS) }.distinct().size.toDouble() }
             val how = if (overnight.size == 1) "The lowest ${names.theirs(overnight.keys.single())} heart rate stayed overnight"
             else "The lowest it stayed overnight, from ${allOf(overnight.size)} devices merged every 5 minutes"

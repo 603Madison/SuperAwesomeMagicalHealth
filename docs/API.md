@@ -169,7 +169,8 @@ person chose one of several for): the result, each device's value and share (`So
   counted then.
 - **Heart rate:** merged every 5 minutes (each device's average there, then the average of the
   devices that had readings), so one that samples every minute doesn't outweigh one that samples
-  every five. Average, lowest and highest come from the merged line; so does the day's chart.
+  every five. Where a chest strap measured, its reading alone is used: it reads the heart's own
+  electrical beat. Average, lowest and highest come from the merged line; so does the day's chart.
 - **Resting heart rate:** the devices' own resting figures where they give them (weighted as
   below); otherwise the lowest the merged night line stayed (the lowest three five-minute points
   in a row).
@@ -177,18 +178,19 @@ person chose one of several for): the result, each device's value and share (`So
   stress:** each device's own night value (for stress, its day's), weighted by how much of the
   night (or day) it measured and how well it suits the reading:
 
-  | | Ring (finger) | Watch (wrist) | Phone | Other |
-  |---|---|---|---|---|
-  | Resting heart rate | 1.0 | 0.8 | 0.2 | 0.6 |
-  | HRV | 1.0 | 0.6 | 0.1 | 0.5 |
-  | Blood oxygen | 1.0 | 0.5 | 0.1 | 0.5 |
-  | Breathing rate | 0.9 | 0.7 | 0.2 | 0.6 |
-  | Skin temperature, temperature deviation | 1.0 | 0.5 | 0.1 | 0.5 |
-  | Stress (the day's) | 0.6 | 1.0 | 0.2 | 0.7 |
-  | Time asleep | 1.0 | 0.9 | 0.4 | 0.7 |
+  | | Ring (finger) | Watch (wrist) | Strap (chest) | Phone | Other |
+  |---|---|---|---|---|---|
+  | Resting heart rate | 1.0 | 0.8 | 2.0 | 0.2 | 0.6 |
+  | HRV | 1.0 | 0.6 | 2.0 | 0.1 | 0.5 |
+  | Blood oxygen | 1.0 | 0.5 | 0.2 | 0.1 | 0.5 |
+  | Breathing rate | 0.9 | 0.7 | 1.0 | 0.2 | 0.6 |
+  | Skin temperature, temperature deviation | 1.0 | 0.5 | 0.3 | 0.1 | 0.5 |
+  | Stress (the day's) | 0.6 | 1.0 | 1.0 | 0.2 | 0.7 |
+  | Time asleep | 1.0 | 0.9 | 0.3 | 0.4 | 0.7 |
 
-  A Colmi ring is a finger; a Pebble or Garmin a wrist; Gadgetbridge, Health Connect and other
-  devices by their name ("ring", "watch", "band"…). How much it measured: up to 90 minutes from
+  A Colmi ring is a finger; a Pebble or Garmin a wrist; a heart rate strap (`HEART_RATE_STRAP`) the
+  chest; Gadgetbridge, Health Connect and other devices by their name ("strap", "hrm", "H10" before
+  "ring", then "watch", "band"…). How much it measured: up to 90 minutes from
   each reading, against the night's length (one reading is the device's summary, and counts in
   full); under half is noted "only part of the night".
 

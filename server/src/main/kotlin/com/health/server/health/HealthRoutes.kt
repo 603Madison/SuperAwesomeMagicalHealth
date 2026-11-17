@@ -185,6 +185,13 @@ fun Route.deviceRoutes(services: Services) {
             val user = call.requireUser(services)
             call.respond(services.devices.list(user.id))
         }
+        // Two devices side by side, night by night. Never shared (see SharedView).
+        get("/compare") {
+            val user = call.requireUser(services)
+            val q = call.request.queryParameters
+            val days = q["days"]?.toIntOrNull() ?: com.health.server.health.CompareService.DEFAULT_DAYS
+            call.respond(services.compare.compare(user.id, q["a"], q["b"], days))
+        }
         // Which device to use for a reading (none: combine them). Never shared (see SharedView).
         get("/choices") {
             val user = call.requireUser(services)

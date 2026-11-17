@@ -7,6 +7,7 @@ import com.health.api.RecentReadings
 import com.health.api.RecentSeries
 import com.health.server.ApiError
 import com.health.server.insights.Combine
+import com.health.server.insights.DeviceRef
 import kotlin.math.roundToInt
 
 /**
@@ -27,6 +28,7 @@ class RecentService(private val records: Records, private val devices: DeviceSto
         val nights = records.sleep(userId, from, to + DAY).filter { it.start < to + AHEAD && it.end > from }
         val present = (samples.map { it.deviceId } + nights.mapNotNull { it.deviceId }).toSet()
         val mine = samples.filter { chosen == null || it.deviceId == chosen }
+        val straps = Combine.straps(known.associate { it.id to DeviceRef(it.id, it.name, it.kind) })
         return RecentReadings(
             from = from,
             to = to,
@@ -34,7 +36,7 @@ class RecentService(private val records: Records, private val devices: DeviceSto
             device = chosen,
             devices = known.filter { it.id in present }.map { RecentDevice(it.id, it.name, it.kind, it.lastSyncAt) },
             sleep = nights.filter { chosen == null || it.deviceId == chosen }.sortedBy { it.start },
-            series = METRICS.mapNotNull { metric -> series(metric, mine.filter { it.metric == metric }, from) },
+            series = METRICS.mapNotNull { metric -> series(metric, mine.filter { it.metric == metric }, from, straps) },
         )
     }
 
@@ -57,13 +59,13 @@ class RecentService(private val records: Records, private val devices: DeviceSto
         private val COUNTS = setOf(Metric.STEPS)
 
         /** One kind of reading over the window, or null with none. */
-        fun series(metric: Metric, samples: List<StoredSample>, from: Long): RecentSeries? {
+        fun series(metric: Metric, samples: List<StoredSample>, from: Long, straps: Set<String> = emptySet()): RecentSeries? {
             if (samples.isEmpty()) return null
             if (metric in COUNTS) return counts(metric, samples, from)
             val devices = samples.map { it.deviceId }.toSet()
             val points = when {
-                // Heart rate from more than one device: merged in time, so none outweighs another.
-                metric == Metric.HEART_RATE && devices.size > 1 -> Combine.line(samples).map { RecentPoint(it.t, it.v) }
+                // Heart rate from more than one device: merged in time, so none outweighs another (a strap, where it measured, alone).
+                metric == Metric.HEART_RATE && devices.size > 1 -> Combine.line(samples, prefer = straps).map { RecentPoint(it.t, it.v) }
                 else -> thinned(samples.sortedBy { it.start }.map { RecentPoint(it.start, it.value) })
             }
             val values = samples.map { it.value }

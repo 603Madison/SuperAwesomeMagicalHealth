@@ -84,7 +84,8 @@ fun Route.trackingRoutes(services: Services) {
     }
 
     get("/api/places") {
-        call.requireUser(services)
+        val user = call.requireUser(services)
+        if (!services.privacy.allows(user.id, com.health.api.DataPath.WEATHER)) throw ApiError.conflict(com.health.server.platform.PrivacyStore.pausedText("The weather"))
         call.respond(t.weather.places(call.request.queryParameters["q"].orEmpty()))
     }
 }

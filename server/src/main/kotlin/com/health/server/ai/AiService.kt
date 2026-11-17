@@ -154,6 +154,7 @@ class AiService(private val services: Services) {
             dailyLimit = settings.dailyLimit,
             loggingAllowed = available && settings.allowLogging,
             dataNotice = DATA_NOTICE,
+            paused = !services.privacy.allows(user.id, com.health.api.DataPath.AI_ASSISTANT),
         )
     }
 
@@ -191,6 +192,7 @@ class AiService(private val services: Services) {
         val key = store.key()
         if (!settings.enabled || key.isEmpty()) throw ApiError.conflict("The assistant isn't turned on on this server")
         val consent = consentOf(user.id) ?: throw ApiError.forbidden("Turn on the assistant for yourself first, in Settings › AI assistant")
+        if (!services.privacy.allows(user.id, com.health.api.DataPath.AI_ASSISTANT)) throw ApiError.forbidden(com.health.server.platform.PrivacyStore.pausedText("The assistant"))
         val used = usedToday(user.id)
         if (used >= settings.dailyLimit) throw ApiError.tooMany("That's today's ${settings.dailyLimit} questions; the assistant is back tomorrow")
         return Ready(settings, key, consent, used)

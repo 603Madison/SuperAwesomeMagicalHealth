@@ -305,6 +305,8 @@ data class MealieStatus(
     val url: String? = null,
     val user: String? = null,
     val version: String? = null,
+    /** Paused in Settings › Where your data goes: still connected, but nothing is asked of it. */
+    val paused: Boolean = false,
 )
 
 /**

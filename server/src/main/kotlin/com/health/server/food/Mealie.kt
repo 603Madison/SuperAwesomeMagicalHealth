@@ -57,6 +57,8 @@ class MealieService(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Tests only: let it reach this machine. */
     private val loopback: () -> Boolean = { false },
+    /** Whether the person paused Mealie (Settings › Where your data goes): nothing is asked of it then. */
+    private val paused: suspend (String) -> Boolean = { false },
 ) {
     // Only the addresses that passed the check are connected to, and redirects never followed.
     private val client = http.newBuilder()
@@ -78,7 +80,7 @@ class MealieService(
     private suspend fun saved(userId: String): Saved? = settings.get(userId, KEY, Saved.serializer())
 
     suspend fun status(userId: String): MealieStatus =
-        saved(userId)?.let { MealieStatus(connected = true, url = it.url, user = it.user, version = it.version) } ?: MealieStatus()
+        saved(userId)?.let { MealieStatus(connected = true, url = it.url, user = it.user, version = it.version, paused = paused(userId)) } ?: MealieStatus()
 
     /** Connects (or reconnects) after checking the address and token with Mealie itself. */
     suspend fun connect(userId: String, input: MealieConnect): MealieStatus {
@@ -114,6 +116,7 @@ class MealieService(
     /** Recipes whose name or ingredients match [text], each with its nutrition (up to [LIMIT]). */
     suspend fun recipes(userId: String, text: String): MealieRecipes {
         val saved = saved(userId) ?: return MealieRecipes(problem = NOT_CONNECTED)
+        if (paused(userId)) return MealieRecipes(problem = PAUSED)
         val query = text.trim().take(100)
         if (query.length < 2) return MealieRecipes()
         return try {
@@ -128,6 +131,7 @@ class MealieService(
     /** One recipe, by its slug. */
     suspend fun recipe(userId: String, slug: String): MealieRecipe {
         val saved = saved(userId) ?: throw ApiError.badRequest(NOT_CONNECTED)
+        if (paused(userId)) throw ApiError.conflict(PAUSED)
         return try {
             recipe(userId, saved, slug)
         } catch (e: Problem) {
@@ -143,6 +147,7 @@ class MealieService(
     suspend fun plan(userId: String, date: LocalDate): MealiePlan {
         val day = date.toString()
         val saved = saved(userId) ?: return MealiePlan(day, problem = NOT_CONNECTED)
+        if (paused(userId)) return MealiePlan(day, problem = PAUSED)
         return try {
             val query = listOf("start_date" to day, "end_date" to day, "page" to "1", "perPage" to "50")
             // Households came in Mealie 2; before, plans were the group's.
@@ -236,6 +241,7 @@ class MealieService(
         const val LIMIT = 10
         private const val KEEP_MS = 10 * 60_000L
         const val NOT_CONNECTED = "Mealie isn't connected"
+        val PAUSED = com.health.server.platform.PrivacyStore.pausedText("Mealie")
         const val NOT_MEALIE = "That doesn't look like Mealie. Check the address"
 
         /**

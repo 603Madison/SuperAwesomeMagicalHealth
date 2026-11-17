@@ -44,6 +44,8 @@ class SharingService(
     private val users: UserStore,
     private val profiles: ProfileStore,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Whether the owner paused their shares (Settings › Where your data goes): nobody sees anything then. */
+    private val paused: suspend (String) -> Boolean = { false },
 ) {
     private class Row(val id: String, val ownerId: String, val viewerId: String, val modules: Set<Module>, val createdAt: Long, val lastViewedAt: Long?)
 
@@ -63,7 +65,7 @@ class SharingService(
 
     suspend fun list(userId: String): Shares = Shares(
         given = rows("owner_id = ?", userId).map { toShare(it) },
-        received = rows("viewer_id = ?", userId).filter { users.byId(it.ownerId)?.disabled == false }.map { toShare(it) },
+        received = rows("viewer_id = ?", userId).filter { users.byId(it.ownerId)?.disabled == false && !paused(it.ownerId) }.map { toShare(it) },
     )
 
     /** Shares the [request]'s features with an account (or changes what it sees, if already shared). */
@@ -114,6 +116,7 @@ class SharingService(
         val share = rows("owner_id = ? AND viewer_id = ?", ownerId.trim(), principal.user.id).firstOrNull()
             ?: throw ApiError.forbidden("That account hasn't shared anything with you")
         val owner = users.byId(share.ownerId)?.takeIf { !it.disabled } ?: throw ApiError.forbidden("That account hasn't shared anything with you")
+        if (paused(owner.id)) throw ApiError.forbidden("${owner.displayName} has paused sharing for now")
         val visible = share.modules intersect profiles.get(owner.id).modules
         val need = SharedView.requirement(call.request.path(), call.request.queryParameters["metric"])
         if (need is SharedView.Need.AnyOf && need.modules.none { it in visible }) throw ApiError.forbidden("That isn't shared with you")

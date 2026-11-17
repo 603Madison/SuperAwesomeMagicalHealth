@@ -73,7 +73,7 @@ data class DayStats(
 ) {
     companion object {
         /** Raised whenever the way days are worked out changes, so kept ones are worked out again. */
-        const val VERSION = 4
+        const val VERSION = 5
     }
 }
 
@@ -308,7 +308,8 @@ class DayService(
         fun latest(metric: Metric) = today.lastOrNull { it.metric == metric }?.value
 
         val heartChoice = ctx.chosen(Metric.HEART_RATE)
-        val nights = pickNights(Combine.nights(sessions, devices, ctx.choices.sleepDeviceId), all, heartChoice)
+        val straps = Combine.straps(devices)
+        val nights = pickNights(Combine.nights(sessions, devices, ctx.choices.sleepDeviceId), all, heartChoice, straps)
         val main = nights.firstOrNull()
         val mainSpan = main?.let { it.start..it.end }
         val nightHeartAll = mainSpan?.let { span -> all.filter { it.metric == Metric.HEART_RATE && it.start in span } }.orEmpty()
@@ -328,7 +329,7 @@ class DayService(
             val inNight = if (metric in NIGHT_READINGS && mainSpan != null) all.filter { it.metric == metric && it.start in mainSpan } else emptyList()
             Combine.readings(metric, inNight.ifEmpty { today.filter { it.metric == metric } }, devices, mainSpan.takeIf { inNight.isNotEmpty() })
         }
-        val nightLine = if (nightHeart.map { it.deviceId }.distinct().size >= 2) Combine.line(nightHeart) else nightHeart.map { Point(it.start, it.value) }
+        val nightLine = if (nightHeart.map { it.deviceId }.distinct().size >= 2) Combine.line(nightHeart, prefer = straps) else nightHeart.map { Point(it.start, it.value) }
         val lowestAt = mainSpan?.let { span -> lowestPosition(nightLine, span) }
 
         val workouts = records.workouts(userId, start, end)
@@ -385,7 +386,7 @@ class DayService(
      * The main night first, then naps. Nights more than one device recorded come already combined
      * (see [Combine.nights]); where one still overlaps another (a night entered by hand), the one with stages wins.
      */
-    private fun pickNights(nights: List<Combine.Night>, samples: List<StoredSample>, heartChoice: String?): List<SleepSummary> {
+    private fun pickNights(nights: List<Combine.Night>, samples: List<StoredSample>, heartChoice: String?, straps: Set<String> = emptySet()): List<SleepSummary> {
         val ranked = nights.sortedWith(
             compareByDescending<Combine.Night> { n -> n.session.stages.any { it.stage != SleepStage.AWAKE && it.stage != SleepStage.ASLEEP } }
                 .thenByDescending { it.session.end - it.session.start },
@@ -397,14 +398,14 @@ class DayService(
             if (!overlapping) kept += n
         }
         val main = kept.maxByOrNull { val d = it.session.end - it.session.start; if (d >= 3 * HOUR) d + 100 * HOUR else d }
-        return listOfNotNull(main).plus(kept.filter { it !== main }.sortedBy { it.session.start }).map { night(it, samples, heartChoice) }
+        return listOfNotNull(main).plus(kept.filter { it !== main }.sortedBy { it.session.start }).map { night(it, samples, heartChoice, straps) }
     }
 
     /** A night's summary, with time asleep from every device that recorded it. */
-    private fun night(n: Combine.Night, samples: List<StoredSample>, heartChoice: String?): SleepSummary {
+    private fun night(n: Combine.Night, samples: List<StoredSample>, heartChoice: String?, straps: Set<String>): SleepSummary {
         val s = n.session
         val during = Combine.pick(samples.filter { it.start in s.start..s.end }, Metric.HEART_RATE, heartChoice)
-        val summary = summarize(s, during).copy(combined = n.combined)
+        val summary = summarize(s, during, straps).copy(combined = n.combined)
         val asleep = n.asleepMinutes ?: return summary
         return summary.copy(
             asleepMinutes = asleep,
@@ -493,7 +494,7 @@ class DayService(
             insights = insights,
             hourlySteps = today.hourlySteps,
             // Merged every five minutes, so two devices make one line.
-            heartRate = Combine.line(heart).map { Point(it.t, (it.v * 10).roundToInt() / 10.0) },
+            heartRate = Combine.line(heart, prefer = Combine.straps(ctx.devices)).map { Point(it.t, (it.v * 10).roundToInt() / 10.0) },
             goals = goals,
             hasData = today.hasData,
             modules = more?.modules ?: ModulesToday(),
@@ -665,7 +666,7 @@ class DayService(
             points.groupBy { it.t / width }.map { (bucket, list) -> Point(bucket * width, (list.sumOf { it.v } / list.size * 10).roundToInt() / 10.0) }
 
         /** A night's numbers from its stages and the heart readings taken during it. */
-        fun summarize(s: SleepSession, samples: List<StoredSample>): SleepSummary {
+        fun summarize(s: SleepSession, samples: List<StoredSample>, straps: Set<String> = emptySet()): SleepSummary {
             val inBed = ((s.end - s.start) / 60_000).toInt()
             val stages = s.stages
             val staged = stages.any { it.stage == SleepStage.DEEP || it.stage == SleepStage.REM || it.stage == SleepStage.LIGHT }
@@ -673,7 +674,7 @@ class DayService(
             val asleep = if (stages.isEmpty()) inBed else stages.filter { it.stage != SleepStage.AWAKE }.sumOf { it.end - it.start }.let { (it / 60_000).toInt() }
             val firstAsleep = stages.firstOrNull { it.stage != SleepStage.AWAKE }?.start
             // With more than one device, heart rate merged every five minutes and each device's own HRV averaged.
-            val heart = Combine.nightHeart(samples.filter { it.metric == Metric.HEART_RATE && it.start in s.start..s.end })
+            val heart = Combine.nightHeart(samples.filter { it.metric == Metric.HEART_RATE && it.start in s.start..s.end }, straps)
             val hrv = samples.filter { it.metric == Metric.HRV && it.start in s.start..s.end }.groupBy { it.deviceId }.values.map { l -> l.sumOf { it.value } / l.size }
             return SleepSummary(
                 start = s.start,

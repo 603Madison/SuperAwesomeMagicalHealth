@@ -40,6 +40,8 @@ class WebhookService(
     private val loopback: () -> Boolean = { false },
     /** How long to wait before try [n] (2, 3): a second, then four. Tests make it instant. */
     var backoff: (Int) -> Long = { n -> if (n == 2) 1_000L else 4_000L },
+    /** Whether the person paused webhooks (Settings › Where your data goes): nothing is sent then. */
+    private val paused: suspend (String) -> Boolean = { false },
 ) {
     private val log = LoggerFactory.getLogger("samh.webhooks")
 
@@ -135,6 +137,7 @@ class WebhookService(
      * Never throws: a hook that's down is the hook's business, not the caller's.
      */
     suspend fun deliver(userId: String, hook: Webhook, event: WebhookEvent, payload: WebhookPayload): WebhookDelivery {
+        if (paused(userId)) return WebhookDelivery(clock(), event, false, null, PrivacyStore.pausedText("Webhooks"), hook.id)
         val body = ApiJson.encodeToString(WebhookPayload.serializer(), payload)
         val secret = runCatching { secret(userId, hook.id!!) }.getOrNull() ?: return record(userId, hook.id!!, event, false, null, "No secret")
         var last: WebhookDelivery? = null

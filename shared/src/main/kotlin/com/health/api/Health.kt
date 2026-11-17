@@ -120,6 +120,8 @@ enum class DeviceKind(val label: String) {
     GADGETBRIDGE("Gadgetbridge"),
     FIT_FILE("FIT files"),
     PHONE("Phone"),
+    /** Any standard Bluetooth heart rate strap (Heart Rate Service), read by the app itself. */
+    HEART_RATE_STRAP("Heart rate strap"),
     BP_MONITOR("Blood pressure monitor"),
     GLUCOSE_METER("Glucose meter"),
     MANUAL("Entered by hand"),
@@ -243,4 +245,79 @@ data class RecentReadings(
     val devices: List<RecentDevice> = emptyList(),
     val sleep: List<SleepSession> = emptyList(),
     val series: List<RecentSeries> = emptyList(),
+)
+
+/** What two devices are compared on (GET /api/devices/compare). */
+@Serializable
+enum class CompareKey(val label: String, val unit: String) {
+    ASLEEP("Time asleep", "min"),
+    DEEP("Deep sleep", "min"),
+    LIGHT("Light sleep", "min"),
+    REM("REM sleep", "min"),
+    AWAKE("Awake in the night", "min"),
+    /** Minutes after 6 pm the evening before (see [ComparedValue]). */
+    BEDTIME("Fell asleep", "clock"),
+    WAKE("Woke up", "clock"),
+    NIGHT_HEART_RATE("Heart rate overnight", "bpm"),
+    LOWEST_HEART_RATE("Lowest heart rate overnight", "bpm"),
+    HRV("HRV overnight", "ms"),
+    SPO2("Blood oxygen overnight", "%"),
+    RESPIRATORY_RATE("Breathing rate overnight", "/min"),
+    SKIN_TEMPERATURE("Skin temperature overnight", "°C"),
+    DAY_HEART_RATE("Heart rate in the day", "bpm"),
+    STEPS("Steps", "steps"),
+}
+
+/**
+ * Two devices' values for one thing on one night (or day). Readings are compared only over the
+ * time both measured: five minutes at a time for heart rate, half an hour for the rest, [pairs]
+ * being how many such spells there were. Sleep and steps are each device's own (pairs 0). For
+ * [CompareKey.BEDTIME] and [CompareKey.WAKE], minutes after 6 pm the evening before.
+ */
+@Serializable
+data class ComparedValue(val key: CompareKey, val a: Double? = null, val b: Double? = null, val pairs: Int = 0)
+
+/** One night: each device's own sleep (null without one) and the values both had. [date] is the morning it ended. */
+@Serializable
+data class ComparedNight(
+    val date: String,
+    val a: SleepSession? = null,
+    val b: SleepSession? = null,
+    val values: List<ComparedValue> = emptyList(),
+)
+
+/** Over every night both measured: their averages and how far apart they were. */
+@Serializable
+data class ComparedMetric(
+    val key: CompareKey,
+    /** Nights (for steps, days) both had it. */
+    val count: Int,
+    val a: Double,
+    val b: Double,
+    /** [b] minus [a], on average: how much higher (or, below 0, lower) b reads. */
+    val difference: Double,
+    /** How far apart they were on average, either way. */
+    val apart: Double,
+    /** The smallest and largest difference on a night: how steady it is. */
+    val lowest: Double,
+    val highest: Double,
+)
+
+/**
+ * Two devices side by side (GET /api/devices/compare?a=&b=&days=14): each night, and over them
+ * all how far apart they read. [a] is the one to compare against (a chest strap, say), [b] the one
+ * being checked. Without a and b, the server picks: a strap first, then the devices with the most
+ * readings. [devices] are every device with readings in the time, for choosing.
+ */
+@Serializable
+data class DeviceComparison(
+    val days: Int,
+    val from: String,
+    val to: String,
+    val a: RecentDevice? = null,
+    val b: RecentDevice? = null,
+    val devices: List<RecentDevice> = emptyList(),
+    val metrics: List<ComparedMetric> = emptyList(),
+    /** Newest first; only nights either device recorded something in. */
+    val nights: List<ComparedNight> = emptyList(),
 )

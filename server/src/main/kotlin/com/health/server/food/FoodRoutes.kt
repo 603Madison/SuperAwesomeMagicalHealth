@@ -103,7 +103,7 @@ fun Route.foodRoutes(services: Services) {
             val query = call.request.queryParameters["q"].orEmpty().trim()
             val mine = services.foods.search(user.id, query)
             var problem: String? = null
-            val online = if (!services.settings.get().foodDatabase || query.length < 2) emptyList() else try {
+            val online = if (!services.foodDatabaseFor(user.id) || query.length < 2) emptyList() else try {
                 services.foodDatabase.search(query)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -119,7 +119,7 @@ fun Route.foodRoutes(services: Services) {
             val user = call.requireUser(services)
             val code = call.parameters["code"].orEmpty().filter { it.isDigit() }
             val food = services.foods.byBarcode(user.id, code)
-                ?: (if (services.settings.get().foodDatabase) runCatching { services.foodDatabase.barcode(code) }.onFailure { log.warn("Open Food Facts barcode lookup failed: {}", it.message) }.getOrNull() else null)
+                ?: (if (services.foodDatabaseFor(user.id)) runCatching { services.foodDatabase.barcode(code) }.onFailure { log.warn("Open Food Facts barcode lookup failed: {}", it.message) }.getOrNull() else null)
                 ?: throw ApiError.notFound("That barcode isn't in the food database yet; add the food yourself")
             call.respond(food)
         }

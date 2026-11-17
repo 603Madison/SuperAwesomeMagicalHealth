@@ -164,6 +164,8 @@ class PushService(
     private val clock: () -> Long,
     /** Tests only: let pushes reach this machine. */
     private val loopback: () -> Boolean = { false },
+    /** Whether the person paused browser notifications (Settings › Where your data goes). */
+    private val paused: suspend (String) -> Boolean = { false },
 ) {
     private val log = LoggerFactory.getLogger("samh.push")
 
@@ -230,6 +232,11 @@ class PushService(
         query("SELECT id, failures FROM push_subscriptions WHERE user_id = ?", userId) { it.string("id") to it.int("failures") }.toMap()
     }
 
+    /** The push services the person's browsers use: hosts only (the whole address names the browser). */
+    suspend fun hosts(userId: String): List<String> = db.tx {
+        query("SELECT endpoint FROM push_subscriptions WHERE user_id = ?", userId) { it.string("endpoint") }
+    }.mapNotNull { PrivacyService.hostOf(it) }.distinct().sorted()
+
     suspend fun count(userId: String): Int = db.tx { long("SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ?", userId).toInt() }
 
     suspend fun delete(userId: String, id: String): Boolean = db.tx { update("DELETE FROM push_subscriptions WHERE id = ? AND user_id = ?", id, userId) } > 0
@@ -238,6 +245,7 @@ class PushService(
 
     /** Sends [message] to each of the person's browsers; returns how many took it. */
     suspend fun send(userId: String, message: PushMessage, urgent: Boolean = false, ttlSeconds: Int = 4 * 3600): Int {
+        if (paused(userId)) return 0
         val targets = db.tx {
             query("SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?", userId) {
                 Target(it.string("id"), it.string("endpoint"), it.string("p256dh"), it.string("auth"))

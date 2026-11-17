@@ -101,7 +101,7 @@ class DigestService(private val services: Services) {
         if (existing != null) return null
         val digest = build(user.id, profile, monday)
         store(user.id, digest)
-        if (prefs.emailEnabled && !prefs.email.isNullOrBlank()) {
+        if (prefs.emailEnabled && !prefs.email.isNullOrBlank() && services.privacy.allows(user.id, com.health.api.DataPath.EMAIL)) {
             runCatching { email(user, profile, digest, prefs.email!!) }
                 .onSuccess { db.tx { update("UPDATE digests SET emailed_at = ? WHERE user_id = ? AND week = ?", services.clock(), user.id, digest.weekStart) } }
                 .onFailure { log.warn("The digest email for {} failed: {}", user.username, it.message) }
@@ -114,6 +114,7 @@ class DigestService(private val services: Services) {
 
     /** Emails [digest], leaving out sensitive features the person didn't list for email. */
     suspend fun email(user: User, profile: Profile, digest: Digest, to: String) {
+        if (!services.privacy.allows(user.id, com.health.api.DataPath.EMAIL)) throw ApiError.conflict(PrivacyStore.pausedText("The weekly email"))
         val (subject, text, html) = emailContent(user, profile, digest)
         services.platform.mailer.send(to, subject, text, html)
     }

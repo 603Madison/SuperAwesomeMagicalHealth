@@ -66,11 +66,19 @@ class Services(
     val devices = DeviceStore(db, clock)
     val records = Records(db, clock)
     val recent = com.health.server.health.RecentService(records, devices, clock)
+    val compare = com.health.server.health.CompareService(records, devices, profiles, clock)
     val checkIns = CheckInStore(db)
+
+    /** Each person's own settings, sealed one row per key (conditions, a feature's diary settings, Autism & ADHD, transition). */
+    val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
+    /** What each person has paused of the ways their data can leave the server. */
+    val privacy = com.health.server.platform.PrivacyStore(userSettings)
     val days = DayService(db, profiles, records, clock)
     val ingest = Ingest(db, devices, records, days, profiles, clock)
     val fit = FitImporter(ingest)
     val foodDatabase = OpenFoodFacts(http, db, clock, foodDatabaseUrls)
+    /** Whether Open Food Facts may be asked on [userId]'s behalf: on for the server, and not paused by them. */
+    suspend fun foodDatabaseFor(userId: String): Boolean = settings.get().foodDatabase && privacy.allows(userId, com.health.api.DataPath.FOOD_DATABASE)
     val foods = FoodStore(db, clock)
     val entries = EntryStore(db, box, clock)
     val modules = ModuleService(
@@ -85,7 +93,7 @@ class Services(
     val hormones = com.health.server.care.HormonesService(modules.meds, entries, profiles, clock).also { modules.meds.onChanged = it::medicationChanged }
     val lifeStages = com.health.server.care.LifeStageService(entries, profiles, modules.cycle, modules.mind, db, clock).also { modules.cycle.stageOf = it::stageOf }
     val appointments = com.health.server.care.AppointmentsService(entries, profiles, { hooks }, clock)
-    val sharing = com.health.server.care.SharingService(db, users, profiles, clock)
+    val sharing = com.health.server.care.SharingService(db, users, profiles, clock, paused = { !privacy.allows(it, com.health.api.DataPath.SHARES) })
     init {
         modules.care = com.health.server.care.CareDay(hormones, lifeStages, appointments)
     }
@@ -95,14 +103,12 @@ class Services(
     val tracking: TrackingService = run {
         val vitals = VitalsService(db, records, profiles, clock)
         val drinks = DrinksService(db, profiles, records, days, clock)
-        val symptoms = SymptomsService(entries, profiles, days, drinks, modules.cycle, weather, clock)
+        val symptoms = SymptomsService(entries, profiles, days, drinks, modules.cycle, weather, clock, weatherAllowed = { privacy.allows(it, com.health.api.DataPath.WEATHER) })
         val habits = HabitsService(db, profiles, days, modules, drinks, clock)
         TrackingService(vitals, drinks, symptoms, habits, weather, days, clock).also { days.parts += it }
     }
 
-    /** Each person's own settings, sealed one row per key (conditions, a feature's diary settings, Autism & ADHD, transition). */
-    val userSettings = com.health.server.modules.UserSettingsStore(db, box, clock)
-    val mealie = com.health.server.food.MealieService(http, userSettings, foods, { settings.get().webhooksPrivateNetworks }, clock, loopback = { config.outboundLoopback })
+    val mealie = com.health.server.food.MealieService(http, userSettings, foods, { settings.get().webhooksPrivateNetworks }, clock, loopback = { config.outboundLoopback }, paused = { !privacy.allows(it, com.health.api.DataPath.MEALIE) })
 
     /** How each person arranges the apps' screens. */
     val layouts = com.health.server.platform.LayoutService(userSettings)
@@ -168,6 +174,8 @@ class Services(
 
     /** The optional AI assistant (off until the admin turns it on; each person opts in). */
     val ai: com.health.server.ai.AiService by lazy { com.health.server.ai.AiService(this) }
+    /** Settings › Where your data goes. */
+    val privacyMap: com.health.server.platform.PrivacyService by lazy { com.health.server.platform.PrivacyService(this) }
 
     override fun close() {
         db.close()
