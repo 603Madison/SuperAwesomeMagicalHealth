@@ -235,6 +235,8 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         }
         // Two devices side by side, night by night (ui/devices/CompareScreen.kt).
         composable("devices/compare") { com.health.app.ui.devices.CompareRoute(onBack = { nav.popBackStack() }) }
+        // Health alerts (ui/alerts): from Today's bell, its alert insights, and the alerts' notifications.
+        composable("alerts") { com.health.app.ui.alerts.AlertsRoute(onBack = { nav.popBackStack() }) }
         // Settings › Where your data goes (ui/settings/WhereDataGoes.kt), also reached from wherever something is paused there.
         composable(WhereDataGoes.ROUTE) { com.health.app.ui.settings.WhereDataGoesRoute(onBack = { nav.popBackStack() }, onOpen = ::open) }
         // The last 24 hours as the devices recorded them (ui/recent): from Today's and Trends' sleep, and each device.
