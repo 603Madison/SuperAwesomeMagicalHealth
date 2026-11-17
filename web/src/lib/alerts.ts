@@ -1,4 +1,4 @@
-import type { AlertLevel, AlertSettings, AlertWatch, HealthAlert } from "./types";
+import type { AlertLevel, AlertSettings, AlertWatch, HealthAlert, HealthAlerts } from "./types";
 
 /*
  * Health alerts (GET /api/alerts, pages/Alerts.tsx), the parts that don't need React (npm test
@@ -126,6 +126,18 @@ export function watchState(w: AlertWatch): "on" | "off" | "not-yet" {
 }
 
 export const WATCH_STATE_TEXT: Record<ReturnType<typeof watchState>, string> = { on: "Watching", off: "Off", "not-yet": "Not yet" };
+
+/**
+ * Health alerts in one line, for Body's row: how many are new, and how much it's watching. Without
+ * the list yet ([alerts] null), just what's new.
+ */
+export function alertsLine(unseen: number, alerts?: Pick<HealthAlerts, "settings" | "watching"> | null): string {
+  const fresh = unseen > 0 ? `${unseen} new` : "Nothing new";
+  if (!alerts) return unseen > 0 ? fresh : "A heads-up when your readings look out of the ordinary";
+  if (!alerts.settings.enabled) return "Turned off";
+  const n = alerts.watching.filter((w) => w.watching).length;
+  return `${fresh} · ${n === 0 ? "nothing to watch yet" : `watching ${n} ${n === 1 ? "thing" : "things"}`}`;
+}
 
 /** The empty list's words: alerts off, nothing to watch yet, or a quiet spell (then what it's watching follows). */
 export function emptyText(settings: Pick<AlertSettings, "enabled">, watching: AlertWatch[], days = ALERT_DAYS): string {

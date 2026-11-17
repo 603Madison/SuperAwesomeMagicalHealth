@@ -1,4 +1,4 @@
-import type { CompareKey, ComparedMetric, ComparedNight, DeviceKind, RecentDevice, SleepSession, Units } from "./types";
+import type { CompareKey, ComparedMetric, ComparedNight, DeviceComparison, DeviceKind, RecentDevice, SleepSession, Units } from "./types";
 
 /*
  * Two devices side by side (GET /api/devices/compare, pages/Compare.tsx), the parts that don't need
@@ -241,6 +241,18 @@ export function metricSentence(m: ComparedMetric, names: ShortNames, fmt: Compar
 /** The metrics this version knows, in the server's order. */
 export function knownMetrics(metrics: ComparedMetric[]): ComparedMetric[] {
   return metrics.filter((m) => knownKey(m.key)).sort((x, y) => ORDER.indexOf(x.key) - ORDER.indexOf(y.key));
+}
+
+/**
+ * Compare devices in one line, for Body's row: how far apart the two read on heart rate at night
+ * (or the first thing both measured): "The ring read 3 bpm higher than the strap". Null with
+ * nothing both measured.
+ */
+export function compareLine(c: Pick<DeviceComparison, "a" | "b" | "metrics">, fmt: CompareFormat): string | null {
+  const metrics = knownMetrics(c.metrics);
+  const m = metrics.find((x) => x.key === "NIGHT_HEART_RATE") ?? metrics[0];
+  if (!m || !c.a || !c.b) return null;
+  return metricSentence(m, shortNames(c.a, c.b), fmt)[0];
 }
 
 // ---- Each night ----

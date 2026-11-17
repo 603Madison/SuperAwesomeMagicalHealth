@@ -62,7 +62,7 @@ export function WatchSetup() {
             {error && <div className="notice notice-error">{error}</div>}
             <Button variant="primary" className="wide" busy={busy} onClick={connect}>Connect my watch</Button>
             <Button variant="ghost" className="wide" onClick={() => window.close()}>Cancel</Button>
-            <p className="login-version">You can disconnect it any time in Settings › Account › Signed in on.</p>
+            <p className="login-version">You can disconnect it any time in You › Look and account › Signed in on.</p>
           </>
         )}
       </div>

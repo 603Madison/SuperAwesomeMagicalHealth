@@ -56,8 +56,8 @@ export function Reports() {
   const toggle = (id: ReportSectionKey) => setChosen(chosen.includes(id) ? chosen.filter((s) => s !== id) : [...chosen, id]);
 
   const sections: Section[] = [
-    { id: "report", label: "A report for your doctor", node: (
-      <Card title="A report for your doctor" icon={<FileText size={18} />} className="span-2">
+    { id: "report", label: "The report", node: (
+      <Card title="The report" icon={<FileText size={18} />} className="span-2">
         <p className="muted">A few clear pages: averages, charts and what changed, for the time you choose. Print it, or bring it on your phone.</p>
         <DateRange range={range} setRange={setRange} from={from} setFrom={setFrom} to={to} setTo={setTo} />
         <Field label="What to include" help="Private features are in it only if you tick them; you choose what your doctor sees.">
@@ -130,7 +130,7 @@ export function Reports() {
 
   return (
     <div className="page">
-      <PageHeader title="Reports & export" subtitle="A summary for your doctor, or all your data to keep" actions={arranged.button} />
+      <PageHeader title="A report for your doctor" subtitle="A summary for your doctor, or all your data to keep" actions={arranged.button} />
       {arranged.render()}
     </div>
   );

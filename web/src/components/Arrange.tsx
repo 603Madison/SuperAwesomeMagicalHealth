@@ -93,15 +93,17 @@ export function ArrangeButton({ title, onClick, compact }: { title: string; onCl
  * [defaultHidden]: what's hidden until the person arranges the screen (the quick actions past the
  * first few). [hiddenText]: what hiding does here ("Hidden", or "Under More").
  */
-export function ArrangePanel({ screen, title, items, groups, onClose, defaultHidden = [], hiddenText = "Hidden", showLabel = (label) => `Show ${label}`, intro, top }: {
+export function ArrangePanel({ screen, title, items, groups, onClose, defaultHidden = [], hiddenText = "Hidden", showLabel = (label) => `Show ${label}`, intro, top, reorderOnly }: {
   screen: string; title: string; items: ArrangeItem[]; groups?: string[]; onClose: () => void;
   defaultHidden?: string[]; hiddenText?: string; showLabel?: (label: string) => string; intro?: ReactNode;
-  /** Above the list: a switch between related screens (Today's cards and its quick actions). */
+  /** Above the list: a switch between related screens. */
   top?: ReactNode;
+  /** Only the order (the + sheet shows everything): no switches, and what was hidden stays as it was saved. */
+  reorderOnly?: boolean;
 }) {
   const saved = useScreenLayout(screen);
   const ordered = arrange(items, (i) => i.id, saved);
-  const hiddenNow = new Set(saved ? saved.hidden : defaultHidden);
+  const hiddenNow = new Set(reorderOnly ? [] : saved ? saved.hidden : defaultHidden);
   const [said, setSaid] = useState("");
   const [drag, setDrag] = useState<{ id: string; to: number } | null>(null);
   const rows = useRef(new Map<string, HTMLLIElement>());
@@ -114,7 +116,7 @@ export function ArrangePanel({ screen, title, items, groups, onClose, defaultHid
     // Sections not offered now (a feature that's off, or one only the phone app has) keep their place and state.
     const next: ScreenLayout = {
       order: mergeOrder(saved?.order ?? [], ids),
-      hidden: [...(saved?.hidden ?? []).filter((id) => !offered.has(id)), ...ids.filter((id) => hidden.has(id))],
+      hidden: reorderOnly ? (saved?.hidden ?? []) : [...(saved?.hidden ?? []).filter((id) => !offered.has(id)), ...ids.filter((id) => hidden.has(id))],
     };
     saveScreen(screen, next).catch(() => errorToast(COULDNT_SAVE));
   };
@@ -202,10 +204,12 @@ export function ArrangePanel({ screen, title, items, groups, onClose, defaultHid
                     </span>
                     <button type="button" className="icon-btn" aria-label={`Move ${item.label} up`} title="Move up" aria-disabled={n === 0} onClick={() => move(item, -1)}><ArrowUp size={18} /></button>
                     <button type="button" className="icon-btn" aria-label={`Move ${item.label} down`} title="Move down" aria-disabled={n === list.length - 1} onClick={() => move(item, 1)}><ArrowDown size={18} /></button>
-                    <label className="toggle arrange-switch">
-                      <input type="checkbox" role="switch" checked={!isHidden} aria-label={showLabel(item.label)} onChange={(e) => toggle(item, e.target.checked)} />
-                      <span className="toggle-track" aria-hidden />
-                    </label>
+                    {!reorderOnly && (
+                      <label className="toggle arrange-switch">
+                        <input type="checkbox" role="switch" checked={!isHidden} aria-label={showLabel(item.label)} onChange={(e) => toggle(item, e.target.checked)} />
+                        <span className="toggle-track" aria-hidden />
+                      </label>
+                    )}
                   </li>
                 );
               })}

@@ -305,7 +305,7 @@ export function useWater(modules: Module[]): boolean {
 
 /**
  * Whether vitamins and minerals show (Food's `nutrition.micros` field, on by default): the Food
- * page's section, what foods carry, "More nutrients" when adding one, the Trends chart and the
+ * page's section, what foods carry, "More nutrients" when adding one, the chart in Body and the
  * targets. Never in eating disorder recovery, where no amounts of food show at all.
  */
 export function useMicros(modules: Module[]): boolean {

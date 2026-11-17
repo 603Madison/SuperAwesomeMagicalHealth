@@ -1,14 +1,21 @@
 import { useState, type ReactNode } from "react";
+import { Dumbbell, Moon, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { hm, isoDate, num, shortDate, useUnits, weightValue } from "../lib/format";
+import { clock, distance, hm, isoDate, num, shortDate, useToday, useUnits, weightValue, workoutLabel } from "../lib/format";
+import { BODY_SPANS, type BodySpan } from "../lib/nav";
 import { useSession } from "../lib/session";
 import { DEFAULT_TARGETS, glucoseValue, unitLabel } from "../lib/vitals";
-import type { NutritionTarget, TrendDay } from "../lib/types";
-import { BarChart, LineChart, scoreFloor } from "../components/charts";
+import type { NutritionTarget, TrendDay, Workout } from "../lib/types";
+import { useReadOnly } from "../lib/viewing";
+import { BarChart, Hypnogram, LineChart, StageLegend, scoreFloor } from "../components/charts";
 import { useModules } from "../App";
-import { Card, ErrorNotice, PageHeader, Segmented, Spinner, useLoad } from "../components/ui";
-import { useArrange, type Section } from "../components/Arrange";
+import { Button, Card, CardAction, ErrorNotice, Menu, Spinner, errorToast, useLoad } from "../components/ui";
+import { useArrange, useHashScroll, type Section } from "../components/Arrange";
+import { SleepDialog, WorkoutDialog } from "../components/LogDialogs";
+import { useLogged } from "../components/LogSheet";
+import { ACTIVITY_METRICS, NIGHT_METRICS, SourcesLink, combinedFor } from "../components/Sources";
 import { layoutKey } from "../lib/types";
+import { BodyFrame } from "./Body";
 import { useMicros, useWater } from "../lib/fields";
 import { GROUPS, NUTRIENTS, amountText, infoOf, targetOf, trendValue, withUnit, type NutrientKey } from "../lib/micros";
 
@@ -31,12 +38,19 @@ interface Series {
   name?: string;
 }
 
-export function Trends() {
-  const [days, setDays] = useState(30);
+/*
+ * Body at a week, a month or a year: each day's numbers, as Trends had them (the scores, sleep,
+ * heart, steps, weight and the rest for the features that are on), with the nights and the
+ * workouts in that time. The sections keep Trends' saved arrangement (layoutKey("trends")) and ids;
+ * the nights and workouts are new ones.
+ */
+export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; setSpan: (s: BodySpan) => void }) {
+  const days = BODY_SPANS.find((s) => s.id === span)!.days;
   const on = useModules();
   const units = useUnits();
   const goals = useSession((s) => s.profile?.goals);
-  const { data, error, loading, reload } = useLoad(() => api.trends(days), [days]);
+  const logged = useLogged();
+  const { data, error, loading, reload } = useLoad(() => api.trends(days), [days, logged]);
   const unit = units === "IMPERIAL" ? "lb" : "kg";
   const vt = useSession((s) => s.profile?.vitalsTargets) ?? DEFAULT_TARGETS;
   const water = useWater(on);
@@ -107,7 +121,8 @@ export function Trends() {
       : s.format(avg);
     return {
       id: s.id, label: s.title, node: (
-        <Card title={s.title} action={<span className="muted small">average <strong>{average}</strong></span>}>
+        <Card title={s.title} className="body-card" action={<span className="muted small">average <strong>{average}</strong></span>}
+          link={s.id === "weight" ? { to: "/body/weight", label: "Open Weight: every entry, body fat and measurements" } : undefined}>
           {s.kind === "line"
             ? <LineChart
                 label={`${s.title} each day`} color={s.color} band={s.band} dots={data.days.length <= 31} area={!s.score && !s.extra} name={s.name}
@@ -131,19 +146,115 @@ export function Trends() {
     const after = sections.findIndex((x) => x.id === "protein");
     sections.splice(after >= 0 ? after + 1 : sections.length, 0, nutrient);
   }
-  const arranged = useArrange(layoutKey("trends"), "Trends", sections);
+  // Each night and each workout in the time, after their charts (new ids: nothing saved had them).
+  const place = (section: Section, after: string) => {
+    const at = sections.findIndex((x) => x.id === after);
+    sections.splice(at >= 0 ? at + 1 : sections.length, 0, section);
+  };
+  if (on.includes("SLEEP")) place({ id: "nights", label: "Nights", node: <NightsCard days={days} /> }, "asleep");
+  if (on.includes("ACTIVITY")) place({ id: "workouts", label: "Workouts", node: <WorkoutsCard days={days} /> }, "steps");
+  const arranged = useArrange(layoutKey("trends"), "Body", sections);
+  useHashScroll(!!data);
 
   return (
-    <div className="page">
-      <PageHeader title="Trends" subtitle="Your numbers over weeks and months, against your own usual" actions={<>
-        <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 7, label: "Week" }, { value: 30, label: "Month" }, { value: 90, label: "3 months" }, { value: 365, label: "Year" }]} />
-        {arranged.button}
-      </>} />
+    <BodyFrame span={span} setSpan={setSpan} actions={arranged.button}>
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
       {data && arranged.nodes.length === 0 && arranged.shown.length > 0 && <p className="muted">Nothing recorded in this time yet.</p>}
-      <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
-    </div>
+      <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render("grid grid-2 body-grid")}</div>
+    </BodyFrame>
+  );
+}
+
+/** How many nights or workouts show before "Show all". */
+const FIRST = 7;
+
+/** Each night in the time (up to a month), with its stages; one entered by hand can go, and a night can be added. */
+function NightsCard({ days }: { days: number }) {
+  const readOnly = useReadOnly();
+  const logged = useLogged();
+  const nights = useLoad(() => api.sleep(Math.min(days, 30)), [days, logged]);
+  // Last night's readings, for where they came from when more than one device measured them.
+  const now = useToday();
+  const day = useLoad(() => api.day(now).catch(() => null), [now, logged]);
+  const [adding, setAdding] = useState(false);
+  const [all, setAll] = useState(false);
+  const reload = () => { nights.reload(); day.reload(); };
+  const list = nights.data ?? [];
+  return (
+    <Card id="nights" title="Nights" icon={<Moon size={18} />} className="span-2 body-card"
+      action={!readOnly && <CardAction label="Add a night" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
+      {nights.error && <p className="muted">{nights.error}</p>}
+      {nights.data && <SourcesLink values={combinedFor(day.data?.combined, NIGHT_METRICS)} onChanged={reload} prefix="Last night's readings:" />}
+      {nights.data && list.length === 0 && <p className="muted">No nights yet. Wear your ring or watch to bed, or add a night by hand.</p>}
+      {(all ? list : list.slice(0, FIRST)).map((n) => (
+        <div key={n.sessionId ?? n.start} className="night">
+          <div className="night-head">
+            <div>
+              <strong>{new Date(n.end).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}</strong>
+              <div className="muted small">{clock(n.start)} – {clock(n.end)} · {hm(n.asleepMinutes)} asleep · {n.efficiency}% efficiency{n.lowestHeartRate ? ` · lowest ${num(n.lowestHeartRate)} bpm` : ""}{n.source ? ` · ${n.source}` : ""}</div>
+            </div>
+            {!readOnly && n.source === "Entered by hand" && n.sessionId && (
+              <Button variant="ghost" onClick={async () => { try { await api.deleteSleep(n.sessionId!); reload(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /> Delete</Button>
+            )}
+          </div>
+          {n.stages.length > 0 && <Hypnogram stages={n.stages} start={n.start} end={n.end} height={120} />}
+          {n.staged && <StageLegend deep={n.deepMinutes} rem={n.remMinutes} light={n.lightMinutes} awake={n.awakeMinutes} />}
+          {n.combined && <SourcesLink sleep={n.combined} onChanged={reload} />}
+        </div>
+      ))}
+      {list.length > FIRST && <button type="button" className="link-btn" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${list.length}`}</button>}
+      {adding && <SleepDialog onClose={() => setAdding(false)} onSaved={reload} />}
+    </Card>
+  );
+}
+
+/** Each workout in the time; one entered by hand can be changed or deleted, and one can be logged. */
+function WorkoutsCard({ days }: { days: number }) {
+  const readOnly = useReadOnly();
+  const units = useUnits();
+  const logged = useLogged();
+  const workouts = useLoad(() => api.workouts(days), [days, logged]);
+  const now = useToday();
+  const day = useLoad(() => api.day(now).catch(() => null), [now, logged]);
+  const [editing, setEditing] = useState<Workout | "new" | null>(null);
+  const [all, setAll] = useState(false);
+  const reload = () => { workouts.reload(); day.reload(); };
+  const list = workouts.data ?? [];
+  return (
+    <Card id="workouts" title="Workouts" icon={<Dumbbell size={18} />} className="span-2 body-card"
+      action={!readOnly && <CardAction label="Log a workout" onClick={() => setEditing("new")}><Plus size={18} /></CardAction>}>
+      {workouts.error && <p className="muted">{workouts.error}</p>}
+      {workouts.data && <SourcesLink values={combinedFor(day.data?.combined, ACTIVITY_METRICS)} onChanged={reload} prefix="Today's steps and calories:" />}
+      {workouts.data && list.length === 0 && <p className="muted">None in this time. They come from your watch, or log one with +.</p>}
+      {list.length > 0 && (
+        <ul className="rows">
+          {(all ? list : list.slice(0, FIRST)).map((w) => (
+            <li key={w.id} className="row">
+              <div className="row-icon"><Dumbbell size={18} /></div>
+              <div className="row-main">
+                <div className="row-title">{w.name ?? workoutLabel(w.type)}</div>
+                <div className="row-sub">
+                  {new Date(w.start).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} {clock(w.start)} · {hm((w.end - w.start) / 60_000)}
+                  {w.distanceM ? ` · ${distance(w.distanceM, units)}` : ""}{w.avgHeartRate ? ` · ${num(w.avgHeartRate)} bpm avg` : ""}{w.effort ? ` · effort ${w.effort}/10` : ""}{w.source ? ` · ${w.source}` : ""}
+                </div>
+              </div>
+              <div className="row-end">{w.activeCalories ? `${num(w.activeCalories)} kcal` : ""}</div>
+              {!readOnly && w.manual && (
+                <div className="row-actions">
+                  <Menu label={`More for ${w.name ?? workoutLabel(w.type)}`} trigger={<MoreHorizontal size={18} />} items={[
+                    { label: "Change", icon: <Pencil size={18} />, onSelect: () => setEditing(w) },
+                    { label: "Delete", icon: <Trash2 size={18} />, danger: true, onSelect: async () => { try { await api.deleteWorkout(w.id!); reload(); } catch (e) { errorToast(e); } } },
+                  ]} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {list.length > FIRST && <button type="button" className="link-btn" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${list.length}`}</button>}
+      {editing && <WorkoutDialog workout={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={reload} />}
+    </Card>
   );
 }
 
@@ -173,7 +284,7 @@ export function NutrientChart({ days, target }: { days: TrendDay[]; target?: Nut
     try { localStorage.setItem(NUTRIENT_KEY, k); } catch { /* fine without */ }
   };
   return (
-    <Card id="nutrient" title="Vitamins & minerals" action={known.length > 0 && <span className="muted small">average <strong>{withUnit(known.reduce((a, b) => a + b, 0) / known.length, info.unit)}</strong></span>}>
+    <Card id="nutrient" title="Vitamins & minerals" className="body-card" action={known.length > 0 && <span className="muted small">average <strong>{withUnit(known.reduce((a, b) => a + b, 0) / known.length, info.unit)}</strong></span>}>
       <label className="nutrient-pick">
         <span className="sr-only">Nutrient</span>
         <select value={key} onChange={(e) => choose(e.target.value as NutrientKey)}>

@@ -10,7 +10,7 @@ import { FEATURES, featureName } from "../components/features";
 import { Button, Card, Empty, ErrorNotice, Field, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
 
 /**
- * What you're tracking: the conditions and goals you live with or want to keep an eye on. Each
+ * Choose what you track: the conditions and goals you live with or want to keep an eye on. Each
  * turns on the features and the fields in them that fit, so the app shows what helps you and
  * nothing else. Private, and kept encrypted.
  */
@@ -51,7 +51,7 @@ export function Conditions() {
 
   return (
     <div className="page">
-      <PageHeader title="What you're tracking" subtitle="Your conditions and goals decide what the app shows, so you see what helps you and nothing else"
+      <PageHeader title="Choose what you track" subtitle="Your conditions and goals decide what the app shows, so you see what helps you and nothing else"
         actions={<Button variant="primary" onClick={() => setOwn(true)}><Plus size={18} /> Your own</Button>} />
       {(catalog.error || mine.error) && <ErrorNotice message={catalog.error ?? mine.error ?? ""} onRetry={() => { catalog.reload(); mine.reload(); }} />}
 
@@ -82,7 +82,7 @@ export function Conditions() {
             })}
           </ul>
         )}
-        {picked.length > 0 && <p className="muted small">Removing one hides the fields it brought, but not the features: turn those off under Features in Settings › What you're tracking if you like. Nothing you've logged is lost.</p>}
+        {picked.length > 0 && <p className="muted small">Removing one hides the fields it brought, but not the features: turn those off under Features in You › What you track if you like. Nothing you've logged is lost.</p>}
       </Card>
 
       <div className="search-box conditions-search">

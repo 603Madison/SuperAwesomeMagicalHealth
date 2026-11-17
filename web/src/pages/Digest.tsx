@@ -41,7 +41,7 @@ export function DigestPage() {
       {data === null && (
         <Card>
           <Empty icon={<Inbox size={36} />} title={week ? "No digest for that week" : "Your first digest is on its way"}>
-            {prefs?.enabled === false ? "The weekly digest is off. Turn it on in Settings › Reminders & sharing." : `It comes every ${WEEKDAYS[(prefs?.day ?? 7) - 1]} at ${String(prefs?.hour ?? 18).padStart(2, "0")}:00, looking back at Monday to Sunday.`}
+            {prefs?.enabled === false ? "The weekly digest is off. Turn it on in You › Reminders, alerts and sharing." : `It comes every ${WEEKDAYS[(prefs?.day ?? 7) - 1]} at ${String(prefs?.hour ?? 18).padStart(2, "0")}:00, looking back at Monday to Sunday.`}
           </Empty>
         </Card>
       )}

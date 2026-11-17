@@ -382,5 +382,5 @@ function HairDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 }
 
 export function EmptyTransition() {
-  return <Empty icon={<Sparkles size={32} />} title="Transition">Turn on Transition in Settings › What you're tracking to keep milestones, changes and moments here.</Empty>;
+  return <Empty icon={<Sparkles size={32} />} title="Transition">Turn on Transition in You › What you track to keep milestones, changes and moments here.</Empty>;
 }

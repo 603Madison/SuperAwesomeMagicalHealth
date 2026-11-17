@@ -1,89 +1,91 @@
-import { useState } from "react";
-import { Plus, Scale, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import { ChevronDown, Watch } from "lucide-react";
 import { api } from "../lib/api";
-import { isoDate, shortDate, useUnits, weight, weightValue } from "../lib/format";
+import { useAlertBadge } from "../lib/alertBadge";
+import { alertsLine } from "../lib/alerts";
+import { compareLine } from "../lib/compare";
+import { shiftDate, useUnits } from "../lib/format";
+import { BODY_SPANS, NAMES, NO_READINGS, spanOf, type BodySpan } from "../lib/nav";
 import { useSession } from "../lib/session";
-import { LineChart } from "../components/charts";
-import { Button, Card, ErrorNotice, PageHeader, Segmented, Spinner, Stat, errorToast, useLoad } from "../components/ui";
-import { useArrange, type Section } from "../components/Arrange";
-import { layoutKey } from "../lib/types";
-import { WeightDialog } from "../components/LogDialogs";
-import { MeasurementsCard } from "../components/Measurements";
-import { F, useFields } from "../lib/fields";
-import { useReadOnly } from "../lib/viewing";
+import { clockTime, zonedTime } from "../lib/today";
+import type { RecentDevice } from "../lib/types";
+import { useViewing } from "../lib/viewing";
+import { useCompareOffered } from "../components/Navigation";
+import { Menu, MenuGroup, MenuRow, PageHeader, useLoad } from "../components/ui";
+import { BodyDay } from "./BodyDay";
+import { BodyTrends } from "./BodyTrends";
+
+/*
+ * Body: what the devices measured. One switch: the last 24 hours as recorded (the night, heart
+ * rate, the tiles, steps; one device or all of them), or a week, a month or a year of days (the
+ * scores, sleep, heart, steps, weight and the rest, with the nights and workouts). At the bottom,
+ * Health alerts and Compare devices. While viewing someone's share: their days only (the last 24
+ * hours as recorded is only ever the person's own).
+ *
+ * The address keeps the span and device: /body?span=week, /body?device=ring1.
+ */
 
 export function Body() {
-  const units = useUnits();
-  const { has } = useFields();
-  const readOnly = useReadOnly();
-  const [days, setDays] = useState(90);
-  const goals = useSession((s) => s.profile?.goals);
-  const weights = useLoad(() => api.measurements("WEIGHT", days), [days]);
-  const fat = useLoad(() => api.measurements("BODY_FAT", days), [days]);
-  const [adding, setAdding] = useState(false);
-  const reload = () => { weights.reload(); fat.reload(); };
-  const list = weights.data ?? [];
-  const latest = list[0];
-  const oldest = list[list.length - 1];
-  const change = latest && oldest && latest !== oldest ? latest.value - oldest.value : undefined;
-  const target = goals?.targetWeightKg ?? undefined;
-  const unit = units === "IMPERIAL" ? "lb" : "kg";
+  const [params, setParams] = useSearchParams();
+  const viewing = useViewing((s) => !!s.share);
+  const span = spanOf(params.get("span"), viewing);
+  const device = params.get("device") || undefined;
+  const setSpan = (s: BodySpan) => setParams(s === "day" ? (device ? { device } : {}) : { span: s }, { replace: true });
+  const choose = (id: string | null) => setParams(id ? { device: id } : {}, { replace: true });
+  return span === "day"
+    ? <BodyDay device={device} choose={choose} setSpan={setSpan} />
+    : <BodyTrends span={span} setSpan={setSpan} />;
+}
 
-  const sections: Section[] = [
-    { id: "weight", label: "Weight", node: weights.data && (
-      <Card title="Weight" icon={<Scale size={18} />} className="span-2">
-        {list.length === 0 ? <p className="muted">No weights yet. Log one here or in the phone app; a smart scale in Health Connect comes in by itself.</p> : (
-          <>
-            <div className="stats">
-              <Stat label="Latest" value={weight(latest.value, units)} sub={new Date(latest.start).toLocaleDateString()} />
-              {change != null && <Stat label="Change" value={`${change > 0 ? "+" : "−"}${weight(Math.abs(change), units)}`} sub={`since ${new Date(oldest.start).toLocaleDateString()}`} />}
-              {target != null && <Stat label="Target" value={weight(target, units)} sub={`${weight(Math.abs(latest.value - target), units)} to go`} />}
-              {fat.data?.[0] && <Stat label="Body fat" value={fat.data[0].value.toFixed(1)} unit="%" />}
-            </div>
-            <LineChart
-              label="Weight over time" color="var(--c1)" height={220} dots={list.length <= 60}
-              band={target != null ? [weightValue(target, units) - 0.5, weightValue(target, units) + 0.5] : undefined}
-              points={[...list].reverse().map((s) => ({ x: s.start, y: weightValue(s.value, units) }))}
-              formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={(y) => `${y.toFixed(1)} ${unit}`}
-            />
-          </>
-        )}
-      </Card>
-    ) },
-    { id: "measurements", label: "Measurements", when: has(F.BODY_MEASUREMENTS), node: <MeasurementsCard imperial={units === "IMPERIAL"} readOnly={readOnly} /> },
-    { id: "entries", label: "Entries", node: list.length > 0 && (
-      <Card title="Entries" className="span-2">
-        <ul className="rows">
-          {list.slice(0, 50).map((s) => (
-            <li key={s.id} className="row">
-              <div className="row-main">
-                <div className="row-title">{weight(s.value, units)}</div>
-                <div className="row-sub">{new Date(s.start).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · {s.source}</div>
-              </div>
-              {s.source === "Entered by hand" && (
-                <div className="row-actions">
-                  <Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteMeasurement(s.id!); reload(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
-    ) },
-  ];
-  const arranged = useArrange(layoutKey("body"), "Body", sections);
-
+/** Around both views: the title, its actions (the device, Arrange), the span switch, and the links at the bottom. */
+export function BodyFrame({ span, setSpan, actions, children }: { span: BodySpan; setSpan: (s: BodySpan) => void; actions?: ReactNode; children: ReactNode }) {
+  const viewing = useViewing((s) => !!s.share);
+  const spans = viewing ? BODY_SPANS.filter((s) => s.id !== "day") : BODY_SPANS;
   return (
-    <div className="page">
-      <PageHeader title="Body" subtitle="Weight and body composition" actions={<>
-        <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 30, label: "Month" }, { value: 90, label: "3 months" }, { value: 365, label: "Year" }]} />
-        {!readOnly && <Button variant="primary" onClick={() => setAdding(true)}><Plus size={18} /> Log weight</Button>}
-        {arranged.button}
-      </>} />
-      {weights.error && <ErrorNotice message={weights.error} onRetry={weights.reload} />}
-      {!weights.data && weights.loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {arranged.render()}
-      {adding && <WeightDialog onClose={() => setAdding(false)} onSaved={reload} />}
+    <div className="page body-page">
+      <PageHeader title={NAMES.body} actions={actions} />
+      <div className="span-switch" role="radiogroup" aria-label="How far back" style={{ gridTemplateColumns: `repeat(${spans.length}, minmax(0, 1fr))` }}>
+        {spans.map((s) => (
+          <button key={s.id} type="button" role="radio" aria-checked={s.id === span} className={s.id === span ? "is-on" : ""} onClick={() => setSpan(s.id)}>{s.label}</button>
+        ))}
+      </div>
+      {children}
+      {!viewing && <BodyLinks />}
     </div>
+  );
+}
+
+/** "All devices ▾": the last 24 hours from one device, or from all of them. */
+export function DeviceFilter({ devices, device, choose }: { devices: Pick<RecentDevice, "id" | "name">[]; device?: string; choose: (id: string | null) => void }) {
+  const chosen = devices.find((d) => d.id === device);
+  return (
+    <Menu label="Which device" buttonClass="device-filter" trigger={<><Watch size={16} aria-hidden="true" /><span>{chosen?.name ?? "All devices"}</span><ChevronDown size={16} aria-hidden="true" /></>} items={[
+      { label: "All devices", onSelect: () => choose(null) },
+      ...devices.map((d) => ({ label: d.name, onSelect: () => choose(d.id) })),
+    ]} />
+  );
+}
+
+/** The person's devices that record readings, for the filter (the ones in the window come with the readings). */
+export function useReadingDevices(): RecentDevice[] {
+  const { data } = useLoad(() => api.devices().catch(() => []), []);
+  return (data ?? []).filter((d) => !NO_READINGS.includes(d.kind)).map((d) => ({ id: d.id, name: d.name, kind: d.kind, lastSyncAt: d.lastSyncAt }));
+}
+
+/** Health alerts and Compare devices, each with one line. */
+function BodyLinks() {
+  const unseen = useAlertBadge();
+  const alerts = useLoad(() => api.alerts(30).catch(() => null), []);
+  const compare = useCompareOffered();
+  const units = useUnits();
+  const zone = useSession((s) => s.profile?.timezone) || undefined;
+  const pair = useLoad(() => (compare ? api.compareDevices(14).catch(() => null) : Promise.resolve(null)), [compare]);
+  const line = pair.data ? compareLine(pair.data, { time: (ms) => clockTime(ms, zone), evening: (date) => zonedTime(shiftDate(date, -1), "18:00", zone), units }) : null;
+  return (
+    <MenuGroup>
+      <MenuRow to="/alerts" title={NAMES.alerts} sub={alertsLine(unseen, alerts.data)} />
+      {compare && <MenuRow to="/devices/compare" title={NAMES.compare} sub={line ?? "How far two devices read from each other, night by night"} />}
+    </MenuGroup>
   );
 }

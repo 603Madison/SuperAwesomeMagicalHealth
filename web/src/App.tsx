@@ -27,11 +27,11 @@ import { Login } from "./pages/Login";
 import { ConnectApp } from "./pages/ConnectApp";
 import { WatchSetup } from "./pages/WatchSetup";
 import { Today } from "./pages/Today";
-import { Sleep } from "./pages/Sleep";
-import { Activity } from "./pages/Activity";
 import { Food } from "./pages/Food";
 import { Body } from "./pages/Body";
-import { Trends } from "./pages/Trends";
+import { Weight } from "./pages/Weight";
+import { Care } from "./pages/Care";
+import { You } from "./pages/You";
 import { Devices } from "./pages/Devices";
 import { Settings } from "./pages/Settings";
 import { Admin } from "./pages/Admin";
@@ -42,11 +42,10 @@ import { Hormones } from "./pages/Hormones";
 import { Appointments } from "./pages/Appointments";
 import { Reports } from "./pages/Reports";
 import { DigestPage } from "./pages/Digest";
-import { Recent } from "./pages/Recent";
 import { Compare } from "./pages/Compare";
 import { Alerts } from "./pages/Alerts";
-import { HealthPage } from "./pages/Health";
-import { More } from "./pages/More";
+import { LogHost } from "./components/LogSheet";
+import { MOVED, movedTo } from "./lib/nav";
 
 export function App() {
   useEffect(() => { void session.start(); }, []);
@@ -88,8 +87,8 @@ export function useModules(): Module[] {
 const DEFAULT_MODULES: Module[] = ["ACTIVITY", "SLEEP", "NUTRITION", "BODY"];
 
 /**
- * Around every page: the sidebar on a wide screen, the five tabs along the bottom on a phone
- * (components/Navigation.tsx, lib/nav.ts).
+ * Around every page: the sidebar on a wide screen, the tabs along the bottom on a phone
+ * (components/Navigation.tsx, lib/nav.ts), and the + sheet (components/LogSheet.tsx).
  */
 function Shell() {
   const user = useSession((s) => s.user)!;
@@ -109,15 +108,14 @@ function Shell() {
         {/* A new key when whose data shows changes, so every page loads afresh for that person. */}
         <Routes key={viewing?.ownerId ?? "mine"}>
           <Route path="/" element={<Today />} />
-          <Route path="/trends" element={<Trends />} />
-          {/* Every feature that's on (or shared), one tap each: the phone's Health tab. */}
-          <Route path="/health" element={<HealthPage />} />
+          {/* What the devices measured: 24 hours (only ever the person's own), a week, a month or a year. */}
+          <Route path="/body" element={<Body />} />
+          <Route path="/body/weight" element={<Shared id="BODY"><Weight /></Shared>} />
+          {/* What the person looks after: a card per area, each opening its page. */}
+          <Route path="/care" element={<Care />} />
           {/* Every feature's page is always reachable by its link (the profile may still be loading);
               while viewing someone's data, only the ones they shared. */}
-          <Route path="/sleep" element={<Shared id="SLEEP"><Sleep /></Shared>} />
-          <Route path="/activity" element={<Shared id="ACTIVITY"><Activity /></Shared>} />
           <Route path="/food" element={<Shared id="NUTRITION"><Food /></Shared>} />
-          <Route path="/body" element={<Shared id="BODY"><Body /></Shared>} />
           <Route path="/mind" element={<Shared id="MIND"><Mind /></Shared>} />
           <Route path="/cycle" element={<Shared id="CYCLE"><Cycle /></Shared>} />
           <Route path="/bladder" element={<Shared id="CONTINENCE"><Continence /></Shared>} />
@@ -134,28 +132,35 @@ function Shell() {
           <Route path="/supplies" element={<SharedAny ids={["CONTINENCE", "CYCLE"]}><Supplies /></SharedAny>} />
           {!viewing && <Route path="/bladder/settings" element={<ContinenceSettingsPage />} />}
           {!viewing && <Route path="/cycle/settings" element={<CycleSettingsPage />} />}
+          {/* Devices, records, where data goes and the settings: only ever the person's own. */}
+          {!viewing && <Route path="/you" element={<You />} />}
           {!viewing && <Route path="/conditions" element={<Conditions />} />}
           {!viewing && <Route path="/assistant" element={<Assistant />} />}
           {!viewing && <Route path="/assistant/sent" element={<AssistantSent />} />}
           {!viewing && <Route path="/reports" element={<Reports />} />}
           {!viewing && <Route path="/digest" element={<DigestPage />} />}
           {!viewing && <Route path="/devices" element={<Devices />} />}
-          {/* The last 24 hours as recorded: never someone's share (the server says no to one). */}
-          {!viewing && <Route path="/recent" element={<Recent />} />}
           {/* Health alerts: only ever the person's own (the server never gives them to a share). */}
           {!viewing && <Route path="/alerts" element={<Alerts />} />}
           {/* Two devices side by side: never someone's share either (the server says no to one). */}
           {!viewing && <Route path="/devices/compare" element={<Compare />} />}
           {!viewing && <Route path="/settings" element={<Settings />} />}
-          {/* Your records, devices, the assistant and Settings: the phone's More tab. */}
-          {!viewing && <Route path="/more" element={<More />} />}
           {!viewing && user.role === "ADMIN" && <Route path="/admin" element={<Admin />} />}
+          {/* The old addresses (Last 24 hours, Trends, Sleep, Activity, Health, More) lead to where they are now. */}
+          {MOVED.map((path) => <Route key={path} path={path} element={<Moved />} />)}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
       <TabBar />
+      <LogHost />
     </div>
   );
+}
+
+/** An old address: where it is now, keeping what it asked for (a device, a span). */
+function Moved() {
+  const location = useLocation();
+  return <Navigate to={movedTo(location.pathname, location.search) ?? "/"} replace />;
 }
 
 /** A feature's page, unless someone else's data is showing and they didn't share that feature. */

@@ -203,7 +203,7 @@ export function usualLine(w: ContinenceWearing): string | null {
   return w.typicalMinutes != null && w.supplyId ? `You usually change these after about ${wornFor(rough(w.typicalMinutes))}` : null;
 }
 
-/** Whether a change reminder is due now (Up next's "Time to change"). */
+/** Whether a change reminder is due now (Right now's "Time to change"). */
 export function changeDue(w: ContinenceWearing | undefined, now = Date.now()): boolean {
   return !!w?.supplyId && w.changeDueAt != null && w.changeDueAt <= now;
 }

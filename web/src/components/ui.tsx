@@ -339,13 +339,13 @@ export function CountBadge({ count, className = "" }: { count: number; className
   );
 }
 
-/** One row of a menu (Health, More): an icon, a title and one line under it, a badge, and a chevron. Opens [to]. */
+/** One row of a menu (You, Body's links): an icon if it helps, a title and one line under it, a badge, and a chevron. Opens [to]. */
 export function MenuRow({ to, icon, title, sub, badge, onClick }: {
-  to: string; icon: ReactNode; title: string; sub?: ReactNode; badge?: number; onClick?: () => void;
+  to: string; icon?: ReactNode; title: string; sub?: ReactNode; badge?: number; onClick?: () => void;
 }) {
   return (
-    <Link to={to} className="menu-row" onClick={onClick}>
-      <span className="menu-row-icon" aria-hidden="true">{icon}</span>
+    <Link to={to} className={`menu-row ${icon ? "" : "no-icon"}`} onClick={onClick}>
+      {icon && <span className="menu-row-icon" aria-hidden="true">{icon}</span>}
       <span className="menu-row-text">
         <span className="menu-row-title">{title}{badge != null && <CountBadge count={badge} />}</span>
         {sub && <span className="menu-row-sub">{sub}</span>}

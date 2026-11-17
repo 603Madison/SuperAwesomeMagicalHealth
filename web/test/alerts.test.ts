@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ALERT_LEVEL_TEXT, ALERT_SECTIONS, DEFAULT_ALERT_SETTINGS, alertWhen, awayText, clampAlertNumber, clampAlertSettings, devicesText, emptyText, isAway,
-  newestFirst, replaceAlert, settingsChanged, stepAlertNumber, unseenIds, watchState,
+  alertsLine, newestFirst, replaceAlert, settingsChanged, stepAlertNumber, unseenIds, watchState,
 } from "../src/lib/alerts.ts";
 import { clockTime, dateIn } from "../src/lib/today.ts";
 import { ALERT_FEEDBACK_LABELS, type AlertWatch, type HealthAlert } from "../src/lib/types.ts";
@@ -100,4 +100,15 @@ test("settings stay within the server's limits, and steps land on round numbers"
   assert.equal(stepAlertNumber("lowOxygen", 90, -1), 89);
   assert.equal(settingsChanged(DEFAULT_ALERT_SETTINGS, { ...DEFAULT_ALERT_SETTINGS }), false);
   assert.equal(settingsChanged(DEFAULT_ALERT_SETTINGS, { ...DEFAULT_ALERT_SETTINGS, notify: false }), true);
+});
+
+test("Body's line for Health alerts: what's new, and how much it's watching", () => {
+  const watching: AlertWatch[] = [{ what: "Heart rate", how: "", watching: true }, { what: "Blood oxygen", how: "", watching: true }, { what: "Getting ill", how: "Learning", watching: false }];
+  assert.equal(alertsLine(1, { settings: DEFAULT_ALERT_SETTINGS, watching }), "1 new · watching 2 things");
+  assert.equal(alertsLine(0, { settings: DEFAULT_ALERT_SETTINGS, watching: watching.slice(0, 1) }), "Nothing new · watching 1 thing");
+  assert.equal(alertsLine(0, { settings: DEFAULT_ALERT_SETTINGS, watching: [] }), "Nothing new · nothing to watch yet");
+  assert.equal(alertsLine(0, { settings: { ...DEFAULT_ALERT_SETTINGS, enabled: false }, watching }), "Turned off");
+  // Before the list has come: just what's new.
+  assert.equal(alertsLine(2, null), "2 new");
+  assert.equal(alertsLine(0, null), "A heads-up when your readings look out of the ordinary");
 });
