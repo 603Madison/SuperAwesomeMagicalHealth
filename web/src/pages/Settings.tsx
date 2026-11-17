@@ -15,7 +15,7 @@ import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
 import { useArrange, type Section } from "../components/Arrange";
 import { MealieSettings } from "./Mealie";
-import { DigestSettings, IntegrationSettings, NotificationSettings, SharingSettings } from "./SettingsExtra";
+import { DigestSettings, IntegrationSettings, NotificationSettings, PrivacySettings, SharingSettings, type SettingsPlace } from "./SettingsExtra";
 import { AssistantSettingsCard, useAiStatus } from "./Assistant";
 import { FieldsEditor } from "../components/FieldKit";
 import { NutrientTargetsPanel } from "./NutrientTargets";
@@ -66,6 +66,18 @@ export function Settings() {
   const navigate = useNavigate();
   // A new connector link or upload key shows in the list of sign-ins at once.
   const [signIns, setSignIns] = useState(0);
+  // The place picker (for the weather) is in You and your goals while symptoms are on, or a place is set.
+  const weather = !!profile && (on.includes("SYMPTOMS") || !!profile.place);
+
+  /** Where a way out is set up, for Where your data goes: a section shown here (not hidden), or a tab. */
+  const where = (id: string): SettingsPlace | null => {
+    const tab = GROUPS.find((g) => g.id === id);
+    if (tab) return { id: tab.id, label: tab.label };
+    if (id === "profile" && !weather) return null;
+    const section = arranged.shown.find((x) => x.id === id);
+    if (!section) return null;
+    return { id: section.id, label: id === "profile" ? `${section.label} › Weather` : section.label };
+  };
 
   const sections: (Section & { group: string })[] = [
     { id: "profile", group: label("you"), label: "You and your goals", node: (
@@ -123,6 +135,10 @@ export function Settings() {
     ) },
     { id: "sharing", group: label("reminders"), label: "Sharing", node: (
       <Panel id="sharing" title="Sharing"><SharingSettings /></Panel>
+    ) },
+    // Every way out, first among the connections: they're what can send anything anywhere.
+    { id: "privacy", group: label("connections"), label: "Where your data goes", node: (
+      <Panel id="privacy" title="Where your data goes"><PrivacySettings where={where} /></Panel>
     ) },
     { id: "devices", group: label("connections"), label: "Devices", node: (
       <Panel id="devices" title="Devices">

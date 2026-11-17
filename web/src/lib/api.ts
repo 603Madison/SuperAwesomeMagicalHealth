@@ -12,7 +12,7 @@ import type {
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
   AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices, FoodPhotoEstimate,
-  NutrientTargets, RecentReadings,
+  NutrientTargets, RecentReadings, DeviceComparison, DataMap, DataPath,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -203,6 +203,9 @@ export const api = {
   renameDevice: (id: string, name: string) => patch<Device>(`/api/devices/${q(id)}`, { name }),
   deleteDevice: (id: string) => del<unknown>(`/api/devices/${q(id)}`),
   // Devices that measure the same thing: one device for a reading, or all combined (always the person's own)
+  /** Two devices side by side over [days] nights (1–90); without a and b the server picks. Never shared. */
+  compareDevices: (days: number, a?: string, b?: string) =>
+    get<DeviceComparison>(`/api/devices/compare?days=${days}${a ? `&a=${q(a)}` : ""}${b ? `&b=${q(b)}` : ""}`),
   deviceChoices: () => get<DeviceChoices>("/api/devices/choices"),
   saveDeviceChoices: (c: DeviceChoices) => put<DeviceChoices>("/api/devices/choices", c),
   uploadKey: (name: string) => post<{ id: string; name: string; token: string; url: string }>("/api/devices/upload-keys", { name }),
@@ -445,6 +448,9 @@ export const api = {
   deleteAiKey: () => del<unknown>("/api/admin/ai/key"),
   testAi: () => post<{ ok: boolean; message: string }>("/api/admin/ai/test"),
   aiStatus: () => get<AiStatus>("/api/ai/status"),
+  /** Where the person's data can go, and pausing each way out (Settings › Where your data goes). Never shared. */
+  privacy: () => get<DataMap>("/api/privacy"),
+  pausePrivacy: (path: DataPath, paused: boolean) => put<DataMap>(`/api/privacy/${q(path)}`, { paused }),
   saveAiConsent: (c: AiConsent) => put<AiConsent>("/api/ai/consent", c),
   withdrawAiConsent: () => del<unknown>("/api/ai/consent"),
   aiChat: (messages: AiMessage[]) => post<AiChatReply>("/api/ai/chat", { messages }),

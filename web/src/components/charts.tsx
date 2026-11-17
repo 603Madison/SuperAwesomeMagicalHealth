@@ -95,13 +95,15 @@ export interface LinePoint {
  * nearest point and the tooltip reads it out.
  */
 export function LineChart({
-  points, height = 180, color = "var(--c1)", formatX, formatY, yMin, yMax, area = true, band, label, dots = false, extra = [], name,
+  points, height = 180, color = "var(--c1)", formatX, formatY, formatTick = formatY, yMin, yMax, area = true, band, label, dots = false, extra = [], name,
 }: {
   points: LinePoint[];
   height?: number;
   color?: string;
   formatX: (x: number) => string;
   formatY: (y: number) => string;
+  /** The y axis's labels, where they need to be shorter than the tooltip's ([formatY] unless given). */
+  formatTick?: (y: number) => string;
   yMin?: number;
   yMax?: number;
   area?: boolean;
@@ -178,7 +180,7 @@ export function LineChart({
           {yTicks.map((t) => (
             <g key={t}>
               <line x1={pad.left} x2={pad.left + w} y1={sy(t)} y2={sy(t)} className="gridline" />
-              <text x={pad.left - 8} y={sy(t)} className="axis" textAnchor="end" dominantBaseline="middle">{formatY(t)}</text>
+              <text x={pad.left - 8} y={sy(t)} className="axis" textAnchor="end" dominantBaseline="middle">{formatTick(t)}</text>
             </g>
           ))}
           {band && <rect x={pad.left} width={w} y={sy(Math.min(hi, band[1]))} height={Math.max(0, sy(Math.max(lo, band[0])) - sy(Math.min(hi, band[1])))} className="chart-band" />}

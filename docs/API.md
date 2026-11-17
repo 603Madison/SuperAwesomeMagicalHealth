@@ -146,13 +146,24 @@ carried.
 | `PATCH /api/devices/{id}` | `{name}` → `Device` |
 | `DELETE /api/devices/{id}` | Forgets a device and everything it recorded (and any choice of it) |
 | `GET /api/devices/choices` · `PUT` | `DeviceChoices`: which device to use for a reading, and for sleep |
+| `GET /api/devices/compare?a=&b=&days=14` | `DeviceComparison`: two devices side by side over 1–90 nights (`a` the one to compare against, `b` the one being checked; without them the server picks, a strap first, then the devices with the most readings), each night with both devices' own sleep and their `ComparedValue`s, and over them all a `ComparedMetric` for each `CompareKey` (`difference` is b − a on average, `apart` how far either way, `lowest`/`highest` the spread). Never shared |
 | `POST /api/devices/upload-keys` | `UploadKeyRequest` → `UploadKey` (shown once) |
 | `POST /api/ingest` | `IngestBatch` → `IngestResult` |
 | `POST /api/import/fit` | multipart `file` (one or more `.fit`) → `FitImportResult` |
 
 `POST /api/ingest` is idempotent: a sample is identified by device, metric and start time, a
 sleep session and a workout by device and start time, so the app can resend a whole day
-whenever it likes. Batches over 20,000 samples are refused; send them in parts.
+whenever it likes. Batches over 20,000 samples are refused; send them in parts. A device's `kind`
+is a `DeviceKind`: `COLMI_RING`, `PEBBLE`, `GARMIN`, `HEALTH_CONNECT`, `GADGETBRIDGE`, `FIT_FILE`,
+`PHONE`, `HEART_RATE_STRAP` (any standard Bluetooth heart rate strap, worn on the chest),
+`BP_MONITOR`, `GLUCOSE_METER`, `MANUAL` or `OTHER`.
+
+**Comparing two devices.** Readings are set side by side only over the time both measured: heart
+rate five minutes at a time, the rest half an hour at a time (`ComparedValue.pairs` counts the
+spells). A night is both devices' sleep together, or 10 pm to 7 am without any; sleep and steps
+are each device's own. `BEDTIME` and `WAKE` are minutes after 6 pm on the evening before the
+night's `date` (the morning it ended), in the person's time zone. Nights are newest first, and
+only those either device recorded something in.
 
 ### More than one device
 
@@ -600,6 +611,21 @@ endpoints need it shared (`/api/series` and `/api/measurements` by their `metric
 `/api/conditions` is never shared. A day's `combined` keeps only the readings of shared features.
 Anything else with the header (a change, or `/api/me`, devices and their choices, settings, admin,
 reports, exports) is refused with 403. Shares go to existing accounts by username, and only for the features picked.
+
+## Where your data goes
+
+| | |
+|---|---|
+| `GET /api/privacy` | `DataMap`: every way something about the person can leave the server (`DataDestination`: who's at the other end, the `hosts`, what goes and when, its `state`, how many are set up, and `setUp`, where in the apps it's set up), and a `note` on what stays put. Never shared |
+| `PUT /api/privacy/{path}` | `DataPathChange` (`{paused}`) → `DataMap`: pauses or resumes one `DataPath` for this person |
+
+`state` is `ON`, `PAUSED` (set up, but paused by the person: nothing goes), `NOT_SET_UP` or
+`OFF_ON_SERVER` (the admin turned it off for everyone). Pausing keeps what's set up (a Mealie
+token, a webhook, a share) and only stops anything going until it's resumed; every way out checks
+it first. `SIGN_IN` can't be paused (`pausable: false`, and a PUT answers 400). While paused,
+`MealieStatus.paused` and `AiStatus.paused` are true (the apps say so where Mealie and the
+assistant show), and asking for something that would go (a Mealie recipe, the assistant, Home
+Assistant's state) answers that it "is paused in Settings › Where your data goes".
 
 ## Reminders, digest, webhooks and Home Assistant
 

@@ -1,7 +1,7 @@
 import { Children, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CirclePause, X } from "lucide-react";
 import { create } from "zustand";
 import { localInput } from "../lib/format";
 
@@ -418,5 +418,15 @@ export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: (
       <span>{message}</span>
       {onRetry && <Button variant="ghost" onClick={onRetry}>Try again</Button>}
     </div>
+  );
+}
+
+/** Where the person paused something (Mealie, the assistant): "Paused in Where your data goes", with the way there. */
+export function PausedNote({ what }: { what?: string }) {
+  return (
+    <p className="paused-note">
+      <CirclePause size={16} aria-hidden="true" />
+      <span>{what ? `${what}: paused` : "Paused"} in <Link to="/settings#privacy">Where your data goes</Link>. Nothing is sent while it is.</span>
+    </p>
   );
 }
