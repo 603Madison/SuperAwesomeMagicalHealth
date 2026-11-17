@@ -165,3 +165,51 @@ export function zonedTime(date: string, time: string, zone?: string | null): num
 
 /** When [date] (YYYY-MM-DD) begins in [zone]. */
 export const startOfDayIn = (date: string, zone?: string | null): number => zonedTime(date, "00:00", zone);
+
+/** The day after [date] (YYYY-MM-DD). */
+function nextDay(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * A time axis's ticks: the moments from [from] to [to] when the clock in [zone] reads a whole
+ * multiple of [every] hours (with 6: midnight, 6 AM, noon and 6 PM). They follow the clock, so
+ * across a change to or from summer time two ticks can be 5 or 7 hours apart.
+ */
+export function hourTicks(from: number, to: number, every: number, zone?: string | null): number[] {
+  if (!(to >= from) || !(every > 0)) return [];
+  const out = new Set<number>();
+  const last = dateIn(to, zone);
+  // From the day before, in case [from] is just after a midnight the zone's clock skipped.
+  let date = dateIn(from - 86_400_000, zone);
+  for (let days = 0; date <= last && days < 400; days++, date = nextDay(date)) {
+    for (let hour = 0; hour < 24; hour += every) {
+      const at = zonedTime(date, `${pad2(hour)}:00`, zone);
+      if (at >= from && at <= to) out.add(at);
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+const timeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * [ms] as the clock in [zone] shows it ("11:08 PM", or "11 PM" with [hourOnly]), written the way
+ * [locale] (the browser's, without one) writes times. In the browser's own zone without a zone,
+ * or with one this browser doesn't know.
+ */
+export function clockTime(ms: number, zone?: string | null, hourOnly = false, locale?: string): string {
+  const key = `${locale ?? ""}|${zone ?? ""}|${hourOnly}`;
+  let format = timeFormats.get(key);
+  if (!format) {
+    const options: Intl.DateTimeFormatOptions = hourOnly ? { hour: "numeric" } : { hour: "numeric", minute: "2-digit" };
+    try {
+      format = new Intl.DateTimeFormat(locale, zone ? { ...options, timeZone: zone } : options);
+    } catch {
+      format = new Intl.DateTimeFormat(locale, options);
+    }
+    timeFormats.set(key, format);
+  }
+  return format.format(ms);
+}

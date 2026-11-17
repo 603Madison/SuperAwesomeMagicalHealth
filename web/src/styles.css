@@ -761,6 +761,32 @@ button.row:hover { background: var(--surface-2); }
 .night { display: flex; flex-direction: column; gap: 10px; }
 .night + .night { border-top: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); padding-top: 14px; }
 .night-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.night-asleep { text-align: right; white-space: nowrap; }
+.night-asleep strong { font-size: 1.3rem; font-weight: var(--w-semibold); }
+
+/* ---------- The last 24 hours: one column, so every chart's time axis lines up ---------- */
+
+.recent-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin: -6px 0 16px; }
+.recent-key { margin-left: auto; }
+.recent-key .sleep-key { width: 16px; height: 12px; background: color-mix(in srgb, var(--stage-deep) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--stage-deep) 30%, transparent); }
+.chart .chart-sleep { fill: var(--stage-deep); opacity: 0.1; }
+.chart .gridline.is-time { stroke-dasharray: 2 4; }
+.chart .zero-line { stroke: var(--muted); stroke-width: 1; }
+.recent-grid { grid-template-columns: minmax(0, 1fr); }
+.recent-reading { display: flex; flex-direction: column; gap: 12px; }
+.recent-reading + .recent-reading { border-top: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); padding-top: 14px; }
+.recent-subhead { font-size: 0.88rem; font-weight: var(--w-semibold); color: var(--muted); }
+.recent-stats { grid-template-columns: repeat(4, minmax(0, 168px)); gap: 10px 16px; }
+.recent-stats .stat-value { font-size: 1.3rem; white-space: nowrap; }
+.recent-stats .stat-unit { margin-left: 3px; }
+.is-refreshing { opacity: 0.6; transition: opacity 0.2s; }
+.row-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--primary); font-size: 0.82rem; font-weight: var(--w-medium); }
+.row-link:hover { text-decoration: underline; }
+@media (max-width: 560px) {
+  .recent-stats { gap: 8px 10px; }
+  .recent-stats .stat-value { font-size: 1.1rem; }
+  .recent-stats .stat-unit { font-size: 0.75rem; }
+}
 @media (max-width: 760px) {
   .hero .ring { padding: 4px; min-width: 0; }
   .hero .ring svg { width: min(100%, 104px); height: auto; }

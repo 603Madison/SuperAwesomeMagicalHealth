@@ -234,8 +234,10 @@ export function Today() {
       title: "Sleep", icon: Moon, to: "/sleep", open: "Sleep", line: data ? sleepLine(data) : null,
       extra: data?.sleepSummary?.combined && data.sleepSummary.combined.sources.length > 1 && <SourcesLink sleep={data.sleepSummary.combined} onChanged={changed} />,
     }, { log: log("Add a night", () => setOpen("sleep")) }),
+    // Today's heart opens the last 24 hours as recorded (only ever the person's own); another day's, Trends.
     feature("HEART", true, {
-      title: "Heart", icon: HeartPulse, to: "/trends", open: "Trends", line: data ? heartLine(data) : null,
+      title: "Heart", icon: HeartPulse, to: isToday && !readOnly ? "/recent" : "/trends", open: isToday && !readOnly ? "the last 24 hours" : "Trends",
+      line: data ? heartLine(data) : null,
       extra: data && <SourcesLink values={combinedFor(data.combined, HEART_METRICS)} onChanged={changed} />,
     }, null),
     feature("STRESS", is("ACTIVITY"), {

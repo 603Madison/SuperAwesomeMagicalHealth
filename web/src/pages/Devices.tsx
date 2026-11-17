@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
-import { Battery, Copy, FileUp, HeartPulse, KeyRound, Layers, MoreHorizontal, Pencil, Smartphone, Trash2, Watch } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Battery, Clock, Copy, FileUp, HeartPulse, KeyRound, Layers, MoreHorizontal, Pencil, Smartphone, Trash2, Watch } from "lucide-react";
 import { api } from "../lib/api";
 import { num, shiftDate, today, when } from "../lib/format";
-import type { DaySummary, Device, DeviceChoices, Metric, SleepSummary } from "../lib/types";
+import type { DaySummary, Device, DeviceChoices, DeviceKind, Metric, SleepSummary } from "../lib/types";
 import { Button, Card, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
@@ -14,6 +15,9 @@ const KIND_LABEL: Record<string, string> = {
   COLMI_RING: "Colmi ring", PEBBLE: "Pebble", GARMIN: "Garmin", HEALTH_CONNECT: "Health Connect", GADGETBRIDGE: "Gadgetbridge",
   FIT_FILE: "FIT files", PHONE: "Phone", MANUAL: "Entered by hand", OTHER: "Other device",
 };
+
+/** Devices whose readings the last 24 hours doesn't show (blood pressure and glucose have pages of their own). */
+const NO_READINGS: DeviceKind[] = ["MANUAL", "BP_MONITOR", "GLUCOSE_METER"];
 
 export function Devices() {
   const { data, error, loading, reload, setData } = useLoad(() => api.devices(), []);
@@ -36,6 +40,9 @@ export function Devices() {
                   <div className="row-sub">
                     {KIND_LABEL[d.kind]}{d.model ? ` · ${d.model}` : ""}{d.firmware ? ` · firmware ${d.firmware}` : ""} · {d.lastSyncAt ? `synced ${when(d.lastSyncAt)}` : `added ${when(d.createdAt)}`}
                   </div>
+                  {!NO_READINGS.includes(d.kind) && (
+                    <Link className="row-link" to={`/recent?device=${encodeURIComponent(d.id)}`} aria-label={`Last 24 hours from ${d.name}`}><Clock size={14} /> Last 24 hours</Link>
+                  )}
                 </div>
                 <div className="row-end">
                   {d.battery != null && <div><Battery size={14} style={{ verticalAlign: -2 }} /> {d.battery}%</div>}

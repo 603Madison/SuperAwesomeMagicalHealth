@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Moon, Plus, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Clock, Moon, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
 import { clock, hm, isoDate, num, shortDate, useToday } from "../lib/format";
 import { useSession } from "../lib/session";
+import { useReadOnly } from "../lib/viewing";
 import { BarChart, Hypnogram, LineChart, StageLegend, scoreFloor } from "../components/charts";
 import { Button, Card, ErrorNotice, PageHeader, Segmented, Spinner, Stat, errorToast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
@@ -19,6 +21,8 @@ export function Sleep() {
   const now = useToday();
   const day = useLoad(() => api.day(now).catch(() => null), [now]);
   const [adding, setAdding] = useState(false);
+  // The last 24 hours is only ever the person's own, so it isn't offered while viewing someone's share.
+  const readOnly = useReadOnly();
   const reload = () => { trends.reload(); nights.reload(); day.reload(); };
   const rows = trends.data?.days ?? [];
   const slept = rows.filter((r) => r.sleepMinutes != null);
@@ -85,6 +89,7 @@ export function Sleep() {
     <div className="page">
       <PageHeader title="Sleep" subtitle="How long, how well, and when" actions={<>
         <Segmented label="Range" value={days} onChange={setDays} options={[{ value: 7, label: "Week" }, { value: 30, label: "Month" }, { value: 90, label: "3 months" }]} />
+        {!readOnly && <Link className="btn btn-ghost" to="/recent"><Clock size={18} /> Last 24 hours</Link>}
         <Button onClick={() => setAdding(true)}><Plus size={18} /> Add a night</Button>
         {arranged.button}
       </>} />

@@ -104,6 +104,67 @@ export interface Device {
   samples: number;
 }
 
+/** A night (or a nap): in bed from [start] to [end], with the stages when the device knows them. */
+export interface SleepSession {
+  start: number;
+  end: number;
+  stages: StageSpan[];
+  id?: string;
+  deviceId?: string;
+  /** The device's name. */
+  source?: string;
+  /** Entered by the person rather than recorded. */
+  manual?: boolean;
+  note?: string;
+}
+
+// ---------------------------------------------------------------- The last 24 hours (Health.kt)
+
+/** One reading in [RecentSeries]: at a time, or (for counts like steps) the total from [at] for its bucket. */
+export interface RecentPoint {
+  at: number;
+  value: number;
+}
+
+/**
+ * One kind of reading over the window (GET /api/recent): its points, oldest first, and a summary.
+ * [metric] is missing for a kind the server knows and this version doesn't: skip it. Counts (steps)
+ * come as totals per [bucketMinutes], with [total]; the rest with [min], [max], [average] and [latest].
+ */
+export interface RecentSeries {
+  metric?: Metric;
+  points: RecentPoint[];
+  min?: number;
+  max?: number;
+  average?: number;
+  latest?: RecentPoint;
+  total?: number;
+  bucketMinutes?: number;
+}
+
+/** A device with something recorded in the window (for choosing one). */
+export interface RecentDevice {
+  id: string;
+  name: string;
+  kind?: DeviceKind;
+  lastSyncAt?: number;
+}
+
+/**
+ * The last [hours] as recorded (GET /api/recent?hours=24&device=): the nights and naps in it with
+ * their stages, and each kind of reading, from [device] alone or (missing) every device.
+ * [devices] are every device with something in it. Never reachable through a share.
+ */
+export interface RecentReadings {
+  from: number;
+  to: number;
+  hours: number;
+  device?: string;
+  devices: RecentDevice[];
+  sleep: SleepSession[];
+  series: RecentSeries[];
+}
+
 // ---------------------------------------------------------------- Devices measuring the same thing (Devices.kt)
 
 /** One device's part in a combined value. */

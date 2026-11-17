@@ -321,6 +321,176 @@ export function BarChart({
   );
 }
 
+// ---- On a time axis ----
+
+/** A time axis several charts share (the last 24 hours): the same window, ticks and shading, so they line up. */
+export interface TimeAxis {
+  from: number;
+  to: number;
+  /** Where it's labelled: every 6 hours, in the person's time zone. */
+  ticks: { at: number; label: string }[];
+  /** Spans shaded faintly behind the marks: when the person was asleep. */
+  shade: [number, number][];
+  /** A moment as the tooltip says it ("2:10 PM"). */
+  time: (ms: number) => string;
+}
+
+export interface TimePoint {
+  at: number;
+  value: number;
+}
+
+/**
+ * Readings over [axis]: a line (broken where readings are more than [gapMinutes] apart, a reading
+ * on its own a dot), points, or bars [bucketMinutes] wide from zero. A crosshair (or the bar)
+ * follows the pointer and the arrow keys, and the tooltip reads out the value and its time.
+ */
+export function TimeChart({
+  axis, points, kind = "line", color = "var(--c1)", formatY, formatTick = compact, yMin, yMax, gapMinutes = 30, bucketMinutes = 60, zero = false, label, height = 150,
+}: {
+  axis: TimeAxis;
+  /** Oldest first. */
+  points: TimePoint[];
+  kind?: "line" | "points" | "bars";
+  color?: string;
+  formatY: (v: number) => string;
+  /** The y axis's labels (compact numbers unless given). */
+  formatTick?: (v: number) => string;
+  yMin?: number;
+  yMax?: number;
+  gapMinutes?: number;
+  bucketMinutes?: number;
+  /** A hairline at zero (for a difference from the usual). */
+  zero?: boolean;
+  /** What the chart shows, for screen readers. */
+  label: string;
+  height?: number;
+}) {
+  const [ref, width] = useWidth();
+  const [hover, setHover] = useState<number | null>(null);
+  const pad = { top: 12, right: 12, bottom: 24, left: 40 };
+  const w = Math.max(0, width - pad.left - pad.right);
+  const h = height - pad.top - pad.bottom;
+  if (points.length === 0) return <div ref={ref} className="chart-empty" style={{ height }}>Nothing recorded</div>;
+  const bars = kind === "bars";
+  const bucket = bucketMinutes * 60_000;
+  const span = Math.max(1, axis.to - axis.from);
+  const sx = (t: number) => pad.left + ((Math.min(Math.max(t, axis.from), axis.to) - axis.from) / span) * w;
+  const values = points.map((p) => p.value);
+  let lo = bars ? 0 : yMin ?? Math.min(...values, ...(zero ? [0] : []));
+  let hi = bars ? Math.max(1, ...values) * 1.08 : yMax ?? Math.max(...values, ...(zero ? [0] : []));
+  // Every reading the same (blood oxygen at 100%): room around it, but not past a fixed end.
+  if (hi === lo) {
+    if (yMin == null) lo -= 1;
+    if (yMax == null || hi === lo) hi += 1;
+  }
+  const range = hi - lo;
+  if (!bars && yMin == null) lo -= range * 0.1;
+  if (!bars && yMax == null) hi += range * 0.1;
+  const sy = (v: number) => pad.top + h - ((v - lo) / (hi - lo)) * h;
+  const centre = (p: TimePoint) => (bars ? sx(p.at + bucket / 2) : sx(p.at));
+
+  // A line's runs: readings close enough together to join.
+  const runs: TimePoint[][] = [];
+  if (kind === "line") {
+    points.forEach((p, i) => {
+      if (i === 0 || p.at - points[i - 1].at > gapMinutes * 60_000) runs.push([]);
+      runs[runs.length - 1].push(p);
+    });
+  }
+  const path = (run: TimePoint[]) => run.map((p, i) => `${i ? "L" : "M"}${sx(p.at).toFixed(1)},${sy(p.value).toFixed(1)}`).join("");
+  const marker = (p: TimePoint, key: string | number, r = 4) => <circle key={key} cx={sx(p.at)} cy={sy(p.value)} r={r} fill={color} stroke="var(--chart-surface)" strokeWidth={2} />;
+
+  const nearest = (x: number) => {
+    let best = -1;
+    let bestDist = Infinity;
+    points.forEach((p, i) => {
+      const d = Math.abs(centre(p) - x);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    return best;
+  };
+  const point = (e: React.PointerEvent<SVGSVGElement>) => setHover(nearest(e.clientX - e.currentTarget.getBoundingClientRect().left));
+  const hovered = hover != null ? points[hover] : null;
+  // Three or so labels on the y axis, and never just one.
+  const within = (count: number) => ticks(lo, hi, count).filter((t) => t >= lo && t <= hi);
+  const yTicks = within(3).length > 1 ? within(3) : within(5);
+  const barR = 4;
+
+  return (
+    <div ref={ref} className="chart" style={{ height }}>
+      {width > 0 && (
+        <svg
+          width={width} height={height} role="img" aria-label={label} tabIndex={0}
+          onPointerMove={point} onPointerDown={point} onPointerLeave={() => setHover(null)} onBlur={() => setHover(null)}
+          onKeyDown={(e) => {
+            const last = points.length - 1;
+            const at = hover ?? -1;
+            const next = e.key === "ArrowRight" ? Math.min(last, at + 1) : e.key === "ArrowLeft" ? Math.max(0, at < 0 ? last : at - 1)
+              : e.key === "Home" ? 0 : e.key === "End" ? last : null;
+            if (next == null) return;
+            e.preventDefault();
+            setHover(next);
+          }}
+        >
+          {axis.shade.map(([a, b]) => (
+            <rect key={a} x={sx(a)} width={Math.max(0, sx(b) - sx(a))} y={pad.top} height={h} rx={4} className="chart-sleep" />
+          ))}
+          {yTicks.map((t) => (
+            <g key={t}>
+              <line x1={pad.left} x2={pad.left + w} y1={sy(t)} y2={sy(t)} className="gridline" />
+              <text x={pad.left - 8} y={sy(t)} className="axis" textAnchor="end" dominantBaseline="middle">{formatTick(t)}</text>
+            </g>
+          ))}
+          {zero && lo < 0 && hi > 0 && <line x1={pad.left} x2={pad.left + w} y1={sy(0)} y2={sy(0)} className="zero-line" />}
+          {axis.ticks.map((t) => {
+            const x = sx(t.at);
+            const anchor = x < pad.left + 14 ? "start" : x > pad.left + w - 14 ? "end" : "middle";
+            return (
+              <g key={t.at}>
+                <line x1={x} x2={x} y1={pad.top} y2={pad.top + h} className="gridline is-time" />
+                <text x={x} y={height - 6} className="axis" textAnchor={anchor}>{t.label}</text>
+              </g>
+            );
+          })}
+          {bars && points.map((p, i) => {
+            const x = sx(p.at) + 1;
+            const bw = Math.max(2, sx(p.at + bucket) - sx(p.at) - 2);
+            const top = sy(p.value);
+            const base = pad.top + h;
+            const r = Math.min(barR, bw / 2);
+            if (p.value <= 0) return null;
+            return (
+              <path
+                key={p.at} fill={color} opacity={hover != null && hover !== i ? 0.55 : 1}
+                d={base - top > r
+                  ? `M${x},${base}V${top + r}Q${x},${top} ${x + r},${top}H${x + bw - r}Q${x + bw},${top} ${x + bw},${top + r}V${base}Z`
+                  : `M${x},${base}V${top}H${x + bw}V${base}Z`}
+              />
+            );
+          })}
+          {kind === "line" && runs.map((run, i) => (run.length > 1
+            ? <path key={i} d={path(run)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            : marker(run[0], i, 3)))}
+          {kind === "points" && points.map((p, i) => marker(p, `d${i}`))}
+          {hovered && (
+            <g pointerEvents="none">
+              {!bars && <line x1={sx(hovered.at)} x2={sx(hovered.at)} y1={pad.top} y2={pad.top + h} className="crosshair" />}
+              {!bars && marker(hovered, "hover", 5)}
+            </g>
+          )}
+        </svg>
+      )}
+      {hovered && (
+        <Tooltip x={centre(hovered)} y={Math.max(0, sy(hovered.value) - 54)} width={width}>
+          <strong>{formatY(hovered.value)}</strong>
+          <span>{bars ? `${axis.time(hovered.at)} – ${axis.time(hovered.at + bucket)}` : axis.time(hovered.at)}</span>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 // ---- Sleep stages ----
 
 const STAGE_ROWS: { stage: SleepStage; label: string; color: string }[] = [
@@ -330,8 +500,16 @@ const STAGE_ROWS: { stage: SleepStage; label: string; color: string }[] = [
   { stage: "DEEP", label: "Deep", color: "var(--stage-deep)" },
 ];
 
-/** The night's stages as rows (awake at the top, deep at the bottom), the way Oura draws them. */
-export function Hypnogram({ stages, start, end, height = 150 }: { stages: StageSpan[]; start: number; end: number; height?: number }) {
+/**
+ * The night's stages as rows (awake at the top, deep at the bottom), the way Oura draws them.
+ * [time] says a moment ("11:08 PM") and [hours] are the hours to label, both in the person's time
+ * zone where the page knows it (the browser's otherwise).
+ */
+export function Hypnogram({ stages, start, end, height = 150, time = clock, hours: given, label }: {
+  stages: StageSpan[]; start: number; end: number; height?: number; time?: (ms: number) => string; hours?: { at: number; label: string }[];
+  /** What it shows, for screen readers (the times otherwise). */
+  label?: string;
+}) {
   const [ref, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const pad = { top: 6, right: 8, bottom: 22, left: 52 };
@@ -339,16 +517,19 @@ export function Hypnogram({ stages, start, end, height = 150 }: { stages: StageS
   const rowH = (height - pad.top - pad.bottom) / STAGE_ROWS.length;
   const sx = (t: number) => pad.left + ((t - start) / Math.max(1, end - start)) * w;
   const rowOf = (s: SleepStage) => Math.max(0, STAGE_ROWS.findIndex((r) => r.stage === (s === "ASLEEP" ? "LIGHT" : s)));
-  const hours: number[] = [];
-  const first = new Date(start);
-  first.setMinutes(0, 0, 0);
-  for (let t = first.getTime() + 3_600_000; t < end; t += 3_600_000) hours.push(t);
+  let hours = given;
+  if (!hours) {
+    hours = [];
+    const first = new Date(start);
+    first.setMinutes(0, 0, 0);
+    for (let t = first.getTime() + 3_600_000; t < end; t += 3_600_000) hours.push({ at: t, label: new Date(t).toLocaleTimeString(undefined, { hour: "numeric" }) });
+  }
   const step = Math.ceil(hours.length / Math.max(1, Math.floor(w / 56)));
   const hovered = hover != null ? stages[hover] : null;
   return (
     <div ref={ref} className="chart" style={{ height }}>
       {width > 0 && (
-        <svg width={width} height={height} role="img" aria-label={`Sleep stages from ${clock(start)} to ${clock(end)}`} onPointerLeave={() => setHover(null)}>
+        <svg width={width} height={height} role="img" aria-label={label ?? `Sleep stages from ${time(start)} to ${time(end)}`} onPointerLeave={() => setHover(null)}>
           {STAGE_ROWS.map((row, i) => (
             <g key={row.stage}>
               <line x1={pad.left} x2={pad.left + w} y1={pad.top + (i + 0.5) * rowH} y2={pad.top + (i + 0.5) * rowH} className="gridline" />
@@ -356,7 +537,7 @@ export function Hypnogram({ stages, start, end, height = 150 }: { stages: StageS
             </g>
           ))}
           {hours.filter((_, i) => i % step === 0).map((t) => (
-            <text key={t} x={sx(t)} y={height - 5} className="axis" textAnchor="middle">{new Date(t).toLocaleTimeString(undefined, { hour: "numeric" })}</text>
+            <text key={t.at} x={sx(t.at)} y={height - 5} className="axis" textAnchor="middle">{t.label}</text>
           ))}
           {stages.map((s, i) => {
             const row = rowOf(s.stage);
@@ -375,7 +556,7 @@ export function Hypnogram({ stages, start, end, height = 150 }: { stages: StageS
       {hovered && (
         <Tooltip x={sx((hovered.start + hovered.end) / 2)} y={pad.top + rowOf(hovered.stage) * rowH - 50} width={width}>
           <strong>{STAGE_ROWS[rowOf(hovered.stage)].label} · {hm((hovered.end - hovered.start) / 60_000)}</strong>
-          <span>{clock(hovered.start)} – {clock(hovered.end)}</span>
+          <span>{time(hovered.start)} – {time(hovered.end)}</span>
         </Tooltip>
       )}
     </div>

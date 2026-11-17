@@ -45,6 +45,7 @@ import { Hormones } from "./pages/Hormones";
 import { Appointments } from "./pages/Appointments";
 import { Reports } from "./pages/Reports";
 import { DigestPage } from "./pages/Digest";
+import { Recent } from "./pages/Recent";
 
 export function App() {
   useEffect(() => { void session.start(); }, []);
@@ -230,6 +231,8 @@ function Shell() {
           {!viewing && <Route path="/reports" element={<Reports />} />}
           {!viewing && <Route path="/digest" element={<DigestPage />} />}
           {!viewing && <Route path="/devices" element={<Devices />} />}
+          {/* The last 24 hours as recorded: never someone's share (the server says no to one). */}
+          {!viewing && <Route path="/recent" element={<Recent />} />}
           {!viewing && <Route path="/settings" element={<Settings />} />}
           {!viewing && user.role === "ADMIN" && <Route path="/admin" element={<Admin />} />}
           <Route path="*" element={<Navigate to="/" replace />} />

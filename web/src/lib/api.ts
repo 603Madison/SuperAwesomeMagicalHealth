@@ -12,7 +12,7 @@ import type {
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
   AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices, FoodPhotoEstimate,
-  NutrientTargets,
+  NutrientTargets, RecentReadings,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -194,6 +194,8 @@ export const api = {
   sleep: (days = 30) => get<SleepSummary[]>(`/api/sleep?days=${days}`),
   addSleep: (start: number, end: number, note?: string) => post<unknown>("/api/sleep", { start, end, note, stages: [] }),
   deleteSleep: (id: string) => del<unknown>(`/api/sleep/${q(id)}`),
+  /** The last [hours] as recorded, from one device or (without one) all of them. Never someone's share: don't call it while viewing one. */
+  recent: (hours = 24, device?: string) => get<RecentReadings>(`/api/recent?hours=${hours}${device ? `&device=${q(device)}` : ""}`),
   checkIn: (date: string) => get<CheckIn>(`/api/checkins/${q(date)}`),
   saveCheckIn: (checkIn: CheckIn) => put<CheckIn>(`/api/checkins/${q(checkIn.date)}`, checkIn),
 
