@@ -88,6 +88,9 @@ import com.health.app.ui.modules.sectionId
 import androidx.compose.material3.IconButton
 import com.health.app.ui.log.NumberField
 import com.health.app.ui.modules.IconTile
+import com.health.app.ui.modules.ModuleInfo
+import com.health.app.ui.modules.NavRow
+import com.health.api.Module
 import com.health.app.ui.theme.AppTheme
 import java.time.Instant
 import java.time.LocalDate
@@ -119,11 +122,14 @@ class MedsActions(
     val retry: () -> Unit = {},
     val allowExact: () -> Unit = {},
     val allowNotifications: () -> Unit = {},
+    /** Opens Hormone therapy, part of this page's area when that feature is on (null: no link). */
+    val hormones: (() -> Unit)? = null,
 )
 
 @Composable
-fun MedsRoute(onEdit: (String?) -> Unit) {
+fun MedsRoute(onEdit: (String?) -> Unit, onOpen: ((String) -> Unit)? = null) {
     val c = appContainer()
+    val hormonesOn = Module.HORMONES in com.health.app.ui.care.shownModules()
     val vm = viewModel { MedsViewModel(c) }
     val state by vm.state.collectAsState()
     val context = LocalContext.current
@@ -153,6 +159,7 @@ fun MedsRoute(onEdit: (String?) -> Unit) {
             allowNotifications = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notify.launch(Manifest.permission.POST_NOTIFICATIONS)
             },
+            hormones = onOpen?.takeIf { hormonesOn }?.let { go -> { go("hormones") } },
         ),
     )
 }
@@ -193,6 +200,12 @@ fun MedsScreen(state: MedsState, zone: ZoneId, actions: MedsActions, canNotify: 
                     MedsTab.TODAY -> TodayTab(state, zone, actions, canNotify, canBeExact)
                     MedsTab.ALL -> AllTab(state.meds, actions)
                     MedsTab.LABS -> LabsTab(state.labs, zone, actions)
+                }
+            }
+            // Hormone therapy is part of Medications: its dose history, levels and labs are a tap away.
+            actions.hormones?.let { go ->
+                InfoCard(null) {
+                    NavRow(ModuleInfo.icon(Module.HORMONES), Module.HORMONES.label, ModuleInfo.description(Module.HORMONES), onClick = go)
                 }
             }
         }
@@ -306,11 +319,12 @@ fun DoseList(day: MedsDay, zone: ZoneId, actions: MedsActions, compact: Boolean 
     }
 }
 
-private fun needsSite(due: DueDose) = (due.form == MedForm.INJECTION || due.form == MedForm.PATCH) && due.nextSite != null
+/** Whether taking [due] asks where it went: an injection or patch with a site to rotate to. */
+fun needsSite(due: DueDose) = (due.form == MedForm.INJECTION || due.form == MedForm.PATCH) && due.nextSite != null
 
-/** Where this injection or patch went: the suggested site first. */
+/** Where this injection or patch went: the suggested site first (here, and from the Care tab). */
 @Composable
-private fun SitePicker(due: DueDose, own: List<String>, onDismiss: () -> Unit, onPick: (String?) -> Unit) {
+fun SitePicker(due: DueDose, own: List<String>, onDismiss: () -> Unit, onPick: (String?) -> Unit) {
     var site by remember { mutableStateOf(due.nextSite) }
     AlertDialog(
         onDismissRequest = onDismiss,
