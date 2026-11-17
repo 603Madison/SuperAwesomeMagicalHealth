@@ -16,8 +16,8 @@ import { useSession } from "../lib/session";
 import { QUICK_ROW, dosesLater, quickRow } from "../lib/today";
 import { useReadOnly, useViewing } from "../lib/viewing";
 import {
-  BODY_MEASUREMENTS, LAYOUT_QUICK, LAYOUT_TODAY, QUICK_ACTIONS, TODAY_SECTION_LABELS, arrange, type DaySummary, type Module, type QuickAction, type Score,
-  type TodaySection,
+  BODY_MEASUREMENTS, LAYOUT_QUICK, LAYOUT_TODAY, QUICK_ACTIONS, TODAY_SECTION_LABELS, arrange, type DaySummary, type Insight, type Module, type QuickAction,
+  type Score, type TodaySection,
 } from "../lib/types";
 import { Meter } from "../components/charts";
 import { Button, CardAction, Card, DateNav, ErrorNotice, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
@@ -405,17 +405,17 @@ function Insights({ day, on, readOnly, date, showing, onChanged, onScores }: {
 }) {
   const digest = useDigestRow(!readOnly && date === today());
   const list = day.insights.filter((i) => (!i.module || on.includes(i.module)) && !(i.shownBy && showing.has(i.shownBy)));
+  // Health alerts (the server puts them first) stay ahead of the week's digest too.
+  const alerts = list.filter((i) => i.link === "ALERTS");
+  const row = (i: Insight) => (
+    <InsightRow
+      key={`${i.icon}-${i.title}`} insight={i} date={date} readOnly={readOnly} onChanged={onChanged}
+      onPage={(page) => { if (page !== "TODAY") return false; onScores(); return true; }}
+    />
+  );
   return (
     <ForYouCard>
-      {[
-        digest,
-        ...list.map((i) => (
-          <InsightRow
-            key={`${i.icon}-${i.title}`} insight={i} date={date} readOnly={readOnly} onChanged={onChanged}
-            onPage={(page) => { if (page !== "TODAY") return false; onScores(); return true; }}
-          />
-        )),
-      ]}
+      {[...alerts.map(row), digest, ...list.filter((i) => i.link !== "ALERTS").map(row)]}
     </ForYouCard>
   );
 }

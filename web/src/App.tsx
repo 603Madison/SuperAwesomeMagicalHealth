@@ -3,7 +3,7 @@ import { useToday } from "./lib/format";
 import { safeReturn } from "./lib/paths";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
-import { ArrowUpDown, Bot, ClipboardList, Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
+import { ArrowUpDown, BellRing, Bot, ClipboardList, Eye, FileText, LogOut, Settings as SettingsIcon, Shield, Sun, TrendingUp, Users, Watch } from "lucide-react";
 import { LAYOUT_NAV, arrange } from "./lib/types";
 import { useScreenLayout } from "./lib/layout";
 import { ArrangePanel } from "./components/Arrange";
@@ -47,6 +47,7 @@ import { Reports } from "./pages/Reports";
 import { DigestPage } from "./pages/Digest";
 import { Recent } from "./pages/Recent";
 import { Compare } from "./pages/Compare";
+import { Alerts } from "./pages/Alerts";
 
 export function App() {
   useEffect(() => { void session.start(); }, []);
@@ -104,8 +105,8 @@ export interface NavItem {
 }
 
 /**
- * The links the sidebar can have (Today aside, always first), in the default order: Trends and
- * the assistant; the features that are on, Food first; then Reports, Devices and What you're
+ * The links the sidebar can have (Today aside, always first), in the default order: Trends, Health
+ * alerts and the assistant; the features that are on, Food first; then Reports, Devices and What you're
  * tracking. Ids are shared with the phone app's Health tab (Layouts.NAV).
  */
 export function useNavItems(): NavItem[] {
@@ -116,6 +117,8 @@ export function useNavItems(): NavItem[] {
   const features = FEATURES.filter((f) => on.includes(f.id) && f.route && !(f.id === "NEURO" && on.includes("MIND")));
   return [
     { id: "TRENDS", group: "Today & Trends", to: "/trends", short: "Trends", label: "Trends", icon: TrendingUp, tab: true },
+    // Health alerts (NavPage.ALERTS): always the person's own.
+    ...(!viewing ? [{ id: "ALERTS", group: "Today & Trends" as const, to: "/alerts", short: "Alerts", label: "Health alerts", icon: BellRing }] : []),
     ...(!viewing && ai?.available ? [{ id: "ASSISTANT", group: "Today & Trends" as const, to: "/assistant", short: "Assistant", label: "Assistant", icon: Bot }] : []),
     ...features.map((f) => ({
       id: f.id === "NUTRITION" ? "FOOD" : f.id, group: "Your health" as const, to: f.route!, icon: f.icon, label: f.name, tab: f.id === "NUTRITION" || f.id === "MIND",
@@ -234,6 +237,8 @@ function Shell() {
           {!viewing && <Route path="/devices" element={<Devices />} />}
           {/* The last 24 hours as recorded: never someone's share (the server says no to one). */}
           {!viewing && <Route path="/recent" element={<Recent />} />}
+          {/* Health alerts: only ever the person's own (the server never gives them to a share). */}
+          {!viewing && <Route path="/alerts" element={<Alerts />} />}
           {/* Two devices side by side: never someone's share either (the server says no to one). */}
           {!viewing && <Route path="/devices/compare" element={<Compare />} />}
           {!viewing && <Route path="/settings" element={<Settings />} />}

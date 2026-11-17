@@ -38,7 +38,9 @@ export type Metric =
   | "HEART_RATE" | "RESTING_HEART_RATE" | "HRV" | "SPO2" | "RESPIRATORY_RATE" | "SKIN_TEMPERATURE" | "TEMPERATURE_DEVIATION"
   | "STRESS" | "STEPS" | "DISTANCE" | "ACTIVE_CALORIES" | "FLOORS" | "WEIGHT" | "BODY_FAT"
   | "BLOOD_PRESSURE_SYSTOLIC" | "BLOOD_PRESSURE_DIASTOLIC" | "BLOOD_GLUCOSE"
-  | "WAIST" | "HIPS" | "CHEST" | "BUST" | "UNDERBUST" | "SHOULDERS" | "NECK" | "UPPER_ARM" | "THIGH" | "CALF";
+  | "WAIST" | "HIPS" | "CHEST" | "BUST" | "UNDERBUST" | "SHOULDERS" | "NECK" | "UPPER_ARM" | "THIGH" | "CALF"
+  /** From a chest strap's beat-to-beat timing: the share (0–100) of a five-minute window's stretches that looked irregular. */
+  | "IRREGULAR_RHYTHM";
 
 /** Each reading's name (Metric.label). */
 export const METRIC_LABELS: Record<Metric, string> = {
@@ -47,7 +49,7 @@ export const METRIC_LABELS: Record<Metric, string> = {
   STRESS: "Stress", STEPS: "Steps", DISTANCE: "Distance", ACTIVE_CALORIES: "Active calories", FLOORS: "Floors climbed",
   WEIGHT: "Weight", BODY_FAT: "Body fat", BLOOD_PRESSURE_SYSTOLIC: "Systolic blood pressure", BLOOD_PRESSURE_DIASTOLIC: "Diastolic blood pressure",
   BLOOD_GLUCOSE: "Blood glucose", WAIST: "Waist", HIPS: "Hips", CHEST: "Chest", BUST: "Bust", UNDERBUST: "Underbust",
-  SHOULDERS: "Shoulders", NECK: "Neck", UPPER_ARM: "Upper arm", THIGH: "Thigh", CALF: "Calf",
+  SHOULDERS: "Shoulders", NECK: "Neck", UPPER_ARM: "Upper arm", THIGH: "Thigh", CALF: "Calf", IRREGULAR_RHYTHM: "Irregular rhythm",
 };
 
 export interface Sample {
@@ -528,8 +530,9 @@ export interface SleepSummary {
   combined?: CombinedSleep;
 }
 
+/** Something worth knowing about the day. "alert": a health alert that could need care now (a "warn" one is worth a look). */
 export interface Insight {
-  tone: "good" | "info" | "warn";
+  tone: "good" | "info" | "warn" | "alert";
   title: string;
   body: string;
   icon: string;
@@ -545,7 +548,7 @@ export interface Insight {
 /** The apps' pages, for an insight to open (Summary.kt's AppPage). */
 export type AppPage =
   | "TODAY" | "FOOD" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "VITALS" | "HABITS" | "SYMPTOMS" | "HORMONES"
-  | "APPOINTMENTS" | "NEURO" | "TRANSITION" | "PHOTOS" | "BODY" | "SLEEP" | "ACTIVITY" | "TRENDS" | "DEVICES";
+  | "APPOINTMENTS" | "NEURO" | "TRANSITION" | "PHOTOS" | "BODY" | "SLEEP" | "ACTIVITY" | "TRENDS" | "DEVICES" | "ALERTS";
 
 /** A feature's own page (AppPage.of). */
 export const MODULE_PAGE: Record<Module, AppPage> = {
@@ -1542,7 +1545,7 @@ export interface Digest {
 export type WebhookEvent =
   | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
   | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST"
-  | "BLADDER_TRAINING" | "CONTINENCE_CHANGE" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE";
+  | "BLADDER_TRAINING" | "CONTINENCE_CHANGE" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE" | "HEALTH_ALERT";
 
 export interface Webhook {
   name: string;
@@ -2483,7 +2486,7 @@ export const QUICK_ACTIONS: { id: QuickAction; label: string; module: Module | n
 ];
 /* How many quick actions show in Today's row (QuickAction.SHOWN) is lib/today.ts's QUICK_ROW. */
 
-export type NavPage = "TODAY" | "TRENDS" | "FOOD" | "REPORTS" | "DEVICES" | "CONDITIONS" | "ASSISTANT";
+export type NavPage = "TODAY" | "TRENDS" | "FOOD" | "REPORTS" | "DEVICES" | "CONDITIONS" | "ASSISTANT" | "ALERTS";
 
 /** Applies a saved layout to a screen's sections (ids in the default order): the person's order, then new ones where they'd be. */
 export function arrange<T>(defaults: T[], id: (t: T) => string, layout?: ScreenLayout): T[] {
@@ -2580,4 +2583,101 @@ export interface DataMap {
 /** Pausing or resuming one way out (PUT /api/privacy/{path}). */
 export interface DataPathChange {
   paused: boolean;
+}
+
+// ---------------------------------------------------------------- Health alerts (Alerts.kt)
+
+/** How soon to act: URGENT could need care now (its advice says when to call emergency services), DOCTOR is worth a doctor's look soon, WATCH worth keeping an eye on. */
+export type AlertLevel = "URGENT" | "DOCTOR" | "WATCH";
+
+export type AlertKind =
+  | "HIGH_HEART_RATE" | "LOW_HEART_RATE" | "IRREGULAR_RHYTHM" | "LOW_OXYGEN" | "OXYGEN_DIPS" | "GETTING_SICK" | "RESTING_HEART_RISE";
+
+/** Each kind's name (AlertKind.label). */
+export const ALERT_KIND_LABELS: Record<AlertKind, string> = {
+  HIGH_HEART_RATE: "High heart rate at rest",
+  LOW_HEART_RATE: "Low heart rate",
+  IRREGULAR_RHYTHM: "Irregular heart rhythm",
+  LOW_OXYGEN: "Low blood oxygen",
+  OXYGEN_DIPS: "Blood oxygen dips at night",
+  GETTING_SICK: "Signs you may be getting ill",
+  RESTING_HEART_RISE: "Resting heart rate has stayed up",
+};
+
+/** What the person said about an alert when putting it away. */
+export type AlertFeedback = "ACTIVE" | "EXPECTED" | "DEVICE" | "DOCTOR" | "OTHER";
+
+/** Each answer's words (AlertFeedback.label), in the server's order. */
+export const ALERT_FEEDBACK_LABELS: Record<AlertFeedback, string> = {
+  ACTIVE: "I was active",
+  EXPECTED: "I know why",
+  DEVICE: "The device slipped or misread",
+  DOCTOR: "I'm getting it checked",
+  OTHER: "Something else",
+};
+
+/** One reading behind an alert: "Highest" · "146 bpm". */
+export interface AlertReading {
+  label: string;
+  value: string;
+}
+
+export interface HealthAlert {
+  id: string;
+  kind: AlertKind;
+  level: AlertLevel;
+  title: string;
+  body: string;
+  /** What to do. For URGENT, it starts with when to call emergency services. */
+  advice: string;
+  evidence?: AlertReading[];
+  /** When it began and (for a spell) ended. */
+  start: number;
+  end?: number;
+  /** The devices whose readings it came from. */
+  devices?: string[];
+  createdAt: number;
+  seenAt?: number;
+  dismissedAt?: number;
+  feedback?: AlertFeedback;
+}
+
+/** Each person's alert settings (PUT /api/alerts/settings); the server keeps the numbers within ALERT_LIMITS. */
+export interface AlertSettings {
+  enabled: boolean;
+  /** Heart rate (bpm) that counts as high when it stays there for 10 minutes at rest: 100–180. */
+  highHeartRate: number;
+  /** Heart rate (bpm) that counts as low when it stays there for 10 minutes while awake: 30–60. */
+  lowHeartRate: number;
+  /** Blood oxygen (%) that counts as low: 85–94. */
+  lowOxygen: number;
+  /** Watch for the signs of getting ill (resting heart rate, HRV, temperature and breathing together). */
+  illness: boolean;
+  /** Watch a chest strap's rhythm. */
+  rhythm: boolean;
+  /** Tell the person by notification (the phone, and the browser if it's set up). */
+  notify: boolean;
+}
+
+/** What the alerts can watch with the person's devices: "Heart rhythm" · "Needs a chest strap…". */
+export interface AlertWatch {
+  what: string;
+  how: string;
+  watching: boolean;
+}
+
+/** GET /api/alerts?days=30. Never shared. */
+export interface HealthAlerts {
+  /** Newest first. */
+  alerts: HealthAlert[];
+  settings: AlertSettings;
+  watching: AlertWatch[];
+  /** What they can and can't do, plainly. */
+  limits: string;
+  checkedAt?: number;
+}
+
+/** Putting an alert away, with what the person said about it (POST /api/alerts/{id}/dismiss). */
+export interface AlertDismiss {
+  feedback?: AlertFeedback;
 }
