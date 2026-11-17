@@ -226,6 +226,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
                 onFindRing = { nav.navigate("devices/ring") },
                 onFindMonitor = { nav.navigate("devices/monitor") },
                 onRecent = { id -> open("recent?device=${android.net.Uri.encode(id)}") },
+                onFindStrap = { nav.navigate("devices/strap") },
             )
         }
         // The last 24 hours as the devices recorded them (ui/recent): from Today's and Trends' sleep, and each device.
@@ -234,6 +235,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             arguments = listOf(navArgument("device") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { back -> com.health.app.ui.recent.RecentRoute(back.arguments?.getString("device"), onBack = { nav.popBackStack() }) }
         composable("devices/ring") { RingPairRoute(onDone = { nav.popBackStack() }) }
+        composable("devices/strap") { com.health.app.ui.devices.StrapPairRoute(onDone = { nav.popBackStack() }) }
         composable("settings") { SettingsRoute(onOpen = ::open) }
 
         composable("health") {

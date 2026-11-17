@@ -68,6 +68,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         // Opening the app is a good moment to bring in what the ring and watch recorded.
         val c = container
         if (c.settings.value.signedIn) c.syncNowQuietly()
+        c.resumeStrapRecording()
     }
 
     /** The server's sign-in page sends the app back here with its one-time code. */

@@ -34,7 +34,10 @@ class Notification(val characteristic: UUID, val value: ByteArray)
  * arrive on [notifications].
  */
 @SuppressLint("MissingPermission")
-class GattConnection private constructor() {
+class GattConnection private constructor(
+    /** What the device is called in messages: "ring", "strap". */
+    private val noun: String,
+) {
     private lateinit var gatt: BluetoothGatt
     private val lock = Mutex()
     private var pending: CompletableDeferred<Pair<Int, ByteArray?>>? = null
@@ -53,7 +56,7 @@ class GattConnection private constructor() {
                 connected.complete(Unit)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 isClosed = true
-                val error = BleException(if (status == 8) "The ring went out of range" else "The ring disconnected")
+                val error = BleException(if (status == 8) "The $noun went out of range" else "The $noun disconnected")
                 connected.completeExceptionally(error)
                 discovered.completeExceptionally(error)
                 pending?.completeExceptionally(error)
@@ -63,7 +66,7 @@ class GattConnection private constructor() {
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) discovered.complete(Unit)
-            else discovered.completeExceptionally(BleException("Couldn't read the ring's services"))
+            else discovered.completeExceptionally(BleException("Couldn't read the $noun's services"))
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
@@ -100,12 +103,12 @@ class GattConnection private constructor() {
     fun hasService(service: UUID): Boolean = gatt.getService(service) != null
 
     private fun characteristic(service: UUID, characteristic: UUID): BluetoothGattCharacteristic =
-        gatt.getService(service)?.getCharacteristic(characteristic) ?: throw BleException("The ring doesn't offer $characteristic")
+        gatt.getService(service)?.getCharacteristic(characteristic) ?: throw BleException("The $noun doesn't offer $characteristic")
 
     /** Turns notifications (or, with [indicate], indications) from [characteristic] on; both arrive on [notifications]. */
     suspend fun enableNotifications(service: UUID, characteristic: UUID, indicate: Boolean = false) {
         val char = characteristic(service, characteristic)
-        if (!gatt.setCharacteristicNotification(char, true)) throw BleException("Couldn't listen to the ring")
+        if (!gatt.setCharacteristicNotification(char, true)) throw BleException("Couldn't listen to the $noun")
         val descriptor = char.getDescriptor(CCCD) ?: return
         val enable = if (indicate) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         operation("listen") {
@@ -147,13 +150,13 @@ class GattConnection private constructor() {
     }
 
     private suspend fun operation(what: String, start: () -> Boolean): ByteArray? = lock.withLock {
-        if (isClosed) throw BleException("The ring disconnected")
+        if (isClosed) throw BleException("The $noun disconnected")
         val done = CompletableDeferred<Pair<Int, ByteArray?>>()
         pending = done
         try {
-            if (!start()) throw BleException("The ring didn't take the $what")
-            val (status, value) = withTimeoutOrNull(OPERATION_TIMEOUT_MS) { done.await() } ?: throw BleException("The ring didn't answer")
-            if (status != BluetoothGatt.GATT_SUCCESS) throw BleException("The ring refused the $what ($status)")
+            if (!start()) throw BleException("The $noun didn't take the $what")
+            val (status, value) = withTimeoutOrNull(OPERATION_TIMEOUT_MS) { done.await() } ?: throw BleException("The $noun didn't answer")
+            if (status != BluetoothGatt.GATT_SUCCESS) throw BleException("The $noun refused the $what ($status)")
             value
         } finally {
             pending = null
@@ -173,23 +176,23 @@ class GattConnection private constructor() {
         private const val OPERATION_TIMEOUT_MS = 8_000L
         private const val CONNECT_TIMEOUT_MS = 25_000L
 
-        /** Connects to the device at [address] and finds its services. */
-        suspend fun connect(context: Context, address: String): GattConnection {
+        /** Connects to the device at [address] (a [noun] in messages) and finds its services. */
+        suspend fun connect(context: Context, address: String, noun: String = "ring"): GattConnection {
             val manager = context.getSystemService(BluetoothManager::class.java) ?: throw BleException("This phone has no Bluetooth")
             val adapter = manager.adapter ?: throw BleException("This phone has no Bluetooth")
             if (!adapter.isEnabled) throw BleException("Bluetooth is off")
             val device = attempt { adapter.getRemoteDevice(address) }.getOrNull() ?: throw BleException("That isn't a Bluetooth address")
-            val connection = GattConnection()
+            val connection = GattConnection(noun)
             connection.gatt = device.connectGatt(context, false, connection.callback, BluetoothDevice.TRANSPORT_LE)
-                ?: throw BleException("Couldn't connect to the ring")
+                ?: throw BleException("Couldn't connect to the $noun")
             try {
                 withTimeout(CONNECT_TIMEOUT_MS) { connection.connected.await() }
-                // A larger MTU isn't needed: the ring speaks in 16-byte packets.
-                if (!connection.gatt.discoverServices()) throw BleException("Couldn't read the ring's services")
+                // A larger MTU isn't needed: the ring speaks in 16-byte packets, a strap in under 20.
+                if (!connection.gatt.discoverServices()) throw BleException("Couldn't read the $noun's services")
                 withTimeout(CONNECT_TIMEOUT_MS) { connection.discovered.await() }
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                 connection.close()
-                throw BleException("Couldn't find the ring. Is it nearby, and charged?")
+                throw BleException("Couldn't find the $noun. Is it nearby, and charged?")
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 connection.close()
                 throw e

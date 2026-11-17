@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.Fields
-import com.health.api.Metric
 import com.health.api.Milestone
 import com.health.api.MilestoneStatus
 import com.health.api.Module
@@ -288,7 +287,8 @@ private fun MeasurementsCard(state: TransitionState, units: Units, open: (String
             Hint("Waist, hips, chest and more, over time.")
             return@InfoCard
         }
-        val latest = Metric.entries.mapNotNull { m -> sets.lastOrNull { m in it.values }?.let { m to it.values.getValue(m) } }
+        // Only the body measurements: anything else (a strap's irregular rhythm, say) isn't a length.
+        val latest = com.health.app.ui.modules.body.BODY_MEASUREMENTS.mapNotNull { m -> sets.lastOrNull { m in it.values }?.let { m to it.values.getValue(m) } }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             latest.forEach { (m, cm) -> Text("${m.label} ${MeasurementFormat.length(cm, units)}", style = MaterialTheme.typography.bodyMedium) }
         }

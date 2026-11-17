@@ -103,6 +103,11 @@ import com.health.app.devices.ble.FoundRing
 import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
+import com.health.app.devices.strap.FoundStrap
+import com.health.app.devices.strap.PairedStrap
+import com.health.app.devices.strap.StrapConduit
+import com.health.app.devices.strap.StrapLive
+import com.health.app.devices.strap.StrapRecording
 import com.health.app.sync.ConduitStatus
 import com.health.app.sync.PairedRing
 import com.health.app.ui.components.Backdrop
@@ -111,6 +116,7 @@ import com.health.app.ui.devices.DevicesScreen
 import com.health.app.ui.devices.DevicesState
 import com.health.app.ui.devices.HealthConnectState
 import com.health.app.ui.devices.RingPairScreen
+import com.health.app.ui.devices.StrapPairScreen
 import com.health.app.ui.food.AddFoodActions
 import com.health.app.ui.food.AddFoodScreen
 import com.health.app.ui.food.AddFoodState
@@ -374,19 +380,48 @@ class ScreenshotTest {
             ColmiConduit.ID to ConduitStatus(now - 7 * 60_000, true, null, samples = 412, sleep = 1),
             HealthConnectConduit.ID to ConduitStatus(now - 52 * 60_000, true, null, samples = 1830, workouts = 2),
             GadgetbridgeConduit.ID to ConduitStatus(),
+            StrapConduit.ID to ConduitStatus(now - 4 * 60_000, true, null, samples = 19),
         ),
         serverDevices = listOf(
             Device("d1", DeviceKind.COLMI_RING, "C4:7A:12:9E:33:01", "R02_9E33", battery = 82, lastSyncAt = now - 7 * 60_000, createdAt = 0, samples = 48_211),
             Device("d2", DeviceKind.GARMIN, "com.garmin.android.apps.connectmobile", "Garmin Connect", lastSyncAt = now - 52 * 60_000, createdAt = 0, samples = 120_330),
             Device("d3", DeviceKind.MANUAL, "manual", "Entered by hand", lastSyncAt = now - 3 * 3_600_000, createdAt = 0, samples = 38),
+            Device("d4", DeviceKind.HEART_RATE_STRAP, "E4:5F:01:AA:20:7C", "Polar H10 A1B2C3D4", battery = 91, lastSyncAt = now - 4 * 60_000, createdAt = 0, samples = 1_204),
         ),
         loading = false,
+        strap = PairedStrap("E4:5F:01:AA:20:7C", "Polar H10 A1B2C3D4", battery = 91),
+        strapRecording = StrapRecording("E4:5F:01:AA:20:7C", at(today, 13, 4)),
+        strapLive = StrapLive(connected = true, bpm = 58),
     )
 
     @Test
     fun devices() {
-        render { Frame("devices") { DevicesScreen(devicesState, DevicesActions(), now) } }
+        render { Frame("devices") { DevicesScreen(devicesState, DevicesActions(), now, zone = zone) } }
         save("devices_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2000dp-xxhdpi")
+    fun devicesStrapDark() {
+        // The strap chosen, not recording.
+        val idle = devicesState.copy(strapRecording = null, strapLive = StrapLive())
+        render(dark = true) { Frame("devices") { DevicesScreen(idle, DevicesActions(), now, zone = zone) } }
+        save("devices_strap_dark")
+    }
+
+    @Test
+    fun devicesStrapLooking() {
+        // Recording, while it looks for the strap.
+        val looking = devicesState.copy(strapLive = StrapLive(problem = "Bluetooth is off"))
+        render { Frame("devices") { DevicesScreen(looking, DevicesActions(), now, zone = zone) } }
+        save("devices_strap_looking")
+    }
+
+    @Test
+    fun strapPairing() {
+        val found = listOf(FoundStrap("E4:5F:01:AA:20:7C", "Polar H10 A1B2C3D4", -48), FoundStrap("C8:11:3A:90:0D:42", "HRM-Dual:4410", -77))
+        render { Frame("devices") { StrapPairScreen(found, searching = true, error = null, onBack = {}, onSearchAgain = {}, onPick = {}) } }
+        save("devices_strap_pairing")
     }
 
     @Test
