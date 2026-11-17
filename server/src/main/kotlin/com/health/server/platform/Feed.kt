@@ -128,7 +128,9 @@ object Feed {
     }
 
     /** "08:30", in the person's time zone. */
-    fun time(ms: Long, days: Days): String = Say.time(ms, days.zone)
+    /** "3:30 PM": one clock everywhere in the feed, as appointments already say it. */
+    fun time(ms: Long, days: Days): String =
+        java.time.Instant.ofEpochMilli(ms).atZone(days.zone).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH))
 
     /** "cramps, bloating and headache"; past [max], "and 2 more". */
     fun words(list: List<String>, max: Int = 3): String? {

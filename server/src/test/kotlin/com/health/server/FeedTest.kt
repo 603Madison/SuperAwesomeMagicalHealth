@@ -277,13 +277,13 @@ class FeedTest {
 
         val overdue = of(NowKind.DOSE_OVERDUE)
         assertEquals("Vitamin D", overdue.title)
-        assertEquals("1000 IU · was due at 14:00", overdue.detail)
+        assertEquals("1000 IU · was due at 2:00 PM", overdue.detail)
         assertEquals("Take", overdue.action!!.label)
         assertEquals(NowAction.DOSE_TAKE, overdue.action!!.action)
         assertEquals(mapOf("medicationId" to seeded.vitaminD, "scheduledFor" to at(14).toString()), overdue.action!!.ids)
         val due = of(NowKind.DOSE_DUE)
         assertEquals("Magnesium", due.title)
-        assertEquals("200 mg · due at 15:30", due.detail)
+        assertEquals("200 mg · due at 3:30 PM", due.detail)
         assertEquals(mapOf("medicationId" to seeded.magnesium, "scheduledFor" to at(15, 30).toString()), due.action!!.ids)
 
         val appointments = now.filter { it.kind == NowKind.APPOINTMENT_SOON }
@@ -294,7 +294,7 @@ class FeedTest {
 
         val wearing = of(NowKind.WEARING)
         assertEquals("Day pants", wearing.title)
-        assertEquals("On for 2 h, since 13:00", wearing.detail)
+        assertEquals("On for 2 h, since 1:00 PM", wearing.detail)
         assertEquals("Change", wearing.action!!.label)
         assertEquals(NowAction.CONTINENCE_CHANGE, wearing.action!!.action)
         assertEquals(mapOf("supplyId" to seeded.dayPants), wearing.action!!.ids)
@@ -322,7 +322,7 @@ class FeedTest {
         s.modules.meds.logDose(s.admin(), DoseLog(seeded.vitaminD, at(15), scheduledFor = at(14)))
         val after = s.feed.feed(s.admin(), "today")
         assertTrue(after.now.none { it.kind == NowKind.DOSE_OVERDUE })
-        assertEquals("Taken · 1000 IU · for 14:00", after.items.one(TimelineKind.DOSE_TAKEN, "Vitamin D").detail)
+        assertEquals("Taken · 1000 IU · for 2:00 PM", after.items.one(TimelineKind.DOSE_TAKEN, "Vitamin D").detail)
     }
 
     @Test
