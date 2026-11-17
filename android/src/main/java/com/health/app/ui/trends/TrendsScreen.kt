@@ -155,7 +155,7 @@ class TrendsActions(
 )
 
 @Composable
-fun TrendsRoute() {
+fun TrendsRoute(onRecent: () -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { TrendsViewModel(c) }
     val state by vm.state.collectAsState()
@@ -168,6 +168,8 @@ fun TrendsRoute() {
         vitalsTargets = profile?.vitalsTargets ?: VitalsTargets(),
         water = showsField(Fields.NUTRITION_WATER),
         micros = com.health.app.ui.food.showsMicros(),
+        // The last 24 hours (ui/recent) are only ever the person's own.
+        onRecent = onRecent.takeIf { !com.health.app.ui.care.LocalReadOnly.current },
     )
 }
 
@@ -200,12 +202,14 @@ fun trendsSections(modules: Set<Module>, water: Boolean = true, micros: Boolean 
     if (Module.ACTIVITY in modules) add(ArrangeItem("workouts", "Workouts"))
 }
 
+/** [onRecent], where given, opens the last 24 hours from the Sleep chart. */
 @Composable
 fun TrendsScreen(
     state: TrendsState, units: Units, goals: Goals, zone: ZoneId, actions: TrendsActions, modules: Set<Module> = Module.DEFAULT,
     vitalsTargets: VitalsTargets = VitalsTargets(),
     water: Boolean = true,
     micros: Boolean = false,
+    onRecent: (() -> Unit)? = null,
 ) {
     var weighing by remember { mutableStateOf(false) }
     val sections = trendsSections(modules, water, micros)
@@ -231,7 +235,7 @@ fun TrendsScreen(
                             // Combined devices: the chart's "From 2 devices", if today's reading has more than one (ui/components/Sources.kt).
                             in TREND_CHARTS -> androidx.compose.runtime.CompositionLocalProvider(
                                 com.health.app.ui.components.LocalChartSources provides com.health.app.ui.components.Sources.chart(id, state.combined, state.combinedSleep, units, zone),
-                            ) { TrendChart(id, days, labels, goals, units) }
+                            ) { TrendChart(id, days, labels, goals, units, onRecent) }
                             else -> TrackingTrend(id, days, labels, vitalsTargets)
                         }
                     }
@@ -248,9 +252,9 @@ internal const val NUTRIENT = "nutrient"
 /** Trends' own charts' ids; the rest are [TrackingTrend]'s. */
 private val TREND_CHARTS = setOf("mood", "doses", "period", "trips", "leaks", "sleep", "steps", "heart", "hrv", "calories", "water")
 
-/** One of Trends' own charts ([TREND_CHARTS]), by its section id. */
+/** One of Trends' own charts ([TREND_CHARTS]), by its section id; Sleep's chevron opens the last 24 hours ([onRecent]). */
 @Composable
-private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, String?, String>, goals: Goals, units: Units) {
+private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, String?, String>, goals: Goals, units: Units, onRecent: (() -> Unit)? = null) {
     when (id) {
         "mood" -> ChartCard(
             "Mood", ModuleInfo.icon(Module.MIND), MaterialTheme.colorScheme.primary,
@@ -290,6 +294,7 @@ private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, 
             "Sleep", Icons.Rounded.Bedtime, AppTheme.data.rem,
             average(days.map { it.sleepMinutes?.toDouble() })?.let { Format.minutes(it.roundToInt()) },
             "a night", labels,
+            onOpen = onRecent, openLabel = "last 24 hours",
         ) { BarChart(days.map { d -> d.sleepMinutes?.let { it / 60.0 } }, color = AppTheme.data.rem, goal = goals.sleepMinutes / 60.0) }
         "steps" -> ChartCard(
             "Steps", Icons.AutoMirrored.Rounded.DirectionsWalk, MaterialTheme.colorScheme.tertiary,
@@ -333,9 +338,11 @@ internal fun ChartCard(
     caption: String,
     labels: Triple<String, String?, String>,
     footer: String? = null,
+    onOpen: (() -> Unit)? = null,
+    openLabel: String? = null,
     chart: @Composable () -> Unit,
 ) {
-    InfoCard(title, icon = icon, iconTint = tint) {
+    InfoCard(title, icon = icon, iconTint = tint, onOpen = onOpen, openLabel = openLabel) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(headline ?: "—", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.width(6.dp))

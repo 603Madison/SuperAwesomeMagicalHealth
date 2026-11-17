@@ -105,12 +105,15 @@ fun ScreenTitle(title: String, subtitle: String? = null, actions: @Composable Ro
     }
 }
 
-/** A page opened from a tab: back on the left, actions on the right. */
+/** A page opened from a tab: back on the left, actions on the right; a short [subtitle] under the title. */
 @Composable
-fun BackBar(onBack: (() -> Unit)?, title: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
+fun BackBar(onBack: (() -> Unit)?, title: String? = null, subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-        Text(title.orEmpty(), style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp))
+        Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+            Text(title.orEmpty(), style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        }
         actions()
     }
 }

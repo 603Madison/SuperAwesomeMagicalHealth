@@ -220,8 +220,19 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             val meal = Meal.entries.firstOrNull { it.name == back.arguments?.getString("meal") } ?: Meal.SNACK
             AddFoodRoute(date, meal, onDone = { nav.popBackStack() })
         }
-        composable("trends") { TrendsRoute() }
-        composable("devices") { DevicesRoute(onFindRing = { nav.navigate("devices/ring") }, onFindMonitor = { nav.navigate("devices/monitor") }) }
+        composable("trends") { TrendsRoute(onRecent = { open("recent") }) }
+        composable("devices") {
+            DevicesRoute(
+                onFindRing = { nav.navigate("devices/ring") },
+                onFindMonitor = { nav.navigate("devices/monitor") },
+                onRecent = { id -> open("recent?device=${android.net.Uri.encode(id)}") },
+            )
+        }
+        // The last 24 hours as the devices recorded them (ui/recent): from Today's and Trends' sleep, and each device.
+        composable(
+            "recent?device={device}",
+            arguments = listOf(navArgument("device") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { back -> com.health.app.ui.recent.RecentRoute(back.arguments?.getString("device"), onBack = { nav.popBackStack() }) }
         composable("devices/ring") { RingPairRoute(onDone = { nav.popBackStack() }) }
         composable("settings") { SettingsRoute(onOpen = ::open) }
 

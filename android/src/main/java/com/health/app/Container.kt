@@ -407,13 +407,12 @@ class Container(val context: Context) {
         return saved
     }
 
-    /** Syncs now, from the Sync button: tells the person how it went. */
-    fun syncNow(onlyId: String? = null) {
+    /** Syncs now, from the Sync button: tells the person how it went. The job ends when the sync does. */
+    fun syncNow(onlyId: String? = null): kotlinx.coroutines.Job =
         scope.launch {
             val result = attempt { sync.sync(onlyId) }.getOrElse { it.message ?: "Couldn't sync" }
             tell(result.lineSequence().first())
         }
-    }
 
     private var lastQuietSync = 0L
 

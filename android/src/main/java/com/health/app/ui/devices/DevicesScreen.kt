@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,12 +93,16 @@ class DevicesActions(
     val retry: () -> Unit = {},
     /** Uses one device for a reading (or, with null, combines them). */
     val choose: (Overlap, String?) -> Unit = { _, _ -> },
+    /** Opens a server device's last 24 hours (ui/recent), by its id; null where it can't (viewing a share). */
+    val recent: ((String) -> Unit)? = null,
 )
 
 @Composable
-fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}) {
+fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecent: (String) -> Unit = {}) {
     val c = appContainer()
     val context = LocalContext.current
+    // The last 24 hours are only ever the person's own.
+    val recent = onRecent.takeIf { !com.health.app.ui.care.LocalReadOnly.current }
     val vm = viewModel { DevicesViewModel(c) }
     val state by vm.state.collectAsState()
     val pairedMonitors by c.monitors.monitors.collectAsState()
@@ -142,6 +147,7 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}) {
             forget = vm::forget,
             retry = vm::loadServer,
             choose = vm::choose,
+            recent = recent,
         ),
         monitors = MonitorsUi(
             pairedMonitors,
@@ -189,7 +195,10 @@ fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = Syst
             state.serverDevices.isEmpty() && !state.loading -> Hint("No data has reached your server yet.", Modifier.padding(horizontal = 20.dp))
             else -> state.serverDevices.forEachIndexed { i, device ->
                 CardItem(i, state.serverDevices.size) {
-                    ServerDeviceRow(device, now, onRename = { renaming = device }, onForget = { forgetting = device })
+                    ServerDeviceRow(
+                        device, now, onRename = { renaming = device }, onForget = { forgetting = device },
+                        onRecent = actions.recent?.takeIf { com.health.app.ui.recent.Recent.records(device.kind) }?.let { open -> { open(device.id) } },
+                    )
                 }
             }
         }
@@ -351,10 +360,16 @@ private fun OtherDevicesCard() {
     }
 }
 
+/** A device on the server: tapped (or from its menu) it opens its last 24 hours, where [onRecent] is given. */
 @Composable
-private fun ServerDeviceRow(device: Device, now: Long, onRename: () -> Unit, onForget: () -> Unit) {
+private fun ServerDeviceRow(device: Device, now: Long, onRename: () -> Unit, onForget: () -> Unit, onRecent: (() -> Unit)? = null) {
     var menu by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (onRecent != null) Modifier.clickable(onClickLabel = "Show its last 24 hours", onClick = onRecent) else Modifier)
+            .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
             Text(device.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val parts = listOfNotNull(
@@ -368,6 +383,7 @@ private fun ServerDeviceRow(device: Device, now: Long, onRename: () -> Unit, onF
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More about ${device.name}") }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                if (onRecent != null) DropdownMenuItem(text = { Text("Last 24 hours") }, onClick = { menu = false; onRecent() })
                 DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
                 DropdownMenuItem(text = { Text("Forget…") }, onClick = { menu = false; onForget() })
             }

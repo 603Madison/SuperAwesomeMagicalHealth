@@ -25,16 +25,25 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.health.api.Point
 import com.health.api.SleepStage
 import com.health.api.StageSpan
 import com.health.app.ui.theme.AppTheme
+import kotlin.math.roundToInt
 
 /**
  * An Oura-style score ring: the theme's two colours sweeping round as far as [fraction] (0–1),
@@ -252,15 +261,32 @@ private fun level(stage: SleepStage) = when (stage) {
     SleepStage.DEEP -> 3
 }
 
-/** The night as a hypnogram: each stage a rounded block on its own level, in its colour. */
+/**
+ * The night as a hypnogram: each stage a rounded block on its own level, in its colour, joined to
+ * the next by a thin line so the night reads as one trace even when it's narrow, from [start] to
+ * [end] across the width (a span outside them is cut off at the edge). [ticks] are times to mark
+ * with a faint line, as [TimeChart] marks its axis.
+ */
 @Composable
-fun Hypnogram(stages: List<StageSpan>, start: Long, end: Long, modifier: Modifier = Modifier, height: Dp = 84.dp) {
+fun Hypnogram(stages: List<StageSpan>, start: Long, end: Long, modifier: Modifier = Modifier, height: Dp = 84.dp, ticks: List<Long> = emptyList()) {
     val colors = SleepStage.entries.associateWith { stageColor(it) }
     val grid = MaterialTheme.colorScheme.outlineVariant
-    Canvas(modifier.fillMaxWidth().height(height)) {
+    val joint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+    Canvas(modifier.fillMaxWidth().height(height).clipToBounds()) {
         val total = (end - start).coerceAtLeast(1).toFloat()
         val rowH = size.height / 4
         for (r in 1..3) drawLine(grid.copy(alpha = 0.5f), Offset(0f, r * rowH), Offset(size.width, r * rowH), 0.5.dp.toPx())
+        ticks.forEach { t ->
+            val x = ((t - start) / total) * size.width
+            if (x in 0f..size.width) drawLine(grid, Offset(x, 0f), Offset(x, size.height), 0.75.dp.toPx())
+        }
+        // One stage to the next, where the next follows straight on.
+        stages.sortedBy { it.start }.zipWithNext { a, b ->
+            if (b.start - a.end <= 60_000L && level(a.stage) != level(b.stage)) {
+                val x = ((b.start - start) / total) * size.width
+                drawLine(joint, Offset(x, (level(a.stage) + 0.5f) * rowH), Offset(x, (level(b.stage) + 0.5f) * rowH), 1.dp.toPx())
+            }
+        }
         stages.forEach { s ->
             val x0 = ((s.start - start) / total) * size.width
             val x1 = ((s.end - start) / total) * size.width
@@ -318,6 +344,174 @@ fun HourlyBars(values: List<Int>, modifier: Modifier = Modifier, color: Color = 
         BarChart(values.map { it.toDouble() }, color = color, height = 52.dp)
         Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             listOf("12a", "6a", "12p", "6p", "").forEach { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Against the clock
+
+/*
+ * Charts drawn against the clock, for a page of them that share one [TimeAxis] (the last 24
+ * hours): each leaves [CHART_GUTTER] on its right for its scale, so a hypnogram given the same
+ * room, and [TimeAxisLabels] under each, line up with them; the nights are shaded faintly behind.
+ */
+
+/** The room on a time chart's right for its scale ("120", "50"). Anything lined up with one leaves the same. */
+val CHART_GUTTER = 32.dp
+
+/** How a [TimeChart] draws its readings. */
+enum class TimeChartStyle {
+    /** A line, broken where readings stop for a while (dotted too when there are only a few). */
+    LINE,
+
+    /** A dot a reading, for readings taken now and then. */
+    DOTS,
+}
+
+/** The faint shading for the nights behind time charts. */
+@Composable
+fun nightShade(): Color = AppTheme.data.deep.copy(alpha = if (com.health.app.ui.theme.LocalIsDark.current) 0.10f else 0.08f)
+
+/**
+ * Readings on [axis] against [scale] (labelled at its ends on the right): a line or dots ([style])
+ * in [color]. A line breaks where readings are more than [gap] apart. [shaded] spans (the nights)
+ * are shaded behind it, and each of the axis's ticks has a faint line. [description] says what it
+ * shows to a screen reader: "Heart rate from 52 to 118 bpm, average 71".
+ */
+@Composable
+fun TimeChart(
+    points: List<Point>,
+    axis: TimeAxis,
+    scale: ChartScale,
+    description: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    style: TimeChartStyle = TimeChartStyle.LINE,
+    shaded: List<Pair<Long, Long>> = emptyList(),
+    gap: Long = 45 * 60_000L,
+    height: Dp = 112.dp,
+    reference: Double? = null,
+) {
+    val refColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    TimePlot(axis, scale, description, modifier, shaded, height) { x, y ->
+        reference?.let {
+            drawLine(refColor, Offset(0f, y(it)), Offset(size.width, y(it)), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
+        }
+        val runs = timeRuns(points, gap)
+        val dots = style == TimeChartStyle.DOTS || points.size <= 24
+        val radius = (if (style == TimeChartStyle.DOTS) 3.5.dp else 2.5.dp).toPx()
+        for (run in runs) {
+            if (style == TimeChartStyle.LINE && run.size >= 2) {
+                val line = Path()
+                run.forEachIndexed { i, p -> if (i == 0) line.moveTo(x(p.t), y(p.v)) else line.lineTo(x(p.t), y(p.v)) }
+                drawPath(line, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            if (dots || run.size == 1) run.forEach { p -> drawCircle(color, radius, Offset(x(p.t), y(p.v))) }
+        }
+    }
+}
+
+/**
+ * Totals a [bucket] at a time (steps an hour at a time) as bars on [axis], each from its start to
+ * the end of its bucket, against [scale]; otherwise as [TimeChart].
+ */
+@Composable
+fun TimeBars(
+    points: List<Point>,
+    bucket: Long,
+    axis: TimeAxis,
+    scale: ChartScale,
+    description: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    shaded: List<Pair<Long, Long>> = emptyList(),
+    height: Dp = 96.dp,
+) {
+    TimePlot(axis, scale, description, modifier, shaded, height) { x, y ->
+        val gap = 1.5.dp.toPx()
+        val base = y(scale.low)
+        points.forEach { p ->
+            if (p.v <= 0) return@forEach
+            val x0 = x(p.t) + gap / 2
+            val w = (x(p.t + bucket) - x(p.t) - gap).coerceAtLeast(1f)
+            val top = y(p.v).coerceAtMost(base - 1f)
+            val r = minOf(w / 3, 3.dp.toPx())
+            drawRoundRect(color.copy(alpha = 0.85f), Offset(x0, top), Size(w, base - top), CornerRadius(r, r))
+        }
+    }
+}
+
+/**
+ * What [TimeChart] and [TimeBars] share: the nights shaded, the axis's ticks, the scale's lines and
+ * labels in the gutter, and [draw] (given where a time and a value fall) clipped to the plot.
+ */
+@Composable
+private fun TimePlot(
+    axis: TimeAxis,
+    scale: ChartScale,
+    description: String,
+    modifier: Modifier,
+    shaded: List<Pair<Long, Long>>,
+    height: Dp,
+    draw: DrawScope.(x: (Long) -> Float, y: (Double) -> Float) -> Unit,
+) {
+    val grid = MaterialTheme.colorScheme.outlineVariant
+    val shade = nightShade()
+    val measurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Canvas(modifier.fillMaxWidth().height(height).semantics { contentDescription = description }) {
+        val right = (size.width - CHART_GUTTER.toPx()).coerceAtLeast(1f)
+        // Room above and below, so a dot on the scale's end isn't cut in half.
+        val inset = 6.dp.toPx()
+        val top = inset
+        val bottom = size.height - inset
+        val x = { t: Long -> axis.fraction(t) * right }
+        val y = { v: Double -> bottom - scale.fraction(v).coerceIn(-0.04f, 1.04f) * (bottom - top) }
+        shaded.forEach { (s, e) ->
+            val x0 = x(s).coerceIn(0f, right)
+            val x1 = x(e).coerceIn(0f, right)
+            if (x1 > x0) drawRect(shade, Offset(x0, 0f), Size(x1 - x0, size.height))
+        }
+        axis.ticks.forEach { tick ->
+            val tx = x(tick.at)
+            if (tx in 0f..right) drawLine(grid, Offset(tx, 0f), Offset(tx, size.height), 0.75.dp.toPx())
+        }
+        drawLine(grid, Offset(0f, y(scale.high)), Offset(right, y(scale.high)), 0.75.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+        drawLine(grid, Offset(0f, y(scale.low)), Offset(right, y(scale.low)), 1.dp.toPx())
+        for (v in listOf(scale.high, scale.low)) {
+            val label = measurer.measure(scale.label(v), labelStyle)
+            val ty = (y(v) - label.size.height / 2f).coerceIn(0f, (size.height - label.size.height).coerceAtLeast(0f))
+            drawText(label, topLeft = Offset(right + 6.dp.toPx(), ty))
+        }
+        clipRect(0f, 0f, right, size.height) { draw(x, y) }
+    }
+}
+
+/**
+ * The labels under a time chart (or a hypnogram given the same gutter): each tick's label centred
+ * under its line, kept inside the card, and left out where it would run into the one before.
+ */
+@Composable
+fun TimeAxisLabels(axis: TimeAxis, modifier: Modifier = Modifier, gutter: Dp = CHART_GUTTER) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    Layout(
+        content = { axis.ticks.forEach { Text(it.label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, softWrap = false) } },
+        modifier = modifier.fillMaxWidth().padding(top = 4.dp),
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val plot = (width - gutter.roundToPx()).coerceAtLeast(1)
+        val placeables = measurables.map { it.measure(Constraints()) }
+        val spacing = 4.dp.roundToPx()
+        layout(width, placeables.maxOfOrNull { it.height } ?: 0) {
+            var after = Int.MIN_VALUE
+            placeables.forEachIndexed { i, p ->
+                val centre = (axis.fraction(axis.ticks[i].at) * plot).roundToInt()
+                val left = (centre - p.width / 2).coerceIn(0, (width - p.width).coerceAtLeast(0))
+                if (left >= after) {
+                    p.place(left, 0)
+                    after = left + p.width + spacing
+                }
+            }
         }
     }
 }
