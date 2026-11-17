@@ -43,9 +43,11 @@ then calls `POST /api/auth/app/token` with the code and its verifier.
 | `GET /api/series?metric=HEART_RATE&from=&to=` | `[Point]`, thinned to a few hundred points |
 
 Each `Insight` may name the page it's about in `link` (an `AppPage`: `TODAY` for the scores,
-`FOOD`, `MEDS`, `SLEEP`, `ACTIVITY`, `TRENDS`, `BODY`, `DEVICES` and each feature's page); a tap
-opens it. Without a link, the apps open the page of its `module` (`AppPage.of`); with neither, it
-isn't a link. Viewing a share, pages that aren't shared (and Devices) aren't offered. `shownBy`
+`FOOD`, `MEDS`, `SLEEP`, `ACTIVITY`, `TRENDS`, `BODY`, `DEVICES`, `ALERTS` and each feature's page);
+a tap opens it. Without a link, the apps open the page of its `module` (`AppPage.of`); with neither,
+it isn't a link. Viewing a share, pages that aren't shared (and Devices and Health alerts) aren't
+offered. `tone` is `"good"`, `"info"`, `"warn"`, or `"alert"` for a health alert that could need
+care now, which the apps set apart in the theme's danger colours. `shownBy`
 names the Today card that already shows the same thing (the day's doses: `MEDS`): the apps leave
 the insight out while that card shows. The protein insight (today only) carries up to three
 `suggestions` (`FoodSuggestion`, as below) and names the top one or two in its body.
@@ -230,6 +232,30 @@ breathing rate, skin temperature, temperature deviation and stress; others, and 
 aren't the person's, are refused with 400. Changing the choices (or renaming or forgetting a
 device) works every day out again. A share sees the combined numbers for what it's shown, never
 the choices.
+
+## Health alerts
+
+| | |
+|---|---|
+| `GET /api/alerts?days=30` | `HealthAlerts`: the last 1–400 days' `HealthAlert`s, newest first (after a fresh look at the readings), the person's `AlertSettings`, what it's `watching` (`AlertWatch`: what, how, and whether it can), and `limits`, what alerts can and can't do. Never shared |
+| `PUT /api/alerts/settings` | `AlertSettings` → `AlertSettings`, kept within its limits (high heart rate 100–180 bpm, low 30–60 bpm, low blood oxygen 85–94%) |
+| `POST /api/alerts/seen` · `POST /api/alerts/{id}/seen` | Marks every alert, or one, seen |
+| `POST /api/alerts/{id}/dismiss` | `AlertDismiss` (`{feedback}`, an `AlertFeedback` or none) → `HealthAlert`: put away, with why. It stays in the list |
+
+The server watches what the devices send for a heart rate that stays high at rest or low while
+awake, an irregular rhythm from a chest strap (`IRREGULAR_RHYTHM`, the share of a five-minute
+window's stretches that looked irregular, worked out on the phone), blood oxygen that stays low or
+dips at night, the signs of getting ill against the person's own usual, and a resting heart rate
+that stays up (`AlertKind`). Each alert says how soon to act (`AlertLevel`: `URGENT` could need
+care now, and its `advice` says when to call emergency services; `DOCTOR` is worth a doctor's look;
+`WATCH` worth keeping an eye on), what happened and when (`start`, `end`), the readings behind it
+(`evidence`) and the `devices` they came from. A spell is one alert, brought up to date as it goes
+on, and never less serious than it was. Alerts are sealed, never shared and never in the digest.
+Today's `/api/day` puts the active ones (not put away, from the last day and a half) first in
+`insights`, with `tone` `"alert"` (urgent) or `"warn"` and `link` `ALERTS`. A new alert, or one that
+becomes more serious, goes out once by notification (with `AlertSettings.notify`; it opens
+`/alerts`) and to webhooks subscribed to `HEALTH_ALERT` (its level only, unless the hook includes
+details). Appointments suggest asking about urgent and doctor's-look alerts not explained away.
 
 ## Health modules
 

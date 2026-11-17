@@ -10,15 +10,22 @@ const SNOOZE_MS = 10 * 60 * 1000;
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+/** A health alert that could need care now (its tag is "alert:<id>:URGENT"): it stays until it's seen to. */
+function urgentAlert(message) {
+  return typeof message.tag === "string" && message.tag.startsWith("alert:") && message.tag.endsWith(":URGENT");
+}
+
 function show(message) {
   const actions = (message.actions || [])
     .filter((a) => a.action !== "open")
     .slice(0, 2)
     .map((a) => ({ action: a.action, title: a.title }));
+  // A health alert opens /alerts when tapped, like any other notification its url.
   return self.registration.showNotification(message.title || "SuperAwesomeMagicalHealth", {
     body: message.body || "",
     tag: message.tag || undefined,
     renotify: !!message.tag,
+    requireInteraction: urgentAlert(message),
     icon: "/icon.svg",
     badge: "/icon.svg",
     data: message,

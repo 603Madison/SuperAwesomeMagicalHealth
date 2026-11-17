@@ -12,7 +12,7 @@ import type {
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
   AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices, FoodPhotoEstimate,
-  NutrientTargets, RecentReadings, DeviceComparison, DataMap, DataPath,
+  NutrientTargets, RecentReadings, DeviceComparison, DataMap, DataPath, HealthAlerts, HealthAlert, AlertSettings, AlertFeedback,
 } from "./types";
 import { viewingOwner } from "./viewing";
 
@@ -199,13 +199,19 @@ export const api = {
   checkIn: (date: string) => get<CheckIn>(`/api/checkins/${q(date)}`),
   saveCheckIn: (checkIn: CheckIn) => put<CheckIn>(`/api/checkins/${q(checkIn.date)}`, checkIn),
 
+  /** Health alerts over the last [days] (after a fresh look), and putting them away. Never shared. */
+  alerts: (days = 30) => get<HealthAlerts>(`/api/alerts?days=${days}`),
+  saveAlertSettings: (s: AlertSettings) => put<AlertSettings>("/api/alerts/settings", s),
+  alertsSeen: () => post<unknown>("/api/alerts/seen", {}),
+  dismissAlert: (id: string, feedback?: AlertFeedback) => post<HealthAlert>(`/api/alerts/${q(id)}/dismiss`, { feedback }),
+
   devices: () => get<Device[]>("/api/devices"),
   renameDevice: (id: string, name: string) => patch<Device>(`/api/devices/${q(id)}`, { name }),
   deleteDevice: (id: string) => del<unknown>(`/api/devices/${q(id)}`),
-  // Devices that measure the same thing: one device for a reading, or all combined (always the person's own)
   /** Two devices side by side over [days] nights (1–90); without a and b the server picks. Never shared. */
   compareDevices: (days: number, a?: string, b?: string) =>
     get<DeviceComparison>(`/api/devices/compare?days=${days}${a ? `&a=${q(a)}` : ""}${b ? `&b=${q(b)}` : ""}`),
+  // Devices that measure the same thing: one device for a reading, or all combined (always the person's own)
   deviceChoices: () => get<DeviceChoices>("/api/devices/choices"),
   saveDeviceChoices: (c: DeviceChoices) => put<DeviceChoices>("/api/devices/choices", c),
   uploadKey: (name: string) => post<{ id: string; name: string; token: string; url: string }>("/api/devices/upload-keys", { name }),

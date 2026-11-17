@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, Plus, Sparkles, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
+import { ALERT_LEVEL_TEXT } from "../lib/alerts";
 import { useFoodNumbers } from "../lib/fields";
 import { today } from "../lib/format";
 import { useViewing } from "../lib/viewing";
@@ -31,6 +32,7 @@ const PAGES: Record<AppPage, { path: string; name: string }> = {
   ACTIVITY: { path: "/activity", name: "Activity" },
   TRENDS: { path: "/trends", name: "Trends" },
   DEVICES: { path: "/devices", name: "Devices" },
+  ALERTS: { path: "/alerts", name: "Health alerts" },
 };
 
 /** The feature each page needs shared, for someone viewing a share (Summary.kt's AppPage.module). */
@@ -49,18 +51,21 @@ export function pagePath(page: AppPage, date?: string): string {
   return PAGES[page].path;
 }
 
-/** Whether [page] can be opened here: everything is one's own; viewing a share, only what's shared (and never Devices). */
+/** Whether [page] can be opened here: everything is one's own; viewing a share, only what's shared (never Devices or Health alerts). */
 export function usePageOpens(): (page: AppPage) => boolean {
   const share = useViewing((s) => s.share);
   return (page) => {
     if (!share) return true;
-    if (page === "DEVICES") return false;
+    if (page === "DEVICES" || page === "ALERTS") return false;
     const needs = PAGE_MODULES[page];
     return !needs || needs.some((m) => share.modules.includes(m));
   };
 }
 
 const MEAL_WORDS: Record<Meal, string> = { BREAKFAST: "breakfast", LUNCH: "lunch", DINNER: "dinner", SNACK: "snacks" };
+
+/** What an "alert" insight says before its title: the URGENT level's words (lib/alerts.ts). */
+const URGENT_FLAG = ALERT_LEVEL_TEXT.URGENT;
 
 /** "38 g protein" (and the calories, with [kcal]). */
 export function amountText(s: FoodSuggestion, kcal = false): string {
@@ -137,10 +142,13 @@ export function InsightRow({ insight, date = today(), readOnly = false, onChange
     name: pageName(page),
     go: () => { if (!onPage?.(page)) navigate(pagePath(page, date)); },
   } : null;
+  // A health alert that could need care now says so before its title (and to screen readers).
+  const urgent = insight.tone === "alert";
   const content: ReactNode = (
     <>
       <span className="insight-icon" aria-hidden="true"><Icon size={18} /></span>
       <span className="insight-text">
+        {urgent && <span className="insight-flag">{URGENT_FLAG}</span>}
         <span className="insight-title">{insight.title}</span>
         {insight.body && <span className="insight-body" id={bodyId}>{insight.body}</span>}
       </span>
@@ -151,7 +159,7 @@ export function InsightRow({ insight, date = today(), readOnly = false, onChange
   return (
     <li className={`insight-row tone-${insight.tone}`}>
       {target ? (
-        <button type="button" className="insight-main" onClick={target.go} aria-label={`${insight.title}. Open ${target.name}`} aria-describedby={insight.body ? bodyId : undefined}>
+        <button type="button" className="insight-main" onClick={target.go} aria-label={`${urgent ? `${URGENT_FLAG}: ` : ""}${insight.title}. Open ${target.name}`} aria-describedby={insight.body ? bodyId : undefined}>
           {content}
         </button>
       ) : <div className="insight-main">{content}</div>}

@@ -315,6 +315,7 @@ function ShareDialog({ share, onClose, onSaved }: { share: Share; onClose: () =>
 
 const EVENT_GROUPS: { title: string; module?: Module; events: { id: WebhookEvent; label: string }[] }[] = [
   { title: "Your day", events: [{ id: "MORNING", label: "Morning: sleep and readiness are ready" }, { id: "READINESS_LOW", label: "Readiness is low" }, { id: "DIGEST", label: "The weekly digest is ready" }] },
+  { title: "Health alerts", events: [{ id: "HEALTH_ALERT", label: "A health alert" }] },
   { title: "Medications", module: "MEDICATIONS", events: [{ id: "DOSE_DUE", label: "A dose is due" }, { id: "DOSE_MISSED", label: "A dose was missed" }, { id: "DOSE_TAKEN", label: "A dose was taken" }, { id: "REFILL", label: "Time to refill" }] },
   { title: "Blood pressure & glucose", module: "VITALS", events: [{ id: "BP_HIGH", label: "Blood pressure is high" }, { id: "GLUCOSE_LOW", label: "Glucose is low" }, { id: "GLUCOSE_HIGH", label: "Glucose is high" }] },
   { title: "Symptoms", module: "SYMPTOMS", events: [{ id: "MIGRAINE", label: "A migraine started" }] },
@@ -417,7 +418,7 @@ function WebhookDialog({ hook, onClose, onSaved }: { hook?: Webhook; onClose: ()
           ))}
         </div>
       </Field>
-      <Toggle label="Include names" help={w.includeDetails ? "Medication, symptom and appointment names go in each call." : "Off: calls say only what happened and when (“a dose was missed at 8:00”), not what."} checked={w.includeDetails} onChange={(includeDetails) => setW({ ...w, includeDetails })} />
+      <Toggle label="Include names" help={w.includeDetails ? "Medication, symptom and appointment names, and a health alert's title, go in each call." : "Off: calls say only what happened and when (“a dose was missed at 8:00”, a health alert's level), not what."} checked={w.includeDetails} onChange={(includeDetails) => setW({ ...w, includeDetails })} />
       {hook && <Toggle label="On" checked={w.enabled} onChange={(enabled) => setW({ ...w, enabled })} />}
     </Modal>
   );
