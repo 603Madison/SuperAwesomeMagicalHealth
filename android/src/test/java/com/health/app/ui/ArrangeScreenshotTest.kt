@@ -250,21 +250,6 @@ class ArrangeScreenshotTest {
 
     private val healthModules = Module.DEFAULT + setOf(Module.MIND, Module.CYCLE, Module.MEDICATIONS, Module.HABITS, Module.SYMPTOMS, Module.PHOTOS)
 
-    private val healthArranged = LayoutPrefs(
-        mapOf(Layouts.NAV to ScreenLayout(listOf("TODAY", "MEDICATIONS", "HABITS", "MIND", NavPage.CONDITIONS.name), hidden = setOf("CYCLE", "PHOTOS"))),
-    )
-
-    private fun health(dark: Boolean, name: String) {
-        render(dark, healthArranged) { Frame("care", healthModules) { CareTabPlaceholder(open = {}, modules = healthModules) } }
-        save(name)
-    }
-
-    @Test
-    fun healthArrangedLight() = health(false, "arrange_health_light")
-
-    @Test
-    fun healthArrangedDark() = health(true, "arrange_health_dark")
-
     // ---- What you track: features hidden from Care say so, and open from there ----
 
     private val settings = Settings(

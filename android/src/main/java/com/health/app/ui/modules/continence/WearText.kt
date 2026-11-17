@@ -48,6 +48,9 @@ object WearText {
         return ((minutes / step.toDouble()).roundToInt() * step).coerceAtLeast(step)
     }
 
+    /** "7 h", "45 min": a short time for a row's title, to the nearest hour past one. */
+    fun hoursShort(minutes: Int): String = if (minutes < 60) "${minutes.coerceAtLeast(0)} min" else "${(minutes / 60.0).roundToInt()} h"
+
     /** What a change put on: its put-on, or, for a change from before that was recorded, a fresh one of what it took off. */
     fun putOnOf(e: ContinenceEntry): String? = when {
         e.kind != ContinenceKind.PAD_CHANGE || e.nothingOn -> null

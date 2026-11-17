@@ -171,21 +171,6 @@ class NavigationScreenshotTest {
         assertEquals(listOf("devices", "digest", "reports", "assistant", "settings/privacy") + SettingsPage.entries.map { it.route }, opened)
     }
 
-    // ---- Care, until its own page is in
-
-    @Test
-    fun careTabLight() {
-        var opened: String? = null
-        render(selected = "care") {
-            CareTabPlaceholder(open = { opened = it }, modules = modules)
-        }
-        shows("Care")
-        shows("What you look after, soonest first")
-        save("nav_care_light")
-        compose.onNodeWithText("Choose what you track").performScrollTo().performClick()
-        assertEquals(SettingsPage.TRACKING.route, opened)
-    }
-
     // ---- A page within a tab has a back arrow
 
     @Test

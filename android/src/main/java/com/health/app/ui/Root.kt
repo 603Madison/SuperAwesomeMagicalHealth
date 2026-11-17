@@ -374,7 +374,7 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
             TodayRoute(onOpen = ::open)
         }
         composable("body") { BodyRoute(open = ::open, ask = bodyAsk, onAsked = onBodyAsked) }
-        composable("care") { CareTabPlaceholder(::open) }
+        composable("care") { com.health.app.ui.care.CareRoute(::open) }
         composable("you") { YouRoute(::open) }
 
         // ---- Food (under Care).
@@ -467,7 +467,7 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
             com.health.app.ui.modules.continence.SuppliesRoute(com.health.app.ui.modules.continence.SupplyArea.of(back.arguments?.getString("area")), onBack = ::back)
         }
 
-        page("meds", nav) { MedsRoute(onEdit = { id -> nav.navigate("meds/edit" + (id?.let { "?id=$it" } ?: "")) }) }
+        page("meds", nav) { MedsRoute(onEdit = { id -> nav.navigate("meds/edit" + (id?.let { "?id=$it" } ?: "")) }, onOpen = ::open) }
         page("meds/edit?id={id}", nav, listOf(arg("id"))) { back -> MedEditorRoute(back.arguments?.getString("id"), onDone = ::back) }
 
         page("vitals", nav) { VitalsRoute() }
