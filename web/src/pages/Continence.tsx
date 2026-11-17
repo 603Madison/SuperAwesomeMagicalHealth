@@ -702,7 +702,7 @@ export function ContinenceSettingsPage() {
   return (
     <div className="page">
       <PageHeader title="Bladder & bowel settings" subtitle="Make the diary yours: what's one tap, your own words, and what to record"
-        actions={<><Link className="btn btn-ghost" to="/bladder">Back</Link><Button variant="primary" busy={busy} onClick={save}>Save</Button></>} />
+        actions={<Button variant="primary" busy={busy} onClick={save}>Save</Button>} />
       <div className="grid grid-2">
         <Card title="Quick buttons">
           <p className="muted small">One tap logs it now. In the order shown:</p>

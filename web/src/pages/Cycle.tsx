@@ -334,7 +334,7 @@ export function CycleSettingsPage() {
   return (
     <div className="page">
       <PageHeader title="Cycle settings" subtitle="Your words, your lengths, your reminders, and what to record"
-        actions={<><Link className="btn btn-ghost" to="/cycle">Back</Link><Button variant="primary" busy={busy} onClick={save}>Save</Button></>} />
+        actions={<Button variant="primary" busy={busy} onClick={save}>Save</Button>} />
       <div className="grid grid-2">
         <Card title="Your own words">
           <WordList label="Symptoms you get" words={s.symptoms} onChange={(symptoms) => setS({ ...s, symptoms })} placeholder="e.g. jaw pain" help="Shown first" />

@@ -83,7 +83,7 @@ from anywhere else (no fonts, trackers or adverts).
 
 **Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
 quick-add calories, make your own foods, copy yesterday's breakfast, bring in your
-[Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections
+[Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections & privacy
 with an API token; each recipe's nutrition comes along, per serving), and track water and
 **drinks**: caffeine (and how much is likely still in you at bedtime) and alcohol, with how both
 went with your sleep and HRV. Calorie
@@ -124,12 +124,12 @@ still be shown or hidden by hand, with a note of which condition brought it.
 - **Quick actions**: Today shows a few for the features you use; the rest are under More, and
   you choose which.
 - **Leave out what you don't track**: every detail field can be hidden, and so can water
-  (Settings › Features, under Food), which takes it off Today, Food, insights, the digest, the
+  (Settings › What you're tracking › Features, under Food), which takes it off Today, Food, insights, the digest, the
   watch and the rest. What you've logged stays, and comes back if you turn it on again.
 
 ## Features you turn on
 
-Settings › **Features**: each person picks what they use. Activity, sleep, food and body are on
+Settings › What you're tracking › **Features**: each person picks what they use. Activity, sleep, food and body are on
 to start. These are opt-in, encrypted on the server (AES-GCM, with a key file kept beside the
 database), and shown to an AI connector only if the person says so when making its link:
 
@@ -416,7 +416,7 @@ works the same without it.
 
 ## The AI connector (MCP)
 
-Settings › **AI connector** makes a link that gives an AI your data over the
+Settings › Connections & privacy › **AI connector** makes a link that gives an AI your data over the
 [Model Context Protocol](https://modelcontextprotocol.io). It's a sign-in of its own: listed with
 your devices and removable there.
 

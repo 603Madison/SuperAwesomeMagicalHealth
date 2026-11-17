@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Activity, ArrowLeftRight, ChevronLeft, GitCompareArrows, Moon } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Activity, ArrowLeftRight, GitCompareArrows, Moon } from "lucide-react";
 import { ApiError, api } from "../lib/api";
 import {
   COMPARE_DEFAULT_NIGHTS, COMPARE_KEYS, COMPARE_SPANS, asleepMinutes, called, drawnText, duration, knownMetrics, metricSentence, nightRows, nightSpan,
@@ -120,10 +120,7 @@ export function Compare() {
 
   return (
     <div className="page compare">
-      <PageHeader title="Compare devices" subtitle="How far two devices read from each other, night by night" actions={<>
-        <Link className="btn btn-ghost" to="/devices"><ChevronLeft size={18} /> Devices</Link>
-        {ready && !quiet ? arranged.button : null}
-      </>} />
+      <PageHeader title="Compare devices" subtitle="How far two devices read from each other, night by night" actions={ready && !quiet ? arranged.button : null} />
       {data && (
         <div className="compare-bar">
           {ready && (

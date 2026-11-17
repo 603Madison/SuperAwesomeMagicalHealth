@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { HeartPulse, Info, Minus, Phone, Plus, Radar, SlidersHorizontal } from "lucide-react";
 import { api } from "../lib/api";
+import { clearAlertBadge } from "../lib/alertBadge";
 import {
   ALERT_DAYS, ALERT_LEVEL_TEXT, ALERT_RANGES, alertWhen, awayText, clampAlertNumber, clampAlertSettings, devicesText, emptyText, isAway, newestFirst,
   replaceAlert, settingsChanged, stepAlertNumber, unseenIds, watchState, WATCH_STATE_TEXT, type AlertClock, type AlertNumber,
@@ -38,6 +39,8 @@ export function Alerts() {
     marked.current = true;
     const unseen = unseenIds(data.alerts);
     setFresh(new Set(unseen));
+    // Seen now: the badges (Today's bell, More, the sidebar) go too.
+    clearAlertBadge();
     if (unseen.length > 0) void api.alertsSeen().catch(() => undefined);
   }, [data]);
 

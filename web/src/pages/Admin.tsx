@@ -109,7 +109,7 @@ function AddUser({ onClose, onAdded }: { onClose: () => void; onAdded: (u: User)
       <form className="form-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <Field label="Username"><input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" required /></Field>
         <Field label="Name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></Field>
-        <Field label="Password" help="At least 8 characters. They can change it in Settings."><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required /></Field>
+        <Field label="Password" help="At least 8 characters. They can change it in Settings › Account."><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required /></Field>
         <Toggle label="Admin" help="Admins manage people and these settings." checked={admin} onChange={setAdmin} />
         <button type="submit" hidden />
       </form>

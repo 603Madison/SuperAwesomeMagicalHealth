@@ -126,7 +126,7 @@ export function Reports() {
       </Card>
     ) },
   ];
-  const arranged = useArrange(layoutKey("reports"), "Reports", sections);
+  const arranged = useArrange(layoutKey("reports"), "Reports & export", sections);
 
   return (
     <div className="page">

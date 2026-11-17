@@ -9,7 +9,7 @@ import { useReadOnly } from "../lib/viewing";
 import { Button, Card, Field, PausedNote, Spinner, errorToast, toast, useLoad } from "../components/ui";
 
 /*
- * Mealie, the self-hosted recipe manager, in Food: connecting it (Settings › Connections), its
+ * Mealie, the self-hosted recipe manager, in Food: connecting it (Settings › Connections & privacy), its
  * recipes in the food search, and the day's meal plan on the Food page. Nothing here is asked while
  * viewing a share: the server never answers one about Mealie.
  */
@@ -64,7 +64,7 @@ export function useMealie(): MealieStatus | undefined {
   return readOnly ? { connected: false } : status;
 }
 
-/** Settings › Connections › Mealie: its address and an API token, checked with Mealie before it's saved. */
+/** Settings › Connections & privacy › Mealie: its address and an API token, checked with Mealie before it's saved. */
 export function MealieSettings() {
   const status = useMealie();
   const [editing, setEditing] = useState(false);
