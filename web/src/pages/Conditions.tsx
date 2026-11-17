@@ -82,7 +82,7 @@ export function Conditions() {
             })}
           </ul>
         )}
-        {picked.length > 0 && <p className="muted small">Removing one hides the fields it brought, but not the features: turn those off in Settings › Features if you like. Nothing you've logged is lost.</p>}
+        {picked.length > 0 && <p className="muted small">Removing one hides the fields it brought, but not the features: turn those off under Features in Settings › What you're tracking if you like. Nothing you've logged is lost.</p>}
       </Card>
 
       <div className="search-box conditions-search">

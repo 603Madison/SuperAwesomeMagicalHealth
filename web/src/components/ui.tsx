@@ -1,9 +1,10 @@
 import { Children, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, CirclePause, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, ChevronLeft, ChevronRight, CirclePause, X } from "lucide-react";
 import { create } from "zustand";
 import { localInput } from "../lib/format";
+import { backFor, badgeText } from "../lib/nav";
 
 // ---- Buttons ----
 
@@ -297,16 +298,89 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
   );
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+/**
+ * Every page's header: a back arrow (unless it's one of the five tab roots), the title and a line
+ * under it, and the page's actions on the right. Back goes back where the person came from in the
+ * app, or (opened straight from a link) to the page's parent (lib/nav.ts's backFor); [back] sets
+ * the parent, or null for none.
+ */
+export function PageHeader({ title, subtitle, actions, back }: { title: string; subtitle?: ReactNode; actions?: ReactNode; back?: { to: string; label: string } | null }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const parent = back === undefined ? backFor(location.pathname) : back;
   return (
     <header className="page-header">
-      <div>
-        <h1>{title}</h1>
-        {subtitle && <p className="page-subtitle">{subtitle}</p>}
+      <div className="page-heading">
+        {parent && (
+          <button type="button" className="icon-btn page-back" aria-label="Back" title="Back"
+            onClick={() => (location.key !== "default" ? navigate(-1) : navigate(parent.to))}>
+            <ArrowLeft size={22} />
+          </button>
+        )}
+        <div className="page-titles">
+          <h1>{title}</h1>
+          {subtitle && <p className="page-subtitle">{subtitle}</p>}
+        </div>
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </header>
   );
+}
+
+/** A small count on a row or tab ("3", "9+"), read out as "3 new". Nothing for none. */
+export function CountBadge({ count, className = "" }: { count: number; className?: string }) {
+  const text = badgeText(count);
+  if (!text) return null;
+  return (
+    <span className={`count-badge ${className}`}>
+      <span aria-hidden="true">{text}</span>
+      <span className="sr-only">{`, ${count} new`}</span>
+    </span>
+  );
+}
+
+/** One row of a menu (Health, More): an icon, a title and one line under it, a badge, and a chevron. Opens [to]. */
+export function MenuRow({ to, icon, title, sub, badge, onClick }: {
+  to: string; icon: ReactNode; title: string; sub?: ReactNode; badge?: number; onClick?: () => void;
+}) {
+  return (
+    <Link to={to} className="menu-row" onClick={onClick}>
+      <span className="menu-row-icon" aria-hidden="true">{icon}</span>
+      <span className="menu-row-text">
+        <span className="menu-row-title">{title}{badge != null && <CountBadge count={badge} />}</span>
+        {sub && <span className="menu-row-sub">{sub}</span>}
+      </span>
+      <ChevronRight size={20} className="menu-row-chevron" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/** A titled group of [MenuRow]s on one card. */
+export function MenuGroup({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <section className="menu-group" aria-label={title}>
+      {title && <h2 className="menu-group-title">{title}</h2>}
+      <div className="menu-card">{children}</div>
+    </section>
+  );
+}
+
+/** The width where the sidebar gives way to the phone's tabs (styles.css). */
+const NARROW = "(max-width: 760px)";
+
+/** Whether the screen is phone-narrow (the tabs along the bottom show), following it as it changes. */
+export function useNarrow(): boolean {
+  const query = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(NARROW) : null;
+  const [narrow, setNarrow] = useState(() => query?.matches ?? false);
+  useEffect(() => {
+    if (!query) return;
+    const change = () => setNarrow(query.matches);
+    change();
+    query.addEventListener("change", change);
+    return () => query.removeEventListener("change", change);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return narrow;
 }
 
 /** Runs [load] when [deps] change; gives the result, any error, and a way to run it again. */

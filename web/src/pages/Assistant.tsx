@@ -241,7 +241,7 @@ export function AssistantSent() {
   const audit = useLoad(() => api.aiAudit(30), []);
   return (
     <div className="page">
-      <PageHeader title="What the assistant has sent" subtitle="The last 30 days: each question, which features it looked at, and how much went" actions={<Link className="btn btn-ghost" to="/assistant">Back</Link>} />
+      <PageHeader title="What the assistant has sent" subtitle="The last 30 days: each question, which features it looked at, and how much went" />
       <Card>
         {audit.loading && <Spinner />}
         {audit.data && audit.data.length === 0 && <p className="muted">Nothing has been sent.</p>}

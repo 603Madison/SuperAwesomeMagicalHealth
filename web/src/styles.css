@@ -398,13 +398,16 @@ input:not([type="checkbox"]):not([type="range"]):focus, select:focus, textarea:f
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; font-weight: var(--w-bold); font-size: 0.95rem; line-height: 1.15; letter-spacing: -0.01em; }
 .brand img { border-radius: 9px; flex-shrink: 0; }
 .nav-link {
-  display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 999px;
-  color: var(--muted); font-weight: var(--w-medium); transition: background 0.15s, color 0.15s;
+  display: flex; align-items: center; gap: 14px; min-height: 42px; padding: 8px 12px 8px 14px; border-radius: 999px;
+  color: var(--muted); font-weight: var(--w-medium); line-height: 1.25; transition: background 0.15s, color 0.15s;
 }
+.nav-link svg { flex: none; }
+.nav-label { flex: 1; min-width: 0; }
+.nav-link .count-badge { flex: none; }
 .nav-link:hover { background: var(--surface-3); color: var(--text); }
 .nav-link.active { background: var(--primary-container); color: var(--on-primary-container); }
-.nav-spacer { flex: 1; }
-/* Groups: Today & Trends, Your health, Records; Settings and Admin at the bottom. */
+.nav-spacer { flex: 1; min-height: 12px; }
+/* Groups: the day (Today, Last 24 hours, Trends, Health alerts), Your health, Your records, Devices, the assistant; Settings at the bottom. */
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
 .nav-group + .nav-group { margin-top: 10px; }
 .nav-heading {
@@ -430,6 +433,10 @@ input:not([type="checkbox"]):not([type="range"]):focus, select:focus, textarea:f
 .splash { display: grid; place-items: center; height: 100dvh; }
 .center-pad { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 40px 0; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+/* Every page's header (PageHeader): back (except on the five tab roots), the title and its line, actions on the right. */
+.page-heading { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.page-back { flex: none; width: 40px; height: 40px; margin: 0 0 0 -10px; color: var(--text); }
+.page-titles { min-width: 0; }
 .page-subtitle { color: var(--muted); margin-top: 6px; }
 .page-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .section-title { margin: 28px 0 12px; font-size: 1.05rem; }
@@ -735,18 +742,9 @@ button.row:hover { background: var(--surface-2); }
 }
 @media (max-width: 760px) {
   :root { font-size: 14.5px; }
-  .shell { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) calc(62px + env(safe-area-inset-bottom)); }
-  .sidebar {
-    grid-row: 2; flex-direction: row; justify-content: space-around; align-items: flex-start; padding: 6px 4px env(safe-area-inset-bottom);
-    border-right: 0; border-top: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); overflow: hidden;
-  }
-  .brand, .sidebar-user, .nav-spacer, .nav-optional, .nav-heading { display: none; }
-  .nav-group { display: contents; }
-  .sidebar > * , .nav-link { order: 1; }
-  .nav-trends { order: 2; }
-  .nav-settings { order: 3; }
-  .nav-link { flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 0.68rem; border-radius: 14px; min-width: 0; }
-  .nav-link.active { background: none; color: var(--primary); }
+  /* The sidebar gives way to the five tabs along the bottom (components/Navigation.tsx). */
+  .shell { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  .sidebar { display: none; }
   .content { grid-row: 1; }
   .page { padding: 18px 14px 32px; }
   h1 { font-size: 1.6rem; }
@@ -804,9 +802,6 @@ button.row:hover { background: var(--surface-2); }
 }
 
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.phone-only { display: none; }
-.more-links { gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-@media (max-width: 760px) { .phone-only { display: flex; } }
 
 /* ---------- Health modules ---------- */
 
@@ -1071,13 +1066,10 @@ button.row:hover { background: var(--surface-2); }
   backdrop-filter: blur(8px);
 }
 .viewing-banner > span { flex: 1; min-width: 200px; }
-.phone-tab-only { display: none; }
 /* Belt and braces: anything that changes data stays hidden while viewing. */
 .is-viewing .row-actions, .is-viewing .dose-actions, .is-viewing .write-only, .is-viewing .quick, .is-viewing .quick-log,
 .is-viewing .log-btn, .is-viewing .up-next-actions, .is-viewing .also-add { display: none !important; }
 @media (max-width: 760px) {
-  .view-switcher { display: none; }
-  .phone-tab-only { display: flex; }
   .viewing-banner { padding: 10px 14px; }
 }
 
@@ -1550,10 +1542,9 @@ button.score-item:hover { background: var(--surface-2); }
 .feature-sub { margin: -4px 0 0 22px; padding-left: 16px; border-left: 2px solid color-mix(in srgb, var(--outline) 50%, transparent); }
 .icon-btn-space { width: 38px; flex: none; }
 .feature-lock { margin-left: 6px; vertical-align: -1px; color: var(--muted); }
+/* On a phone, each Settings page opens from More on its own: no tabs. */
 @media (max-width: 760px) {
-  .settings-tabs .tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
-  .settings-tabs .tabs::-webkit-scrollbar { display: none; }
-  .settings-tabs .tabs button { flex: none; }
+  .settings-tabs { display: none; }
 }
 /* ---------- Voice training ---------- */
 .voice-trainer { z-index: 45; background: radial-gradient(ellipse at top, color-mix(in srgb, var(--glow-1) 12%, var(--bg)), var(--bg) 55%); }
@@ -1934,3 +1925,49 @@ button.score-item:hover { background: var(--surface-2); }
   .alert-card { padding: 16px 16px 12px; }
   .alert-urgent { padding: 12px 14px; }
 }
+
+/* ---------- Getting around: the phone's tabs, menus (Health, More) and counts ---------- */
+/* The five tabs along the bottom on a phone (the sidebar on a wide screen). */
+.tabbar {
+  display: none; grid-row: 2; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  background: var(--surface); border-top: 1px solid color-mix(in srgb, var(--outline) 45%, transparent);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 56px; padding: 4px 2px;
+  border: 0; border-radius: 16px; background: none; color: var(--muted); font: inherit; font-size: 0.74rem; font-weight: var(--w-semibold); cursor: pointer;
+}
+.tab-icon { position: relative; display: grid; place-items: center; width: 58px; height: 32px; border-radius: 999px; transition: background 0.15s, color 0.15s; }
+.tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab.is-on { color: var(--text); }
+.tab.is-on .tab-icon { background: var(--primary-container); color: var(--on-primary-container); }
+.tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.tab-badge { position: absolute; top: -3px; right: 6px; }
+@media (max-width: 760px) { .tabbar { display: grid; } }
+
+/* A count: unseen health alerts. The theme's own colour, never an alarm. */
+.count-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: var(--primary); color: var(--on-primary); font-size: 0.72rem; font-weight: var(--w-bold); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.today-bell { position: relative; }
+.bell-badge { position: absolute; top: 0; right: -2px; }
+
+/* Menus: Health and More, rows of one tap each. */
+.menu-page { max-width: 760px; }
+.menu-group { margin-bottom: 20px; }
+.menu-group-title { margin: 0 0 8px 14px; font-size: 0.75rem; font-weight: var(--w-semibold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.menu-card { display: flex; flex-direction: column; padding: 6px; border-radius: 22px; background: var(--card); border: 1px solid color-mix(in srgb, var(--outline) 30%, transparent); }
+.menu-row { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 10px 10px 10px 12px; border-radius: 16px; color: inherit; transition: background 0.15s; }
+.menu-row + .menu-row { position: relative; }
+.menu-row + .menu-row::before { content: ""; position: absolute; top: 0; left: 66px; right: 12px; border-top: 1px solid color-mix(in srgb, var(--outline) 26%, transparent); }
+.menu-row:hover { background: var(--surface-2); }
+.menu-row:hover::before, .menu-row:hover + .menu-row::before { border-color: transparent; }
+.menu-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.menu-row-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 13px; background: var(--primary-container); color: var(--on-primary-container); }
+.menu-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.menu-row-title { display: flex; align-items: center; gap: 8px; font-weight: var(--w-semibold); }
+.menu-row-sub { color: var(--muted); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-row-chevron { flex: none; color: var(--muted); }
+.menu-hint { display: flex; align-items: center; gap: 8px; margin: -8px 14px 20px; color: var(--muted); font-size: 0.86rem; }
+.menu-hint svg { flex: none; color: var(--primary); }

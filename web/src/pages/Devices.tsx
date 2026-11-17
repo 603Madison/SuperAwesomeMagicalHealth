@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { Battery, Clock, Copy, FileUp, GitCompareArrows, HeartPulse, KeyRound, Layers, MoreHorizontal, Pencil, Smartphone, Trash2, Watch } from "lucide-react";
 import { api } from "../lib/api";
 import { num, shiftDate, today, when } from "../lib/format";
-import type { DaySummary, Device, DeviceChoices, DeviceKind, Metric, SleepSummary } from "../lib/types";
+import type { DaySummary, Device, DeviceChoices, Metric, SleepSummary } from "../lib/types";
+import { NAMES, NO_READINGS, compareOffered } from "../lib/nav";
 import { Button, Card, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
@@ -16,9 +17,6 @@ const KIND_LABEL: Record<string, string> = {
   FIT_FILE: "FIT files", PHONE: "Phone", HEART_RATE_STRAP: "Heart rate strap", BP_MONITOR: "Blood pressure monitor", GLUCOSE_METER: "Glucose meter",
   MANUAL: "Entered by hand", OTHER: "Other device",
 };
-
-/** Devices whose readings the last 24 hours doesn't show (blood pressure and glucose have pages of their own). */
-const NO_READINGS: DeviceKind[] = ["MANUAL", "BP_MONITOR", "GLUCOSE_METER"];
 
 export function Devices() {
   const { data, error, loading, reload, setData } = useLoad(() => api.devices(), []);
@@ -45,7 +43,7 @@ export function Devices() {
                     {KIND_LABEL[d.kind]}{d.model ? ` · ${d.model}` : ""}{d.firmware ? ` · firmware ${d.firmware}` : ""} · {d.lastSyncAt ? `synced ${when(d.lastSyncAt)}` : `added ${when(d.createdAt)}`}
                   </div>
                   {!NO_READINGS.includes(d.kind) && (
-                    <Link className="row-link" to={`/recent?device=${encodeURIComponent(d.id)}`} aria-label={`Last 24 hours from ${d.name}`}><Clock size={14} /> Last 24 hours</Link>
+                    <Link className="row-link" to={`/recent?device=${encodeURIComponent(d.id)}`} aria-label={`${NAMES.recent} from ${d.name}`}><Clock size={14} /> {NAMES.recent}</Link>
                   )}
                 </div>
                 <div className="row-end">
@@ -62,9 +60,9 @@ export function Devices() {
             ))}
           </ul>
         )}
-        {data.filter((d) => !NO_READINGS.includes(d.kind)).length >= 2 && (
+        {compareOffered(data) && (
           <div className="button-row">
-            <Link className="btn btn-tonal" to="/devices/compare"><GitCompareArrows size={18} /> Compare two devices</Link>
+            <Link className="btn btn-tonal" to="/devices/compare"><GitCompareArrows size={18} /> {NAMES.compare}</Link>
           </div>
         )}
       </Card>
