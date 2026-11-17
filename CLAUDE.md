@@ -38,9 +38,15 @@
   shared, and reach the phone by its own notifications after each sync (no push service). A chest
   strap (`DeviceKind.HEART_RATE_STRAP`) is placed on the chest in `Combine`: its heart rate wins
   where it measured; `Metric.IRREGULAR_RHYTHM` comes only from a strap's beat-to-beat timing.
-- Navigation, both apps: five fixed tabs (Today · 24 hours · Health · Trends · More); features go
-  in Health, everything else in More (records, devices, assistant, Settings as short pages). Every
-  non-tab page has a back arrow; one name per place.
+- The interface, both apps (the owner's approved redesign): fixed tabs **Today · Body · + · Care ·
+  You**, organised by what the person is doing, never a launcher of feature names. Today is what's
+  live ("Right now", each with one action) and the day as one timeline, both from `GET /api/feed`
+  (`platform/Feed.kt`; each feature adds its part through `FeatureHooks.timeline`/`now`). Body is
+  everything devices measured (24 hours, week, month, year). + is the one way to log. Care is one
+  live card per area, related things merged (meds with hormones, bladder with supplies, transition
+  with measurements, photos and voice). You is devices, records, privacy and settings. Every row
+  says something true and current, or isn't shown; every non-tab page has a back arrow; one name
+  per place.
 - `web/`: React + Vite + TypeScript, built into the server's jar.
 - `pebble/`: the Pebble watch app (C + PebbleKit JS, `node --test pebble/test/*.test.js`).
 - `fdroid/`: the F-Droid repository's listing, build script and page (see Releases).
