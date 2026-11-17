@@ -89,6 +89,7 @@ object InsightLinks {
         AppPage.BODY -> if (measurements) Target(page, "measurements", "Measurements") else Target(page, "trends", "Trends")
         AppPage.SLEEP, AppPage.ACTIVITY, AppPage.TRENDS -> Target(page, "trends", "Trends")
         AppPage.DEVICES -> Target(page, "devices", "Devices")
+        AppPage.ALERTS -> Target(page, "alerts", "Health alerts")
     }
 
     /**
