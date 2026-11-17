@@ -12,12 +12,18 @@ import com.health.api.HealthAlerts
 import com.health.api.Insight
 import com.health.api.Metric
 import com.health.api.Module
+import com.health.api.NowAction
+import com.health.api.NowItem
+import com.health.api.NowKind
 import com.health.api.Profile
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.WebhookEvent
 import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Reminder
 import com.health.server.platform.json
 import com.health.server.util.Random
@@ -260,6 +266,46 @@ class AlertService(private val services: Services) : FeatureHooks {
             .filter { it.level in worth && it.feedback !in explained }
             .distinctBy { it.kind }
             .map { a -> SuggestedQuestion("My ${a.kind.label.lowercase()} on ${zone.dateOf(a.start)}: what could cause it, and should it be checked?", a.body) }
+    }
+
+    // ---- Today's feed (the person's own: never shared)
+
+    /** The alerts that began on the day, after a fresh look. Ones that could need care now say when to call emergency services. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        if (!settings(userId).enabled) return emptyList()
+        check(userId)
+        val zone = services.profiles.days(userId)
+        return stored(userId, "start_at >= ? AND start_at < ?", zone.start(from), zone.end(to)).mapNotNull { open(userId, it) }.map { a ->
+            TimelineItem(
+                Feed.id(TimelineKind.HEALTH_ALERT, a.id), TimelineKind.HEALTH_ALERT, a.start, end = a.end, title = a.title, detail = line(a),
+                page = AppPage.ALERTS, ref = a.id,
+            )
+        }
+    }
+
+    /** Alerts not put away yet (from the last day and a half), with Open: most serious first. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> = active(userId).map { a ->
+        NowItem(
+            id = "alert:${a.id}",
+            kind = NowKind.HEALTH_ALERT,
+            title = a.title,
+            detail = line(a),
+            page = AppPage.ALERTS,
+            action = NowAction("Open", NowAction.ALERT_OPEN, mapOf("alertId" to a.id)),
+            priority = when (a.level) {
+                AlertLevel.URGENT -> 100
+                AlertLevel.DOCTOR -> 90
+                AlertLevel.WATCH -> 60
+            },
+            at = a.start,
+        )
+    }
+
+    /** One line: for an alert that could need care now, when to call emergency services; otherwise what happened. */
+    private fun line(a: HealthAlert): String {
+        val sentences = (if (a.level == AlertLevel.URGENT) a.advice else a.body).split(Regex("(?<=\\.) ")).map { it.trim() }.filter { it.isNotEmpty() }
+        val pick = if (a.level == AlertLevel.URGENT) sentences.firstOrNull { "emergency" in it.lowercase() } ?: AlertRules.EMERGENCY else sentences.firstOrNull() ?: a.title
+        return if (pick.endsWith(".")) pick else "$pick."
     }
 
     companion object {

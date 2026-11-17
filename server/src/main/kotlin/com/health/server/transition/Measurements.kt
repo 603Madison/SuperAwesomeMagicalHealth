@@ -1,14 +1,18 @@
 package com.health.server.transition
 
+import com.health.api.AppPage
 import com.health.api.DigestSection
 import com.health.api.Metric
 import com.health.api.Module
 import com.health.api.Point
 import com.health.api.Profile
 import com.health.api.ReportSectionKey
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.server.health.Records
 import com.health.server.platform.Csv
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Fhir
 import com.health.server.platform.ReportChart
 import com.health.server.platform.ReportSection
@@ -79,6 +83,17 @@ class MeasurementHooks(private val records: Records) : FeatureHooks {
             Fhir.observation("measure-${s.id}", userId, code, "vital-signs", s.value, "cm", "cm", at = s.start, zone = zone)
         }
     }
+
+    /** Each set of measurements taken together, as one item: "Waist 78 cm · hips 96 cm". */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> =
+        samples(userId, profile, from, to).groupBy { it.start }.map { (at, list) ->
+            val sorted = list.sortedBy { TransitionService.MEASUREMENTS.indexOf(it.metric) }
+            TimelineItem(
+                id = Feed.id(TimelineKind.MEASUREMENT, at), kind = TimelineKind.MEASUREMENT, at = at, title = "Measurements",
+                detail = Feed.capitalised(sorted.joinToString(" · ") { "${it.metric.label.lowercase(Locale.ROOT)} ${cm(it.value)}" }),
+                module = Module.BODY, page = AppPage.BODY, ref = sorted.first().id.toString(),
+            )
+        }
 
     private fun cm(v: Double) = "${Say.number(v, 1).removeSuffix(".0")} cm"
 }

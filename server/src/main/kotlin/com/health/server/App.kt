@@ -17,6 +17,7 @@ import com.health.server.platform.platformRoutes
 import com.health.server.ai.aiRoutes
 import com.health.server.neuro.neuroTransitionRoutes
 import com.health.server.platform.layoutRoutes
+import com.health.server.platform.feedRoutes
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -128,6 +129,7 @@ fun Application.module(services: Services) {
         aiRoutes(services)
         neuroTransitionRoutes(services)
         layoutRoutes(services)
+        feedRoutes(services)
         route("/api/{...}") {
             handle { call.respond(HttpStatusCode.NotFound, ErrorBody("No such API")) }
         }

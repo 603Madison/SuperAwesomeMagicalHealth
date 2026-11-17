@@ -153,7 +153,7 @@ class Services(
         days.foodForInsights = { userId, date, isToday, today, target -> s.forInsights(userId, date, isToday, today, target) }
     }
 
-    /** Each feature's part in digests, reports, exports, reminders and appointment questions. */
+    /** Each feature's part in digests, reports, exports, reminders, appointment questions and Today's feed. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(
             *CoreHooks.all(this).toTypedArray(),
@@ -161,14 +161,18 @@ class Services(
             hormones, lifeStages, appointments,
             *com.health.server.care.CoreQuestions.all(modules.mind, modules.cycle, modules.continence, modules.meds, days, clock).toTypedArray(),
             VitalsHooks(tracking.vitals, clock), DrinksHooks(tracking.drinks), SymptomsHooks(tracking.symptoms),
-            HabitsHooks(tracking.habits), StressHooks(days),
+            HabitsHooks(tracking.habits, clock), StressHooks(days),
             neuro, transition, com.health.server.transition.MeasurementHooks(records),
             com.health.server.modules.ContinenceHooks(modules.continence, clock, supplies),
             com.health.server.modules.SuppliesHooks(supplies, profiles, clock),
             com.health.server.modules.CycleHooks(modules.cycle, clock),
+            com.health.server.photos.PhotoHooks(photos),
             alerts,
         )
     }
+
+    /** Today's feed: what's live now, and the day's timeline, from every feature's hooks. */
+    val feed: com.health.server.platform.FeedService by lazy { com.health.server.platform.FeedService(this) }
 
     /** Reminders, push, webhooks, digests, reports, exports and the watch. */
     val platform: Platform by lazy { Platform(this) }

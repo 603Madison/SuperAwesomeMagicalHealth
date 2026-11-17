@@ -145,6 +145,8 @@ object SharedView {
     private val PREFIXES: List<Pair<String, Need>> = listOf(
         "/api/day" to Need.Always,
         "/api/trends" to Need.Always,
+        // Today's timeline, of the shared features only: no "Right now", no health alerts (see limit(DayFeed)).
+        "/api/feed" to Need.Always,
         "/api/workouts" to any(Module.ACTIVITY),
         "/api/sleep" to any(Module.SLEEP),
         "/api/checkins" to any(Module.MIND),
@@ -329,6 +331,29 @@ object SharedView {
             ),
         )
     }
+
+    /**
+     * Today's feed as a viewer sees it: the timeline of the features shared ([modules]) and nothing
+     * else. "Right now" is the owner's alone (its actions change things), and health alerts are never
+     * shared; nor is anything not tagged with a feature. Pages a viewer can't open aren't offered.
+     * Without [foodNumbers] (the owner's or the viewer's eating disorder recovery), meals lose their calories.
+     */
+    fun limit(feed: com.health.api.DayFeed, modules: Set<Module>, foodNumbers: Boolean = true): com.health.api.DayFeed = feed.copy(
+        now = emptyList(),
+        items = feed.items
+            .filter { it.kind != com.health.api.TimelineKind.HEALTH_ALERT && it.module != null && it.module in modules }
+            .map { item ->
+                val page = item.page?.takeIf { p -> !p.ownOnly && (p.module == null || p.module in modules) }
+                val detail = if (!foodNumbers && item.kind == com.health.api.TimelineKind.MEAL) withoutCalories(item.detail) else item.detail
+                item.copy(page = page, detail = detail)
+            },
+    )
+
+    /** A detail line without its amount of food: "Lunch · 610 kcal" to "Lunch". */
+    fun withoutCalories(detail: String?): String? =
+        detail?.split(" · ")?.filterNot { CALORIES.matches(it) }?.joinToString(" · ")?.ifEmpty { null }
+
+    private val CALORIES = Regex("^[\\d,]+ kcal$")
 
     /** A trend day, with only what [modules] cover. */
     fun limit(t: TrendDay, modules: Set<Module>): TrendDay {
