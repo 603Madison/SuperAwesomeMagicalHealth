@@ -2,22 +2,21 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
 
 android {
     namespace = "com.health.app"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.superawesomemagical.health"
         minSdk = 28
         targetSdk = 36
         // The whole project's version: the server and its container image use it too.
-        versionCode = 11
-        versionName = "0.7.0"
+        versionCode = 13
+        versionName = "0.7.1"
     }
 
     // Release builds are signed with the permanent key when it's there (see CLAUDE.md).
@@ -73,6 +72,10 @@ kotlin {
 }
 
 dependencies {
+    // Guava with its security fix (CVE-2026-102554), over the older one AndroidX libraries ask for.
+    constraints {
+        implementation(libs.guava) { because("CVE-2026-102554") }
+    }
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(project(":shared"))
 

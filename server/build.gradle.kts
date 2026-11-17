@@ -39,6 +39,8 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
+    // Netty with its security fixes, over the older one Ktor asks for.
+    implementation(platform(libs.netty.bom))
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.call.logging)
@@ -57,6 +59,9 @@ dependencies {
     implementation(libs.angus.mail)
     // The optional AI assistant (ai/): the official Anthropic Java SDK.
     implementation(libs.anthropic.java)
+    // Jackson and OpenTelemetry with their security fixes, over the older ones the SDK asks for.
+    implementation(platform(libs.jackson.bom))
+    implementation(platform(libs.opentelemetry.bom))
     implementation(libs.imageio.webp)
 
     testImplementation(libs.junit)

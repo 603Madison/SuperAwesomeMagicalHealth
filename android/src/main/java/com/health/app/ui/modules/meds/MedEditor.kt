@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -69,7 +70,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.TextStyle
-import java.util.Locale
 
 val SITES_INJECTION = listOf("Left thigh", "Right thigh", "Left abdomen", "Right abdomen", "Left glute", "Right glute", "Left arm", "Right arm")
 val SITES_PATCH = listOf("Left abdomen", "Right abdomen", "Left buttock", "Right buttock", "Left upper arm", "Right upper arm")
@@ -205,7 +205,7 @@ fun MedEditorScreen(
                                 FilterChip(
                                     selected = d.value in weekdays,
                                     onClick = { weekdays = if (d.value in weekdays) weekdays - d.value else weekdays + d.value },
-                                    label = { Text(d.getDisplayName(TextStyle.SHORT, Locale.getDefault())) },
+                                    label = { Text(d.getDisplayName(TextStyle.SHORT, LocalLocale.current.platformLocale)) },
                                 )
                             }
                         }

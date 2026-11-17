@@ -167,7 +167,7 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
     suspend fun copy(userId: String, from: LocalDate, to: LocalDate, meal: Meal?): Int = db.tx {
         val entries = query(
             "SELECT * FROM food_entries WHERE user_id = ? AND date = ?${if (meal != null) " AND meal = ?" else ""} ORDER BY logged_at",
-            *listOfNotNull(userId, from.toString(), meal).toTypedArray(), map = ::toEntry,
+            *listOfNotNull<Any>(userId, from.toString(), meal).toTypedArray(), map = ::toEntry,
         )
         entries.forEach { e ->
             update(

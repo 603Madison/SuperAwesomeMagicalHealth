@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -521,7 +522,7 @@ fun RecordingsScreen(
     onDeleteAll: () -> Unit,
 ) {
     var confirm by remember { mutableStateOf(false) }
-    val format = DateTimeFormatter.ofPattern("EEE d MMM, H:mm", Locale.getDefault())
+    val format = DateTimeFormatter.ofPattern("EEE d MMM, H:mm", LocalLocale.current.platformLocale)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
         BackBar(onBack, "Recordings")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

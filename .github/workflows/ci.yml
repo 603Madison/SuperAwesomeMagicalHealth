@@ -11,8 +11,8 @@ jobs:
   server-and-web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -20,11 +20,11 @@ jobs:
       - name: Web app
         working-directory: web
         run: npm ci --no-audit --no-fund && npm run build && npm test
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Server tests
         env:
           SAMH_SERVER_ONLY: "1"
@@ -33,20 +33,20 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Tests, lint and a debug APK
         run: ./gradlew --no-daemon :android:testDebugUnitTest :android:lintDebug :android:assembleDebug
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SuperAwesomeMagicalHealth-debug-apk
           path: android/build/outputs/apk/debug/*.apk
           retention-days: 7
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: android-screenshots
@@ -57,13 +57,13 @@ jobs:
   pebble:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Watch app logic tests
         run: node --test pebble/test/*.test.js
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.3
       # The Pebble SDK from Core Devices (pebble-tool, then the SDK with its ARM toolchain),
       # pinned so builds are repeatable; raise both together.
       - name: Pebble SDK
@@ -74,7 +74,7 @@ jobs:
       - name: Build the watch app
         working-directory: pebble
         run: pebble build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SuperAwesomeMagicalHealth-watch
           path: pebble/build/*.pbw
