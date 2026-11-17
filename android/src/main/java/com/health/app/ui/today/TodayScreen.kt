@@ -561,7 +561,12 @@ private fun ActivityCard(summary: DaySummary, units: Units, numbers: Boolean, on
 /** Last night: time asleep, then when and how well. Opens [openLabel] (Trends, or the last 24 hours with its stages). */
 @Composable
 private fun SleepCard(sleep: SleepSummary, zone: ZoneId, openLabel: String = "trends", onOpen: () -> Unit) {
-    InfoCard("Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem, onClick = onOpen, onOpen = onOpen, openLabel = openLabel) {
+    // Today's night opens Last 24 hours: said in words, not only by the arrow.
+    val toRecent = openLabel == "last 24 hours"
+    InfoCard(
+        "Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem, onClick = onOpen, onOpen = onOpen, openLabel = openLabel,
+        status = if (toRecent) "Last 24 hours" else null, statusColor = MaterialTheme.colorScheme.primary,
+    ) {
         Figure(
             Format.minutes(sleep.asleepMinutes), "asleep",
             "${Format.timeOfDay(sleep.start, zone)} – ${Format.timeOfDay(sleep.end, zone)} · ${sleep.efficiency}% efficient",

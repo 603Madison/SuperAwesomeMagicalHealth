@@ -27,7 +27,20 @@
   in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature). Anything the
   server calls on someone's behalf (webhooks, Mealie, push) uses an OkHttp client with
   `util/OutboundDns` (checked addresses only) and no redirects; `ServerConfig.outboundLoopback` is
-  for tests only. Logs never carry what someone wrote.
+  for tests only. Logs never carry what someone wrote. **Every way out** (Open Food Facts, the
+  weather, Mealie, the assistant, connector links, webhooks, push, email, shares, Home Assistant)
+  asks `services.privacy.allows(userId, DataPath.…)` first and is listed in
+  `platform/Privacy.kt`'s map (Settings › Where your data goes): a new one gets a `DataPath`, a gate
+  and an entry there.
+- Health alerts (`insights/AlertRules.kt`, pure; `insights/Alerts.kt`, sealed rows in
+  `health_alerts`): each spell or night keeps one key, levels never go down, and what could need
+  care now always says when to call emergency services. They never claim a diagnosis, are never
+  shared, and reach the phone by its own notifications after each sync (no push service). A chest
+  strap (`DeviceKind.HEART_RATE_STRAP`) is placed on the chest in `Combine`: its heart rate wins
+  where it measured; `Metric.IRREGULAR_RHYTHM` comes only from a strap's beat-to-beat timing.
+- Navigation, both apps: five fixed tabs (Today · 24 hours · Health · Trends · More); features go
+  in Health, everything else in More (records, devices, assistant, Settings as short pages). Every
+  non-tab page has a back arrow; one name per place.
 - `web/`: React + Vite + TypeScript, built into the server's jar.
 - `pebble/`: the Pebble watch app (C + PebbleKit JS, `node --test pebble/test/*.test.js`).
 - `fdroid/`: the F-Droid repository's listing, build script and page (see Releases).
