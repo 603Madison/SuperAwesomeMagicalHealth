@@ -2,18 +2,21 @@ package com.health.server.platform
 
 import com.health.api.DigestSection
 import com.health.api.Module
+import com.health.api.NowItem
 import com.health.api.Point
 import com.health.api.Profile
 import com.health.api.ReminderAction
 import com.health.api.ReportSectionKey
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
 import com.health.api.WebhookEvent
 import kotlinx.serialization.json.JsonObject
 import java.time.LocalDate
 
 /**
  * What a feature adds to the platform: the weekly digest, the doctor's report, the export,
- * reminders (sent by push and webhook) and questions for appointments. Each feature's service
+ * reminders (sent by push and webhook), questions for appointments, and its part of Today's feed
+ * (the timeline and what's live now, see [FeedService]). Each feature's service
  * implements the parts it has and is listed in [com.health.server.Services.hooks]; the platform
  * asks only the features the person has turned on ([module] null means always).
  */
@@ -37,6 +40,16 @@ interface FeatureHooks {
 
     /** Questions worth asking at an appointment, from what was logged in [since]..[to]. */
     suspend fun questions(userId: String, profile: Profile, since: LocalDate, to: LocalDate): List<SuggestedQuestion> = emptyList()
+
+    /**
+     * Everything this feature has logged or recorded on the days [from]..[to] (the person's days),
+     * for Today's timeline, in any order. Items carry the feature they belong to ([TimelineItem.module]),
+     * which decides who else may see them; the feed sorts them and leaves out what isn't on or shared.
+     */
+    suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> = emptyList()
+
+    /** What's live for this feature at [at] (epoch ms, now), each with one action: only ever for the person's own Today. */
+    suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> = emptyList()
 }
 
 /** A section of the report: a few plain sentences, tables and charts. */

@@ -41,7 +41,10 @@ class VoiceTrainer(
     private val profiles: ProfileStore,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun plan(userId: String): VoicePlan = personal.get(userId, PLAN, VoicePlan.serializer()) ?: VoicePlan()
+    suspend fun plan(userId: String): VoicePlan = savedPlan(userId) ?: VoicePlan()
+
+    /** The plan, once the person has made one (null until then). */
+    suspend fun savedPlan(userId: String): VoicePlan? = personal.get(userId, PLAN, VoicePlan.serializer())
 
     suspend fun savePlan(userId: String, plan: VoicePlan): VoicePlan = personal.put(userId, PLAN, checkPlan(plan, clock()), VoicePlan.serializer())
 

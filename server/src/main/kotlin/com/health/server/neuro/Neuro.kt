@@ -1,5 +1,6 @@
 package com.health.server.neuro
 
+import com.health.api.AppPage
 import com.health.api.CommunicationCard
 import com.health.api.Count
 import com.health.api.DigestSection
@@ -13,6 +14,7 @@ import com.health.api.NeuroCheckIn
 import com.health.api.NeuroProfile
 import com.health.api.NeuroSummary
 import com.health.api.NeuroToday
+import com.health.api.NowItem
 import com.health.api.OverloadEvent
 import com.health.api.Profile
 import com.health.api.ReminderAction
@@ -20,6 +22,8 @@ import com.health.api.ReportSectionKey
 import com.health.api.Routine
 import com.health.api.RoutineRun
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.WebhookEvent
 import com.health.api.Wording
 import com.health.server.ApiError
@@ -30,6 +34,7 @@ import com.health.server.modules.CycleService
 import com.health.server.modules.EntryKind
 import com.health.server.modules.EntryStore
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Reminder
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
@@ -389,6 +394,65 @@ class NeuroService(
             }
         }
         return today to insights
+    }
+
+    // ---------------------------------------------------------------- Today's feed
+
+    /**
+     * Times things got too much, the day's energy, check-ins, focus and routines done. Plain words:
+     * what happened and how strongly, never a judgement of it.
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = Days(Days.zoneOf(profile.timezone))
+        val events = entries.list(userId, EntryKind.NEURO_EVENT, from, to, OverloadEvent.serializer()).map { s ->
+            val e = s.value
+            TimelineItem(
+                Feed.id(TimelineKind.OVERLOAD, s.id), TimelineKind.OVERLOAD, e.start, end = e.end, title = e.kind.label,
+                detail = Feed.line("intensity ${e.intensity} of 5", e.end?.let { Feed.duration(((it - e.start) / 60_000).toInt()) }, Feed.words(e.whatHelped, 2)?.let { "helped: $it" })
+                    ?.let(Feed::capitalised),
+                module = Module.NEURO, page = AppPage.NEURO, ref = s.id,
+            )
+        }
+        val energy = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList().mapNotNull { d ->
+            energyOn(userId, d)?.let { Feed.energy(it, d, zone, Module.NEURO, AppPage.NEURO) }
+        }
+        val checks = entries.list(userId, EntryKind.NEURO_CHECKIN, from, to, NeuroCheckIn.serializer()).map { s ->
+            val c = s.value
+            val parts = listOf(
+                "masking" to c.masking, "social load" to c.socialLoad, "sensory load" to c.sensoryLoad, "focus" to c.focus,
+                "energy for starting things" to c.starting, "restlessness" to c.restlessness, "burnout" to c.burnout,
+            ).mapNotNull { (name, v) -> v?.let { "$name $it of 5" } }
+            TimelineItem(
+                Feed.id(TimelineKind.CHECK_IN, s.id), TimelineKind.CHECK_IN, c.at, title = "Check-in",
+                detail = Feed.line(parts.take(3))?.let(Feed::capitalised), module = Module.NEURO, page = AppPage.NEURO, ref = s.id,
+            )
+        }
+        val focus = entries.list(userId, EntryKind.NEURO_FOCUS, from, to, FocusSession.serializer()).map { s ->
+            val f = s.value
+            TimelineItem(
+                Feed.id(TimelineKind.FOCUS, s.id), TimelineKind.FOCUS, f.start, end = f.end, title = f.task ?: f.kind.label,
+                detail = Feed.line(f.kind.label.takeIf { f.task != null }, f.end?.let { Feed.duration(((it - f.start) / 60_000).toInt()) }),
+                module = Module.NEURO, page = AppPage.NEURO, ref = s.id,
+            )
+        }
+        val routines = routines(userId).associateBy { it.id }
+        val runs = entries.list(userId, EntryKind.NEURO_ROUTINE_RUN, from, to, RoutineRun.serializer()).mapNotNull { s ->
+            val run = s.value
+            val routine = routines[run.routineId] ?: return@mapNotNull null
+            val steps = routine.steps.size
+            TimelineItem(
+                Feed.id(TimelineKind.ROUTINE, s.id), TimelineKind.ROUTINE, s.at, title = routine.name,
+                detail = if (run.done.size >= steps) "All ${plural(steps, "step")}" else "${run.done.size} of ${plural(steps, "step")}",
+                module = Module.NEURO, page = AppPage.NEURO, ref = run.routineId,
+            )
+        }
+        return events + energy + checks + focus + runs
+    }
+
+    /** Today's energy: what's left, or a gentle nudge to set it. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        val today = Days(Days.zoneOf(profile.timezone)).dateOf(at)
+        return listOf(Feed.energyNow(energyOn(userId, today), today, Module.NEURO, AppPage.NEURO))
     }
 
     // ---------------------------------------------------------------- Hooks

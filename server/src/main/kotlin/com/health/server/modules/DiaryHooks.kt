@@ -1,19 +1,29 @@
 package com.health.server.modules
 
+import com.health.api.AppPage
 import com.health.api.BladderTraining
+import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
 import com.health.api.DigestSection
 import com.health.api.Flow
+import com.health.api.Fullness
 import com.health.api.Module
+import com.health.api.NowAction
+import com.health.api.NowItem
+import com.health.api.NowKind
 import com.health.api.Profile
 import com.health.api.ReportSectionKey
 import com.health.api.SuggestedQuestion
 import com.health.api.SupplyCategory
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.Verdict
 import com.health.api.WebhookEvent
 import com.health.server.health.ProfileStore
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Reminder
+import com.health.server.platform.Say
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
 import com.health.server.util.Days
@@ -190,6 +200,96 @@ class ContinenceHooks(private val continence: ContinenceService, private val clo
 
     private fun say(v: Double) = if (v == v.roundToInt().toDouble()) v.roundToInt().toString() else "%.1f".format(v)
     private fun sayOrDash(v: Double?) = v?.let(::say) ?: "–"
+
+    // ---- Today's feed
+
+    /** Each diary entry: trips, leaks and accidents, changes (with how the one taken off was), pelvic floor sets. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val names = supplies?.list(userId, all = true).orEmpty().filter { it.id != null }.associate { it.id!! to it.name }
+        return continence.entriesBetween(userId, from, to).map { item(it, names) }
+    }
+
+    private fun item(e: ContinenceEntry, names: Map<String, String>): TimelineItem {
+        val night = "in the night".takeIf { e.night }
+        val through = "leaked through".takeIf { e.leakedThrough }
+        val (kind, title, detail) = when (e.kind) {
+            ContinenceKind.URINATION -> Triple(TimelineKind.BATHROOM, "Toilet trip", Feed.line(e.volumeMl?.let { "$it ml" }, urgency(e.urgency), night))
+            ContinenceKind.CATHETER -> Triple(TimelineKind.BATHROOM, "Catheter", Feed.line(e.volumeMl?.let { "$it ml" }, night))
+            ContinenceKind.BOWEL -> Triple(TimelineKind.BATHROOM, "Bowel movement", Feed.line(e.bristol?.let { "type $it" }, "with pain".takeIf { e.pain }, "with blood".takeIf { e.blood }, night))
+            ContinenceKind.LEAK -> Triple(TimelineKind.LEAK, "Leak", Feed.line(e.leak?.label, Feed.words(e.triggers, 2), through, night))
+            ContinenceKind.BOWEL_LEAK -> Triple(TimelineKind.LEAK, "Bowel accident", Feed.line(e.leak?.label, through, night))
+            ContinenceKind.BEDWETTING -> Triple(TimelineKind.LEAK, "Wet night", Feed.line(e.leak?.label, through))
+            ContinenceKind.PELVIC_FLOOR -> Triple(TimelineKind.PELVIC_FLOOR, "Pelvic floor exercises", Feed.line(e.reps?.let { Say.plural(it, "squeeze") }, e.holdSeconds?.let { "held $it s each" }))
+            ContinenceKind.PAD_CHANGE -> return change(e, names)
+        }
+        return TimelineItem(
+            Feed.id(kind, e.id ?: e.at), kind, e.at, title = title, detail = detail?.let(Feed::capitalised),
+            module = Module.CONTINENCE, page = AppPage.CONTINENCE, ref = e.id,
+        )
+    }
+
+    /** "Changed · the one before was damp after 2 h 30 min": what went on, and how what came off was. */
+    private fun change(e: ContinenceEntry, names: Map<String, String>): TimelineItem {
+        val putOn = Wear.putOn(e)?.let { names[it] }
+        val tookOff = e.supplyId != null
+        val worn = e.wornMinutes?.let(Wear::say)
+        val how = e.fullness?.let { f -> if (f == Fullness.LEAKED) "leaked through" else "was ${f.label.lowercase()}" }
+        // How the one taken off was, said after "the one before" (or "it").
+        val before = when {
+            !tookOff -> null
+            how != null && worn != null -> "$how after $worn"
+            how != null -> how
+            worn != null -> "was on for $worn"
+            else -> null
+        }
+        val (title, detail) = when {
+            e.nothingOn -> (e.supplyId?.let { names[it] } ?: "Taken off") to Feed.line("Taken off, nothing on for now", before?.let { "it $it" })
+            tookOff -> (putOn ?: "Change") to Feed.line("Changed", before?.let { "the one before $it" })
+            else -> (putOn ?: "Put on") to "Put on".takeIf { putOn != null }
+        }
+        return TimelineItem(
+            Feed.id(TimelineKind.PRODUCT_CHANGE, e.id ?: e.at), TimelineKind.PRODUCT_CHANGE, e.at, title = title, detail = detail,
+            module = Module.CONTINENCE, page = AppPage.CONTINENCE, ref = e.id,
+        )
+    }
+
+    private fun urgency(level: Int?): String? = when (level) {
+        1 -> "some urgency"
+        2 -> "a strong urge"
+        3 -> "couldn't wait"
+        else -> null
+    }
+
+    /** What's on now, with Change: since when, the usual, how full, and when it's time for a check. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        val w = continence.wearing(userId)
+        val supplyId = w.supplyId ?: return emptyList()
+        val since = w.since ?: return emptyList()
+        val days = Days(Days.zoneOf(profile.timezone))
+        val minutes = ((at - since) / 60_000).toInt().coerceAtLeast(0)
+        val due = w.changeDueAt?.let { it <= at } ?: false
+        val span = w.changeDueAt?.let { ((it - since) / 60_000).toInt() } ?: w.typicalMinutes
+        val fullness = w.wear?.fullness?.let { if (it == Fullness.LEAKED) "leaked through" else "${it.label.lowercase()} so far" }
+        return listOf(
+            NowItem(
+                id = "wearing:$since",
+                kind = NowKind.WEARING,
+                title = w.name ?: "What you have on",
+                detail = Feed.line(
+                    "On for ${Wear.say(minutes)}, since ${Feed.time(since, days)}",
+                    w.typicalMinutes?.let { "usually about ${Wear.say(Wear.rough(it))}" },
+                    fullness,
+                    "time for a check when you're ready".takeIf { due },
+                ),
+                progress = span?.takeIf { it > 0 }?.let { (minutes.toDouble() / it).coerceIn(0.0, 1.0) },
+                module = Module.CONTINENCE,
+                page = AppPage.CONTINENCE,
+                action = NowAction("Change", NowAction.CONTINENCE_CHANGE, mapOf("supplyId" to supplyId)),
+                priority = if (due) 70 else 45,
+                at = since,
+            ),
+        )
+    }
 }
 
 /** When bladder training reminders come: pure, for tests. */
@@ -358,6 +458,23 @@ class CycleHooks(private val cycle: CycleService, private val clock: () -> Long)
                 d.products.joinToString(", ") { "${it.count} ${it.kind.label.lowercase()}" }, d.clots?.label.orEmpty())
         }
         return ReportSection(ReportSectionKey.CYCLE, summary, listOf(ReportTable("Pain, symptoms and products", listOf("Date", "Bleeding", "Pain", "Where", "Symptoms", "Products", "Clots"), rows)))
+    }
+
+    /** Each day logged, as the day it is in the cycle: bleeding, pain and symptoms (never fertility signs). */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val days = Days(Days.zoneOf(profile.timezone))
+        return cycle.logged(userId, from, to).map { d ->
+            val date = LocalDate.parse(d.date)
+            val day = cycle.today(userId, date).cycleDay
+            TimelineItem(
+                Feed.id(TimelineKind.CYCLE_DAY, d.date), TimelineKind.CYCLE_DAY, days.start(date), allDay = true,
+                title = day?.let { "Cycle day $it" } ?: "Cycle",
+                detail = Feed.line(
+                    d.flow?.let { if (it == Flow.SPOTTING) "spotting" else "${it.label.lowercase()} flow" }, d.pain?.let { "pain $it of 10" }, Feed.words(d.symptoms),
+                )?.let(Feed::capitalised),
+                module = Module.CYCLE, page = AppPage.CYCLE, ref = d.date,
+            )
+        }
     }
 
     override suspend fun export(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, List<List<String>>> {

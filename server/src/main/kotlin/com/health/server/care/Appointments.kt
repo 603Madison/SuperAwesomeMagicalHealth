@@ -1,20 +1,27 @@
 package com.health.server.care
 
+import com.health.api.AppPage
 import com.health.api.Appointment
 import com.health.api.AppointmentQuestion
 import com.health.api.DigestSection
 import com.health.api.Insight
 import com.health.api.Module
+import com.health.api.NowAction
+import com.health.api.NowItem
+import com.health.api.NowKind
 import com.health.api.Profile
 import com.health.api.ReminderAction
 import com.health.api.ReportSectionKey
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.WebhookEvent
 import com.health.server.ApiError
 import com.health.server.health.ProfileStore
 import com.health.server.modules.EntryKind
 import com.health.server.modules.EntryStore
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Reminder
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
@@ -193,6 +200,47 @@ class AppointmentsService(
         }
         return if (rows.isEmpty()) emptyMap() else mapOf("appointments.csv" to listOf(listOf("time", "title", "minutes", "with", "place", "questions", "notes")) + rows)
     }
+
+    /** Each appointment on the day (later ones too: the day's plan is part of it). */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> =
+        between(userId, from, to).map { a ->
+            TimelineItem(
+                Feed.id(TimelineKind.APPOINTMENT, a.id ?: a.at), TimelineKind.APPOINTMENT, a.at, end = a.durationMinutes?.let { a.at + it * 60_000L },
+                title = a.title, detail = where(a), module = Module.APPOINTMENTS, page = AppPage.APPOINTMENTS, ref = a.id,
+            )
+        }
+
+    /** Appointments in the next seven days that aren't over yet (as Today's card has them): the soonest first. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        val zone = Days(Days.zoneOf(profile.timezone))
+        val date = zone.dateOf(at)
+        return today(userId, date, profile.timezone).first.take(3).map { a ->
+            val day = zone.dateOf(a.at)
+            val open = a.questions.count { !it.done }
+            val whenText = when (day) {
+                date -> "Today"
+                date.plusDays(1) -> "Tomorrow"
+                else -> dayText(zone, a.at)
+            } + " at ${time(zone, a.at)}"
+            NowItem(
+                id = "appointment:${a.id}",
+                kind = NowKind.APPOINTMENT_SOON,
+                title = a.title,
+                detail = Feed.line(whenText, a.with?.let { "with $it" }, if (open > 0) "${plural(open, "question")} ready" else null),
+                module = Module.APPOINTMENTS,
+                page = AppPage.APPOINTMENTS,
+                action = NowAction("Open", NowAction.APPOINTMENT_OPEN, mapOf("appointmentId" to a.id.orEmpty())),
+                priority = when {
+                    day == date -> 75
+                    day == date.plusDays(1) -> 55
+                    else -> 35
+                },
+                at = a.at,
+            )
+        }
+    }
+
+    private fun where(a: Appointment): String? = Feed.line(a.with?.let { "With $it" }, a.place)
 
     companion object {
         fun validated(a: Appointment): Appointment {

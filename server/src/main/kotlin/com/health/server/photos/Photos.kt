@@ -1,13 +1,20 @@
 package com.health.server.photos
 
 import com.health.api.ApiJson
+import com.health.api.AppPage
 import com.health.api.Metric
+import com.health.api.Module
 import com.health.api.Photo
 import com.health.api.PhotoAlbum
+import com.health.api.Profile
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.server.ApiError
 import com.health.server.db.Database
 import com.health.server.health.ProfileStore
 import com.health.server.health.Records
+import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.transition.TransitionService
 import com.health.server.util.Random
 import com.health.server.util.SecretBox
@@ -70,6 +77,10 @@ class PhotoService(
         val photos = rows(userId, from).filter { album == null || it.album.equals(album.trim(), ignoreCase = true) }
         return decorate(userId, photos)
     }
+
+    /** The photos taken on the days [from]..[to], newest first, without the weight or time on hormones (for Today's timeline). */
+    suspend fun between(userId: String, from: LocalDate, to: LocalDate): List<Photo> =
+        rows(userId, from.toString()).filter { (it.date ?: "") <= to.toString() }
 
     suspend fun albums(userId: String): List<PhotoAlbum> =
         rows(userId, "0000-00-00").groupBy { it.album }.map { (name, photos) ->
@@ -153,4 +164,17 @@ class PhotoService(
     }
 
     private fun safe(userId: String) = userId.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.ifEmpty { "x" }
+}
+
+/** Progress photos' part of Today's timeline: each photo added, by album and pose (never the picture itself). */
+class PhotoHooks(private val photos: PhotoService) : FeatureHooks {
+    override val module = Module.PHOTOS
+
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> =
+        photos.between(userId, from, to).map { p ->
+            TimelineItem(
+                id = Feed.id(TimelineKind.PHOTO, p.id ?: p.at), kind = TimelineKind.PHOTO, at = p.at, title = "Photo added",
+                detail = Feed.line(p.album, p.pose.label), module = Module.PHOTOS, page = AppPage.PHOTOS, ref = p.id,
+            )
+        }
 }

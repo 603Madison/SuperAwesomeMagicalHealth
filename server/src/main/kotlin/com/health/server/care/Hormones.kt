@@ -1,5 +1,6 @@
 package com.health.server.care
 
+import com.health.api.AppPage
 import com.health.api.DigestSection
 import com.health.api.DoseChange
 import com.health.api.HormoneMed
@@ -12,17 +13,21 @@ import com.health.api.LabSeries
 import com.health.api.LabTarget
 import com.health.api.Medication
 import com.health.api.Module
+import com.health.api.NowItem
 import com.health.api.Point
 import com.health.api.Profile
 import com.health.api.ReportSectionKey
 import com.health.api.ScheduleKind
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.server.ApiError
 import com.health.server.health.ProfileStore
 import com.health.server.modules.EntryKind
 import com.health.server.modules.EntryStore
 import com.health.server.modules.MedsService
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.ReportChart
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
@@ -232,6 +237,38 @@ class HormonesService(
             if (!LocalDate.parse(due).isAfter(to.plusDays(30))) out += SuggestedQuestion("Can I get a form for my next blood test?", "Labs due around ${shortDate(due)}", Module.HORMONES)
         }
         return out
+    }
+
+    /**
+     * Each change to a hormone medication's dose or schedule (and its start). Without Medications on
+     * (which has every dose), hormone medications' doses too.
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val days = Days(Days.zoneOf(profile.timezone))
+        val list = meds.list(userId, all = true).filter { it.hormone }
+        if (list.isEmpty()) return emptyList()
+        val byId = list.associateBy { it.id }
+        val changes = changes(userId).filter { days.dateOf(it.at) in from..to && it.medicationId in byId }.map { c ->
+            TimelineItem(
+                Feed.id(TimelineKind.DOSE_CHANGE, c.id ?: c.at), TimelineKind.DOSE_CHANGE, c.at,
+                title = byId[c.medicationId]?.name ?: "A hormone medication",
+                detail = if (c.from == null) "Started · ${c.to}" else "Changed to ${c.to}",
+                module = Module.HORMONES, page = AppPage.HORMONES, ref = c.id,
+            )
+        }
+        val doses = if (Module.MEDICATIONS in profile.modules) emptyList() else {
+            meds.doses(userId, from, to).filter { it.medicationId in byId }.map { Feed.dose(it, byId[it.medicationId], days, Module.HORMONES, AppPage.HORMONES) }
+        }
+        return changes + doses
+    }
+
+    /** Without Medications on (which offers every dose), hormone medications' doses due now. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        if (Module.MEDICATIONS in profile.modules) return emptyList()
+        val ids = meds.list(userId).filter { it.hormone }.mapNotNull { it.id }.toSet()
+        if (ids.isEmpty()) return emptyList()
+        val days = Days(Days.zoneOf(profile.timezone))
+        return meds.day(userId, days.dateOf(at)).due.filter { it.medicationId in ids }.mapNotNull { Feed.doseNow(it, at, days, Module.HORMONES, AppPage.HORMONES) }
     }
 
     companion object {

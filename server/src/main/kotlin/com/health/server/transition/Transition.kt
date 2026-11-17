@@ -1,5 +1,6 @@
 package com.health.server.transition
 
+import com.health.api.AppPage
 import com.health.api.BodyChange
 import com.health.api.ChecklistItem
 import com.health.api.Count
@@ -15,13 +16,19 @@ import com.health.api.MilestoneStatus
 import com.health.api.MilestoneTemplate
 import com.health.api.Module
 import com.health.api.MomentKind
+import com.health.api.NowAction
+import com.health.api.NowItem
+import com.health.api.NowKind
 import com.health.api.Point
 import com.health.api.Profile
 import com.health.api.ReportSectionKey
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.TransitionOverview
 import com.health.api.TransitionProfile
 import com.health.api.TransitionToday
+import com.health.api.VoiceCatalog
 import com.health.api.VoicePlan
 import com.health.api.VoiceSession
 import com.health.server.ApiError
@@ -36,6 +43,7 @@ import com.health.server.neuro.plural
 import com.health.server.neuro.text
 import com.health.server.platform.Csv
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Reminder
 import com.health.server.platform.ReportChart
 import com.health.server.platform.ReportSection
@@ -46,6 +54,7 @@ import kotlinx.serialization.KSerializer
 import java.time.LocalDate
 import java.time.Period
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Transition (Module.TRANSITION), whatever it means to each person and at their pace: milestones,
@@ -231,6 +240,57 @@ class TransitionService(
             insights += 50 to Insight("info", m.title, if (d == date) "Planned for today." else "Coming up on ${Say.shortDate(d)}.", "calendar", Module.TRANSITION)
         }
         return TransitionToday(headline, due.map { it.title }, week.size) to insights
+    }
+
+    // ---------------------------------------------------------------- Today's feed
+
+    /** Voice practice, and moments of euphoria and dysphoria (by how strong, with what was going on). */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val voice = trainer.sessions(userId, from, to).map { (_, v) ->
+            TimelineItem(
+                Feed.id(TimelineKind.VOICE_PRACTICE, v.id ?: v.at), TimelineKind.VOICE_PRACTICE, v.at, end = v.at + v.minutes * 60_000L,
+                title = v.lessonId?.let { VoiceCatalog.lesson(it)?.title } ?: "Voice practice",
+                detail = Feed.line(Feed.duration(v.minutes), v.pitchAvgHz?.let { "around ${it.roundToInt()} Hz" }, "some strain".takeIf { v.strain }),
+                module = Module.TRANSITION, page = AppPage.TRANSITION, ref = v.id,
+            )
+        }
+        val moments = entries.list(userId, EntryKind.TRANSITION_MOMENT, from, to, GenderMoment.serializer()).map { s ->
+            val m = s.value
+            TimelineItem(
+                Feed.id(TimelineKind.TRANSITION_MOMENT, s.id), TimelineKind.TRANSITION_MOMENT, m.at, title = m.kind.label,
+                detail = Feed.line("intensity ${m.intensity} of 5", Feed.words(m.context, 2))?.let(Feed::capitalised),
+                module = Module.TRANSITION, page = AppPage.TRANSITION, ref = s.id,
+            )
+        }
+        return voice + moments
+    }
+
+    /**
+     * Voice practice, once there's a plan: on a day that isn't a rest day, with nothing practised yet,
+     * from the reminder's time if one is set. Gently, after a session with strain.
+     */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        val plan = trainer.savedPlan(userId) ?: return emptyList()
+        val zone = Days(Days.zoneOf(profile.timezone))
+        val today = zone.dateOf(at)
+        if (today.dayOfWeek.value in plan.restDays) return emptyList()
+        plan.reminder?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() }?.let { if (at < zone.at(today, it)) return emptyList() }
+        val recent = trainer.sessions(userId, today.minusDays(1), today)
+        if (recent.any { it.date == today }) return emptyList()
+        val gently = recent.any { it.date == today.minusDays(1) && it.session.strain }
+        val next = VoiceCatalog.nextLesson(plan.goal, trainer.sessions(userId).mapNotNull { it.session.lessonId }.toSet())
+        return listOf(
+            NowItem(
+                id = "voice:$today",
+                kind = NowKind.VOICE_PRACTICE_DUE,
+                title = "Voice practice",
+                detail = if (gently) "Take it gently today: a short warm-up is plenty" else Feed.line("About ${plural(plan.dailyMinutes, "minute")}", next?.let { "next up: ${it.title}" }),
+                module = Module.TRANSITION,
+                page = AppPage.TRANSITION,
+                action = NowAction("Start", NowAction.VOICE_START, next?.let { mapOf("lessonId" to it.id) } ?: emptyMap()),
+                priority = 40,
+            ),
+        )
     }
 
     // ---------------------------------------------------------------- Hooks
