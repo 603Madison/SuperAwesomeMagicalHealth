@@ -64,10 +64,12 @@ object FeatureScreens {
     val PHOTOS = key("photos")
     val MEASUREMENTS = key("measurements")
     val TRENDS = key("trends")
+    /** The last 24 hours as the devices recorded them (ui/recent). */
+    val RECENT = key("recent")
 
     val ALL: List<String> = listOf(
         MIND, NEURO, CYCLE, CONTINENCE, CONTINENCE_PROGRESS, SUPPLIES, MEDS_TODAY, MEDS_LABS, VITALS, SYMPTOMS, HABITS,
-        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS,
+        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT,
     )
 
     private fun key(screen: String) = Layouts.screen(Layouts.ANDROID, screen)

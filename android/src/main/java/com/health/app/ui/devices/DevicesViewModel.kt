@@ -149,7 +149,9 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
 
     fun forgetRing() = c.colmi.forget()
 
-    fun sync(id: String? = null) = c.syncNow(id)
+    fun sync(id: String? = null) {
+        c.syncNow(id)
+    }
 
     fun rename(device: Device, name: String) {
         viewModelScope.launch {

@@ -365,7 +365,10 @@ fun TodayScreen(
                                             TodaySection.LIFE_STAGE -> m.lifeStage?.let { LifeStageTodayCard(it, zone) { open("cycle") } }
                                             TodaySection.APPOINTMENTS -> AppointmentsTodayCard(TodayPlan.laterAppointments(day), zone, now) { open("appointments") }
                                             TodaySection.ACTIVITY -> ActivityCard(summary, units, foodNumbers) { open("trends") }
-                                            TodaySection.SLEEP -> summary.sleepSummary?.let { SleepCard(it, zone) { open("trends") } }
+                                            // Last night's stages beside the rest of the last 24 hours (ui/recent): the person's own, today's only.
+                                            TodaySection.SLEEP -> summary.sleepSummary?.let {
+                                                if (isToday && !readOnly) SleepCard(it, zone, "last 24 hours") { open("recent") } else SleepCard(it, zone) { open("trends") }
+                                            }
                                             TodaySection.HEART -> HeartCard(summary, units) { open("trends") }
                                             TodaySection.STRESS -> StressTodayCard(summary.stressDay, summary.resilience) { open("trends") }
                                             TodaySection.FOOD -> FoodCard(summary, readOnly, foodNumbers, state.meals, onLog = { actions.logFood(state.date) }) { open("food") }
@@ -543,10 +546,10 @@ private fun ActivityCard(summary: DaySummary, units: Units, numbers: Boolean, on
     }
 }
 
-/** Last night: time asleep, then when and how well. */
+/** Last night: time asleep, then when and how well. Opens [openLabel] (Trends, or the last 24 hours with its stages). */
 @Composable
-private fun SleepCard(sleep: SleepSummary, zone: ZoneId, onOpen: () -> Unit) {
-    InfoCard("Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem, onClick = onOpen, onOpen = onOpen, openLabel = "trends") {
+private fun SleepCard(sleep: SleepSummary, zone: ZoneId, openLabel: String = "trends", onOpen: () -> Unit) {
+    InfoCard("Sleep", icon = Icons.Rounded.Bedtime, iconTint = AppTheme.data.rem, onClick = onOpen, onOpen = onOpen, openLabel = openLabel) {
         Figure(
             Format.minutes(sleep.asleepMinutes), "asleep",
             "${Format.timeOfDay(sleep.start, zone)} – ${Format.timeOfDay(sleep.end, zone)} · ${sleep.efficiency}% efficient",

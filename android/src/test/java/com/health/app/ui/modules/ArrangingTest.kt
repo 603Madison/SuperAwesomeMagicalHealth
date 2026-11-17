@@ -77,6 +77,12 @@ class ArrangingTest {
         assertEquals("android.mind", FeatureScreens.MIND)
         assertEquals("android.continence", FeatureScreens.CONTINENCE)
         assertEquals("android.meds.today", FeatureScreens.MEDS_TODAY)
+        assertEquals("android.recent", FeatureScreens.RECENT)
+        // The last 24 hours' section ids, saved with the person's arrangement.
+        assertEquals(
+            listOf("sleep", "heart", "spo2", "hrv", "stress", "breathing", "temperature", "steps"),
+            ids(com.health.app.ui.recent.Recent.SECTIONS),
+        )
     }
 
     @Test
@@ -97,6 +103,7 @@ class ArrangingTest {
         assertValid("transition", transitionSections(everyField, all))
         assertValid("photos", photoSections())
         assertValid("measurements", measurementSections())
+        assertValid("recent", com.health.app.ui.recent.Recent.SECTIONS)
     }
 
     @Test
