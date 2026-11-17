@@ -112,6 +112,10 @@ class FoodPhotoLogicTest {
         assertEquals(PhotoOffer.SETTINGS, FoodPhotoText.offer(on.copy(consent = null), viewing = false))
         assertEquals(PhotoOffer.SETTINGS, FoodPhotoText.offer(on.copy(consent = yes.copy(modules = setOf(Module.SLEEP))), viewing = false))
         assertEquals(PhotoOffer.SETTINGS, FoodPhotoText.offer(on.copy(consent = yes.copy(acknowledged = false)), viewing = false))
+        // Paused in Where your data goes: a line saying so instead of the button (and still the Settings line before a yes).
+        assertEquals(PhotoOffer.PAUSED, FoodPhotoText.offer(on.copy(paused = true), viewing = false))
+        assertEquals(PhotoOffer.SETTINGS, FoodPhotoText.offer(on.copy(consent = null, paused = true), viewing = false))
+        assertNull(FoodPhotoText.offer(on.copy(paused = true), viewing = true))
     }
 
     @Test

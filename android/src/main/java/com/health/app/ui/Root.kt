@@ -80,6 +80,7 @@ import com.health.app.ui.tracking.MonitorPairRoute
 import com.health.app.ui.tracking.SymptomsRoute
 import com.health.app.ui.tracking.VitalsRoute
 import com.health.app.ui.trends.TrendsRoute
+import com.health.app.ui.settings.WhereDataGoes
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -211,14 +212,16 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
                 onOpen = ::open,
             )
         }
-        composable("food") { FoodRoute(onAdd = { date, meal -> nav.navigate("food/add/$date/${meal.name}") }) }
+        composable("food") {
+            FoodRoute(onAdd = { date, meal -> nav.navigate("food/add/$date/${meal.name}") }, onPrivacy = { open(WhereDataGoes.ROUTE) })
+        }
         composable(
             "food/add/{date}/{meal}",
             arguments = listOf(navArgument("date") { type = NavType.StringType }, navArgument("meal") { type = NavType.StringType }),
         ) { back ->
             val date = attempt { LocalDate.parse(back.arguments?.getString("date")) }.getOrElse { LocalDate.now() }
             val meal = Meal.entries.firstOrNull { it.name == back.arguments?.getString("meal") } ?: Meal.SNACK
-            AddFoodRoute(date, meal, onDone = { nav.popBackStack() })
+            AddFoodRoute(date, meal, onDone = { nav.popBackStack() }, onPrivacy = { open(WhereDataGoes.ROUTE) })
         }
         composable("trends") { TrendsRoute(onRecent = { open("recent") }) }
         composable("devices") {
@@ -226,8 +229,13 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
                 onFindRing = { nav.navigate("devices/ring") },
                 onFindMonitor = { nav.navigate("devices/monitor") },
                 onRecent = { id -> open("recent?device=${android.net.Uri.encode(id)}") },
+                onCompare = { open("devices/compare") },
             )
         }
+        // Two devices side by side, night by night (ui/devices/CompareScreen.kt).
+        composable("devices/compare") { com.health.app.ui.devices.CompareRoute(onBack = { nav.popBackStack() }) }
+        // Settings › Where your data goes (ui/settings/WhereDataGoes.kt), also reached from wherever something is paused there.
+        composable(WhereDataGoes.ROUTE) { com.health.app.ui.settings.WhereDataGoesRoute(onBack = { nav.popBackStack() }, onOpen = ::open) }
         // The last 24 hours as the devices recorded them (ui/recent): from Today's and Trends' sleep, and each device.
         composable(
             "recent?device={device}",
@@ -317,7 +325,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
         }
         composable("settings/watch") { WatchRoute(onBack = { nav.popBackStack() }) }
         composable("settings/integrations") { IntegrationsRoute(onBack = { nav.popBackStack() }) }
-        composable("settings/mealie") { com.health.app.ui.settings.MealieRoute(onBack = { nav.popBackStack() }) }
+        composable("settings/mealie") { com.health.app.ui.settings.MealieRoute(onBack = { nav.popBackStack() }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
         composable("digest") { DigestRoute(onBack = { nav.popBackStack() }) }
         composable("reports") { ReportsRoute(onBack = { nav.popBackStack() }) }
 
@@ -331,7 +339,7 @@ private fun Routes(nav: NavHostController, showDevicesInHub: Boolean) {
             com.health.app.ui.modules.continence.SuppliesRoute(com.health.app.ui.modules.continence.SupplyArea.of(back.arguments?.getString("area")), onBack = { nav.popBackStack() })
         }
         composable("cycle/settings") { com.health.app.ui.modules.cycle.CycleSettingsRoute(onBack = { nav.popBackStack() }) }
-        composable("settings/ai") { com.health.app.ui.ai.AiRoute(onBack = { nav.popBackStack() }, onAudit = { open("settings/ai/audit") }) }
+        composable("settings/ai") { com.health.app.ui.ai.AiRoute(onBack = { nav.popBackStack() }, onAudit = { open("settings/ai/audit") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
         composable("settings/ai/audit") { com.health.app.ui.ai.AiAuditRoute(onBack = { nav.popBackStack() }) }
         // Wave 3: Autism & ADHD (also reached from Mind), transition, progress photos, body
         // measurements and Settings › Export (ui/modules/neuro, transition, photos, body; ui/settings/ExportSettings.kt).

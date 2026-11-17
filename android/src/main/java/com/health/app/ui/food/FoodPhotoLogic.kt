@@ -13,8 +13,8 @@ import com.health.app.net.ServerException
 import com.health.app.ui.Format
 import kotlin.math.roundToInt
 
-/** Whether the add-food screen offers a photo: the button, or one line pointing to Settings. */
-enum class PhotoOffer { READY, SETTINGS }
+/** Whether the add-food screen offers a photo: the button, one line pointing to Settings, or one saying it's paused. */
+enum class PhotoOffer { READY, SETTINGS, PAUSED }
 
 /**
  * One food or drink on the review: the estimate as it came ([item]) and what the person made of
@@ -45,10 +45,18 @@ object FoodPhotoText {
     /** Small print on the review: a photo shows fibre and the like, never vitamins. */
     const val NO_VITAMINS = "Vitamins and minerals can't be judged from a photo."
 
-    /** On, said yes to, with Food allowed: the button. On, but not that: the line. Otherwise (or while viewing a share) nothing. */
+    /** Who the paused line names: "The assistant is paused in Where your data goes". */
+    const val PAUSED_WHAT = "The assistant"
+
+    /**
+     * On, said yes to, with Food allowed: the button (or, while the person has paused the assistant
+     * in Where your data goes, a line saying so). On, but not that: the line pointing to Settings.
+     * Otherwise (or while viewing a share) nothing.
+     */
     fun offer(status: AiStatus?, viewing: Boolean): PhotoOffer? = when {
         viewing || status == null || !status.available -> null
         status.consent?.acknowledged != true || Module.NUTRITION !in status.consent!!.modules -> PhotoOffer.SETTINGS
+        status.paused -> PhotoOffer.PAUSED
         else -> PhotoOffer.READY
     }
 

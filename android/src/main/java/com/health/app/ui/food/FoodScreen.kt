@@ -103,10 +103,12 @@ class FoodActions(
     val ideasFor: (Meal) -> Unit = {},
     /** Logs a recipe from Mealie's meal plan (its place in the plan): one serving, to its meal. */
     val addPlanned: (Int) -> Unit = {},
+    /** Opens Settings › Where your data goes (where Mealie is paused). */
+    val privacy: () -> Unit = {},
 )
 
 @Composable
-fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
+fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit, onPrivacy: () -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { FoodViewModel(c) }
     val state by vm.state.collectAsState()
@@ -117,7 +119,7 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit) {
             go = vm::go, retry = { vm.load() }, add = onAdd, delete = vm::delete, change = vm::change,
             addWater = vm::addWater, deleteWater = vm::deleteWater, copyYesterday = vm::copyYesterday,
             quickDrink = { vm.quickDrink(it) }, saveDrink = { vm.saveDrink(it) }, deleteDrink = { vm.deleteDrink(it) },
-            addIdea = vm::addIdea, ideasFor = vm::ideasFor, addPlanned = vm::addPlanned,
+            addIdea = vm::addIdea, ideasFor = vm::ideasFor, addPlanned = vm::addPlanned, privacy = onPrivacy,
         ),
         zone = c.zone(),
         water = showsField(Fields.NUTRITION_WATER),
@@ -193,7 +195,8 @@ fun FoodScreen(
                         val meal = Meal.entries.firstOrNull { FoodSections.meal(it) == id }
                         when {
                             id == FoodSections.IDEAS -> IdeasCard(state.ideas, state.ideasMeal, state.ideasError, actions, numbers)
-                            id == FoodSections.MEALPLAN -> state.plan?.takeIf { mealPlan && MealieText.shown(it) }?.let { MealPlanCard(it, numbers, actions.addPlanned) }
+                            id == FoodSections.MEALPLAN -> if (mealPlan && state.mealiePaused) MealPlanPaused(actions.privacy)
+                            else state.plan?.takeIf { mealPlan && MealieText.shown(it) }?.let { MealPlanCard(it, numbers, actions.addPlanned) }
                             id == FoodSections.TOTALS -> if (numbers) Totals(day)
                             id == FoodSections.MICROS -> if (numbers && micros) MicrosCard(day, state.date == state.today)
                             meal != null -> MealCard(

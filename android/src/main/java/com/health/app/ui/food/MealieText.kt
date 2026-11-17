@@ -56,9 +56,11 @@ object MealieText {
     /** "Mealie 3.1.0", when Mealie said. */
     fun version(status: MealieStatus): String? = status.version?.trim()?.removePrefix("v")?.takeIf { it.isNotBlank() }?.let { "Mealie $it" }
 
-    /** Settings' row: where it's connected, or what it's for. */
-    fun row(status: MealieStatus?): String =
-        saved(status)?.let { "Connected to ${it.substringAfter("://")}" } ?: "Your recipes and meal plan in Food"
+    /** Settings' row: where it's connected (or that it's paused in Where your data goes), or what it's for. */
+    fun row(status: MealieStatus?): String = when {
+        status?.connected == true && status.paused -> com.health.app.ui.settings.WhereDataGoes.PAUSED
+        else -> saved(status)?.let { "Connected to ${it.substringAfter("://")}" } ?: "Your recipes and meal plan in Food"
+    }
 
     /** The address Mealie is connected at, or null when it isn't. */
     private fun saved(status: MealieStatus?): String? = status?.takeIf { it.connected }?.url?.takeIf { it.isNotBlank() }

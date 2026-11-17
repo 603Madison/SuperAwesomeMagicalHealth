@@ -56,6 +56,15 @@ class AiLogicTest {
     }
 
     @Test
+    fun `Settings says when it's paused in Where your data goes`() {
+        val off = AiStatus(available = true)
+        val on = off.copy(consent = AiConsent(setOf(Module.SLEEP), acknowledged = true))
+        assertEquals("Optional. Read what it means before turning it on", AiText.row(off))
+        assertEquals("On: it can look at what you chose", AiText.row(on))
+        assertEquals("Paused in Where your data goes", AiText.row(on.copy(paused = true)))
+    }
+
+    @Test
     fun `the conversation goes as it is, and errors are plain`() {
         val turns = listOf(ChatTurn(ChatTurn.USER, "How did I sleep?"), ChatTurn(ChatTurn.ASSISTANT, "Well."), ChatTurn(ChatTurn.USER, "And last week?"))
         assertEquals(listOf("user", "assistant", "user"), AiText.messages(turns).map { it.role })

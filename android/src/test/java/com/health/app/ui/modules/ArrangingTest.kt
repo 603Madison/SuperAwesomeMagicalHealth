@@ -83,6 +83,17 @@ class ArrangingTest {
             listOf("sleep", "heart", "spo2", "hrv", "stress", "breathing", "temperature", "steps"),
             ids(com.health.app.ui.recent.Recent.SECTIONS),
         )
+        // Comparing devices, and Where your data goes, with their section ids.
+        assertEquals("android.compare", FeatureScreens.COMPARE)
+        assertEquals("android.privacy", FeatureScreens.PRIVACY)
+        assertEquals(
+            listOf(
+                "asleep", "deep", "light", "rem", "awake", "bedtime", "wake", "heart", "lowest-heart", "hrv", "spo2", "breathing",
+                "temperature", "day-heart", "steps", "nights",
+            ),
+            ids(com.health.app.ui.devices.Compare.SECTIONS),
+        )
+        assertEquals(listOf("server", "phone"), ids(com.health.app.ui.settings.WhereDataGoes.SECTIONS))
     }
 
     @Test
@@ -104,6 +115,8 @@ class ArrangingTest {
         assertValid("photos", photoSections())
         assertValid("measurements", measurementSections())
         assertValid("recent", com.health.app.ui.recent.Recent.SECTIONS)
+        assertValid("compare", com.health.app.ui.devices.Compare.SECTIONS)
+        assertValid("privacy", com.health.app.ui.settings.WhereDataGoes.SECTIONS)
     }
 
     @Test

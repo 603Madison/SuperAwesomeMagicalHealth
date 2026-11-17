@@ -50,6 +50,13 @@ object AiText {
 
     fun atLimit(status: AiStatus): Boolean = status.dailyLimit > 0 && status.usedToday >= status.dailyLimit
 
+    /** Settings' row for the assistant: paused in Where your data goes, on, or what turning it on means. */
+    fun row(status: AiStatus): String = when {
+        status.consent != null && status.paused -> com.health.app.ui.settings.WhereDataGoes.PAUSED
+        status.consent != null -> "On: it can look at what you chose"
+        else -> "Optional. Read what it means before turning it on"
+    }
+
     /** "Looked at: your sleep, last 7 days · your diary" under a reply. */
     fun looked(looks: List<AiLook>): String {
         val parts = looks.map { it.summary.trim() }.filter { it.isNotEmpty() }.distinct()

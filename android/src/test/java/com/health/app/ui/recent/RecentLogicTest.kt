@@ -291,6 +291,7 @@ class RecentLogicTest {
         assertTrue(Recent.records(DeviceKind.COLMI_RING))
         assertTrue(Recent.records(DeviceKind.HEALTH_CONNECT))
         assertTrue(Recent.records(DeviceKind.PEBBLE))
+        assertTrue(Recent.records(DeviceKind.HEART_RATE_STRAP))
         assertFalse(Recent.records(DeviceKind.BP_MONITOR))
         assertFalse(Recent.records(DeviceKind.GLUCOSE_METER))
         assertFalse(Recent.records(DeviceKind.MANUAL))

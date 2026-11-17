@@ -94,7 +94,7 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
                 // Only the person's own: someone viewing a share never gets the assistant.
                 val ai = async {
                     if (c.viewing.value != null) false
-                    else attempt { api.breakdownStatus().let { s -> s.available && s.consent?.acknowledged == true } }.getOrDefault(false)
+                    else attempt { api.breakdownStatus().let { s -> s.available && s.consent?.acknowledged == true && !s.paused } }.getOrDefault(false)
                 }
                 _state.update {
                     it.copy(

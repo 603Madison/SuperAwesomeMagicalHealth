@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.CompareArrows
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -68,6 +69,7 @@ import com.health.app.ui.tracking.MonitorsCard
 import com.health.app.ui.tracking.MonitorsUi
 import com.health.app.sync.ConduitStatus
 import com.health.app.ui.Format
+import com.health.app.ui.components.AppCard
 import com.health.app.ui.components.CardItem
 import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
@@ -76,6 +78,7 @@ import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.SectionTitle
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.modules.NavRow
 import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 
@@ -95,14 +98,17 @@ class DevicesActions(
     val choose: (Overlap, String?) -> Unit = { _, _ -> },
     /** Opens a server device's last 24 hours (ui/recent), by its id; null where it can't (viewing a share). */
     val recent: ((String) -> Unit)? = null,
+    /** Opens Compare devices (CompareScreen.kt); null where it can't (viewing a share). */
+    val compare: (() -> Unit)? = null,
 )
 
 @Composable
-fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecent: (String) -> Unit = {}) {
+fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecent: (String) -> Unit = {}, onCompare: () -> Unit = {}) {
     val c = appContainer()
     val context = LocalContext.current
-    // The last 24 hours are only ever the person's own.
+    // The last 24 hours and comparing devices are only ever the person's own.
     val recent = onRecent.takeIf { !com.health.app.ui.care.LocalReadOnly.current }
+    val compare = onCompare.takeIf { !com.health.app.ui.care.LocalReadOnly.current }
     val vm = viewModel { DevicesViewModel(c) }
     val state by vm.state.collectAsState()
     val pairedMonitors by c.monitors.monitors.collectAsState()
@@ -148,6 +154,7 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecen
             retry = vm::loadServer,
             choose = vm::choose,
             recent = recent,
+            compare = compare,
         ),
         monitors = MonitorsUi(
             pairedMonitors,
@@ -200,6 +207,12 @@ fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = Syst
                         onRecent = actions.recent?.takeIf { com.health.app.ui.recent.Recent.records(device.kind) }?.let { open -> { open(device.id) } },
                     )
                 }
+            }
+        }
+        // Two devices or more: how they read against each other, night by night.
+        actions.compare?.takeIf { Compare.offered(state.serverDevices) }?.let { open ->
+            AppCard(Modifier.padding(horizontal = 16.dp).padding(top = 12.dp), padding = 8.dp) {
+                NavRow(Icons.AutoMirrored.Rounded.CompareArrows, "Compare devices", "How two of them read on the same nights", onClick = open, modifier = Modifier.padding(horizontal = 8.dp))
             }
         }
     }
