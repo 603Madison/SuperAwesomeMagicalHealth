@@ -40,7 +40,7 @@ object FoodPhotoText {
 
     const val ESTIMATES = "These are estimates from a photo, so they can be off. Check the amounts before you log them."
     const val ESTIMATES_PLAIN = "These are estimates from a photo, so they can be off. Check the foods and amounts before you log them."
-    const val SETTINGS_LINE = "To estimate a meal from a photo, let the assistant see Food in More › Connections & privacy › AI assistant."
+    const val SETTINGS_LINE = "To estimate a meal from a photo, let the assistant see Food in You › Connections › AI assistant."
 
     /** Small print on the review: a photo shows fibre and the like, never vitamins. */
     const val NO_VITAMINS = "Vitamins and minerals can't be judged from a photo."

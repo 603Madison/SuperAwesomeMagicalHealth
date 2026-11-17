@@ -59,7 +59,7 @@ fun PrivacyScreen(onClose: () -> Unit) {
                     Text("What it's for", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Your server turns it into your readiness, sleep and activity scores, trends over weeks and months, and how " +
-                            "your eating lines up with what you burn. It only writes to Health Connect what you turn on in More › Connections & privacy › Send to other apps " +
+                            "your eating lines up with what you burn. It only writes to Health Connect what you turn on in You › Connections › Send to other apps " +
                             "(so apps like Samsung Health can read it), and never reads that back.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 6.dp),

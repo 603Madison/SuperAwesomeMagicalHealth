@@ -7,7 +7,7 @@ import com.health.api.DataPathState
 import com.health.app.ui.components.ArrangeItem
 
 /*
- * More › Connections & privacy › Where your data goes (GET /api/privacy): every way something about the person can
+ * You › Where your data goes (GET /api/privacy): every way something about the person can
  * leave their server, each paused or resumed with a switch, then what happens on this phone.
  * Worked out without drawing anything, so it can be tested; WhereDataGoes.kt draws it.
  */
@@ -81,6 +81,19 @@ object WhereDataGoes {
             if (d.path != path || !switchable(d)) d else d.copy(state = if (paused) DataPathState.PAUSED else DataPathState.ON)
         },
     )
+
+    /** You's one line about it: "Nothing leaves your server", or "2 ways out on · 1 paused". */
+    fun youLine(map: DataMap): String {
+        val on = map.destinations.count { it.state == DataPathState.ON }
+        val paused = map.destinations.count { it.state == DataPathState.PAUSED }
+        if (on == 0 && paused == 0) return "Nothing leaves your server"
+        val ways = when (on) {
+            0 -> "Nothing goes out now"
+            1 -> "1 way out on"
+            else -> "$on ways out on"
+        }
+        return if (paused > 0) "$ways · $paused paused" else ways
+    }
 
     /** "On now: Open Food Facts, Open-Meteo and Signing in.", or that nothing is. */
     fun summary(map: DataMap): String {

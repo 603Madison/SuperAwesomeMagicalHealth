@@ -75,8 +75,8 @@ import com.health.app.ui.theme.LocalBackdrop
 @Composable
 fun appContainer(): Container = LocalContext.current.container
 
-/** Corners of the app's cards, as in the other apps. */
-val CARD_CORNER = 20.dp
+/** Corners of the app's cards: 24 dp, as the redesign draws them. */
+val CARD_CORNER = 24.dp
 
 /** Everything behind the screens: the theme's background with two soft glows at the top, like an aurora. */
 @Composable
@@ -175,7 +175,7 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: (@Compos
     }
 }
 
-/** The app's one card style, as in the other apps: 20dp corners on surfaceContainer. */
+/** The app's one card style: 24 dp corners on surfaceContainer (white in the light themes). */
 @Composable
 fun AppCard(modifier: Modifier = Modifier, padding: Dp = 16.dp, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)

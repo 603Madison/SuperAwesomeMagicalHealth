@@ -1,10 +1,10 @@
 package com.health.app.ui.today
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,153 +18,218 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Air
+import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Event
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FitnessCenter
-import androidx.compose.material.icons.rounded.Inventory2
-import androidx.compose.material.icons.rounded.LocalCafe
 import androidx.compose.material.icons.rounded.Medication
-import androidx.compose.material.icons.rounded.MonitorWeight
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.SelfImprovement
-import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Watch
-import androidx.compose.material.icons.rounded.Wc
-import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.health.api.AlertKind
+import com.health.api.AlertLevel
+import com.health.api.FoodSuggestion
+import com.health.api.HealthAlert
+import com.health.api.Insight
 import com.health.api.Module
+import com.health.api.NowItem
+import com.health.api.NowKind
 import com.health.api.Score
-import com.health.api.TodaySection
+import com.health.api.StageSpan
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
+import com.health.app.ui.Format
+import com.health.app.ui.alerts.Alerts
 import com.health.app.ui.components.AppCard
-import com.health.app.ui.components.CardAction
-import com.health.app.ui.components.InfoCard
+import com.health.app.ui.components.CARD_CORNER
+import com.health.app.ui.components.PillButton
+import com.health.app.ui.components.ProgressBar
 import com.health.app.ui.components.Ring
+import com.health.app.ui.components.RowDivider
+import com.health.app.ui.components.Tile
+import com.health.app.ui.components.stageColor
+import com.health.app.ui.components.titleStyle
 import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.theme.AppTheme
+import java.time.LocalDate
+import java.time.ZoneId
 
 /*
- * Today's own parts: the scores strip (or its one quiet line), Up next, Also today, and the one
- * headline style every feature card uses ([Figure]).
+ * Today's parts, as the redesign draws them: the header (the day, a greeting and the bell), the
+ * health alert's card, the scores, Right now, Your day and For you.
  */
 
+// ---- The header ----
+
 /**
- * A card's headline when it's words ("Feeling good", "Breakfast, lunch logged"), and at most one
- * line under it: the same size on every card, a step under [Figure]'s numbers. Read out as one.
+ * The day as a button (another day), the greeting (or, on a day gone by, which day it is and the
+ * way back to today), and the bell with the unseen health alerts ([alerts]; none while viewing a share).
  */
 @Composable
-fun Headline(text: String, supporting: String? = null, supportingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
-        Text(text, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        supporting?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = supportingColor, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+fun TodayHeader(date: LocalDate, today: LocalDate, hour: Int, alerts: Int, bell: Boolean, onPickDay: () -> Unit, onToday: () -> Unit, onBell: () -> Unit) {
+    val isToday = date == today
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClickLabel = "Choose another day", role = Role.Button, onClick = onPickDay)
+                    .heightIn(min = 48.dp)
+                    .padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(Format.longDay(date), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Rounded.ArrowDropDown, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                if (isToday) TodayRows.greeting(hour) else Format.day(date, today),
+                style = titleStyle, color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.semantics { heading() },
+            )
+            if (!isToday) {
+                TextButton(onClick = onToday, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)) { Text("Back to today") }
+            }
+        }
+        if (bell) Bell(alerts, onBell)
+    }
+}
+
+/** The bell: a round white button, with how many health alerts are new. */
+@Composable
+private fun Bell(count: Int, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainer, contentColor = MaterialTheme.colorScheme.onSurface),
+        modifier = Modifier.padding(top = 4.dp).size(48.dp),
+    ) {
+        if (count > 0) {
+            BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text(if (count > 9) "9+" else "$count") } }) {
+                Icon(Icons.Rounded.Notifications, Alerts.countText(count))
+            }
+        } else {
+            Icon(Icons.Rounded.Notifications, "Health alerts")
         }
     }
 }
 
+// ---- The health alert ----
+
 /**
- * A card's one headline number, and at most one line under it: [value] ("5,120", "7h 12m") in
- * the same size on every card, [unit] after it in the quiet colour ("of 8,000 steps"),
- * [supporting] beneath. Read out as one.
+ * The most serious active health alert, always first. One that could need care now is in the
+ * danger colours and says when to call emergency services (its advice's first sentence); the
+ * rest a gentle tint. Opens Health alerts.
  */
 @Composable
-fun Figure(
-    value: String,
-    unit: String? = null,
-    supporting: String? = null,
-    color: Color = MaterialTheme.colorScheme.onSurface,
-    supportingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-) {
-    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
-    val unitStyle = MaterialTheme.typography.bodyMedium
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
-        Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(color = color)) { append(value) }
-                if (unit != null) {
-                    append(" ")
-                    withStyle(SpanStyle(color = quiet, fontSize = unitStyle.fontSize, fontWeight = unitStyle.fontWeight, fontFamily = unitStyle.fontFamily)) { append(unit) }
+fun AlertCard(alert: HealthAlert, onOpen: () -> Unit) {
+    val urgent = alert.level == AlertLevel.URGENT
+    val scheme = MaterialTheme.colorScheme
+    val warn = AppTheme.status.warn
+    val background = if (urgent) scheme.errorContainer else warn.copy(alpha = 0.10f).compositeOver(scheme.surfaceContainer)
+    val strong = if (urgent) scheme.onErrorContainer else scheme.onSurface
+    val quiet = if (urgent) scheme.onErrorContainer else scheme.onSurfaceVariant
+    val level = Alerts.levelText(alert.level)
+    Surface(
+        onClick = onOpen, shape = RoundedCornerShape(CARD_CORNER), color = background, contentColor = strong,
+        modifier = Modifier.fillMaxWidth().semantics { onClick(label = "Open Health alerts") { onOpen(); true } },
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Tile(
+                alertIcon(alert.kind),
+                container = if (urgent) scheme.error else warn.copy(alpha = 0.20f).compositeOver(background),
+                content = if (urgent) scheme.onError else warn,
+                round = true,
+            )
+            Column(Modifier.weight(1f)) {
+                Text(level, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = quiet)
+                Text(alert.title, style = MaterialTheme.typography.titleSmall, color = strong)
+                Text(Alerts.firstSentence(alert.body), style = MaterialTheme.typography.bodyMedium, color = quiet, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                if (urgent && alert.advice.isNotBlank()) {
+                    Text(Alerts.firstSentence(alert.advice), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = strong, modifier = Modifier.padding(top = 4.dp))
                 }
-            },
-            style = MaterialTheme.typography.titleLarge,
-        )
-        supporting?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = supportingColor, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = quiet)
         }
     }
 }
 
-// ---- Scores ----
+private fun alertIcon(kind: AlertKind): ImageVector = when (kind) {
+    AlertKind.LOW_OXYGEN, AlertKind.OXYGEN_DIPS -> Icons.Rounded.Air
+    AlertKind.GETTING_SICK -> Icons.Rounded.Thermostat
+    else -> Icons.Rounded.MonitorHeart
+}
+
+// ---- The scores ----
 
 /**
- * Readiness, sleep and activity as three small rings in one slim card (a tap shows what made
- * each); with none, one quiet line instead, with the way to Devices ([onDevices], none while
- * viewing a share).
+ * Readiness, sleep and activity as three rings in one card, with one plain sentence under them
+ * ([line]); the whole card opens Body. With no scores, one quiet line and the way to Devices.
  */
 @Composable
-fun ScoresStrip(readiness: Score?, sleep: Score?, activity: Score?, isToday: Boolean, readOnly: Boolean, onScore: (String, Score) -> Unit, onDevices: () -> Unit) {
+fun ScoresCard(readiness: Score?, sleep: Score?, activity: Score?, line: String?, isToday: Boolean, readOnly: Boolean, onOpen: () -> Unit, onDevices: () -> Unit) {
     val scores = listOf("Readiness" to readiness, "Sleep" to sleep, "Activity" to activity)
     if (scores.all { it.second == null }) {
         NoScoresLine(isToday, readOnly, onDevices)
         return
     }
-    AppCard(padding = 0.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            scores.forEach { (name, s) -> MiniScore(name, s) { s?.let { onScore(name, it) } } }
-        }
-    }
-}
-
-@Composable
-private fun MiniScore(name: String, score: Score?, onClick: () -> Unit) {
-    Column(
-        Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(enabled = score != null, role = Role.Button, onClickLabel = "See what made it", onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = "$name ${score?.score ?: "not measured"}${score?.label?.let { ", $it" } ?: ""}" }
-            .padding(horizontal = 14.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    val spoken = scores.joinToString(", ") { (name, s) -> "$name ${s?.score ?: "not measured"}" } + (line?.let { ". $it" } ?: "")
+    AppCard(
+        padding = 0.dp, onClick = onOpen,
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = spoken
+            role = Role.Button
+            onClick("Open Body") { onOpen(); true }
+        },
     ) {
-        Ring(score?.let { it.score / 100f }, size = 52.dp, stroke = 5.dp) {
-            Text(score?.score?.toString() ?: "—", style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth()) {
+                scores.forEachIndexed { i, (name, s) ->
+                    val color = if (i == 2) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Ring(s?.let { it.score / 100f }, size = 64.dp, stroke = 6.dp, colors = listOf(color)) {
+                            Text(s?.score?.toString() ?: "—", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(name, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                }
+            }
+            line?.let { Text(it, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
 
@@ -191,205 +256,242 @@ private fun NoScoresLine(isToday: Boolean, readOnly: Boolean, onDevices: () -> U
     }
 }
 
-// ---- Up next ----
-
-/** What Up next's rows can do; each row offers one ([TodayPlan.Item]), a dose two (Take and Skip). */
-class UpNextActions(
-    val take: (TodayPlan.Item) -> Unit = {},
-    val skip: (TodayPlan.Item) -> Unit = {},
-    val trip: (TodayPlan.Item) -> Unit = {},
-    /** Opens the Change sheet. */
-    val change: (TodayPlan.Item) -> Unit = {},
-    val open: (String) -> Unit = {},
-)
+// ---- Right now ----
 
 /**
- * Up next: what needs doing now, most urgent first ([TodayPlan.upNext]), the first [shown] and
- * "Show N more". Nothing when there's nothing to do. Viewing a share, the rows without buttons.
+ * Right now: each live thing from the feed with its one button (none while viewing a share), the
+ * server's words as they come. One that could need care now keeps the danger colours.
  */
 @Composable
-fun UpNextCard(items: List<TodayPlan.Item>, readOnly: Boolean, actions: UpNextActions, shown: Int = 4) {
-    if (items.isEmpty()) return
-    var all by rememberSaveable { mutableStateOf(false) }
-    val rows = if (all || items.size <= shown + 1) items else items.take(shown)
-    InfoCard("Up next", icon = Icons.Rounded.Schedule) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // Take and Skip go under the words when two buttons beside them wouldn't leave room (a small phone, large text).
-            val stacked = maxWidth < 280.dp * LocalDensity.current.fontScale
-            Column {
-                rows.forEachIndexed { i, item ->
-                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    UpNextRow(item, readOnly, actions, stacked)
+fun RightNowCard(items: List<NowItem>, readOnly: Boolean, onAction: (NowItem) -> Unit) {
+    AppCard(padding = 0.dp) {
+        items.forEachIndexed { i, item ->
+            if (i > 0) RowDivider()
+            NowRowView(item, readOnly, onAction)
+        }
+    }
+}
+
+@Composable
+private fun NowRowView(item: NowItem, readOnly: Boolean, onAction: (NowItem) -> Unit) {
+    val urgent = TodayRows.urgent(item)
+    val (container, content) = nowColors(item)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (urgent) Modifier.background(MaterialTheme.colorScheme.errorContainer) else Modifier)
+            .heightIn(min = 64.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Tile(nowIcon(item.kind), container, content, round = item.kind == NowKind.HEALTH_ALERT)
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = if (urgent) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
+            )
+            item.progress?.let { ProgressBar(it.toFloat(), color = if (item.kind == NowKind.FOOD_TODAY) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary, height = 6.dp) }
+            item.detail?.let {
+                Text(
+                    it, style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis,
+                    color = when {
+                        urgent -> MaterialTheme.colorScheme.onErrorContainer
+                        item.kind == NowKind.DOSE_OVERDUE -> AppTheme.status.warn
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+        val action = item.action
+        if (!readOnly && action != null) PillButton(action.label, { onAction(item) }, container, content, spoken = TodayRows.spoken(item))
+    }
+}
+
+/**
+ * A Right now row's tile and button colours: food in the theme's second colour, a health alert
+ * in the danger colours when it could need care now (else a gentle warm tint), the rest in the first.
+ */
+@Composable
+fun nowColors(item: NowItem): Pair<Color, Color> {
+    val scheme = MaterialTheme.colorScheme
+    return when {
+        TodayRows.urgent(item) -> scheme.error to scheme.onError
+        item.kind == NowKind.HEALTH_ALERT -> AppTheme.status.warn.copy(alpha = 0.18f).compositeOver(scheme.surfaceContainer) to scheme.onSurface
+        item.kind == NowKind.FOOD_TODAY -> scheme.tertiaryContainer to scheme.onTertiaryContainer
+        else -> scheme.primaryContainer to scheme.onPrimaryContainer
+    }
+}
+
+/** Each kind's icon. */
+fun nowIcon(kind: NowKind): ImageVector = when (kind) {
+    NowKind.WEARING -> ModuleInfo.icon(Module.CONTINENCE)
+    NowKind.DOSE_DUE, NowKind.DOSE_OVERDUE -> Icons.Rounded.Medication
+    NowKind.FOOD_TODAY -> Icons.Rounded.Restaurant
+    NowKind.APPOINTMENT_SOON -> Icons.Rounded.Event
+    NowKind.ENERGY_TODAY -> Icons.Rounded.Bolt
+    NowKind.VOICE_PRACTICE_DUE -> Icons.Rounded.Mic
+    NowKind.HEALTH_ALERT -> Icons.Rounded.MonitorHeart
+    NowKind.OTHER -> Icons.Rounded.Schedule
+}
+
+// ---- Your day ----
+
+/**
+ * Your day as one timeline card: a "Now" line on top for today ([nowLine]), then each of the
+ * feed's items with its time, a dot in its kind's colour, its title and one line; a tap opens it
+ * ([routeOf], [onOpen]). A night carries its stages ([stagesOf]). Without the feed ([error]), a
+ * quiet line and a way to try again.
+ */
+@Composable
+fun DayCard(
+    items: List<TimelineItem>,
+    nowLine: String?,
+    isToday: Boolean,
+    zone: ZoneId,
+    routeOf: (TimelineItem) -> String?,
+    onOpen: (String) -> Unit,
+    stagesOf: (TimelineItem) -> List<StageSpan> = { emptyList() },
+    error: String? = null,
+    onRetry: () -> Unit = {},
+) {
+    AppCard(padding = 0.dp) {
+        Column(Modifier.padding(vertical = 6.dp)) {
+            if (error != null) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onRetry) { Text("Try again") }
                 }
-                if (items.size > rows.size || all) {
-                    TextButton(onClick = { all = !all }) { Text(if (all) "Show fewer" else "Show ${items.size - rows.size} more") }
-                }
+                return@Column
+            }
+            if (items.isEmpty() && (nowLine == null || !isToday)) {
+                Text(
+                    if (isToday) "Nothing yet today. What you log, and what your devices record, shows up here." else "Nothing was logged or recorded on this day.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+                return@Column
+            }
+            var first = true
+            if (isToday && nowLine != null) {
+                TimelineRow("Now", MaterialTheme.colorScheme.primary, null, nowLine, null, timeColor = MaterialTheme.colorScheme.primary)
+                first = false
+            }
+            items.forEach { item ->
+                if (!first) RowDivider()
+                first = false
+                TimelineRow(
+                    if (item.allDay) "All day" else Format.timeOfDay(item.at, zone),
+                    dayColor(item.kind), item.title, item.detail, routeOf(item)?.let { r -> { onOpen(r) } },
+                    stages = stagesOf(item),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun UpNextRow(item: TodayPlan.Item, readOnly: Boolean, actions: UpNextActions, stacked: Boolean) {
-    val tone = when {
-        item.late || item.kind == TodayPlan.Kind.RESTOCK -> AppTheme.status.warn
+private fun TimelineRow(
+    time: String,
+    dot: Color,
+    title: String?,
+    detail: String?,
+    onClick: (() -> Unit)?,
+    timeColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    stages: List<StageSpan> = emptyList(),
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick).heightIn(min = 48.dp) else Modifier)
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(time, style = MaterialTheme.typography.labelMedium, fontWeight = if (title == null) FontWeight.SemiBold else null, color = timeColor, modifier = Modifier.width(72.dp).padding(top = 2.dp))
+        Box(Modifier.width(20.dp).padding(top = 5.dp), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+        }
+        Column(Modifier.weight(1f).padding(start = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (title != null) Text(title, style = MaterialTheme.typography.titleSmall)
+            detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (stages.isNotEmpty()) StageStrip(stages, Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+/** A night's stages in a thin strip, in their colours, start to end. */
+@Composable
+fun StageStrip(stages: List<StageSpan>, modifier: Modifier = Modifier) {
+    val start = stages.minOf { it.start }
+    val end = stages.maxOf { it.end }
+    val colors = com.health.api.SleepStage.entries.associateWith { stageColor(it) }
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    Canvas(modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp))) {
+        drawRect(track)
+        val total = (end - start).coerceAtLeast(1).toFloat()
+        stages.forEach { s ->
+            val x0 = (s.start - start) / total * size.width
+            val x1 = (s.end - start) / total * size.width
+            drawRoundRect(colors.getValue(s.stage), Offset(x0, 0f), Size((x1 - x0).coerceAtLeast(1f), size.height), CornerRadius(0f, 0f))
+        }
+    }
+}
+
+/**
+ * A timeline item's dot: sleep quiet, food and drinks in the second colour, movement warm, blood
+ * pressure and glucose the heart's colour, symptoms and the body's numbers the third, a health
+ * alert the danger colour, the rest the first.
+ */
+@Composable
+fun dayColor(kind: TimelineKind): Color = when (kind) {
+    TimelineKind.SLEEP, TimelineKind.NAP, TimelineKind.OTHER -> MaterialTheme.colorScheme.onSurfaceVariant
+    TimelineKind.MEAL, TimelineKind.DRINK -> MaterialTheme.colorScheme.tertiary
+    TimelineKind.WORKOUT -> AppTheme.status.warn
+    TimelineKind.BLOOD_PRESSURE, TimelineKind.GLUCOSE -> AppTheme.data.heart
+    TimelineKind.SYMPTOM, TimelineKind.WEIGHT, TimelineKind.MEASUREMENT -> MaterialTheme.colorScheme.secondary
+    TimelineKind.HEALTH_ALERT -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.primary
+}
+
+// ---- For you ----
+
+/** An insight as a card of its own (the features' pages use these; Today has For you). */
+@Composable
+fun InsightCard(insight: Insight) {
+    val tone = when (insight.tone) {
+        "good" -> AppTheme.status.good
+        "warn" -> AppTheme.status.warn
         else -> MaterialTheme.colorScheme.primary
     }
-    val buttons: @Composable () -> Unit = {
-        when (item.kind) {
-            TodayPlan.Kind.DOSE -> {
-                SkipButton(item, actions)
-                FilledTonalButton(onClick = { actions.take(item) }, contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.semantics { contentDescription = "Take ${item.title}" }) { Text("Take") }
+    AppCard(padding = 14.dp) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Tile(com.health.app.ui.AppIcons.insight(insight.icon), tone.copy(alpha = 0.15f).compositeOver(MaterialTheme.colorScheme.surfaceContainer), tone, size = 36.dp, round = true)
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                Text(insight.title, style = MaterialTheme.typography.titleSmall)
+                Text(insight.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TodayPlan.Kind.BLADDER -> RowButton("Done", "Log a toilet trip") { actions.trip(item) }
-            TodayPlan.Kind.CHANGE -> RowButton("Change", "Log a change") { actions.change(item) }
-            TodayPlan.Kind.APPOINTMENT -> RowButton("Open", "Open ${item.title}") { item.route?.let(actions.open) }
-            TodayPlan.Kind.ROUTINE -> RowButton("Start", "Start ${item.title}") { item.route?.let(actions.open) }
-            TodayPlan.Kind.RESTOCK -> RowButton("Restock", "Restock ${item.title.removeSuffix(" running low")}") { item.route?.let(actions.open) }
-        }
-    }
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp), verticalAlignment = if (stacked && item.kind == TodayPlan.Kind.DOSE) Alignment.Top else Alignment.CenterVertically) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(tone.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            Icon(upNextIcon(item.kind), null, tint = tone, modifier = Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Column(Modifier.semantics(mergeDescendants = true) {}) {
-                Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(item.detail, style = MaterialTheme.typography.bodyMedium, color = if (item.late) AppTheme.status.warn else MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            if (!readOnly && stacked && item.kind == TodayPlan.Kind.DOSE) {
-                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Take first: it's the one most reach for.
-                    FilledTonalButton(onClick = { actions.take(item) }, contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.semantics { contentDescription = "Take ${item.title}" }) { Text("Take") }
-                    SkipButton(item, actions)
-                }
-            }
-        }
-        if (!readOnly && !(stacked && item.kind == TodayPlan.Kind.DOSE)) {
-            Spacer(Modifier.width(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) { buttons() }
         }
     }
 }
 
-/** Skip, quieter than Take beside it. */
+/** For you: at most two insights, each a row that opens where it's about. */
 @Composable
-private fun SkipButton(item: TodayPlan.Item, actions: UpNextActions) {
-    TextButton(
-        onClick = { actions.skip(item) },
-        colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-        modifier = Modifier.semantics { contentDescription = "Skip ${item.title}" },
-    ) { Text("Skip") }
-}
-
-@Composable
-private fun RowButton(text: String, spoken: String, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.semantics { contentDescription = spoken }) { Text(text, maxLines = 1) }
-}
-
-private fun upNextIcon(kind: TodayPlan.Kind): ImageVector = when (kind) {
-    TodayPlan.Kind.DOSE -> Icons.Rounded.Medication
-    TodayPlan.Kind.APPOINTMENT -> Icons.Rounded.Event
-    TodayPlan.Kind.BLADDER -> Icons.Rounded.Wc
-    TodayPlan.Kind.CHANGE -> Icons.Rounded.Layers
-    TodayPlan.Kind.ROUTINE -> Icons.Rounded.Checklist
-    TodayPlan.Kind.RESTOCK -> Icons.Rounded.Inventory2
-}
-
-// ---- Also today ----
-
-/** A feature with nothing yet today, as Also today's row: its [action] logs (none while viewing a share). */
-data class AlsoRow(val section: TodaySection, val name: String, val status: String, val action: CardAction?)
-
-/** Every feature that's on with nothing logged yet today, as one card of short rows. */
-@Composable
-fun AlsoTodayCard(rows: List<AlsoRow>, modules: Set<Module>, isToday: Boolean) {
-    if (rows.isEmpty()) return
-    val nameStyle = MaterialTheme.typography.bodyLarge
-    val statusStyle = MaterialTheme.typography.bodyMedium
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    InfoCard(if (isToday) "Also today" else "Also on this day", icon = Icons.AutoMirrored.Rounded.PlaylistAdd) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // One way for every row: each status at the end of its line when they all fit there (beside the icon and "+"), else under each name.
-            val room = maxWidth - 44.dp - (if (rows.any { it.action != null }) 48.dp else 0.dp) - 12.dp
-            val inline = remember(rows, room, nameStyle, statusStyle, density) {
-                rows.all { r ->
-                    with(density) { (measurer.measure(r.name, nameStyle, maxLines = 1).size.width + measurer.measure(r.status, statusStyle, maxLines = 1).size.width).toDp() } <= room
-                }
-            }
-            Column {
-                rows.forEachIndexed { i, row ->
-                    if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-                            Icon(TodayIcons.of(row.section, modules), null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        val name: @Composable () -> Unit = { Text(row.name, style = nameStyle) }
-                        val status: @Composable () -> Unit = { Text(row.status, style = statusStyle, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
-                        val words = Modifier.weight(1f).padding(vertical = 6.dp).semantics(mergeDescendants = true) {}
-                        if (inline) {
-                            Row(words, verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.weight(1f)) { name() }
-                                Spacer(Modifier.width(12.dp))
-                                status()
-                            }
-                        } else {
-                            Column(words) { name(); status() }
-                        }
-                        row.action?.let { AddButton(it) }
-                    }
-                }
+fun ForYouCard(
+    insights: List<Insight>,
+    targetOf: (Insight) -> InsightLinks.Target?,
+    onOpen: (InsightLinks.Target) -> Unit,
+    readOnly: Boolean = false,
+    onAdd: ((FoodSuggestion) -> Unit)? = null,
+    showNumbers: Boolean = true,
+) {
+    if (insights.isEmpty()) return
+    AppCard(padding = 0.dp) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            insights.forEachIndexed { i, insight ->
+                if (i > 0) RowDivider(inset = 4.dp)
+                InsightRow(insight, targetOf(insight), onOpen, readOnly = readOnly, onAdd = onAdd, showNumbers = showNumbers)
             }
         }
-    }
-}
-
-/** A row's "+" (or its short menu, for things logged more than one way). */
-@Composable
-private fun AddButton(action: CardAction) {
-    if (action.menu.isEmpty()) {
-        IconButton(onClick = action.onClick) { Icon(action.icon, action.label, tint = MaterialTheme.colorScheme.primary) }
-        return
-    }
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { Icon(action.icon, action.label, tint = MaterialTheme.colorScheme.primary) }
-        DropdownMenu(open, onDismissRequest = { open = false }) {
-            action.menu.forEach { (label, go) -> DropdownMenuItem(text = { Text(label) }, onClick = { open = false; go() }) }
-        }
-    }
-}
-
-/** Each of Today's sections' icon: the feature's own where it has one. */
-object TodayIcons {
-    fun of(section: TodaySection, modules: Set<Module>): ImageVector = when (section) {
-        TodaySection.MEDS -> ModuleInfo.icon(Module.MEDICATIONS)
-        TodaySection.MIND -> ModuleInfo.icon(Module.MIND)
-        TodaySection.CYCLE, TodaySection.LIFE_STAGE -> ModuleInfo.icon(Module.CYCLE)
-        TodaySection.CONTINENCE -> ModuleInfo.icon(Module.CONTINENCE)
-        TodaySection.SUPPLIES -> Icons.Rounded.Inventory2
-        TodaySection.NEURO -> ModuleInfo.icon(if (Module.NEURO in modules) Module.NEURO else Module.MIND)
-        TodaySection.TRANSITION -> ModuleInfo.icon(Module.TRANSITION)
-        TodaySection.VITALS -> ModuleInfo.icon(Module.VITALS)
-        TodaySection.DRINKS -> Icons.Rounded.LocalCafe
-        TodaySection.SYMPTOMS -> ModuleInfo.icon(Module.SYMPTOMS)
-        TodaySection.HABITS -> ModuleInfo.icon(Module.HABITS)
-        TodaySection.HORMONES -> ModuleInfo.icon(Module.HORMONES)
-        TodaySection.APPOINTMENTS -> Icons.Rounded.Event
-        TodaySection.ACTIVITY -> Icons.AutoMirrored.Rounded.DirectionsWalk
-        TodaySection.SLEEP -> Icons.Rounded.Bedtime
-        TodaySection.HEART -> Icons.Rounded.Favorite
-        TodaySection.STRESS -> Icons.Rounded.SelfImprovement
-        TodaySection.FOOD -> Icons.Rounded.Restaurant
-        TodaySection.WATER -> Icons.Rounded.WaterDrop
-        TodaySection.WORKOUTS -> Icons.Rounded.FitnessCenter
-        TodaySection.BODY -> Icons.Rounded.MonitorWeight
-        TodaySection.SCORES -> Icons.Rounded.Watch
-        TodaySection.UP_NEXT -> Icons.Rounded.Schedule
-        TodaySection.INSIGHTS, TodaySection.QUICK -> Icons.Rounded.Add
-        TodaySection.ALSO -> Icons.AutoMirrored.Rounded.PlaylistAdd
     }
 }

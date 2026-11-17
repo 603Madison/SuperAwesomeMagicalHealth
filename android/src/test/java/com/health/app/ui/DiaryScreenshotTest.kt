@@ -542,18 +542,4 @@ class DiaryScreenshotTest {
         render { Frame("settings") { AiAuditScreen(audit, zone, {}) } }
         save("ai_audit")
     }
-
-    // ---- Today ----
-
-    @Test
-    @Config(qualifiers = "w411dp-h1600dp-xxhdpi")
-    fun todayLowSupplies() {
-        val summary = DaySummary(
-            date = today.toString(), readiness = Score(78, "Good", emptyList()), sleep = Score(81, "Good", emptyList()), activity = Score(72, "Good", emptyList()),
-            hasData = true, goals = Goals(),
-            modules = ModulesToday(continence = ContinenceDay(today.toString(), voids = 5, leaks = 1), lowSupplies = statuses.filter { it.low }),
-        )
-        render { Frame("today") { TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions(), modules = Module.DEFAULT + Module.CONTINENCE) } }
-        save("today_low_supplies")
-    }
 }

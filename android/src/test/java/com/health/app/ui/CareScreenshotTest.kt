@@ -421,28 +421,4 @@ class CareScreenshotTest {
         render { Frame("health") { MedEditorScreen(estradiol, {}, {}, {}, hormones = true) } }
         save("med_editor_hormones")
     }
-
-    private fun today(dark: Boolean, readOnly: Boolean, name: String) {
-        render(dark) {
-            Frame("today", readOnly) {
-                Column {
-                    if (readOnly) ViewingBanner("Mum", {})
-                    TodayScreen(TodayState(today, today, summaryWithCare(), loading = false), Units.METRIC, zone, TodayActions(), allModules)
-                }
-            }
-        }
-        save(name)
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h3200dp-xxhdpi")
-    fun todayCare() = today(dark = false, readOnly = false, name = "today_care_light")
-
-    @Test
-    @Config(qualifiers = "w411dp-h3200dp-xxhdpi")
-    fun todayCareDark() = today(dark = true, readOnly = false, name = "today_care_dark")
-
-    @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
-    fun todayViewingShare() = today(dark = false, readOnly = true, name = "today_viewing_share")
 }

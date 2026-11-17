@@ -132,7 +132,7 @@ fun ReportsScreen(
     var chosen by remember(offered) { mutableStateOf(offered.toSet()) }
     val from = today.minusDays(range.days - 1)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        BackBar(onBack, "Reports & export") { ArrangeAction(FeatureScreens.REPORTS, "Reports & export", REPORT_SECTIONS) }
+        BackBar(onBack, "A report for your doctor") { ArrangeAction(FeatureScreens.REPORTS, "A report for your doctor", REPORT_SECTIONS) }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Sections(arrangedIn(FeatureScreens.REPORTS, REPORT_SECTIONS)) { id ->
                 when (id) {

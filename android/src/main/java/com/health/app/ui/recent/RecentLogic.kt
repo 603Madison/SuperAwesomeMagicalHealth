@@ -19,7 +19,7 @@ import kotlin.math.roundToInt
 
 /*
  * The last 24 hours as the person's devices recorded them (GET /api/recent): what the page shows,
- * worked out without drawing anything, so it can be tested. RecentScreen.kt draws it.
+ * worked out without drawing anything, so it can be tested. Body draws it at 24 hours (ui/body).
  */
 object Recent {
     /** How far back the page looks. */

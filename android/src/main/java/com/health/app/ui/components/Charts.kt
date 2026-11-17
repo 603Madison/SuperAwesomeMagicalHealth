@@ -194,7 +194,16 @@ fun LineChart(
     }
 }
 
-/** A bar per value (nulls are gaps), with an optional dashed goal line; bars at or over the goal are full colour. */
+/** More values than this (a year of days) are drawn a week to a bar. */
+private const val MAX_BARS = 120
+
+/** [values] a week (7) at a time, each the average of the days that have one (null when none do). */
+fun weekly(values: List<Double?>): List<Double?> = values.chunked(7).map { week -> week.filterNotNull().takeIf { it.isNotEmpty() }?.average() }
+
+/**
+ * A bar per value (nulls are gaps), with an optional dashed goal line; bars at or over the goal
+ * are full colour. More than [MAX_BARS] values (a year) are drawn a week to a bar ([weekly]).
+ */
 @Composable
 fun BarChart(
     values: List<Double?>,
@@ -204,6 +213,7 @@ fun BarChart(
     goal: Double? = null,
     highlightLast: Boolean = false,
 ) {
+    if (values.size > MAX_BARS) return BarChart(weekly(values), modifier, color, height, goal, highlightLast)
     val goalColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
     val grid = MaterialTheme.colorScheme.outlineVariant
     Canvas(modifier.fillMaxWidth().height(height)) {

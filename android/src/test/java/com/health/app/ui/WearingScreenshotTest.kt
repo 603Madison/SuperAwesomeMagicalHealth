@@ -367,23 +367,6 @@ class WearingScreenshotTest {
         ),
     )
 
-    @Test
-    @Config(qualifiers = "w411dp-h1600dp-xxhdpi")
-    fun todayLight() {
-        render(tab = "today") { TodayScreen(TodayState(today, today, day, loading = false), Units.METRIC, zone, TodayActions(), modules = Module.DEFAULT + Module.CONTINENCE, now = now) }
-        assertTrue(compose.onAllNodesWithText("Time to change: Day pants,\u00A06\u00A0h").fetchSemanticsNodes().isNotEmpty())
-        // How what's on is, then the day's other counts.
-        assertTrue(compose.onAllNodesWithText("Wet \u00B7 2 accidents \u00B7 3 trips \u00B7 1 at night", substring = true).fetchSemanticsNodes().isNotEmpty())
-        save("wearing_today_light")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h1600dp-xxhdpi")
-    fun todayDark() {
-        render(dark = true, tab = "today") { TodayScreen(TodayState(today, today, day, loading = false), Units.METRIC, zone, TodayActions(), modules = Module.DEFAULT + Module.CONTINENCE, now = now) }
-        save("wearing_today_dark")
-    }
-
     // ---- How each product goes ----
 
     @Test

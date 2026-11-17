@@ -154,6 +154,7 @@ class AlertsViewModel(private val c: Container) : ViewModel() {
                 val changed = c.api.dismissAlert(alert.id, feedback)
                 _state.update { it.copy(alerts = Alerts.replace(it.alerts, changed)) }
                 c.alertsSeen(alert.id)
+                c.alertChanged(changed)
                 attempt { c.alertNotices.cancel(alert) }
                 c.tell("Put away. It stays in the list, in case you want it later.")
             } catch (e: CancellationException) { throw e } catch (e: Exception) {

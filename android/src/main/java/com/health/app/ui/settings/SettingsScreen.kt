@@ -25,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
-import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.EditNote
@@ -35,10 +34,10 @@ import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MedicalInformation
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Watch
@@ -107,8 +106,8 @@ import java.time.ZoneId
 import kotlin.math.roundToInt
 
 /*
- * Settings, as short pages opened from More: You & goals, What you're tracking, Reminders &
- * sharing, Connections & privacy, Appearance and Account. Each is one screen's worth; the pages
+ * Settings, as five short pages opened from You: What you track, Reminders, alerts and sharing,
+ * Profile and goals, Connections, and Look and account. Each is one screen's worth; the pages
  * further in (reminders, sharing, Mealie, the watch…) open from their rows. Settings' sections were
  * once arranged under android.settings; with a page each, nothing here is arranged any more, and
  * those ids are left as they were (never used for anything else).
@@ -126,14 +125,13 @@ class SettingsActions(
     val openWeb: (String) -> Unit = {},
 )
 
-/** The Settings pages, in More's order, each with its route, its name and what it holds. */
+/** The Settings pages, in You's order, each with its route, its name and what it holds. */
 enum class SettingsPage(val route: String, val title: String, val about: String, val icon: ImageVector) {
-    YOU("settings/you", "You & goals", "Your body, units and what you aim for", Icons.Rounded.Person),
-    TRACKING("settings/tracking", "What you're tracking", "Conditions, features and fields", Icons.Rounded.Tune),
-    REMINDERS("settings/reminders-sharing", "Reminders & sharing", "Reminders, the weekly digest and sharing", Icons.Rounded.Notifications),
-    CONNECTIONS("settings/connections", "Connections & privacy", "Where your data goes, syncing and other apps", Icons.Rounded.Shield),
-    APPEARANCE("settings/appearance", "Appearance", "Theme, bold text and arranged screens", Icons.Rounded.Palette),
-    ACCOUNT("settings/account", "Account", "Who's signed in, and signing out", Icons.Rounded.AccountCircle),
+    TRACKING("settings/tracking", "What you track", "Your conditions, goals and features", Icons.Rounded.Tune),
+    REMINDERS("settings/reminders-sharing", "Reminders, alerts and sharing", "What tells you, and who can see", Icons.Rounded.Notifications),
+    YOU("settings/you", "Profile and goals", "Height, units, calorie formula, targets", Icons.Rounded.Person),
+    CONNECTIONS("settings/connections", "Connections", "Mealie, the assistant, Home Assistant, the watch", Icons.Rounded.Hub),
+    LOOK("settings/appearance", "Look and account", "Theme, bold text, signing out", Icons.Rounded.Palette),
 }
 
 @Composable
@@ -187,8 +185,8 @@ private enum class Edit { BIRTH_YEAR, HEIGHT, ENERGY, STEPS, ACTIVE, SLEEP, CALO
 /**
  * One Settings page. [water] is whether water is shown; [ai] the assistant's status (null until
  * known, or without one); [mealie] whether Mealie is connected (null until known);
- * [hiddenFromHealth] the features hidden from the Health tab, which open from What you're tracking
- * instead; [arrangedScreens] how many screens the person has arranged.
+ * [hiddenFromHealth] the features hidden from Care, which open from What you track instead;
+ * [arrangedScreens] how many screens the person has arranged.
  */
 @Composable
 fun SettingsScreen(
@@ -229,23 +227,23 @@ fun SettingsScreen(
                 }
                 SettingsPage.REMINDERS -> MenuGroup(null) {
                     NavRow(Icons.Rounded.Notifications, "Reminders", "Doses, refills, habits and appointments", onClick = { onOpen("settings/reminders") })
+                    // Health alerts' settings are on their own page, under what they've found.
+                    if (!LocalReadOnly.current) NavRow(Icons.Rounded.MonitorHeart, "Health alerts", "What it watches, and when it tells you", onClick = { onOpen("alerts") })
                     NavRow(Icons.Rounded.Summarize, "Weekly digest", "When Your week comes, and by email", onClick = { onOpen(DIGEST_SETTINGS) })
                     NavRow(Icons.Rounded.Group, "Sharing", "Let someone you trust see what you choose", onClick = { onOpen("settings/sharing") })
                 }
                 SettingsPage.CONNECTIONS -> ConnectionsSection(settings, ai, mealie, food, actions, onOpen)
-                SettingsPage.APPEARANCE -> {
+                SettingsPage.LOOK -> {
                     AppearanceSection(settings, actions)
                     SectionCard("Arranged screens") {
                         Text(
-                            "Each page with an Arrange button at the top can be arranged: move what matters up, and hide what you don't use. " +
-                                "Today, its quick actions and Health are arranged the same way on the web.",
+                            "Each page with an Arrange button can be arranged: move what matters up, and hide what you don't use. " +
+                                "Today, the + sheet and Care are arranged the same way on the web.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Hint(if (arrangedScreens == 0) "Nothing arranged yet." else "$arrangedScreens ${if (arrangedScreens == 1) "screen" else "screens"} arranged.")
                         OutlinedButton(enabled = arrangedScreens > 0 && !LocalReadOnly.current, onClick = { confirmReset = true }) { Text("Put every screen back as it was") }
                     }
-                }
-                SettingsPage.ACCOUNT -> {
                     SectionCard("Signed in") {
                         Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
                         Hint("${settings.user?.username ?: ""} on ${settings.serverName.ifBlank { settings.server }}")
@@ -305,7 +303,7 @@ private fun YouSection(profile: Profile, units: Units, actions: SettingsActions,
     }
 }
 
-/** The features to turn on, with water under Food and the photo lock under photos; a hidden feature opens from here. */
+/** The features to turn on, with water under Food and the photo lock under photos; one hidden from Care opens from here. */
 @Composable
 private fun FeaturesSection(profile: Profile, water: Boolean, hiddenFromHealth: Set<String>, actions: SettingsActions, onOpen: (String) -> Unit) {
     SectionCard("Features") {
@@ -336,14 +334,14 @@ private fun FeaturesSection(profile: Profile, water: Boolean, hiddenFromHealth: 
     }
 }
 
-/** A feature's switch; one hidden from the Health tab says so, and has a way to open it. */
+/** A feature's switch; one hidden from Care says so, and has a way to open it. */
 @Composable
 private fun FeatureRow(m: Module, on: Boolean, hidden: Boolean, onToggle: (Boolean) -> Unit, onOpen: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().clickable { onToggle(!on) }, verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(m.label, style = MaterialTheme.typography.bodyLarge)
             Text(
-                if (hidden) "Hidden from the Health tab" else ModuleInfo.description(m),
+                if (hidden) "Hidden from Care" else ModuleInfo.description(m),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -374,16 +372,13 @@ private fun GoalsSection(g: Goals, units: Units, water: Boolean, micros: Boolean
 }
 
 /**
- * Connections & privacy: Where your data goes first, then syncing from this phone, then the apps
- * and services the server or this phone talks to: Mealie (with Food on), the AI assistant's
- * settings (where the server offers it), AI connector links, webhooks and Home Assistant, the
- * Pebble watch, and sending to other apps.
+ * Connections: syncing from this phone, then the apps and services the server or this phone talks
+ * to: Mealie (with Food on), the AI assistant's settings (where the server offers it), AI connector
+ * links, webhooks and Home Assistant, the Pebble watch, and sending to other apps. Where your data
+ * goes has its own row on You, and is linked from each of them.
  */
 @Composable
 private fun ConnectionsSection(settings: Settings, ai: AiStatus?, mealie: MealieStatus?, food: Boolean, actions: SettingsActions, onOpen: (String) -> Unit) {
-    MenuGroup(null) {
-        NavRow(Icons.Rounded.Shield, WhereDataGoes.TITLE, "Everything that can leave your server, and pausing it", onClick = { onOpen(WhereDataGoes.ROUTE) })
-    }
     SectionCard("Syncing") {
         LabeledSwitch(
             "Sync in the background", settings.backgroundSync, { v -> actions.updateSettings { it.copy(backgroundSync = v) } },

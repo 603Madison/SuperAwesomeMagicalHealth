@@ -148,7 +148,8 @@ fun ArrangeButton(onClick: () -> Unit) {
  * The sheet: each section with up and down, and a switch to show or hide it; "Put back as it was"
  * resets the screen. Changes save as they're made. [hiddenMeans] says what hiding does here
  * ("Hidden" by default; for quick actions, "Under More"). [defaultHidden] are the ids hidden while
- * the person hasn't arranged the screen (quick actions after the first few).
+ * the person hasn't arranged the screen. With [orderOnly] nothing can be hidden, only moved (the
+ * + sheet's grid, where everything tracked shows).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,9 +160,10 @@ fun ArrangeSheet(
     onDismiss: () -> Unit,
     hiddenMeans: String = "Hidden",
     defaultHidden: Set<String> = emptySet(),
+    orderOnly: Boolean = false,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        ArrangeContent(key, title, items, onDismiss, hiddenMeans, defaultHidden)
+        ArrangeContent(key, title, items, onDismiss, hiddenMeans, defaultHidden, orderOnly)
     }
 }
 
@@ -174,12 +176,13 @@ fun ArrangeContent(
     onDone: () -> Unit,
     hiddenMeans: String = "Hidden",
     defaultHidden: Set<String> = emptySet(),
+    orderOnly: Boolean = false,
 ) {
     val store = layoutStore()
     val scope = rememberCoroutineScope()
     val saved = screenLayout(key)
     val ordered = Layouts.arrange(items, { it.id }, saved)
-    val hidden = saved?.hidden ?: defaultHidden.filter { id -> items.any { it.id == id } }.toSet()
+    val hidden = if (orderOnly) emptySet() else saved?.hidden ?: defaultHidden.filter { id -> items.any { it.id == id } }.toSet()
     var error by remember { mutableStateOf<String?>(null) }
 
     fun send(layout: ScreenLayout) {
@@ -198,7 +201,7 @@ fun ArrangeContent(
         Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Arrange $title", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                Text("Move what matters to the top, and hide what you don't use.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (orderOnly) "Move what you use most to the top." else "Move what matters to the top, and hide what you don't use.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) }
@@ -222,12 +225,14 @@ fun ArrangeContent(
                     IconButton(onClick = { save(ordered.toMutableList().apply { add(i + 1, removeAt(i)) }, hidden) }, enabled = i < ordered.lastIndex) {
                         Icon(Icons.Rounded.KeyboardArrowDown, "Move ${item.label} down")
                     }
-                    IconButton(onClick = { save(ordered, if (isHidden) hidden - item.id else hidden + item.id) }) {
-                        Icon(
-                            if (isHidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
-                            if (isHidden) "Show ${item.label}" else "Hide ${item.label}",
-                            tint = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
-                        )
+                    if (!orderOnly) {
+                        IconButton(onClick = { save(ordered, if (isHidden) hidden - item.id else hidden + item.id) }) {
+                            Icon(
+                                if (isHidden) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                if (isHidden) "Show ${item.label}" else "Hide ${item.label}",
+                                tint = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
                 if (i < ordered.lastIndex) HorizontalDivider(Modifier.padding(start = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)

@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -229,9 +230,12 @@ class AlertsScreenshotTest {
         hasData = true,
     )
 
+    /** The bell with its count, and the most serious alert as Today's first card: one that could need care now, in the danger colours. */
     private fun todayBell(dark: Boolean, name: String) {
-        render(dark) { Frame("today") { TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions(), alerts = 3) } }
+        render(dark) { Frame("today") { TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions(), alerts = 3, alert = urgent) } }
         compose.onNodeWithContentDescription("3 new health alerts").assertExists()
+        assertTrue(compose.onAllNodesWithText("Could need care now").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText(urgent.title).fetchSemanticsNodes().isNotEmpty())
         save(name)
     }
 
