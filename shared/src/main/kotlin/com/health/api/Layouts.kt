@@ -95,6 +95,8 @@ enum class TodaySection(val label: String) {
     BODY("Body"),
     /** The features with nothing logged yet today, as one card of short rows. */
     ALSO("Also today"),
+    /** The day as one timeline: everything logged or recorded, newest first (GET /api/feed). */
+    DAY("Your day"),
 }
 
 /** Today's quick actions, in the default order. The first few for the features that are on show; the rest go under "More". */

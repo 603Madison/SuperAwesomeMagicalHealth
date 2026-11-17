@@ -2453,7 +2453,7 @@ export const LAYOUT_MAX_SECTIONS = 80;
 export type TodaySection =
   | "SCORES" | "UP_NEXT" | "INSIGHTS" | "QUICK" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "NEURO" | "TRANSITION"
   | "VITALS" | "DRINKS" | "SYMPTOMS" | "HABITS" | "HORMONES" | "LIFE_STAGE" | "APPOINTMENTS" | "ACTIVITY" | "SLEEP"
-  | "HEART" | "STRESS" | "FOOD" | "WATER" | "WORKOUTS" | "BODY" | "ALSO";
+  | "HEART" | "STRESS" | "FOOD" | "WATER" | "WORKOUTS" | "BODY" | "ALSO" | "DAY";
 
 /** Today's sections' names, for Arrange (TodaySection.label). */
 export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
@@ -2461,7 +2461,7 @@ export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
   MIND: "Mind", CYCLE: "Cycle", CONTINENCE: "Bladder & bowel", SUPPLIES: "Supplies running low", NEURO: "Autism & ADHD", TRANSITION: "Transition",
   VITALS: "Blood pressure & glucose", DRINKS: "Drinks", SYMPTOMS: "Symptoms", HABITS: "Habits", HORMONES: "Hormone therapy", LIFE_STAGE: "Life stage",
   APPOINTMENTS: "Appointments", ACTIVITY: "Activity", SLEEP: "Sleep", HEART: "Heart", STRESS: "Stress", FOOD: "Food", WATER: "Water",
-  WORKOUTS: "Workouts", BODY: "Body", ALSO: "Also today",
+  WORKOUTS: "Workouts", BODY: "Body", ALSO: "Also today", DAY: "Your day",
 };
 
 export type QuickAction =
