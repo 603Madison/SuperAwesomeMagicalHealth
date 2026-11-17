@@ -66,10 +66,14 @@ object FeatureScreens {
     val TRENDS = key("trends")
     /** The last 24 hours as the devices recorded them (ui/recent). */
     val RECENT = key("recent")
+    /** Two devices side by side, night by night (ui/devices/CompareScreen.kt). */
+    val COMPARE = key("compare")
+    /** Settings › Where your data goes (ui/settings/WhereDataGoes.kt). */
+    val PRIVACY = key("privacy")
 
     val ALL: List<String> = listOf(
         MIND, NEURO, CYCLE, CONTINENCE, CONTINENCE_PROGRESS, SUPPLIES, MEDS_TODAY, MEDS_LABS, VITALS, SYMPTOMS, HABITS,
-        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT,
+        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT, COMPARE, PRIVACY,
     )
 
     private fun key(screen: String) = Layouts.screen(Layouts.ANDROID, screen)

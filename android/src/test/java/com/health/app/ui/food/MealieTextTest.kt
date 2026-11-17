@@ -153,6 +153,8 @@ class MealieTextTest {
         assertEquals("Connected to mealie.home:9000", MealieText.row(connected))
         assertEquals("Your recipes and meal plan in Food", MealieText.row(MealieStatus()))
         assertEquals("Your recipes and meal plan in Food", MealieText.row(null))
+        // Paused in Where your data goes: still connected, and the row says where to turn it back on.
+        assertEquals("Paused in Where your data goes", MealieText.row(connected.copy(paused = true)))
 
         // The first time: the address and a token, both needed.
         assertEquals(MealieConnect("mealie.home:9000", "tok"), MealieText.request(MealieStatus(), MealieEdit.NONE, " mealie.home:9000 ", " tok "))

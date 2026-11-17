@@ -32,8 +32,18 @@ import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.Pill
+import com.health.app.ui.settings.PausedNote
+import com.health.app.ui.settings.WhereDataGoes
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.today.InsightLinks
+
+/** The meal plan while Mealie is paused in Where your data goes: nothing is asked of it, and a way to turn it back on. */
+@Composable
+fun MealPlanPaused(onOpen: () -> Unit) {
+    InfoCard("Meal plan", icon = Icons.AutoMirrored.Rounded.MenuBook) {
+        PausedNote(WhereDataGoes.paused("Mealie"), onOpen = onOpen)
+    }
+}
 
 /**
  * The day's meal plan from Mealie: each planned thing with its meal, added to that meal with one

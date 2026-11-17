@@ -65,6 +65,8 @@ import com.health.app.ui.components.Hint
 import com.health.app.ui.components.Pill
 import com.health.app.ui.components.SearchField
 import com.health.app.ui.components.SectionTitle
+import com.health.app.ui.settings.PausedNote
+import com.health.app.ui.settings.WhereDataGoes
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.log.NumberField
 import com.journeyapps.barcodescanner.ScanContract
@@ -83,10 +85,12 @@ class AddFoodActions(
     val snap: () -> Unit = {},
     /** Opens a page (a Mealie recipe's) in the browser. */
     val openLink: (String) -> Unit = {},
+    /** Opens Settings › Where your data goes (where Mealie or the assistant is paused). */
+    val privacy: () -> Unit = {},
 )
 
 @Composable
-fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
+fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit, onPrivacy: () -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel(key = "add-$date-$meal") { AddFoodViewModel(c, date, meal) }
     val state by vm.state.collectAsState()
@@ -99,7 +103,7 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
         return
     }
     AddFoodScreen(
-        meal, if (LocalReadOnly.current) state.copy(photoOffer = null, mealieOn = false) else state,
+        meal, if (LocalReadOnly.current) state.copy(photoOffer = null, mealieOn = false, mealiePaused = false) else state,
         AddFoodActions(
             back = onDone,
             query = vm::query,
@@ -119,6 +123,7 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit) {
             dismissUnknown = vm::dismissUnknown,
             snap = { snapping = true },
             openLink = { link -> attempt { uri.openUri(link) } },
+            privacy = onPrivacy,
         ),
         numbers = com.health.app.ui.components.foodNumbers(),
         micros = showsMicros(),
@@ -159,6 +164,9 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
             }
         }
         if (state.photoOffer == PhotoOffer.SETTINGS) Hint(FoodPhotoText.SETTINGS_LINE, Modifier.padding(horizontal = 20.dp))
+        if (state.photoOffer == PhotoOffer.PAUSED) {
+            PausedNote(WhereDataGoes.paused(FoodPhotoText.PAUSED_WHAT), Modifier.padding(start = 20.dp, end = 16.dp, top = 2.dp, bottom = 4.dp), onOpen = actions.privacy)
+        }
         state.error?.let { ErrorCard(it, Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         val results = state.results
@@ -193,6 +201,9 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
                         }
                     }
                     mealie.line?.let { line -> item { Hint(line, Modifier.padding(horizontal = 20.dp, vertical = if (recipes.isEmpty()) 0.dp else 8.dp)) } }
+                } else if (state.mealiePaused && state.query.trim().length >= MealieText.MIN_QUERY) {
+                    item { SectionTitle(MealieText.GROUP) }
+                    item { PausedNote(WhereDataGoes.paused("Mealie"), Modifier.padding(start = 20.dp, end = 16.dp), onOpen = actions.privacy) }
                 }
                 item { SectionTitle("Open Food Facts") }
                 when {

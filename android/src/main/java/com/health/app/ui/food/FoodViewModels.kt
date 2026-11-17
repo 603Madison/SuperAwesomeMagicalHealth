@@ -58,6 +58,8 @@ data class FoodState(
     val mealie: Boolean = false,
     /** The day's meal plan in Mealie, once it's come (or why it couldn't). */
     val plan: MealiePlan? = null,
+    /** Mealie is connected but paused in Where your data goes: the card says so, and nothing is asked of it. */
+    val mealiePaused: Boolean = false,
 )
 
 class FoodViewModel(private val c: Container) : ViewModel() {
@@ -105,15 +107,20 @@ class FoodViewModel(private val c: Container) : ViewModel() {
             return
         }
         planJob = viewModelScope.launch {
-            val connected = try {
-                c.api.mealieStatus().connected
+            val status = try {
+                c.api.mealieStatus()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                false
+                null
             }
-            if (!connected) {
-                _state.update { it.copy(mealie = false, plan = null) }
+            if (status?.connected != true) {
+                _state.update { it.copy(mealie = false, plan = null, mealiePaused = false) }
+                return@launch
+            }
+            // Paused by the person: nothing is asked of Mealie, and the card says where to turn it back on.
+            if (status.paused) {
+                _state.update { it.copy(mealie = true, plan = null, mealiePaused = true) }
                 return@launch
             }
             val plan = try {
@@ -123,7 +130,7 @@ class FoodViewModel(private val c: Container) : ViewModel() {
             } catch (e: Exception) {
                 MealiePlan(date.toString(), problem = MealieText.problem(e))
             }
-            _state.update { if (it.date == date) it.copy(mealie = true, plan = plan) else it }
+            _state.update { if (it.date == date) it.copy(mealie = true, plan = plan, mealiePaused = false) else it }
         }
     }
 
@@ -255,6 +262,8 @@ data class AddFoodState(
     /** Mealie's recipes for [query], once they've come. */
     val mealie: MealieRecipes? = null,
     val mealieSearching: Boolean = false,
+    /** Mealie is connected but paused in Where your data goes: it isn't asked, and the search says so. */
+    val mealiePaused: Boolean = false,
 )
 
 class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: Meal) : ViewModel() {
@@ -273,7 +282,9 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
         }
         if (c.viewing.value == null) viewModelScope.launch {
             attempt { c.api.mealieStatus() }.onSuccess { s ->
-                if (s.connected && c.viewing.value == null) {
+                if (s.connected && s.paused && c.viewing.value == null) {
+                    _state.update { it.copy(mealiePaused = true) }
+                } else if (s.connected && c.viewing.value == null) {
                     _state.update { it.copy(mealieOn = true) }
                     // Something typed before the answer came is looked for in Mealie too.
                     if (_state.value.query.isNotBlank()) searchMealie(_state.value.query)

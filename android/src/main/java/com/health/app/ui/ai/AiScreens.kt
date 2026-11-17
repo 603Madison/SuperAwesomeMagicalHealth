@@ -92,6 +92,8 @@ import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
 import com.health.app.ui.components.ProgressBar
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.settings.PausedNote
+import com.health.app.ui.settings.WhereDataGoes
 import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -182,7 +184,7 @@ class AiViewModel(private val c: Container) : ViewModel() {
 }
 
 @Composable
-fun AiRoute(onBack: () -> Unit, onAudit: () -> Unit) {
+fun AiRoute(onBack: () -> Unit, onAudit: () -> Unit, onPrivacy: () -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { AiViewModel(c) }
     val state by vm.state.collectAsState()
@@ -195,7 +197,10 @@ fun AiRoute(onBack: () -> Unit, onAudit: () -> Unit) {
     }
     AiScreen(
         state, profile?.modules ?: c.modules(), onBack,
-        AiActions(agree = { vm.agree(it) }, forget = { vm.forget() }, ask = vm::ask, retry = vm::send, newChat = vm::newChat, choose = vm::choose, audit = onAudit, reload = vm::load),
+        AiActions(
+            agree = { vm.agree(it) }, forget = { vm.forget() }, ask = vm::ask, retry = vm::send, newChat = vm::newChat, choose = vm::choose, audit = onAudit, reload = vm::load,
+            privacy = onPrivacy,
+        ),
     )
 }
 
@@ -229,6 +234,8 @@ class AiActions(
     val choose: (Boolean) -> Unit = {},
     val audit: () -> Unit = {},
     val reload: () -> Unit = {},
+    /** Opens Settings › Where your data goes, where the assistant is paused or resumed. */
+    val privacy: () -> Unit = {},
 )
 
 /** The warning until the person chooses; then the conversation. */
@@ -385,7 +392,8 @@ fun AiChatScreen(state: AiState, status: AiStatus, onBack: () -> Unit, actions: 
     val scroll = rememberScrollState()
     LaunchedEffect(state.turns.size, state.sending) { scroll.animateScrollTo(scroll.maxValue) }
     val consent = status.consent
-    val atLimit = AiText.atLimit(status)
+    // Paused in Where your data goes: nothing can be asked until it's resumed there.
+    val atLimit = AiText.atLimit(status) || status.paused
     Column(Modifier.fillMaxSize().imePadding()) {
         BackBar(onBack, "AI assistant") {
             if (state.turns.isNotEmpty()) IconButton(onClick = actions.newChat) { Icon(Icons.Rounded.AddComment, "Start a new conversation") }
@@ -399,7 +407,7 @@ fun AiChatScreen(state: AiState, status: AiStatus, onBack: () -> Unit, actions: 
                     ". This conversation stays on this phone, and is gone when you leave.",
                 Modifier.padding(horizontal = 4.dp),
             )
-            if (state.turns.isEmpty()) {
+            if (state.turns.isEmpty() && !status.paused) {
                 Text("Ask about your own data", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp).semantics { heading() })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AiText.suggestions(consent?.modules.orEmpty()).forEach { q ->
@@ -418,11 +426,15 @@ fun AiChatScreen(state: AiState, status: AiStatus, onBack: () -> Unit, actions: 
             state.chatError?.let { ErrorCard(it, actionLabel = "Try again", onAction = actions.retry) }
         }
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(AiText.usage(status.usedToday, status.dailyLimit), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            if (status.paused) {
+                PausedNote(WhereDataGoes.paused("The assistant"), Modifier.padding(bottom = 8.dp), onOpen = actions.privacy)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(AiText.usage(status.usedToday, status.dailyLimit), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                }
+                if (status.dailyLimit > 0) ProgressBar(status.usedToday.toFloat() / status.dailyLimit, Modifier.padding(vertical = 4.dp), color = if (atLimit) AppTheme.status.warn else MaterialTheme.colorScheme.primary, height = 4.dp)
+                if (atLimit) Hint("That's today's questions. The assistant is back tomorrow.")
             }
-            if (status.dailyLimit > 0) ProgressBar(status.usedToday.toFloat() / status.dailyLimit, Modifier.padding(vertical = 4.dp), color = if (atLimit) AppTheme.status.warn else MaterialTheme.colorScheme.primary, height = 4.dp)
-            if (atLimit) Hint("That's today's questions. The assistant is back tomorrow.")
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     text, { text = it.take(4000) },

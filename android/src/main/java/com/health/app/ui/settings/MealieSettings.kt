@@ -159,10 +159,12 @@ class MealieActions(
     val edit: (MealieEdit) -> Unit = {},
     val disconnect: () -> Unit = {},
     val reload: () -> Unit = {},
+    /** Opens Settings › Where your data goes, where Mealie is paused or resumed. */
+    val privacy: () -> Unit = {},
 )
 
 @Composable
-fun MealieRoute(onBack: () -> Unit) {
+fun MealieRoute(onBack: () -> Unit, onPrivacy: () -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { MealieViewModel(c) }
     val state by vm.state.collectAsState()
@@ -177,7 +179,7 @@ fun MealieRoute(onBack: () -> Unit) {
     }
     MealieScreen(
         state,
-        MealieActions(url = vm::url, token = vm::token, connect = vm::connect, edit = vm::edit, disconnect = vm::disconnect, reload = vm::load),
+        MealieActions(url = vm::url, token = vm::token, connect = vm::connect, edit = vm::edit, disconnect = vm::disconnect, reload = vm::load, privacy = onPrivacy),
         onBack,
     )
 }
@@ -207,7 +209,12 @@ fun MealieScreen(state: MealieState, actions: MealieActions, onBack: () -> Unit)
                     InfoCard("Your Mealie", icon = Icons.Rounded.CheckCircle, iconTint = AppTheme.status.good) {
                         Text(MealieText.connected(status), style = MaterialTheme.typography.bodyMedium)
                         MealieText.version(status)?.let { Hint(it, Modifier.padding(top = 2.dp)) }
-                        Hint("Your recipes show up when you add food, and each day's plan is on the Food tab.", Modifier.padding(top = 6.dp))
+                        if (status.paused) {
+                            // Still connected, but nothing is asked of it until it's resumed.
+                            PausedNote(WhereDataGoes.PAUSED, Modifier.padding(top = 10.dp), onOpen = actions.privacy)
+                        } else {
+                            Hint("Your recipes show up when you add food, and each day's plan is on the Food tab.", Modifier.padding(top = 6.dp))
+                        }
                         if (state.edit == MealieEdit.NONE) {
                             Spacer(Modifier.height(12.dp))
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -43,8 +43,7 @@ fun YourHealthSettings(onOpen: (String) -> Unit) {
             status == null -> Unit
             !status.available -> Hint("The AI assistant isn't turned on on this server.")
             else -> NavRow(
-                Icons.Rounded.AutoAwesome, "AI assistant",
-                if (status.consent != null) "On: it can look at what you chose" else "Optional. Read what it means before turning it on",
+                Icons.Rounded.AutoAwesome, "AI assistant", com.health.app.ui.ai.AiText.row(status),
                 onClick = { onOpen("settings/ai") },
             )
         }

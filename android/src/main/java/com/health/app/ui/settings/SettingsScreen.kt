@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.MedicalInformation
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Summarize
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material3.AlertDialog
@@ -339,10 +340,12 @@ private fun GoalsSection(g: Goals, units: Units, water: Boolean, micros: Boolean
     }
 }
 
-/** Syncing, other apps, the watch, webhooks, Mealie (with Food on) and the AI assistant. */
+/** Where data goes, syncing, other apps, the watch, webhooks, Mealie (with Food on) and the AI assistant. */
 @Composable
 private fun ConnectionsSection(settings: Settings, ai: AiStatus?, mealie: MealieStatus?, food: Boolean, actions: SettingsActions, onOpen: (String) -> Unit) {
     SectionCard("Connections") {
+        NavRow(Icons.Rounded.Shield, WhereDataGoes.TITLE, "Everything that can leave your server, and pausing it", onClick = { onOpen(WhereDataGoes.ROUTE) })
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LabeledSwitch(
             "Sync in the background", settings.backgroundSync, { v -> actions.updateSettings { it.copy(backgroundSync = v) } },
             subtitle = "About once an hour, your ring, Health Connect and Gadgetbridge send what's new to your server.",
@@ -360,11 +363,7 @@ private fun ConnectionsSection(settings: Settings, ai: AiStatus?, mealie: Mealie
             NavRow(Icons.AutoMirrored.Rounded.MenuBook, "Mealie", com.health.app.ui.food.MealieText.row(mealie), onClick = { onOpen("settings/mealie") })
         }
         if (ai?.available == true) {
-            NavRow(
-                Icons.Rounded.AutoAwesome, "AI assistant",
-                if (ai.consent != null) "On: it can look at what you chose" else "Optional. Read what it means before turning it on",
-                onClick = { onOpen("settings/ai") },
-            )
+            NavRow(Icons.Rounded.AutoAwesome, "AI assistant", com.health.app.ui.ai.AiText.row(ai), onClick = { onOpen("settings/ai") })
         }
     }
 }
