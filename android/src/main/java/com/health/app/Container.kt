@@ -9,6 +9,10 @@ import com.health.app.data.Settings
 import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
+import com.health.app.devices.strap.StrapConduit
+import com.health.app.devices.strap.StrapRecorder
+import com.health.app.devices.strap.StrapService
+import com.health.app.devices.strap.StrapStore
 import com.health.app.devices.vitals.MonitorStore
 import com.health.app.devices.vitals.VitalsConduit
 import com.health.api.Share
@@ -87,8 +91,12 @@ class Container(val context: Context) {
     val monitors = MonitorStore(context)
     val vitalsMonitors = VitalsConduit(context, monitors, zone = ::zone)
 
+    /** The heart rate strap chosen on this phone, and what its recordings have waiting for the server (devices/strap). */
+    val strapStore = StrapStore(context)
+    val strap = StrapConduit(strapStore, syncStore)
+
     val sync = SyncManager(
-        conduits = listOf(colmi, healthConnect, gadgetbridge, vitalsMonitors),
+        conduits = listOf(colmi, healthConnect, gadgetbridge, vitalsMonitors, strap),
         store = syncStore,
         outbox = outbox,
         upload = { api.ingest(it) },
@@ -96,6 +104,14 @@ class Container(val context: Context) {
         onNewData = { dataChanged() },
         account = { settings.value.account },
     )
+
+    /** Records the strap (with [StrapService] keeping the app going), sending what it has about every 15 minutes. */
+    val strapRecorder = StrapRecorder(context, strapStore, scope, upload = { sync.sync(StrapConduit.ID) })
+
+    /** A recording the app was closed during (and Android didn't start again) carries on once the app is open. */
+    fun resumeStrapRecording() {
+        if (settings.value.signedIn && strapStore.recording.value != null && !strapRecorder.running) StrapService.start(context)
+    }
 
     /** Medications kept on the phone for reminders, the reminders themselves, and doses waiting to be sent. */
     val medsCache = MedsCache(context)
@@ -441,6 +457,10 @@ class Container(val context: Context) {
             return // Already signed out: several requests can come back refused at once.
         }
         prefs.signOut()
+        // The strap stops recording, and what it has waiting is forgotten with the rest, or kept under
+        // the account when the sign-out wasn't asked for (needs the strap's cursor: before the sync store goes).
+        strapRecorder.stop(send = false)
+        attempt { strap.signedOut(account, keep = !requested, outbox) }
         syncStore.clear()
         if (requested && account != null) {
             outbox.clear(account)

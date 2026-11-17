@@ -187,6 +187,8 @@ object SharedView {
         Metric.WEIGHT, Metric.BODY_FAT, Metric.WAIST, Metric.HIPS, Metric.CHEST, Metric.BUST, Metric.UNDERBUST, Metric.SHOULDERS,
         Metric.NECK, Metric.UPPER_ARM, Metric.THIGH, Metric.CALF -> Module.BODY
         Metric.BLOOD_PRESSURE_SYSTOLIC, Metric.BLOOD_PRESSURE_DIASTOLIC, Metric.BLOOD_GLUCOSE -> Module.VITALS
+        // A chest strap's irregular-rhythm share: shared with the heart's other readings someone chose to share.
+        Metric.IRREGULAR_RHYTHM -> Module.VITALS
     }
 
     /** Checks a request that carries the header: only reading, and only what can be shared. */

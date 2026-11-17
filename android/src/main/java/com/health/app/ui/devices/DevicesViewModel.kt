@@ -11,6 +11,10 @@ import com.health.app.devices.colmi.ColmiConduit
 import com.health.app.devices.colmi.RingReadingsState
 import com.health.app.devices.gadgetbridge.GadgetbridgeConduit
 import com.health.app.devices.healthconnect.HealthConnectConduit
+import com.health.app.devices.strap.PairedStrap
+import com.health.app.devices.strap.StrapLive
+import com.health.app.devices.strap.StrapRecording
+import com.health.app.devices.strap.StrapService
 import com.health.app.net.choosing
 import com.health.app.net.choosingSleep
 import com.health.app.net.deviceChoices
@@ -46,6 +50,10 @@ data class DevicesState(
     val ringReadings: RingReadingsState = RingReadingsState(),
     /** Readings more than one device measures, and which the person uses (empty until loaded, or if the server can't say). */
     val overlaps: List<Overlap> = emptyList(),
+    /** The heart rate strap chosen on this phone, the recording under way, and what the strap is doing. */
+    val strap: PairedStrap? = null,
+    val strapRecording: StrapRecording? = null,
+    val strapLive: StrapLive = StrapLive(),
 )
 
 class DevicesViewModel(private val c: Container) : ViewModel() {
@@ -60,6 +68,10 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
                     ringReadings = readings,
                 )
             }.collect { _state.value = it }
+        }
+        viewModelScope.launch {
+            combine(c.strapStore.strap, c.strapStore.recording, c.strapRecorder.live) { strap, recording, live -> Triple(strap, recording, live) }
+                .collect { (strap, recording, live) -> _state.update { it.copy(strap = strap, strapRecording = recording, strapLive = live) } }
         }
         viewModelScope.launch { c.syncStore.healthConnectOn.collect { refreshHealthConnect() } }
         viewModelScope.launch { c.revision.drop(1).collect { loadServer() } }
@@ -149,6 +161,23 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
 
     fun forgetRing() = c.colmi.forget()
 
+    /** Starts recording the strap (the app keeps going in the background meanwhile). */
+    fun recordStrap() {
+        if (c.strapStore.strap.value == null) return
+        if (!StrapService.start(c.context)) c.tell("Couldn't start recording. Try again with the app open.")
+    }
+
+    fun stopStrap() {
+        c.strapRecorder.stop()
+        c.tell("Stopped recording; sending what it recorded")
+    }
+
+    /** Forgets the strap (stopping a recording); what it recorded still goes to the server. */
+    fun forgetStrap() {
+        c.strapRecorder.stop()
+        c.strapStore.forget()
+    }
+
     fun sync(id: String? = null) {
         c.syncNow(id)
     }
@@ -166,6 +195,9 @@ class DevicesViewModel(private val c: Container) : ViewModel() {
                     c.tell(if (deleteData) "Forgot ${device.name} and its data" else "Forgot ${device.name}")
                     if (device.kind == com.health.api.DeviceKind.COLMI_RING && c.syncStore.ring.value?.address == device.identifier) {
                         c.colmi.forget()
+                    }
+                    if (device.kind == com.health.api.DeviceKind.HEART_RATE_STRAP && c.strapStore.strap.value?.address == device.identifier) {
+                        forgetStrap()
                     }
                     loadServer()
                     c.dataChanged()

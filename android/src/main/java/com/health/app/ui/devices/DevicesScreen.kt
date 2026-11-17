@@ -1,7 +1,10 @@
 package com.health.app.ui.devices
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -55,6 +58,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -78,11 +82,17 @@ import com.health.app.ui.components.SectionTitle
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.theme.AppTheme
 import kotlinx.coroutines.delay
+import java.time.ZoneId
 
 class DevicesActions(
     val sync: (String?) -> Unit = {},
     val findRing: () -> Unit = {},
     val forgetRing: () -> Unit = {},
+    /** The heart rate strap: finding one, recording it, and forgetting it. */
+    val findStrap: () -> Unit = {},
+    val recordStrap: () -> Unit = {},
+    val stopStrap: () -> Unit = {},
+    val forgetStrap: () -> Unit = {},
     val connectHealthConnect: () -> Unit = {},
     val healthConnectOff: () -> Unit = {},
     val installHealthConnect: () -> Unit = {},
@@ -98,7 +108,7 @@ class DevicesActions(
 )
 
 @Composable
-fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecent: (String) -> Unit = {}) {
+fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecent: (String) -> Unit = {}, onFindStrap: () -> Unit = {}) {
     val c = appContainer()
     val context = LocalContext.current
     // The last 24 hours are only ever the person's own.
@@ -116,6 +126,19 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecen
         if (result.values.all { it }) onFindRing() else c.tell("The app needs Bluetooth permission to find your ring")
     }
     val file = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::chooseGadgetbridge) }
+    val strapBluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.all { it }) onFindStrap() else c.tell("The app needs Bluetooth permission to find your strap")
+    }
+    // Recording shows a notification (with its Stop button): asked for once, and recording starts either way.
+    val notifyThenRecord = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.recordStrap() }
+    fun recordStrap() {
+        val ask = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (ask) notifyThenRecord.launch(Manifest.permission.POST_NOTIFICATIONS) else vm.recordStrap()
+    }
+    val recordBluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result.values.all { it }) recordStrap() else c.tell("The app needs Bluetooth permission to record your strap")
+    }
     LaunchedEffect(Unit) {
         // Coming back from Health Connect's screens.
         while (true) {
@@ -131,6 +154,10 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecen
                 if (ColmiConduit.hasPermission(context)) onFindRing() else bluetooth.launch(ColmiConduit.permissions())
             },
             forgetRing = vm::forgetRing,
+            findStrap = { if (ColmiConduit.hasPermission(context)) onFindStrap() else strapBluetooth.launch(ColmiConduit.permissions()) },
+            recordStrap = { if (ColmiConduit.hasPermission(context)) recordStrap() else recordBluetooth.launch(ColmiConduit.permissions()) },
+            stopStrap = vm::stopStrap,
+            forgetStrap = vm::forgetStrap,
             connectHealthConnect = { healthConnect.launch(vm.healthConnectPermissions()) },
             healthConnectOff = vm::healthConnectOff,
             installHealthConnect = {
@@ -154,11 +181,18 @@ fun DevicesRoute(onFindRing: () -> Unit, onFindMonitor: () -> Unit = {}, onRecen
             find = { if (ColmiConduit.hasPermission(context)) onFindMonitor() else monitorBluetooth.launch(ColmiConduit.permissions()) },
             forget = { kind -> c.monitors.forget(kind) },
         ),
+        zone = c.zone(),
     )
 }
 
 @Composable
-fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = System.currentTimeMillis(), monitors: MonitorsUi = MonitorsUi()) {
+fun DevicesScreen(
+    state: DevicesState,
+    actions: DevicesActions,
+    now: Long = System.currentTimeMillis(),
+    monitors: MonitorsUi = MonitorsUi(),
+    zone: ZoneId = ZoneId.systemDefault(),
+) {
     var renaming by remember { mutableStateOf<Device?>(null) }
     var forgetting by remember { mutableStateOf<Device?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -175,6 +209,7 @@ fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = Syst
                 Hint("${state.outbox} ${if (state.outbox == 1) "upload waits" else "uploads wait"} for the server; they're sent at the next sync.")
             }
             RingCard(state, actions, now)
+            StrapCard(state, actions, now, zone)
             HealthConnectCard(state, actions, now)
             GadgetbridgeCard(state, actions, now)
             // Blood pressure monitors and glucose meters (ui/tracking).
@@ -236,7 +271,7 @@ fun DevicesScreen(state: DevicesState, actions: DevicesActions, now: Long = Syst
 
 /** How a source's last sync went, in a line. */
 @Composable
-private fun StatusLine(status: ConduitStatus?, running: Boolean, now: Long) {
+internal fun StatusLine(status: ConduitStatus?, running: Boolean, now: Long) {
     val (icon, color, text) = when {
         running -> Triple(Icons.Rounded.Sync, MaterialTheme.colorScheme.primary, "Syncing…")
         status?.lastSyncAt == null -> Triple(null, MaterialTheme.colorScheme.onSurfaceVariant, "Not synced yet")
@@ -261,7 +296,7 @@ private fun StatusLine(status: ConduitStatus?, running: Boolean, now: Long) {
 }
 
 @Composable
-private fun SourceHeader(icon: ImageVector, title: String, subtitle: String) {
+internal fun SourceHeader(icon: ImageVector, title: String, subtitle: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(44.dp)) {
             Box(contentAlignment = Alignment.Center) { Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }

@@ -16,6 +16,13 @@
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!--
+        A heart rate strap recording through the night, screen off: a foreground service for the
+        connected strap, and the phone kept awake enough to reconnect and send (StrapService).
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Barcodes on food packaging. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -162,6 +169,12 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- Recording a heart rate strap ("Recording heart rate", with its Stop button). -->
+        <service
+            android:name=".devices.strap.StrapService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- Reports and exports handed to the share sheet. -->
         <provider
