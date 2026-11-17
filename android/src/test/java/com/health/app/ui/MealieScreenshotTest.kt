@@ -24,7 +24,6 @@ import com.health.api.FoodSource
 import com.health.api.FoodSuggestion
 import com.health.api.FoodSuggestions
 import com.health.api.LayoutPrefs
-import com.health.api.Layouts
 import com.health.api.Meal
 import com.health.api.MealiePlan
 import com.health.api.MealiePlanEntry
@@ -36,7 +35,6 @@ import com.health.api.Nutrients
 import com.health.api.NutritionTarget
 import com.health.api.Profile
 import com.health.api.Role
-import com.health.api.ScreenLayout
 import com.health.api.Units
 import com.health.api.User
 import com.health.app.data.Palette
@@ -56,6 +54,7 @@ import com.health.app.ui.settings.MealieActions
 import com.health.app.ui.settings.MealieScreen
 import com.health.app.ui.settings.MealieState
 import com.health.app.ui.settings.SettingsActions
+import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.theme.HealthTheme
 import org.junit.Assert.assertEquals
@@ -100,7 +99,7 @@ class MealieScreenshotTest {
     private fun Screen(dark: Boolean, tab: String, layout: LayoutPrefs, readOnly: Boolean, content: @Composable () -> Unit) {
         HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
             CompositionLocalProvider(LocalLayoutStore provides remember { MemoryLayoutStore(layout) }, LocalReadOnly provides readOnly) {
-                AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.DEFAULT), content = content)
+                AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
             }
         }
     }
@@ -204,14 +203,12 @@ class MealieScreenshotTest {
         assertEquals(1, gone)
     }
 
-    /** Settings' Connections, with Mealie's row (Food is on): the other sections hidden, to see it. */
+    /** Connections & privacy, with Mealie's row (Food is on). */
     @Test
     fun settingsRow() {
         val settings = Settings(server = "https://health.home.arpa", token = "t", serverName = "Health at home", user = User("u1", "sam", "Sam", Role.USER, createdAt = 0))
-        val others = setOf("you", "features", "goals", "reminders", "appearance", "account")
-        val layout = LayoutPrefs(mapOf(Layouts.screen(Layouts.ANDROID, "settings") to ScreenLayout(hidden = others)))
-        render(tab = "settings", layout = layout) {
-            SettingsScreen(settings, Profile(timezone = "Europe/London", modules = Module.DEFAULT), SettingsActions(), mealie = connected)
+        render(tab = "settings") {
+            SettingsScreen(SettingsPage.CONNECTIONS, settings, Profile(timezone = "Europe/London", modules = Module.DEFAULT), SettingsActions(), mealie = connected)
         }
         save("mealie_settings_row")
     }

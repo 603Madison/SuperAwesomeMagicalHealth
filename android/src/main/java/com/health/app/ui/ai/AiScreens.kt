@@ -217,11 +217,55 @@ fun AiAuditRoute(onBack: () -> Unit) {
     AiAuditScreen(state.audit, c.zone(), onBack, onForget = { vm.forget(); onBack() }, hasConsent = state.status?.consent != null)
 }
 
+/**
+ * Connections & privacy › AI assistant: whether it's on for this person and what it may look at,
+ * or turning it on (the chat itself is the Assistant, in More).
+ */
 @Composable
-private fun NotWhileViewing(onBack: () -> Unit) {
+fun AiSettingsRoute(onBack: () -> Unit) {
+    val c = appContainer()
+    val vm = viewModel { AiViewModel(c) }
+    val state by vm.state.collectAsState()
+    val profile by c.profile.collectAsState()
+    LaunchedEffect(Unit) { vm.load() }
+    if (LocalReadOnly.current) {
+        NotWhileViewing(onBack, SETTINGS_TITLE)
+        return
+    }
+    val status = state.status
+    when {
+        status == null || !status.available -> AiUnavailable(state, onBack, SETTINGS_TITLE, vm::load)
+        else -> AiConsentScreen(
+            status, profile?.modules ?: c.modules(), onBack,
+            onAgree = { vm.agree(it) },
+            onForget = if (status.consent != null) ({ vm.forget() }) else null,
+        )
+    }
+}
+
+/** The chat's name (More › Assistant), and its settings' (Connections & privacy › AI assistant). */
+const val ASSISTANT_TITLE = "Assistant"
+private const val SETTINGS_TITLE = "AI assistant"
+
+@Composable
+private fun NotWhileViewing(onBack: () -> Unit, title: String = ASSISTANT_TITLE) {
     Column(Modifier.fillMaxSize()) {
-        BackBar(onBack, "AI assistant")
+        BackBar(onBack, title)
         EmptyState(Icons.Rounded.Lock, "Only for your own data", "Go back to your own data to use the assistant.")
+    }
+}
+
+/** Still loading, couldn't load, or not on this server. */
+@Composable
+private fun AiUnavailable(state: AiState, onBack: () -> Unit, title: String, reload: () -> Unit) {
+    val status = state.status
+    Column(Modifier.fillMaxSize()) {
+        BackBar(onBack, title)
+        when {
+            status == null && state.loading -> Loading()
+            status == null -> ErrorCard(state.error ?: "Couldn't reach your server", Modifier.padding(16.dp), actionLabel = "Try again", onAction = reload)
+            else -> EmptyState(Icons.Rounded.AutoAwesome, "Not on this server", "The AI assistant isn't turned on on this server.")
+        }
     }
 }
 
@@ -243,15 +287,7 @@ class AiActions(
 fun AiScreen(state: AiState, on: Set<Module>, onBack: () -> Unit, actions: AiActions) {
     val status = state.status
     when {
-        status == null && state.loading -> Column(Modifier.fillMaxSize()) { BackBar(onBack, "AI assistant"); Loading() }
-        status == null -> Column(Modifier.fillMaxSize()) {
-            BackBar(onBack, "AI assistant")
-            ErrorCard(state.error ?: "Couldn't reach your server", Modifier.padding(16.dp), actionLabel = "Try again", onAction = actions.reload)
-        }
-        !status.available -> Column(Modifier.fillMaxSize()) {
-            BackBar(onBack, "AI assistant")
-            EmptyState(Icons.Rounded.AutoAwesome, "Not on this server", "The AI assistant isn't turned on on this server.")
-        }
+        status == null || !status.available -> AiUnavailable(state, onBack, ASSISTANT_TITLE, actions.reload)
         status.consent == null || state.choosing -> AiConsentScreen(
             status, on,
             onBack = { if (state.choosing) actions.choose(false) else onBack() },
@@ -395,7 +431,7 @@ fun AiChatScreen(state: AiState, status: AiStatus, onBack: () -> Unit, actions: 
     // Paused in Where your data goes: nothing can be asked until it's resumed there.
     val atLimit = AiText.atLimit(status) || status.paused
     Column(Modifier.fillMaxSize().imePadding()) {
-        BackBar(onBack, "AI assistant") {
+        BackBar(onBack, ASSISTANT_TITLE) {
             if (state.turns.isNotEmpty()) IconButton(onClick = actions.newChat) { Icon(Icons.Rounded.AddComment, "Start a new conversation") }
             IconButton(onClick = { actions.choose(true) }) { Icon(Icons.Rounded.Tune, "Change what it can look at") }
             IconButton(onClick = actions.audit) { Icon(Icons.Rounded.History, "What it looked at, and when") }

@@ -130,7 +130,7 @@ class ForYouScreenshotTest {
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
                 CompositionLocalProvider(LocalLayoutStore provides remember { MemoryLayoutStore(layout) }, LocalReadOnly provides readOnly) {
-                    AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(modules), content = content)
+                    AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
                 }
             }
         }

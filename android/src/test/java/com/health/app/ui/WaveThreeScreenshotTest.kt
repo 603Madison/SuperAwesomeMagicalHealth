@@ -132,7 +132,7 @@ class WaveThreeScreenshotTest {
 
     @Composable
     private fun Frame(content: @Composable () -> Unit) {
-        AppFrame(selected = "health", snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.entries.toSet()), content = content)
+        AppFrame(selected = "health", snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {
@@ -381,7 +381,7 @@ class WaveThreeScreenshotTest {
 
     @Test
     fun hubWithEverything() {
-        render { Frame { HubScreen(Module.entries.toSet(), false, showMeasurements = true) {} } }
+        render { Frame { HubScreen(Module.entries.toSet(), showMeasurements = true) {} } }
         save("hub_wave3")
     }
 }

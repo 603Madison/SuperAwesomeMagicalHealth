@@ -17,7 +17,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.health.api.ExerciseResult
-import com.health.api.Module
 import com.health.api.VoiceGoal
 import com.health.api.VoicePlan
 import com.health.app.data.Palette
@@ -94,7 +93,7 @@ class VoiceScreenshotTest {
 
     @Composable
     private fun Frame(content: @Composable () -> Unit) {
-        AppFrame(selected = "health", snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.entries.toSet()), content = content)
+        AppFrame(selected = "health", snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {

@@ -149,7 +149,7 @@ class PrivacyScreenshotTest {
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
                 CompositionLocalProvider(LocalArrangements provides layout) {
-                    AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.DEFAULT), content = content)
+                    AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
                 }
             }
         }
@@ -176,13 +176,13 @@ class PrivacyScreenshotTest {
         shows("On · 2 links")
         shows("Turned off on this server")
         shows("Always on: it's how you sign in")
-        shows("Set up in Settings › Integrations")
+        shows("Set up in Webhooks & Home Assistant")
         shows("Choose a place in Symptoms")
         shows("api.anthropic.com")
         shows("Everything else stays on this server")
         shows("This app only talks to your server")
         shows("https://health.home.arpa")
-        shows("Written back to it, as you chose in Export: weight and workouts.")
+        shows("Written back to it, as you chose in Send to other apps: weight and workouts.")
         save("privacy-light")
     }
 
@@ -223,8 +223,8 @@ class PrivacyScreenshotTest {
         // Signing in, and what isn't set up, have no switch.
         assertEquals(0, compose.onAllNodes(isToggleable() and hasText("Signing in")).fetchSemanticsNodes().size)
         assertEquals(0, compose.onAllNodes(isToggleable() and hasText("Webhooks")).fetchSemanticsNodes().size)
-        compose.onAllNodesWithText("Set up in Settings › Integrations")[0].performScrollTo().performClick()
-        compose.onNodeWithText("Writing: Export").performScrollTo().performClick()
+        compose.onAllNodesWithText("Set up in Webhooks & Home Assistant")[0].performScrollTo().performClick()
+        compose.onNodeWithText("Writing: Send to other apps").performScrollTo().performClick()
         assertEquals(listOf("settings/integrations", "settings/export"), opened)
     }
 

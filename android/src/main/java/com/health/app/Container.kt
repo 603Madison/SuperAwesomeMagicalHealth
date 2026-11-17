@@ -23,6 +23,7 @@ import com.health.app.net.continenceSettings
 import com.health.app.net.continenceWearing
 import com.health.app.net.fields
 import com.health.app.net.layout
+import com.health.app.net.saveAllLayouts
 import com.health.app.net.saveScreenLayout
 import com.health.app.net.serverHealth
 import com.health.app.net.habitsForReminders
@@ -196,6 +197,18 @@ class Container(val context: Context) {
         _layout.value = before.copy(screens = if (screen.order.isEmpty() && screen.hidden.isEmpty()) before.screens - key else before.screens + (key to screen))
         try {
             _layout.value = api.saveScreenLayout(key, screen)
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            _layout.value = before
+            throw e
+        }
+    }
+
+    /** Puts every arranged screen back as it was, in both apps (Settings › Appearance): shown at once, undone if the server says no. */
+    suspend fun resetLayouts() {
+        val before = _layout.value
+        _layout.value = com.health.api.LayoutPrefs()
+        try {
+            _layout.value = api.saveAllLayouts(com.health.api.LayoutPrefs())
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             _layout.value = before
             throw e

@@ -22,7 +22,6 @@ import com.health.app.ui.components.mergeOrder
 import com.health.app.ui.food.FoodSections
 import com.health.app.ui.modules.hubRows
 import com.health.app.ui.settings.ExportState
-import com.health.app.ui.settings.SettingsSections
 import com.health.app.ui.settings.WaterSetting
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -196,17 +195,21 @@ class TodayLayoutTest {
     }
 
     @Test
-    fun `the Health tab lists the features that are on, then devices and conditions, by shared ids`() {
-        val rows = hubRows(setOf(Module.ACTIVITY, Module.BODY, Module.MIND, Module.CYCLE), showDevices = true, showMeasurements = true)
-        assertEquals(listOf("MIND", "CYCLE", "BODY", NavPage.DEVICES.name, NavPage.CONDITIONS.name), rows.map { it.id })
+    fun `the Health tab lists Food, the features that are on and body measurements, by the web's ids`() {
+        val rows = hubRows(setOf(Module.ACTIVITY, Module.NUTRITION, Module.BODY, Module.MIND, Module.CYCLE), showMeasurements = true)
+        // Food is the web sidebar's FOOD; body measurements its BODY (the Body page). Activity and sleep are in Trends.
+        assertEquals(listOf(NavPage.FOOD.name, "MIND", "CYCLE", "BODY"), rows.map { it.id })
+        assertEquals(listOf("food", "mind", "cycle", "measurements"), rows.map { it.route })
+        // No Devices and no conditions here any more: they're in More.
+        assertTrue(rows.none { it.id == NavPage.DEVICES.name || it.id == NavPage.CONDITIONS.name })
         val shown = Layouts.visible(rows, { it.id }, ScreenLayout(listOf("CYCLE"), hidden = setOf("MIND")))
-        assertEquals(listOf("CYCLE", "BODY", NavPage.DEVICES.name, NavPage.CONDITIONS.name), shown.map { it.id })
+        assertEquals(listOf(NavPage.FOOD.name, "CYCLE", "BODY"), shown.map { it.id })
+        // Without the measurements' fields, no body row.
+        assertEquals(listOf(NavPage.FOOD.name, "MIND", "CYCLE"), hubRows(setOf(Module.NUTRITION, Module.BODY, Module.MIND, Module.CYCLE), showMeasurements = false).map { it.id })
     }
 
     @Test
     fun `settings and food keep stable section ids`() {
-        assertEquals(listOf("you", "features", "goals", "reminders", "connections", "appearance", "account"), SettingsSections.ITEMS.map { it.id })
-        assertEquals("android.settings", SettingsSections.KEY)
         assertEquals(listOf("ideas", "totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true).map { it.id })
         // Ideas are for today only.
         assertEquals(listOf("totals", "breakfast", "lunch", "dinner", "snack", "water", "drinks"), FoodSections.items(water = true, ideas = false).map { it.id })

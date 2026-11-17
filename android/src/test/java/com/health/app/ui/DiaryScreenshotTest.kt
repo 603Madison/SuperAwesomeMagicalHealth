@@ -140,7 +140,7 @@ class DiaryScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(all), content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     /** A form as its bottom sheet draws it. */

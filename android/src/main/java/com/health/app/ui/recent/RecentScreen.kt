@@ -58,7 +58,7 @@ import com.health.app.net.ServerException
 import com.health.app.net.recent
 import com.health.app.ui.Format
 import com.health.app.ui.care.LocalReadOnly
-import com.health.app.ui.components.BackBar
+import com.health.app.ui.components.PageHeader
 import com.health.app.ui.components.CHART_GUTTER
 import com.health.app.ui.components.EmptyState
 import com.health.app.ui.components.ErrorCard
@@ -177,7 +177,8 @@ class RecentViewModel(private val c: Container, device: String?) : ViewModel() {
 
 /** What the page can do, as callbacks (so it can be drawn with sample data). */
 class RecentActions(
-    val back: () -> Unit = {},
+    /** Back, on the page a device opens from Devices; none on the 24 hours tab itself. */
+    val back: (() -> Unit)? = null,
     val choose: (String?) -> Unit = {},
     val refresh: () -> Unit = {},
     val retry: () -> Unit = {},
@@ -185,7 +186,7 @@ class RecentActions(
 )
 
 @Composable
-fun RecentRoute(device: String?, onBack: () -> Unit) {
+fun RecentRoute(device: String?, onBack: (() -> Unit)? = null) {
     val c = appContainer()
     val vm = viewModel(key = "recent:${device.orEmpty()}") { RecentViewModel(c, device) }
     val state by vm.state.collectAsState()
@@ -208,7 +209,8 @@ fun RecentScreen(state: RecentState, units: Units, zone: ZoneId, actions: Recent
     val sections = if (readOnly || readings == null) emptyList() else Recent.sections(readings)
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = { if (!readOnly) actions.refresh() }, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            BackBar(actions.back, "Last 24 hours", subtitle = "As your devices recorded it") {
+            // A tab of its own (large, no way back), or a device's page from Devices.
+            PageHeader("Last 24 hours", "As your devices recorded it", actions.back, large = actions.back == null) {
                 ArrangeAction(FeatureScreens.RECENT, "Last 24 hours", sections)
             }
             when {

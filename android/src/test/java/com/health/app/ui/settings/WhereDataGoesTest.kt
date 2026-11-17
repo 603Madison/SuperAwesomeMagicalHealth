@@ -44,7 +44,7 @@ class WhereDataGoesTest {
         assertEquals("settings/mealie", WhereDataGoes.link("settings.connections")?.route)
         assertEquals("settings/ai", WhereDataGoes.link("settings.ai")?.route)
         assertEquals("settings/integrations", WhereDataGoes.link("settings.integrations")?.route)
-        assertEquals("digest", WhereDataGoes.link("settings.digest")?.route)
+        assertEquals("settings/digest", WhereDataGoes.link("settings.digest")?.route)
         assertEquals("settings/sharing", WhereDataGoes.link("settings.sharing")?.route)
         assertEquals("symptoms", WhereDataGoes.link("settings.profile")?.route)
         // Connector links and browser notifications are made on the server's web page: no link.
@@ -90,7 +90,7 @@ class WhereDataGoesTest {
     @Test
     fun `this phone's part says what's read and what's written back`() {
         assertEquals("Nothing is written back to it.", WhereDataGoes.healthConnectWrites(emptyList()))
-        assertTrue(WhereDataGoes.healthConnectWrites(listOf("Weight", "Workouts")).startsWith("Written back to it, as you chose in Export: weight and workouts."))
+        assertTrue(WhereDataGoes.healthConnectWrites(listOf("Weight", "Workouts")).startsWith("Written back to it, as you chose in Send to other apps: weight and workouts."))
         assertEquals("weight, water and drinks and workouts", WhereDataGoes.list(listOf("weight", "water and drinks", "workouts")))
         assertTrue(WhereDataGoes.healthConnectRead(true).startsWith("Read on this phone"))
         assertTrue(WhereDataGoes.gadgetbridge("Gadgetbridge.db").contains("(Gadgetbridge.db). Nothing is written to it."))

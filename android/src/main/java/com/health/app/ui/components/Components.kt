@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,28 +94,70 @@ fun Backdrop(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     }
 }
 
-/** A tab's title, large and left-aligned over the backdrop, with its actions on the right. */
+/**
+ * The way back from the page on show, given by the app (Root.kt) to every page that isn't one of
+ * the five tabs' own; null on a tab, which has nothing to go back to. [ScreenTitle] shows it.
+ */
+val LocalBack = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/**
+ * Every page's header, one pattern throughout: back on the left where there's somewhere to go
+ * back to, the title (large at the top of a tab or a feature, smaller on the pages within), a
+ * short subtitle, and the page's actions on the right.
+ */
 @Composable
-fun ScreenTitle(title: String, subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+fun PageHeader(title: String?, subtitle: String? = null, onBack: (() -> Unit)? = null, large: Boolean = false, actions: @Composable RowScope.() -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().padding(
+            start = if (onBack != null) 4.dp else 20.dp,
+            end = 4.dp,
+            top = if (large) 12.dp else 4.dp,
+            bottom = if (large) 6.dp else 4.dp,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+        Column(Modifier.weight(1f).padding(start = if (onBack != null) 4.dp else 0.dp, end = 4.dp)) {
+            val style = when {
+                !large -> MaterialTheme.typography.titleLarge
+                onBack != null -> MaterialTheme.typography.headlineSmall
+                else -> MaterialTheme.typography.headlineMedium
+            }
+            Text(title.orEmpty(), style = style, maxLines = if (large) 2 else 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
+            subtitle?.let {
+                Text(
+                    it, style = if (large) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (large) 2 else 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         actions()
     }
 }
 
-/** A page opened from a tab: back on the left, actions on the right; a short [subtitle] under the title. */
+/** The top of a tab, or of a feature's home: a large title, with back where the app gives one ([LocalBack]). */
 @Composable
-fun BackBar(onBack: (() -> Unit)?, title: String? = null, subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-        Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-            Text(title.orEmpty(), style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+fun ScreenTitle(title: String, subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {}) =
+    PageHeader(title, subtitle, LocalBack.current, large = true, actions = actions)
+
+/** A page within: back on the left (none when [onBack] is null), actions on the right; a short [subtitle] under the title. */
+@Composable
+fun BackBar(onBack: (() -> Unit)?, title: String? = null, subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {}) =
+    PageHeader(title, subtitle, onBack, large = false, actions = actions)
+
+/** A titled group of menu rows ([com.health.app.ui.modules.NavRow]) in one card: More, the Settings pages, Health. */
+@Composable
+fun MenuGroup(title: String?, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxWidth()) {
+        if (title != null) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp).semantics { heading() },
+            )
         }
-        actions()
+        AppCard(padding = 0.dp) { Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), content = content) }
     }
 }
 

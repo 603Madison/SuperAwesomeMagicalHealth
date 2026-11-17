@@ -86,7 +86,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /*
- * Settings › Where your data goes: each way something about the person can leave their server, as
+ * Connections & privacy › Where your data goes: each way something about the person can leave their server, as
  * the server lists it (GET /api/privacy), with a switch to pause or resume the ones that are set
  * up; then what this phone does (its Bluetooth devices, Health Connect, Gadgetbridge, and that the
  * app talks only to the server). Arranged under android.privacy. Only ever the person's own.
@@ -311,9 +311,9 @@ private fun OnThisPhone(phone: WhereDataGoes.Phone, actions: WhereActions) {
             Text(WhereDataGoes.healthConnectRead(phone.healthConnect), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(6.dp))
             Text(WhereDataGoes.healthConnectWrites(phone.writes), style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 2.dp).offset(x = (-12).dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 2.dp).offset(x = (-12).dp)) {
                 TextButton(onClick = { actions.open("devices") }) { Text("Reading: Devices") }
-                TextButton(onClick = { actions.open("settings/export") }) { Text("Writing: Export") }
+                TextButton(onClick = { actions.open("settings/export") }) { Text("Writing: $SEND_TO_APPS") }
             }
         }
         InfoCard("Gadgetbridge", icon = Icons.Rounded.Description) {

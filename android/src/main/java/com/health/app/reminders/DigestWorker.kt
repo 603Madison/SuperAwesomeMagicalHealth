@@ -102,7 +102,7 @@ class DigestWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             )
             val notification = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Your week in health is ready")
+                .setContentTitle("Your week is ready")
                 .setContentText("Tap to read it.")
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(open)

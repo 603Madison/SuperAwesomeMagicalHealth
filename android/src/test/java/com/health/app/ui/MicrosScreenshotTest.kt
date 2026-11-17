@@ -89,7 +89,7 @@ class MicrosScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.DEFAULT), content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {

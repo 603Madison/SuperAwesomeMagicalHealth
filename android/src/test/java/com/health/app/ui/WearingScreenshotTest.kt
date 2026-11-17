@@ -112,7 +112,7 @@ class WearingScreenshotTest {
                     LocalLayoutStore provides remember { MemoryLayoutStore(layout) }, LocalReadOnly provides readOnly,
                     com.health.app.ui.modules.LocalArrangements provides layout.takeIf { it.screens.isNotEmpty() },
                 ) {
-                    AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(all), content = content)
+                    AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
                 }
             }
         }

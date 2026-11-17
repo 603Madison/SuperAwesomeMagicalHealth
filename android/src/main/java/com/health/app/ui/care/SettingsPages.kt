@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Summarize
@@ -46,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.health.api.Digest
 import com.health.api.DigestPrefs
-import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.ReminderPrefs
 import com.health.app.attempt
@@ -60,6 +57,7 @@ import com.health.app.ui.components.Hint
 import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
+import com.health.app.ui.components.MenuGroup
 import com.health.app.ui.components.SectionCard
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.modules.NavRow
@@ -68,19 +66,6 @@ import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.format.TextStyle
-
-/** Settings' links to the pages for reminders, the digest, sharing, reports, the watch and integrations. */
-@Composable
-fun MoreSettings(onOpen: (String) -> Unit) {
-    SectionCard("More") {
-        NavRow(Icons.Rounded.Notifications, "Reminders", "Doses, refills, habits and appointments", onClick = { onOpen("settings/reminders") })
-        NavRow(Icons.Rounded.Summarize, "Weekly digest", "Your week in health, on your chosen day", onClick = { onOpen("digest") })
-        NavRow(Icons.Rounded.Group, "Sharing", "Let someone you trust see what you choose", onClick = { onOpen("settings/sharing") })
-        NavRow(Icons.Rounded.Description, "Reports and export", "A PDF for your doctor, or all your data", onClick = { onOpen("reports") })
-        NavRow(Icons.Rounded.Watch, "Pebble watch", "Today's scores and one-tap logging on your wrist", onClick = { onOpen("settings/watch") })
-        NavRow(Icons.Rounded.Hub, "Integrations", "Webhooks and Home Assistant", onClick = { onOpen("settings/integrations") })
-    }
-}
 
 // ---------------------------------------------------------------- Reminders
 
@@ -201,13 +186,12 @@ fun RemindersScreen(profile: Profile?, onBack: () -> Unit, canNotify: Boolean = 
     }
 }
 
-// ---------------------------------------------------------------- Weekly digest
+// ---------------------------------------------------------------- Your week, and the weekly digest's settings
 
+/** Your week (More › Your records): the latest digest, and a way to its settings. */
 @Composable
-fun DigestRoute(onBack: () -> Unit) {
+fun DigestRoute(onBack: () -> Unit, onSettings: () -> Unit) {
     val c = appContainer()
-    val profile by c.profile.collectAsState()
-    val scope = rememberCoroutineScope()
     var digest by remember { mutableStateOf<Digest?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -215,78 +199,98 @@ fun DigestRoute(onBack: () -> Unit) {
         attempt { c.ui.latestDigest() }.onSuccess { digest = it }.onFailure { error = it.message ?: "Couldn't load your digest" }
         loading = false
     }
-    DigestScreen(
-        digest, loading, error, profile, onBack,
+    DigestScreen(digest, loading, error, onBack, onSettings.takeIf { !LocalReadOnly.current })
+}
+
+/** Your week: the week against the one before; [onSettings] opens the weekly digest's settings. */
+@Composable
+fun DigestScreen(digest: Digest?, loading: Boolean, error: String?, onBack: (() -> Unit)?, onSettings: (() -> Unit)? = null) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+        BackBar(onBack, "Your week")
+        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            when {
+                loading && digest == null -> Loading()
+                digest != null -> DigestView(digest)
+                error != null -> Hint("No digest yet. The first one comes at the end of your first week.", Modifier.padding(horizontal = 4.dp))
+            }
+            onSettings?.let { open ->
+                MenuGroup(null, Modifier.padding(top = 8.dp)) {
+                    NavRow(Icons.Rounded.Summarize, "Weekly digest", "When Your week comes, and by email", onClick = open)
+                }
+            }
+        }
+    }
+}
+
+/** Reminders & sharing › Weekly digest: whether it comes, on which day and hour, and by email. */
+@Composable
+fun DigestSettingsRoute(onBack: () -> Unit) {
+    val c = appContainer()
+    val profile by c.profile.collectAsState()
+    val scope = rememberCoroutineScope()
+    DigestSettingsScreen(
+        profile, onBack,
         onSave = { p -> scope.launch { attempt { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
         onTestEmail = { scope.launch { attempt { c.api.emailDigestTest() }.onSuccess { c.tell("Sent. Check your inbox.") }.onFailure { c.tell(it.message ?: "Couldn't send it") } } },
     )
 }
 
 @Composable
-fun DigestScreen(
-    digest: Digest?,
-    loading: Boolean,
-    error: String?,
-    profile: Profile?,
-    onBack: () -> Unit,
-    onSave: (Profile) -> Unit = {},
-    onTestEmail: () -> Unit = {},
-) {
+fun DigestSettingsScreen(profile: Profile?, onBack: (() -> Unit)?, onSave: (Profile) -> Unit = {}, onTestEmail: () -> Unit = {}) {
     val readOnly = LocalReadOnly.current
     var pickingHour by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        BackBar(onBack, "Your week in health")
+        BackBar(onBack, "Weekly digest")
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
-                loading && digest == null -> Loading()
-                digest != null -> DigestView(digest)
-                error != null -> Hint("No digest yet. The first one comes at the end of your first week.")
-            }
-            if (profile != null && !readOnly) {
-                val d = profile.digest
-                fun save(change: DigestPrefs) = onSave(profile.copy(digest = change))
-                SectionCard("Settings") {
-                    LabeledSwitch("A weekly digest", d.enabled, { save(d.copy(enabled = it)) }, subtitle = "Your week against the one before, in a few lines")
-                    if (d.enabled) {
-                        Text("On", style = MaterialTheme.typography.bodyLarge)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            DayOfWeek.entries.forEach { day ->
-                                FilterChip(selected = d.day == day.value, onClick = { save(d.copy(day = day.value)) }, label = { Text(day.getDisplayName(TextStyle.SHORT, LocalLocale.current.platformLocale)) })
+                readOnly -> Hint("Go back to your own data to change your weekly digest.", Modifier.padding(horizontal = 4.dp))
+                profile == null -> Loading()
+                else -> {
+                    val d = profile.digest
+                    fun save(change: DigestPrefs) = onSave(profile.copy(digest = change))
+                    SectionCard(null) {
+                        LabeledSwitch("A weekly digest", d.enabled, { save(d.copy(enabled = it)) }, subtitle = "Your week against the one before, in a few lines")
+                        if (d.enabled) {
+                            Text("On", style = MaterialTheme.typography.bodyLarge)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                DayOfWeek.entries.forEach { day ->
+                                    FilterChip(selected = d.day == day.value, onClick = { save(d.copy(day = day.value)) }, label = { Text(day.getDisplayName(TextStyle.SHORT, LocalLocale.current.platformLocale)) })
+                                }
                             }
-                        }
-                        OutlinedButton(onClick = { pickingHour = true }) { Text("At %d:00".format(d.hour)) }
-                        Hint("The phone shows a notification that only says it's ready.")
-                        var email by remember(d.email) { mutableStateOf(d.email.orEmpty()) }
-                        LabeledSwitch("Email it to me too", d.emailEnabled, { save(d.copy(emailEnabled = it, email = email.trim().ifBlank { null })) })
-                        if (d.emailEnabled) {
-                            OutlinedTextField(
-                                email, { email = it }, label = { Text("Email address") }, singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilledTonalButton(enabled = email.contains('@') && email.trim() != d.email, onClick = { save(d.copy(email = email.trim())) }) { Text("Save address") }
-                                TextButton(enabled = !d.email.isNullOrBlank(), onClick = onTestEmail) { Text("Send a test") }
-                            }
-                            val private = profile.modules.filter { it.sensitive }
-                            if (private.isNotEmpty()) {
-                                Text("Private features in the email", style = MaterialTheme.typography.bodyLarge)
-                                Hint("Email is less private than the app. Only what you pick here goes in it.")
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    private.forEach { m ->
-                                        FilterChip(
-                                            selected = m in d.emailModules,
-                                            onClick = { save(d.copy(emailModules = if (m in d.emailModules) d.emailModules - m else d.emailModules + m)) },
-                                            label = { Text(m.label) },
-                                        )
+                            OutlinedButton(onClick = { pickingHour = true }) { Text("At %d:00".format(d.hour)) }
+                            Hint("The phone shows a notification that only says it's ready.")
+                            var email by remember(d.email) { mutableStateOf(d.email.orEmpty()) }
+                            LabeledSwitch("Email it to me too", d.emailEnabled, { save(d.copy(emailEnabled = it, email = email.trim().ifBlank { null })) })
+                            if (d.emailEnabled) {
+                                OutlinedTextField(
+                                    email, { email = it }, label = { Text("Email address") }, singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilledTonalButton(enabled = email.contains('@') && email.trim() != d.email, onClick = { save(d.copy(email = email.trim())) }) { Text("Save address") }
+                                    TextButton(enabled = !d.email.isNullOrBlank(), onClick = onTestEmail) { Text("Send a test") }
+                                }
+                                val private = profile.modules.filter { it.sensitive }
+                                if (private.isNotEmpty()) {
+                                    Text("Private features in the email", style = MaterialTheme.typography.bodyLarge)
+                                    Hint("Email is less private than the app. Only what you pick here goes in it.")
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        private.forEach { m ->
+                                            FilterChip(
+                                                selected = m in d.emailModules,
+                                                onClick = { save(d.copy(emailModules = if (m in d.emailModules) d.emailModules - m else d.emailModules + m)) },
+                                                label = { Text(m.label) },
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                if (pickingHour) {
-                    TimePickDialog(LocalTime.of(d.hour, 0), "At", { pickingHour = false }) { t -> save(d.copy(hour = t.hour)); pickingHour = false }
+                    if (pickingHour) {
+                        TimePickDialog(LocalTime.of(d.hour, 0), "At", { pickingHour = false }) { t -> save(d.copy(hour = t.hour)); pickingHour = false }
+                    }
                 }
             }
         }
@@ -370,9 +374,9 @@ fun IntegrationsRoute(onBack: () -> Unit) {
 @Composable
 fun IntegrationsScreen(onBack: () -> Unit, onOpenWeb: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        BackBar(onBack, "Integrations")
+        BackBar(onBack, com.health.app.ui.settings.INTEGRATIONS)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            InfoCard("Webhooks and Home Assistant", icon = Icons.Rounded.Hub) {
+            InfoCard("What they do", icon = Icons.Rounded.Hub) {
                 Text(
                     "Your server can tell other things when something happens: a dose due or missed, a low reading, a morning summary, a quiet device. " +
                         "Home Assistant can show today's numbers as sensors, and turn on a light when a dose is due.",

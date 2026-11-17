@@ -17,7 +17,6 @@ import androidx.compose.ui.test.performScrollTo
 import com.health.api.Device
 import com.health.api.DeviceKind
 import com.health.api.LayoutPrefs
-import com.health.api.Module
 import com.health.api.ScreenLayout
 import com.health.api.Units
 import com.health.app.data.Palette
@@ -66,7 +65,7 @@ class RecentScreenshotTest {
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
                 CompositionLocalProvider(LocalArrangements provides layout) {
-                    AppFrame(selected = null, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.DEFAULT), content = content)
+                    AppFrame(selected = "recent", snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
                 }
             }
         }

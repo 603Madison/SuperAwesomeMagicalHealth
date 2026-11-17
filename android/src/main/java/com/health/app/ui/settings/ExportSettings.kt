@@ -165,13 +165,13 @@ fun ExportRoute(onBack: () -> Unit, onOpen: (String) -> Unit) {
     )
 }
 
-/** Settings › Export: Health Connect for the apps that read it, FIT files, CSV and FHIR, and a word about iPhones. */
+/** Connections & privacy › Send to other apps: Health Connect for the apps that read it, FIT files, CSV and FHIR, and a word about iPhones. */
 @Composable
 fun ExportScreen(state: ExportState, actions: ExportActions, today: LocalDate) {
     var range by remember { mutableStateOf(FitRange.YEAR) }
     val from = today.minusDays(range.days - 1)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
-        BackBar(actions.back, "Export to other apps")
+        BackBar(actions.back, SEND_TO_APPS)
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             InfoCard("Health Connect", icon = Icons.Rounded.Favorite) {
                 Text(
@@ -219,7 +219,7 @@ fun ExportScreen(state: ExportState, actions: ExportActions, today: LocalDate) {
             }
             InfoCard("Spreadsheets and health records", icon = Icons.Rounded.Description) {
                 Text("Everything as CSV files for spreadsheets, and a FHIR file that health records and many health apps read.", style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(onClick = actions.openReports, modifier = Modifier.padding(top = 8.dp)) { Text("Reports and export") }
+                OutlinedButton(onClick = actions.openReports, modifier = Modifier.padding(top = 8.dp)) { Text("Reports & export") }
             }
             InfoCard("Apple Health", icon = Icons.Rounded.PhoneIphone) {
                 Text(

@@ -54,6 +54,7 @@ import com.health.app.ui.components.LocalLayoutStore
 import com.health.app.ui.components.MemoryLayoutStore
 import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.settings.SettingsActions
+import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.today.QuickLogRow
@@ -104,7 +105,7 @@ class ArrangeScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, modules: Set<Module>, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(modules), content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     /** A sheet's content as it sits over the page: on the sheet's colour, rounded at the top. */
@@ -258,7 +259,7 @@ class ArrangeScreenshotTest {
     )
 
     private fun health(dark: Boolean, name: String) {
-        render(dark, healthArranged) { Frame("health", healthModules) { HubScreen(healthModules, showDevices = false) {} } }
+        render(dark, healthArranged) { Frame("health", healthModules) { HubScreen(healthModules) {} } }
         save(name)
     }
 
@@ -268,7 +269,7 @@ class ArrangeScreenshotTest {
     @Test
     fun healthArrangedDark() = health(true, "arrange_health_dark")
 
-    // ---- Settings, in its sections ----
+    // ---- What you're tracking: features hidden from Health say so, and open from there ----
 
     private val settings = Settings(
         server = "https://health.home.arpa", token = "t", serverName = "Health at home",
@@ -279,17 +280,17 @@ class ArrangeScreenshotTest {
         val profile = Profile(birthYear = 1994, heightCm = 170.0, timezone = "America/New_York", goals = goals, modules = healthModules)
         render(dark) {
             Frame("settings", healthModules) {
-                SettingsScreen(settings, profile, SettingsActions(), water = water, ai = AiStatus(available = true), hiddenFromHealth = setOf("CYCLE", "PHOTOS"))
+                SettingsScreen(SettingsPage.TRACKING, settings, profile, SettingsActions(), water = water, ai = AiStatus(available = true), hiddenFromHealth = setOf("CYCLE", "PHOTOS"))
             }
         }
         save(name)
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h4400dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
     fun settingsLight() = settings(false, "arrange_settings_light", water = true)
 
     @Test
-    @Config(qualifiers = "w411dp-h4400dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
     fun settingsDark() = settings(true, "arrange_settings_dark", water = false)
 }

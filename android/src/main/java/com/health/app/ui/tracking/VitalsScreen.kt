@@ -184,7 +184,7 @@ fun VitalsScreen(state: VitalsState, targets: VitalsTargets, zone: ZoneId, actio
     var dialog by remember { mutableStateOf<VitalsDialog?>(null) }
     var removing by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("BP & glucose", "Against your own targets") {
+        ScreenTitle("Blood pressure & glucose", "Against your own targets") {
             IconButton(onClick = { dialog = VitalsDialog.TARGETS }) { Icon(Icons.Rounded.Tune, "Your targets") }
             ArrangeAction(FeatureScreens.VITALS, "Blood pressure & glucose", VITALS_SECTIONS)
         }

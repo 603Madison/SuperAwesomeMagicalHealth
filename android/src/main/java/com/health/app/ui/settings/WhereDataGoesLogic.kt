@@ -7,7 +7,7 @@ import com.health.api.DataPathState
 import com.health.app.ui.components.ArrangeItem
 
 /*
- * Settings › Where your data goes (GET /api/privacy): every way something about the person can
+ * More › Connections & privacy › Where your data goes (GET /api/privacy): every way something about the person can
  * leave their server, each paused or resumed with a switch, then what happens on this phone.
  * Worked out without drawing anything, so it can be tested; WhereDataGoes.kt draws it.
  */
@@ -65,11 +65,11 @@ object WhereDataGoes {
      * (AI connector links and browser notifications are made on the server's web page).
      */
     fun link(setUp: String?): Link? = when (setUp) {
-        "settings.connections" -> Link("settings/mealie", "Set up in Settings › Mealie")
-        "settings.ai" -> Link("settings/ai", "Set up in Settings › AI assistant")
-        "settings.integrations" -> Link("settings/integrations", "Set up in Settings › Integrations")
-        "settings.digest" -> Link("digest", "Set up in Settings › Weekly digest")
-        "settings.sharing" -> Link("settings/sharing", "Set up in Settings › Sharing")
+        "settings.connections" -> Link("settings/mealie", "Set up Mealie")
+        "settings.ai" -> Link("settings/ai", "Set up the assistant")
+        "settings.integrations" -> Link("settings/integrations", "Set up in $INTEGRATIONS")
+        "settings.digest" -> Link(DIGEST_SETTINGS, "Set up the weekly digest")
+        "settings.sharing" -> Link("settings/sharing", "Set up sharing")
         // The weather follows the place chosen in Symptoms.
         "settings.profile" -> Link("symptoms", "Choose a place in Symptoms")
         else -> null
@@ -97,7 +97,7 @@ object WhereDataGoes {
 
     /**
      * What this phone does: the server it talks to, the paired ring, whether Health Connect is read,
-     * what the person chose to write back to it (Settings › Export), and Gadgetbridge's export file.
+     * what the person chose to write back to it (Send to other apps), and Gadgetbridge's export file.
      */
     data class Phone(
         val server: String,
@@ -116,7 +116,7 @@ object WhereDataGoes {
     /** What the app writes back to Health Connect: only the kinds chosen in Export, else nothing. */
     fun healthConnectWrites(writes: List<String>): String = when {
         writes.isEmpty() -> "Nothing is written back to it."
-        else -> "Written back to it, as you chose in Export: ${list(writes.map { it.lowercase() })}. Other apps you let read Health Connect can see these, and some send them on to their own servers."
+        else -> "Written back to it, as you chose in $SEND_TO_APPS: ${list(writes.map { it.lowercase() })}. Other apps you let read Health Connect can see these, and some send them on to their own servers."
     }
 
     fun gadgetbridge(file: String?): String =

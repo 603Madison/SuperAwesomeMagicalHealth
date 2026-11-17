@@ -173,7 +173,7 @@ fun ConditionsScreen(state: ConditionsState, on: Set<Module>, onBack: () -> Unit
     var editing by remember { mutableStateOf<MyCondition?>(null) }
     var adding by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        BackBar(onBack, "Conditions and goals") {
+        BackBar(onBack, "Your conditions and goals") {
             TextButton(enabled = state.changed && !state.saving, onClick = actions.save) { Text("Save") }
         }
         Column(

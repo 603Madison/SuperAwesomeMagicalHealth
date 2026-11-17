@@ -121,9 +121,8 @@ class CareScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, readOnly: Boolean = false, content: @Composable () -> Unit) {
-        val tabs = if (tab == "settings") tabsFor(Module.DEFAULT) else tabsFor(allModules)
         CompositionLocalProvider(LocalReadOnly provides readOnly) {
-            AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabs, content = content)
+            AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
         }
     }
 
@@ -378,14 +377,14 @@ class CareScreenshotTest {
     @Test
     @Config(qualifiers = "w411dp-h2200dp-xxhdpi")
     fun digest() {
-        render { Frame("settings") { DigestScreen(digest, false, null, profile, {}) } }
+        render { Frame("settings") { DigestScreen(digest, false, null, {}, onSettings = {}) } }
         save("digest_light")
     }
 
     @Test
     @Config(qualifiers = "w411dp-h2200dp-xxhdpi")
     fun digestDark() {
-        render(dark = true) { Frame("settings") { DigestScreen(digest, false, null, profile, {}) } }
+        render(dark = true) { Frame("settings") { DigestScreen(digest, false, null, {}, onSettings = {}) } }
         save("digest_dark")
     }
 

@@ -71,7 +71,7 @@ fun MicrosCard(day: FoodDay, isToday: Boolean, startExpanded: Boolean = false) {
             } else {
                 rows.forEach { MicroRowView(it) }
             }
-            day.target.microBasis?.let { Hint("Targets: ${it.replaceFirstChar { c -> c.lowercase() }}. Change them in Settings › Goals.") }
+            day.target.microBasis?.let { Hint("Targets: ${it.replaceFirstChar { c -> c.lowercase() }}. Change them in More › You & goals.") }
         }
     }
 }

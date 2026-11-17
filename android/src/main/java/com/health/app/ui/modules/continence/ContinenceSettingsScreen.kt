@@ -183,7 +183,7 @@ fun DiarySettingsScreen(
                                 subtitle = "A quiet nudge that only says \"Time for a check\", never what you're wearing.",
                             )
                             if (hours != null) {
-                                if (!canNotify) ErrorCard("Notifications are off for this app, so reminders can't show on this phone. Settings › Reminders can turn them on.")
+                                if (!canNotify) ErrorCard("Notifications are off for this app, so reminders can't show on this phone. More › Reminders & sharing › Reminders can turn them on.")
                                 Text("After", style = MaterialTheme.typography.titleSmall)
                                 Choices(listOf(2, 3, 4, 5, 6, 8, 10, 12), hours, { if (it == 1) "1 hour" else "$it hours" }) { v -> change { it.copy(changeReminderHours = v) } }
                                 Hint("From when something goes on.")
@@ -258,7 +258,7 @@ private fun BladderTrainingSection(t: BladderTraining, today: LocalDate, canNoti
             "Remind me to go", t.enabled, { onChange(t.copy(enabled = it, startedOn = if (it && !t.enabled) null else t.startedOn)) },
             subtitle = "Trips at set times while you're up, the gap growing a little at a time. It often helps with sudden urges.",
         )
-        if (t.enabled && !canNotify) ErrorCard("Notifications are off for this app, so reminders can't show on this phone. Settings › Reminders can turn them on.")
+        if (t.enabled && !canNotify) ErrorCard("Notifications are off for this app, so reminders can't show on this phone. More › Reminders & sharing › Reminders can turn them on.")
         Text("Start with every", style = MaterialTheme.typography.titleSmall)
         Choices(listOf(30, 45, 60, 90, 120), t.intervalMinutes, { BladderTrainingPlan.say(it).let { s -> if (s == "hour") "1 hour" else s } }) { v ->
             onChange(t.copy(intervalMinutes = v, goalMinutes = maxOf(t.goalMinutes, v)))
@@ -274,7 +274,7 @@ private fun BladderTrainingSection(t: BladderTraining, today: LocalDate, canNoti
         ValueRow("From", t.from, onClick = { onPick("trainingFrom") })
         ValueRow("Until", t.to, onClick = { onPick("trainingTo") })
         if (t.enabled) Hint(BladderTrainingPlan.today(t, today) + ".")
-        Hint("Reminders come on this phone and wherever else you get them. Unless names are on in Settings › Reminders, they only say \"Time for your planned break\".")
+        Hint("Reminders come on this phone and wherever else you get them. Unless names are on in More › Reminders & sharing › Reminders, they only say \"Time for your planned break\".")
         if (t.startedOn != null) OutlinedButton(onClick = { onChange(t.copy(startedOn = today.toString())) }) { Text("Start again from today") }
     }
 }

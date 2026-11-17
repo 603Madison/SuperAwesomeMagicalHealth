@@ -123,8 +123,6 @@ import com.health.app.ui.food.AddFoodState
 import com.health.app.ui.food.FoodActions
 import com.health.app.ui.food.FoodScreen
 import com.health.app.ui.food.FoodState
-import com.health.app.ui.settings.SettingsActions
-import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.signin.SignInActions
 import com.health.app.ui.signin.SignInScreen
 import com.health.app.ui.theme.HealthTheme
@@ -177,8 +175,7 @@ class ScreenshotTest {
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
         // A module's pages sit under Health, which shows once one is turned on.
-        val tabs = if (tab == "health") tabsFor(Module.entries.toSet()) else tabsFor(Module.DEFAULT)
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabs, content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {
@@ -444,19 +441,6 @@ class ScreenshotTest {
         user = User("u1", "maddie", "Maddie", Role.ADMIN, createdAt = 0),
     )
     private val profile = Profile(birthYear = 1994, heightCm = 170.0, timezone = "America/New_York", goals = goals)
-
-    @Test
-    @Config(qualifiers = "w411dp-h2300dp-xxhdpi")
-    fun settingsWhole() {
-        render { Frame("settings") { SettingsScreen(settings, profile, SettingsActions()) } }
-        save("settings_full")
-    }
-
-    @Test
-    fun settingsDarkBold() {
-        render(dark = true) { Frame("settings") { SettingsScreen(settings.copy(boldText = true), profile, SettingsActions()) } }
-        save("settings_dark")
-    }
 
     private val noSignIn = SignInActions({ error("unused") }, {}, { _, _, _ -> })
 
@@ -751,22 +735,8 @@ class ScreenshotTest {
 
     @Test
     fun hub() {
-        render { Frame("health") { HubScreen(allModules, showDevices = true) {} } }
+        render { Frame("health") { HubScreen(allModules, showMeasurements = true) {} } }
         save("health_hub")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
-    fun featuresLight() {
-        render { Frame("settings") { SettingsScreen(settings, profile.copy(modules = Module.DEFAULT + Module.MIND + Module.MEDICATIONS), SettingsActions()) } }
-        save("settings_features_light")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
-    fun featuresDark() {
-        render(dark = true) { Frame("settings") { SettingsScreen(settings, profile.copy(modules = allModules), SettingsActions()) } }
-        save("settings_features_dark")
     }
 
     private val modulesToday = ModulesToday(
@@ -778,14 +748,13 @@ class ScreenshotTest {
         transition = com.health.api.TransitionToday(headline = "1 year, 3 months since you began", milestonesDue = listOf("Update my passport"), euphoriaThisWeek = 3),
     )
 
-    private fun allTabs() = tabsFor(allModules)
 
     @Test
     @Config(qualifiers = "w411dp-h3600dp-xxhdpi")
     fun todayAllModulesLight() {
         val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
         render {
-            AppFrame("today", remember { SnackbarHostState() }, {}, allTabs()) {
+            AppFrame("today", remember { SnackbarHostState() }, {}) {
                 TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = allModules)
             }
         }
@@ -797,7 +766,7 @@ class ScreenshotTest {
     fun todayAllModulesDark() {
         val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
         render(dark = true) {
-            AppFrame("today", remember { SnackbarHostState() }, {}, allTabs()) {
+            AppFrame("today", remember { SnackbarHostState() }, {}) {
                 TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = allModules)
             }
         }
@@ -809,7 +778,7 @@ class ScreenshotTest {
         val only = setOf(Module.MIND, Module.CYCLE, Module.MEDICATIONS)
         val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
         render {
-            AppFrame("today", remember { SnackbarHostState() }, {}, tabsFor(only)) {
+            AppFrame("today", remember { SnackbarHostState() }, {}) {
                 TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = only)
             }
         }
@@ -828,7 +797,7 @@ class ScreenshotTest {
             )
         }
         val state = trendsState.copy(trends = trendsState.trends!!.copy(days = days))
-        render { AppFrame("trends", remember { SnackbarHostState() }, {}, allTabs()) { TrendsScreen(state, Units.METRIC, goals, zone, TrendsActions(), modules = allModules) } }
+        render { AppFrame("trends", remember { SnackbarHostState() }, {}) { TrendsScreen(state, Units.METRIC, goals, zone, TrendsActions(), modules = allModules) } }
         save("trends_modules")
     }
 }

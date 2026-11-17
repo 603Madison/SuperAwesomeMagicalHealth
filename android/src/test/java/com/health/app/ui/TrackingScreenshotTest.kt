@@ -66,6 +66,7 @@ import com.health.app.ui.food.FoodScreen
 import com.health.app.ui.food.FoodState
 import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.settings.SettingsActions
+import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.today.TodayActions
@@ -127,7 +128,7 @@ class TrackingScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(all), content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {
@@ -380,13 +381,13 @@ class TrackingScreenshotTest {
     @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
     fun settingsAllFeatures() {
         val settings = Settings(server = "https://health.home.arpa", token = "t", serverName = "Health at home", user = User("u1", "maddie", "Maddie", Role.ADMIN, createdAt = 0))
-        render { Frame("settings") { SettingsScreen(settings, Profile(timezone = "America/New_York", modules = all), SettingsActions()) } }
+        render { Frame("settings") { SettingsScreen(SettingsPage.TRACKING, settings, Profile(timezone = "America/New_York", modules = all), SettingsActions()) } }
         save("settings_all_features")
     }
 
     @Test
     fun hubAllFeatures() {
-        render { Frame("health") { HubScreen(all, showDevices = false) {} } }
+        render { Frame("health") { HubScreen(all) {} } }
         save("hub_all_features")
     }
 }

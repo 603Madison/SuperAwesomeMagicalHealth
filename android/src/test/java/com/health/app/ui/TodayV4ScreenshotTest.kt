@@ -176,7 +176,7 @@ class TodayV4ScreenshotTest {
             CompositionLocalProvider(LocalDensity provides if (fontScale != null) Density(density.density, fontScale) else density) {
                 HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
                     CompositionLocalProvider(LocalLayoutStore provides remember { MemoryLayoutStore(LayoutPrefs()) }, LocalReadOnly provides readOnly) {
-                        AppFrame(selected = "today", snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(modules), content = content)
+                        AppFrame(selected = "today", snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
                     }
                 }
             }

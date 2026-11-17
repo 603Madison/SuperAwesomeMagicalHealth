@@ -15,3 +15,8 @@ suspend fun ServerApi.layout(): LayoutPrefs = ServerVersion.plain("to arrange sc
 suspend fun ServerApi.saveScreenLayout(key: String, layout: ScreenLayout): LayoutPrefs = ServerVersion.plain("to arrange screens") {
     send("PUT", "${base()}/api/layout/${enc(key)}", ApiJson.encodeToString(ScreenLayout.serializer(), layout), LayoutPrefs.serializer())
 }
+
+/** Replaces every arrangement with [prefs] (empty: every screen as it was, in both apps). */
+suspend fun ServerApi.saveAllLayouts(prefs: LayoutPrefs): LayoutPrefs = ServerVersion.plain("to arrange screens") {
+    send("PUT", "${base()}/api/layout", ApiJson.encodeToString(LayoutPrefs.serializer(), prefs), LayoutPrefs.serializer())
+}

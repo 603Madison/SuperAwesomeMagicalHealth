@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.automirrored.rounded.EventNote
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Bedtime
@@ -61,6 +63,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.health.api.Module
 import com.health.app.ui.theme.AppTheme
@@ -106,8 +109,9 @@ object ModuleInfo {
         Module.PHOTOS -> "Progress photos to compare over time: encrypted, lockable, and only ever yours to share."
     }
 
-    /** The route each opt-in module's screen lives at. */
+    /** The route each feature's screen lives at (Food's, and each opt-in module's); null where the app has none (Activity, Sleep: in Trends). */
     fun route(module: Module): String? = when (module) {
+        Module.NUTRITION -> "food"
         Module.MIND -> "mind"
         Module.CYCLE -> "cycle"
         Module.CONTINENCE -> "continence"
@@ -122,6 +126,12 @@ object ModuleInfo {
         Module.PHOTOS -> "photos"
         else -> null
     }
+
+    /**
+     * A feature's id in the Health tab's arrangement ([com.health.api.Layouts.NAV], shared with the
+     * web's sidebar): Food is the page [com.health.api.NavPage.FOOD] there, the rest their own names.
+     */
+    fun navId(module: Module): String = if (module == Module.NUTRITION) com.health.api.NavPage.FOOD.name else module.name
 
     /** The opt-in modules, in the order they're shown. */
     val OPT_IN = listOf(
@@ -252,7 +262,11 @@ fun IconTile(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.onPrimar
     }
 }
 
-/** A tappable row: icon, title, subtitle, and whatever goes on the right. */
+/**
+ * The app's one menu row (More, the Settings pages, Health, a feature's links): its icon, title, a
+ * short subtitle, an optional [badge] (a count, shown when above 0) and a chevron, or [trailing]
+ * in the chevron's place. At least 56 dp tall, all of it one tap.
+ */
 @Composable
 fun NavRow(
     icon: ImageVector,
@@ -260,18 +274,33 @@ fun NavRow(
     subtitle: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    badge: Int? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
+        modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconTile(icon)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
         }
-        trailing?.invoke()
+        badge?.takeIf { it > 0 }?.let { count ->
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.semantics { contentDescription = "$count new" },
+            ) {
+                Text(if (count > 99) "99+" else "$count", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+            }
+        }
+        if (trailing != null) {
+            trailing()
+        } else {
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

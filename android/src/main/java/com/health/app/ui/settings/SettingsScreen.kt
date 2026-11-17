@@ -2,6 +2,7 @@
 
 package com.health.app.ui.settings
 
+import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,21 +25,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MedicalInformation
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Summarize
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +56,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,9 +66,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.health.api.AiStatus
 import com.health.api.EnergyProfile
 import com.health.api.Fields
@@ -74,7 +80,6 @@ import com.health.api.MealieStatus
 import com.health.api.Module
 import com.health.api.Profile
 import com.health.api.Units
-import com.health.app.BuildConfig
 import com.health.app.attempt
 import com.health.app.data.Palette
 import com.health.app.data.Settings
@@ -82,18 +87,16 @@ import com.health.app.data.ThemeMode
 import com.health.app.net.aiStatus
 import com.health.app.net.mealieStatus
 import com.health.app.ui.Format
-import com.health.app.ui.components.ArrangeButton
-import com.health.app.ui.components.ArrangeItem
-import com.health.app.ui.components.ArrangeSheet
+import com.health.app.ui.care.LocalReadOnly
+import com.health.app.ui.components.BackBar
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.LabeledSwitch
 import com.health.app.ui.components.Loading
-import com.health.app.ui.components.ScreenTitle
+import com.health.app.ui.components.MenuGroup
 import com.health.app.ui.components.SectionCard
 import com.health.app.ui.components.SegmentedChoice
 import com.health.app.ui.components.ValueRow
 import com.health.app.ui.components.appContainer
-import com.health.app.ui.components.arranged
 import com.health.app.ui.components.screenLayout
 import com.health.app.ui.components.showsField
 import com.health.app.ui.log.NumberField
@@ -103,64 +106,78 @@ import kotlinx.coroutines.launch
 import java.time.ZoneId
 import kotlin.math.roundToInt
 
+/*
+ * Settings, as short pages opened from More: You & goals, What you're tracking, Reminders &
+ * sharing, Connections & privacy, Appearance and Account. Each is one screen's worth; the pages
+ * further in (reminders, sharing, Mealie, the watch…) open from their rows. Settings' sections were
+ * once arranged under android.settings; with a page each, nothing here is arranged any more, and
+ * those ids are left as they were (never used for anything else).
+ */
+
 class SettingsActions(
     val saveProfile: (Profile) -> Unit = {},
     val updateSettings: ((Settings) -> Settings) -> Unit = {},
     val signOut: () -> Unit = {},
     /** Shows or hides water (a field), keeping the person's other choices. */
     val setWater: (Boolean) -> Unit = {},
+    /** Puts every arranged screen back as it was (both apps). */
+    val resetScreens: () -> Unit = {},
+    /** Opens a part of the server's web settings in the browser, by its anchor ("connector", "account"). */
+    val openWeb: (String) -> Unit = {},
 )
 
+/** The Settings pages, in More's order, each with its route, its name and what it holds. */
+enum class SettingsPage(val route: String, val title: String, val about: String, val icon: ImageVector) {
+    YOU("settings/you", "You & goals", "Your body, units and what you aim for", Icons.Rounded.Person),
+    TRACKING("settings/tracking", "What you're tracking", "Conditions, features and fields", Icons.Rounded.Tune),
+    REMINDERS("settings/reminders-sharing", "Reminders & sharing", "Reminders, the weekly digest and sharing", Icons.Rounded.Notifications),
+    CONNECTIONS("settings/connections", "Connections & privacy", "Where your data goes, syncing and other apps", Icons.Rounded.Shield),
+    APPEARANCE("settings/appearance", "Appearance", "Theme, bold text and arranged screens", Icons.Rounded.Palette),
+    ACCOUNT("settings/account", "Account", "Who's signed in, and signing out", Icons.Rounded.AccountCircle),
+}
+
 @Composable
-fun SettingsRoute(onOpen: (String) -> Unit = {}) {
+fun SettingsRoute(page: SettingsPage, onBack: () -> Unit, onOpen: (String) -> Unit) {
     val c = appContainer()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by c.settings.collectAsState()
     val profile by c.profile.collectAsState()
-    var ai by remember { mutableStateOf<AiStatus?>(null) }
-    LaunchedEffect(Unit) { ai = attempt { c.api.aiStatus() }.getOrNull() }
-    // Mealie is the person's own, and never asked about while viewing a share.
+    val layout by c.layout.collectAsState()
+    // The assistant and Mealie are the person's own, and never asked about while viewing a share.
     val viewing by c.viewing.collectAsState()
+    var ai by remember { mutableStateOf<AiStatus?>(null) }
     var mealie by remember { mutableStateOf<MealieStatus?>(null) }
-    LaunchedEffect(viewing) { mealie = if (viewing == null) attempt { c.api.mealieStatus() }.getOrNull() else null }
+    LaunchedEffect(page, viewing) {
+        if (page == SettingsPage.CONNECTIONS && viewing == null) {
+            ai = attempt { c.api.aiStatus() }.getOrNull()
+            mealie = attempt { c.api.mealieStatus() }.getOrNull()
+        }
+    }
     SettingsScreen(
-        settings, profile,
+        page, settings, profile,
         SettingsActions(
             saveProfile = { p -> scope.launch { attempt { c.saveProfile(p) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
             updateSettings = { t -> scope.launch { c.prefs.update(t) } },
             signOut = { scope.launch { c.signOut() } },
             setWater = { on -> scope.launch { attempt { WaterSetting.save(c, on) }.onFailure { c.tell(it.message ?: "Couldn't save that") } } },
+            resetScreens = {
+                scope.launch {
+                    attempt { c.resetLayouts() }.onSuccess { c.tell("Every screen is back as it was") }.onFailure { c.tell(it.message ?: "Couldn't put them back") }
+                }
+            },
+            openWeb = { anchor ->
+                attempt { context.startActivity(Intent(Intent.ACTION_VIEW, "${settings.server.trimEnd('/')}/settings#$anchor".toUri())) }
+            },
         ),
+        onBack = onBack,
         onOpen = onOpen,
         water = showsField(Fields.NUTRITION_WATER),
         micros = com.health.app.ui.food.showsMicros(),
         ai = ai,
         mealie = mealie,
         hiddenFromHealth = screenLayout(Layouts.NAV)?.hidden.orEmpty(),
-        serverNotice = com.health.app.ui.components.serverNotice(),
-        serverVersion = c.serverVersion.collectAsState().value,
-    )
-}
-
-/** Settings' sections, arranged under `android.settings`: their ids are saved, so they stay as they are. */
-object SettingsSections {
-    val KEY = Layouts.screen(Layouts.ANDROID, "settings")
-    const val YOU = "you"
-    const val FEATURES = "features"
-    const val GOALS = "goals"
-    const val REMINDERS = "reminders"
-    const val CONNECTIONS = "connections"
-    const val APPEARANCE = "appearance"
-    const val ACCOUNT = "account"
-
-    val ITEMS = listOf(
-        ArrangeItem(YOU, "You"),
-        ArrangeItem(FEATURES, "Features"),
-        ArrangeItem(GOALS, "Goals"),
-        ArrangeItem(REMINDERS, "Reminders & sharing"),
-        ArrangeItem(CONNECTIONS, "Connections"),
-        ArrangeItem(APPEARANCE, "Appearance"),
-        ArrangeItem(ACCOUNT, "Account"),
+        arrangedScreens = layout.screens.size,
     )
 }
 
@@ -168,74 +185,80 @@ object SettingsSections {
 private enum class Edit { BIRTH_YEAR, HEIGHT, ENERGY, STEPS, ACTIVE, SLEEP, CALORIES, PROTEIN, WATER, WORKOUTS, TARGET_WEIGHT, WEEKLY }
 
 /**
- * Settings, in sections the person can arrange: You, Features, Goals, Reminders & sharing,
- * Connections, Appearance and Account. [water] is whether water is shown; [ai] the assistant's
- * status (null until known, or without one); [mealie] whether Mealie is connected (null until
- * known); [hiddenFromHealth] the features hidden from the Health tab, which open from here instead.
+ * One Settings page. [water] is whether water is shown; [ai] the assistant's status (null until
+ * known, or without one); [mealie] whether Mealie is connected (null until known);
+ * [hiddenFromHealth] the features hidden from the Health tab, which open from What you're tracking
+ * instead; [arrangedScreens] how many screens the person has arranged.
  */
 @Composable
 fun SettingsScreen(
+    page: SettingsPage,
     settings: Settings,
     profile: Profile?,
     actions: SettingsActions,
+    onBack: (() -> Unit)? = null,
     onOpen: (String) -> Unit = {},
     water: Boolean = true,
     ai: AiStatus? = null,
     hiddenFromHealth: Set<String> = emptySet(),
-    serverNotice: com.health.app.ui.components.ServerNoticeState? = null,
-    serverVersion: String? = null,
     /** Whether vitamins and minerals show (their field, never in eating disorder recovery): their targets are under Goals. */
     micros: Boolean = false,
     mealie: MealieStatus? = null,
+    arrangedScreens: Int = 0,
 ) {
     var editing by remember { mutableStateOf<Edit?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
-    var arranging by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
     val units = profile?.units ?: settings.units
-    val shown = arranged(SettingsSections.KEY, SettingsSections.ITEMS)
+    val food = profile?.modules?.contains(Module.NUTRITION) == true
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Settings") { ArrangeButton { arranging = true } }
+        BackBar(onBack, page.title)
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            serverNotice?.let { com.health.app.ui.components.ServerUpdateNotice(it) }
-            if (profile == null) Loading()
-            shown.forEach { section ->
-                key(section) {
-                    when (section) {
-                        SettingsSections.YOU -> if (profile != null) YouSection(profile, units, actions) { editing = it }
-                        SettingsSections.FEATURES -> if (profile != null) FeaturesSection(profile, water, hiddenFromHealth, actions, onOpen)
-                        SettingsSections.GOALS -> if (profile != null) {
-                            GoalsSection(profile.goals, units, water && Module.NUTRITION in profile.modules, micros && Module.NUTRITION in profile.modules, onOpen) { editing = it }
-                        }
-                        SettingsSections.REMINDERS -> SectionCard("Reminders & sharing") {
-                            NavRow(Icons.Rounded.Notifications, "Reminders", "Doses, refills, habits and appointments", onClick = { onOpen("settings/reminders") })
-                            NavRow(Icons.Rounded.Summarize, "Weekly digest", "Your week in health, on your chosen day", onClick = { onOpen("digest") })
-                            NavRow(Icons.Rounded.Group, "Sharing", "Let someone you trust see what you choose", onClick = { onOpen("settings/sharing") })
-                            NavRow(Icons.Rounded.Description, "Reports and export", "A PDF for your doctor, or all your data", onClick = { onOpen("reports") })
-                        }
-                        SettingsSections.CONNECTIONS -> ConnectionsSection(settings, ai, mealie, food = profile?.modules?.contains(Module.NUTRITION) == true, actions, onOpen)
-                        SettingsSections.APPEARANCE -> AppearanceSection(settings, actions)
-                        SettingsSections.ACCOUNT -> SectionCard("Account") {
-                            Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
-                            Hint("${settings.user?.username ?: ""} on ${settings.serverName.ifBlank { settings.server }}")
-                            Hint(settings.server)
-                            Hint("Your password, signed-in devices and upload keys are on the server's web page.")
-                            OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out") }
-                        }
+            when (page) {
+                SettingsPage.YOU -> if (profile == null) Loading() else {
+                    YouSection(profile, units, actions) { editing = it }
+                    GoalsSection(profile.goals, units, water && food, micros && food, onOpen) { editing = it }
+                }
+                SettingsPage.TRACKING -> {
+                    Hint("Your conditions and goals decide what the app shows, so you see what helps you and nothing else.", Modifier.padding(horizontal = 4.dp))
+                    MenuGroup(null) {
+                        NavRow(Icons.Rounded.MedicalInformation, "Your conditions and goals", "What you live with or want to keep track of", onClick = { onOpen("settings/conditions") })
+                        NavRow(Icons.Rounded.EditNote, "Fields", "The details each form asks for", onClick = { onOpen("settings/fields") })
                     }
-                    Unit
+                    if (profile == null) Loading() else FeaturesSection(profile, water, hiddenFromHealth, actions, onOpen)
+                }
+                SettingsPage.REMINDERS -> MenuGroup(null) {
+                    NavRow(Icons.Rounded.Notifications, "Reminders", "Doses, refills, habits and appointments", onClick = { onOpen("settings/reminders") })
+                    NavRow(Icons.Rounded.Summarize, "Weekly digest", "When Your week comes, and by email", onClick = { onOpen(DIGEST_SETTINGS) })
+                    NavRow(Icons.Rounded.Group, "Sharing", "Let someone you trust see what you choose", onClick = { onOpen("settings/sharing") })
+                }
+                SettingsPage.CONNECTIONS -> ConnectionsSection(settings, ai, mealie, food, actions, onOpen)
+                SettingsPage.APPEARANCE -> {
+                    AppearanceSection(settings, actions)
+                    SectionCard("Arranged screens") {
+                        Text(
+                            "Each page with an Arrange button at the top can be arranged: move what matters up, and hide what you don't use. " +
+                                "Today, its quick actions and Health are arranged the same way on the web.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Hint(if (arrangedScreens == 0) "Nothing arranged yet." else "$arrangedScreens ${if (arrangedScreens == 1) "screen" else "screens"} arranged.")
+                        OutlinedButton(enabled = arrangedScreens > 0 && !LocalReadOnly.current, onClick = { confirmReset = true }) { Text("Put every screen back as it was") }
+                    }
+                }
+                SettingsPage.ACCOUNT -> {
+                    SectionCard("Signed in") {
+                        Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
+                        Hint("${settings.user?.username ?: ""} on ${settings.serverName.ifBlank { settings.server }}")
+                        Hint(settings.server)
+                    }
+                    MenuGroup(null) {
+                        NavRow(Icons.Rounded.Key, "Password, sign-ins and upload keys", "On your server's web page", onClick = { actions.openWeb("account") })
+                    }
+                    OutlinedButton(onClick = { confirmSignOut = true }, modifier = Modifier.fillMaxWidth()) { Text("Sign out") }
                 }
             }
-            Text(
-                "SuperAwesomeMagicalHealth ${BuildConfig.VERSION_NAME}" + (serverVersion?.let { " · server $it" } ?: ""),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
-
-    if (arranging) ArrangeSheet(SettingsSections.KEY, "Settings", SettingsSections.ITEMS, { arranging = false })
 
     if (confirmSignOut) {
         AlertDialog(
@@ -246,9 +269,21 @@ fun SettingsScreen(
             dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
         )
     }
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Put every screen back?") },
+            text = { Text("Every screen you've arranged goes back to its first order, with nothing hidden, here and on the web.") },
+            confirmButton = { TextButton(onClick = { confirmReset = false; actions.resetScreens() }) { Text("Put them back") } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } },
+        )
+    }
 
     EditDialogs(profile, units, editing, actions) { editing = null }
 }
+
+/** Where the weekly digest's settings open (Reminders & sharing › Weekly digest). */
+const val DIGEST_SETTINGS = "settings/digest"
 
 @Composable
 private fun YouSection(profile: Profile, units: Units, actions: SettingsActions, edit: (Edit) -> Unit) {
@@ -274,17 +309,15 @@ private fun YouSection(profile: Profile, units: Units, actions: SettingsActions,
 @Composable
 private fun FeaturesSection(profile: Profile, water: Boolean, hiddenFromHealth: Set<String>, actions: SettingsActions, onOpen: (String) -> Unit) {
     SectionCard("Features") {
-        NavRow(Icons.Rounded.MedicalInformation, "Conditions and goals", "What you live with or want to keep track of", onClick = { onOpen("settings/conditions") })
-        NavRow(Icons.Rounded.EditNote, "Fields", "The details each form asks for", onClick = { onOpen("settings/fields") })
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Hint("Turn on what's useful to you. What's off is hidden, and nothing you've logged is lost.")
         Module.entries.forEach { m ->
             val on = m in profile.modules
-            val hidden = on && m.name in hiddenFromHealth && m in ModuleInfo.OPT_IN
+            val route = ModuleInfo.route(m)
+            val hidden = on && route != null && ModuleInfo.navId(m) in hiddenFromHealth
             FeatureRow(
                 m, on, hidden,
                 onToggle = { v -> actions.saveProfile(profile.copy(modules = if (v) profile.modules + m else profile.modules - m)) },
-                onOpen = ModuleInfo.route(m)?.takeIf { hidden }?.let { route -> { onOpen(route) } },
+                onOpen = route?.takeIf { hidden }?.let { r -> { onOpen(r) } },
             )
             if (m == Module.NUTRITION && on) {
                 LabeledSwitch(
@@ -340,12 +373,18 @@ private fun GoalsSection(g: Goals, units: Units, water: Boolean, micros: Boolean
     }
 }
 
-/** Where data goes, syncing, other apps, the watch, webhooks, Mealie (with Food on) and the AI assistant. */
+/**
+ * Connections & privacy: Where your data goes first, then syncing from this phone, then the apps
+ * and services the server or this phone talks to: Mealie (with Food on), the AI assistant's
+ * settings (where the server offers it), AI connector links, webhooks and Home Assistant, the
+ * Pebble watch, and sending to other apps.
+ */
 @Composable
 private fun ConnectionsSection(settings: Settings, ai: AiStatus?, mealie: MealieStatus?, food: Boolean, actions: SettingsActions, onOpen: (String) -> Unit) {
-    SectionCard("Connections") {
+    MenuGroup(null) {
         NavRow(Icons.Rounded.Shield, WhereDataGoes.TITLE, "Everything that can leave your server, and pausing it", onClick = { onOpen(WhereDataGoes.ROUTE) })
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+    SectionCard("Syncing") {
         LabeledSwitch(
             "Sync in the background", settings.backgroundSync, { v -> actions.updateSettings { it.copy(backgroundSync = v) } },
             subtitle = "About once an hour, your ring, Health Connect and Gadgetbridge send what's new to your server.",
@@ -355,22 +394,24 @@ private fun ConnectionsSection(settings: Settings, ai: AiStatus?, mealie: Mealie
             enabled = settings.backgroundSync,
             subtitle = "Background syncs wait for Wi-Fi. Opening the app still syncs.",
         )
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        NavRow(Icons.Rounded.FileUpload, "Export to other apps", "Health Connect, FIT files, CSV and FHIR", onClick = { onOpen("settings/export") })
+    }
+    MenuGroup("Apps and services") {
+        if (food) NavRow(Icons.AutoMirrored.Rounded.MenuBook, "Mealie", com.health.app.ui.food.MealieText.row(mealie), onClick = { onOpen("settings/mealie") })
+        if (ai?.available == true) NavRow(Icons.Rounded.AutoAwesome, "AI assistant", com.health.app.ui.ai.AiText.row(ai), onClick = { onOpen("settings/ai") })
+        NavRow(Icons.Rounded.Link, "AI connector links", "Made on your server's web page", onClick = { actions.openWeb("connector") })
+        NavRow(Icons.Rounded.Hub, INTEGRATIONS, "Events sent where you choose, and today's numbers", onClick = { onOpen("settings/integrations") })
         NavRow(Icons.Rounded.Watch, "Pebble watch", "Today's scores and one-tap logging on your wrist", onClick = { onOpen("settings/watch") })
-        NavRow(Icons.Rounded.Hub, "Integrations", "Webhooks and Home Assistant", onClick = { onOpen("settings/integrations") })
-        if (food) {
-            NavRow(Icons.AutoMirrored.Rounded.MenuBook, "Mealie", com.health.app.ui.food.MealieText.row(mealie), onClick = { onOpen("settings/mealie") })
-        }
-        if (ai?.available == true) {
-            NavRow(Icons.Rounded.AutoAwesome, "AI assistant", com.health.app.ui.ai.AiText.row(ai), onClick = { onOpen("settings/ai") })
-        }
+        NavRow(Icons.Rounded.FileUpload, SEND_TO_APPS, "Health Connect, FIT files, CSV and FHIR", onClick = { onOpen("settings/export") })
     }
 }
 
+/** The names of two pages, said the same wherever they're mentioned. */
+const val INTEGRATIONS = "Webhooks & Home Assistant"
+const val SEND_TO_APPS = "Send to other apps"
+
 @Composable
 private fun AppearanceSection(settings: Settings, actions: SettingsActions) {
-    SectionCard("Appearance") {
+    SectionCard(null) {
         Text("Theme", style = MaterialTheme.typography.bodyLarge)
         val wallpaperOn = settings.wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

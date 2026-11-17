@@ -214,7 +214,7 @@ class FeatureArrangeScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.entries.toSet()), content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {
@@ -321,7 +321,7 @@ class FeatureArrangeSheetScreenshotTest {
         layout.value = Arranged.prefs
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
-                AppFrame(selected = "trends", snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.entries.toSet())) {
+                AppFrame(selected = "trends", snackbar = remember { SnackbarHostState() }, onTab = {}) {
                     TrendsScreen(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, TrendsActions(), modules = Arranged.modules)
                 }
                 ArrangeSheet(FeatureScreens.TRENDS, "Trends", trendsSections(Arranged.modules), onDismiss = {})

@@ -59,7 +59,7 @@ class FoodPhotoScreenshotTest {
 
     @Composable
     private fun Frame(content: @Composable () -> Unit) {
-        AppFrame(selected = "food", snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.DEFAULT), content = content)
+        AppFrame(selected = "health", snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {

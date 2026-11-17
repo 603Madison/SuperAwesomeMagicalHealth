@@ -23,7 +23,6 @@ import com.health.api.DeviceChoices
 import com.health.api.DeviceKind
 import com.health.api.Goals
 import com.health.api.Metric
-import com.health.api.Module
 import com.health.api.Point
 import com.health.api.SleepSource
 import com.health.api.SleepStage
@@ -99,7 +98,7 @@ class DeviceSourcesScreenshotTest {
 
     @Composable
     private fun Frame(tab: String, content: @Composable () -> Unit) {
-        AppFrame(selected = tab, snackbar = remember { SnackbarHostState() }, onTab = {}, tabs = tabsFor(Module.DEFAULT), content = content)
+        AppFrame(selected = tabOf(tab), snackbar = remember { SnackbarHostState() }, onTab = {}, content = content)
     }
 
     private fun save(name: String) {
