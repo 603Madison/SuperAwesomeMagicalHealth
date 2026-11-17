@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countText, pausedToast, setUpSection, stateText, switchable, withPaused } from "../src/lib/privacy.ts";
+import { countText, pausedToast, privacyLine, setUpSection, stateText, switchable, withPaused } from "../src/lib/privacy.ts";
 import type { DataDestination, DataMap, DataPath, DataPathState } from "../src/lib/types.ts";
 
 function way(path: DataPath, state: DataPathState, change: Partial<DataDestination> = {}): DataDestination {
@@ -69,6 +69,12 @@ test("a pause shows at once: only that one, and only where it can be paused", ()
   assert.deepEqual(withPaused(map, "SIGN_IN", true), map);
   // The map itself is left alone.
   assert.equal(map.destinations[0].state, "ON");
+});
+
+test("You's line: how many ways out are on and paused; signing in isn't counted", () => {
+  assert.equal(privacyLine(map), "1 way out on, 1 paused · everything else stays on your server");
+  assert.equal(privacyLine({ destinations: [way("SIGN_IN", "ON", { pausable: false }), way("SHARES", "NOT_SET_UP")] }), "Everything stays on your server");
+  assert.equal(privacyLine({ destinations: [way("MEALIE", "ON"), way("WEBHOOKS", "ON")] }), "2 ways out on · everything else stays on your server");
 });
 
 test("what the toast says", () => {

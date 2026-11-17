@@ -13,6 +13,12 @@ export const RECENT_HOURS = 24;
 export const RECENT_SECTIONS = ["sleep", "heart", "spo2", "hrv", "stress", "breathing", "temperature", "steps"] as const;
 export type RecentSection = (typeof RECENT_SECTIONS)[number];
 
+/** Body at 24 hours shows them in this order until the person arranges it: the night, the heart, the tiles, the steps. */
+export const BODY_DAY_SECTIONS: RecentSection[] = ["sleep", "heart", "hrv", "spo2", "breathing", "temperature", "stress", "steps"];
+
+/** The ones that are small tiles, two or four to a row. */
+export const BODY_DAY_TILES: RecentSection[] = ["hrv", "spo2", "breathing", "temperature", "stress"];
+
 /** The kinds of reading the page shows, in the server's order. */
 export const RECENT_METRICS = [
   "HEART_RATE", "SPO2", "HRV", "STRESS", "RESPIRATORY_RATE", "SKIN_TEMPERATURE", "TEMPERATURE_DEVIATION", "STEPS",
@@ -190,4 +196,41 @@ export function nightSummary(s: SleepSession, time: (ms: number) => string, dura
   const n = nightMinutes(s);
   const stages = n.staged ? `, deep ${duration(n.deep)}, REM ${duration(n.rem)}, light ${duration(n.light)}, awake ${duration(n.awake)}` : "";
   return `Sleep from ${time(s.start)} to ${time(s.end)}: ${duration(n.asleep)} asleep${stages}.`;
+}
+
+// ---- Body at 24 hours: the night, the heart, the tiles ----
+
+/** The night to show large: the longest in the window (two devices may each have one, and there may be naps). */
+export function mainNight(sessions: SleepSession[]): SleepSession | null {
+  return sessions.reduce<SleepSession | null>((best, s) => (!best || s.end - s.start > best.end - best.start ? s : best), null);
+}
+
+/** The lowest reading and when it was; null with none. */
+export function lowestPoint(s: Pick<RecentSeries, "points">): RecentPoint | null {
+  return s.points.reduce<RecentPoint | null>((low, p) => (!low || p.value < low.value ? p : low), null);
+}
+
+/** The average of the values there are (a usual, from the days before); null with none. */
+export function usualOf(values: (number | null | undefined)[]): number | null {
+  const known = values.filter((v): v is number => v != null && Number.isFinite(v));
+  return known.length === 0 ? null : known.reduce((a, b) => a + b, 0) / known.length;
+}
+
+/**
+ * How [value] stands against the person's [usual], as a share: 0.22 "below". Within [near] (5%)
+ * it's their usual. Null without a usual.
+ */
+export function againstUsual(value: number, usual: number | null | undefined, near = 0.05): { share: number; word: "above" | "below" | "usual" } | null {
+  if (usual == null || usual <= 0) return null;
+  const share = (value - usual) / usual;
+  return { share: Math.abs(share), word: Math.abs(share) < near ? "usual" : share > 0 ? "above" : "below" };
+}
+
+/** Whose readings these are, for the heart rate card: the device chosen, the one there is, or "Colmi R02 and Polar H10 together". */
+export function devicesTogether(devices: Pick<RecentDevice, "id" | "name">[], chosen?: string | null): string | null {
+  if (chosen) return devices.find((d) => d.id === chosen)?.name ?? null;
+  if (devices.length === 0) return null;
+  if (devices.length === 1) return devices[0].name;
+  const names = devices.map((d) => d.name);
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} together`;
 }

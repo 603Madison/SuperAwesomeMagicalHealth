@@ -38,7 +38,7 @@ export function SnapPhoto({ onSnap }: { onSnap: () => void }) {
   const offer = usePhotoOffer();
   if (offer === "ready") return <Button onClick={onSnap}><Camera size={18} /> Snap a photo</Button>;
   if (offer === "settings") {
-    return <p className="muted small photo-links">To estimate a meal from a photo, let the assistant see Food in <Link to="/settings#assistant">Settings › AI assistant</Link>.</p>;
+    return <p className="muted small photo-links">To estimate a meal from a photo, let the assistant see Food in <Link to="/settings#assistant">You › Connections › AI assistant</Link>.</p>;
   }
   if (offer === "paused") return <PausedNote what="Photo estimates" />;
   return null;

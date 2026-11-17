@@ -40,7 +40,17 @@ export function Food() {
   const numbers = useFoodNumbers();
   // Vitamins and minerals: while their field shows, and never in recovery.
   const micros = useMicros(modules);
-  const [adding, setAdding] = useState<Meal | null>(null);
+  // "?add=LUNCH" (from the +) opens adding to that meal straight away.
+  const asked = params.get("add");
+  const [adding, setAdding] = useState<Meal | null>(() => (!readOnly && MEALS.some((m) => m.id === asked) ? (asked as Meal) : null));
+  const stopAdding = () => {
+    setAdding(null);
+    if (params.has("add")) {
+      const next = new URLSearchParams(params);
+      next.delete("add");
+      setParams(next, { replace: true });
+    }
+  };
   const [editing, setEditing] = useState<FoodEntry | null>(null);
   const mealie = useMealie();
   useHashScroll(!!data);
@@ -75,7 +85,7 @@ export function Food() {
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
       <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
-      {adding && <AddFood date={date} meal={adding} numbers={numbers} micros={micros} onClose={() => setAdding(null)} onAdded={reload} />}
+      {adding && <AddFood date={date} meal={adding} numbers={numbers} micros={micros} onClose={stopAdding} onAdded={reload} />}
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </div>
   );
@@ -166,7 +176,7 @@ function Macros({ eaten, target }: { eaten: { protein: number; carbs: number; fa
   );
 }
 
-/** Water against its goal, a glass at a time. Only while water shows (Settings › What you're tracking › Features › Food). */
+/** Water against its goal, a glass at a time. Only while water shows (You › What you track › Features › Food). */
 function WaterCard({ day, readOnly, onChanged }: { day: FoodDay; readOnly: boolean; onChanged: () => void }) {
   const t = day.target;
   const glasses = Math.max(8, Math.ceil(t.waterMl / 250));

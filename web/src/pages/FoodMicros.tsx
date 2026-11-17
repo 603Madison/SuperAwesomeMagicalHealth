@@ -35,7 +35,7 @@ export function MicrosCard({ day }: { day: FoodDay }) {
             </div>
           ))
         : <MicroRows rows={rows} />}
-      {day.target.microBasis && <p className="muted small">Targets: {day.target.microBasis.charAt(0).toLowerCase() + day.target.microBasis.slice(1)}. Change them in Settings.</p>}
+      {day.target.microBasis && <p className="muted small">Targets: {day.target.microBasis.charAt(0).toLowerCase() + day.target.microBasis.slice(1)}. Change them in You › Profile and goals.</p>}
     </Card>
   );
 }

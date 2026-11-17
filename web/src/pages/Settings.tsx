@@ -2,15 +2,15 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowUpDown, Bot, ChevronRight, Copy, Home, KeyRound, Lock, LogOut, Monitor, Smartphone, Watch } from "lucide-react";
 import { useModules } from "../App";
 import type { Module } from "../lib/types";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { KG_PER_LB, toKg, when } from "../lib/format";
 import { F, setField, useMicros, useWater } from "../lib/fields";
 import { resetAllScreens, useLayoutStore, useScreenLayout } from "../lib/layout";
 import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
-import { LAYOUT_NAV, SENSITIVE, layoutKey, type Goals, type Profile as ProfileModel } from "../lib/types";
-import { Button, Field, IconButton, NumberInput, PageHeader, Spinner, Toggle, errorToast, toast, useLoad, useNarrow } from "../components/ui";
+import { LAYOUT_NAV, SENSITIVE, layoutKey, visible, type Goals, type Profile as ProfileModel } from "../lib/types";
+import { Button, Field, IconButton, NumberInput, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { NAMES, SETTINGS_PAGES, type SettingsPage } from "../lib/nav";
 import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
@@ -20,16 +20,18 @@ import { DigestSettings, IntegrationSettings, NotificationSettings, PrivacySetti
 import { AssistantSettingsCard, useAiStatus } from "./Assistant";
 import { FieldsEditor } from "../components/FieldKit";
 import { NutrientTargetsPanel } from "./NutrientTargets";
+import { AlertSettingsForm } from "./Alerts";
 
 /** Features whose fields are chosen right here (bladder and bowel, and cycle, have their own pages). */
 const RECORDED: { module: Module; name: string }[] = [
   { module: "NUTRITION", name: "Food" }, { module: "MIND", name: "Mind" }, { module: "NEURO", name: "Autism & ADHD" }, { module: "TRANSITION", name: "Transition" },
-  { module: "BODY", name: "Body" },
+  { module: "BODY", name: "Weight" },
 ];
 
 /**
- * Settings, in a few pages (lib/nav.ts's SETTINGS_PAGES): on a wide screen each is a tab, on a
- * phone each opens from More on its own. /settings#digest lands on the digest's section, and
+ * Settings, in a few pages (lib/nav.ts's SETTINGS_PAGES), each opened from You on its own with a
+ * back arrow to it: What you track · Reminders, alerts and sharing · Profile and goals · Connections
+ * · Look and account, and Where your data goes. /settings#digest lands on the digest's section, and
  * /settings#reminders on its page. The ids are kept from before (they're in links and saved).
  */
 const GROUPS = SETTINGS_PAGES;
@@ -62,24 +64,24 @@ export function Settings() {
   // Vitamin and mineral targets: with Food on and its vitamins shown (never in eating disorder recovery).
   const micros = useMicros(on);
   const location = useLocation();
-  const navigate = useNavigate();
   // A new connector link or upload key shows in the list of sign-ins at once.
   const [signIns, setSignIns] = useState(0);
   // The place picker (for the weather) is in Profile and goals while symptoms are on, or a place is set.
   const weather = !!profile && (on.includes("SYMPTOMS") || !!profile.place);
+  const saved = useScreenLayout(layoutKey("settings"));
 
-  /** Where a way out is set up, for Where your data goes: a section shown here (not hidden), or a tab. */
+  /** Where a way out is set up, for Where your data goes: a page of Settings, or a section on one that's showing. */
   const where = (id: string): SettingsPlace | null => {
-    const tab = GROUPS.find((g) => g.id === id);
-    if (tab) return { id: tab.id, label: tab.label };
+    const page = GROUPS.find((g) => g.id === id);
+    if (page) return { id: page.id, label: page.label };
     if (id === "profile" && !weather) return null;
-    const section = arranged.shown.find((x) => x.id === id);
+    const section = visible(sections.filter((x) => x.when !== false), (x) => x.id, saved).find((x) => x.id === id);
     if (!section) return null;
-    return { id: section.id, label: id === "profile" ? `${section.label} › Weather` : section.label };
+    return { id: section.id, label: `${label(section.group)} › ${id === "profile" ? "Weather" : section.label}` };
   };
 
-  const sections: (Section & { group: string })[] = [
-    { id: "profile", group: label("you"), label: "Profile and goals", node: (
+  const sections: (Section & { group: Group })[] = [
+    { id: "profile", group: "you", label: "Profile and goals", node: (
       <Panel id="profile" title="Profile and goals">
         <p className="muted">Your profile works out resting energy and calorie targets; goals shape your scores.</p>
         {profile ? <ProfileForm initial={profile} water={water} /> : <Spinner />}
@@ -91,31 +93,21 @@ export function Settings() {
         )}
       </Panel>
     ) },
-    { id: "nutrients", group: label("you"), label: "Nutrient targets", when: micros, node: (
+    { id: "nutrients", group: "you", label: "Nutrient targets", when: micros, node: (
       <Panel id="nutrients" title="Nutrient targets"><NutrientTargetsPanel /></Panel>
     ) },
-    { id: "account", group: label("account"), label: "Account", node: (
-      <Panel id="account" title="Account">
-        <NameForm />
-        {user.hasPassword && <PasswordChange />}
-        {user.oidc && !user.hasPassword && <p className="muted">You sign in through single sign-on; your password is managed there.</p>}
-      </Panel>
+    { id: "tracking", group: "features", label: "Conditions and goals", node: (
+      <Panel id="tracking" title="Conditions and goals"><TrackingSummary /></Panel>
     ) },
-    { id: "signins", group: label("account"), label: "Signed in on", node: (
-      <Panel id="signins" title="Signed in on"><SignIns key={signIns} /></Panel>
-    ) },
-    { id: "tracking", group: label("features"), label: "What you're tracking", node: (
-      <Panel id="tracking" title="What you're tracking"><TrackingSummary /></Panel>
-    ) },
-    { id: "features", group: label("features"), label: "Features", node: (
+    { id: "features", group: "features", label: "Features", node: (
       <Panel id="features" title="Features">
         <p className="muted">Turn on the parts you want. The rest stay out of your way.</p>
         {profile ? <Features profile={profile} water={water} /> : <Spinner />}
       </Panel>
     ) },
-    { id: "fields", group: label("features"), label: "What to record", when: RECORDED.some((m) => on.includes(m.module)) || on.includes("CONTINENCE") || on.includes("CYCLE"), node: (
+    { id: "fields", group: "features", label: "What to record", when: RECORDED.some((m) => on.includes(m.module)) || on.includes("CONTINENCE") || on.includes("CYCLE"), node: (
       <Panel id="fields" title="What to record">
-        <p className="muted">What you're tracking decides what each form asks for. Show or hide any of it here; it's saved straight away.</p>
+        <p className="muted">Your conditions and goals decide what each form asks for. Show or hide any of it here; it's saved straight away.</p>
         {on.includes("CONTINENCE") && <p><Link to="/bladder/settings">Bladder &amp; bowel settings</Link>: quick buttons, your own words and fields, bladder training.</p>}
         {on.includes("CYCLE") && <p><Link to="/cycle/settings">Cycle settings</Link>: your own symptoms, lengths, reminders and plain wording.</p>}
         {RECORDED.filter((m) => on.includes(m.module)).map((m) => (
@@ -126,78 +118,86 @@ export function Settings() {
         ))}
       </Panel>
     ) },
-    { id: "reminders", group: label("reminders"), label: "Reminders and notifications", node: (
+    { id: "reminders", group: "reminders", label: "Reminders and notifications", node: (
       <Panel id="reminders" title="Reminders and notifications"><NotificationSettings /></Panel>
     ) },
-    { id: "digest", group: label("reminders"), label: "Weekly digest", node: (
+    { id: "alerts", group: "reminders", label: NAMES.alerts, node: <AlertSettingsPanel /> },
+    { id: "digest", group: "reminders", label: "Weekly digest", node: (
       <Panel id="digest" title="Weekly digest"><DigestSettings /></Panel>
     ) },
-    { id: "sharing", group: label("reminders"), label: "Sharing", node: (
+    { id: "sharing", group: "reminders", label: "Sharing", node: (
       <Panel id="sharing" title="Sharing"><SharingSettings /></Panel>
     ) },
-    // Every way out, first among the connections: they're what can send anything anywhere.
-    { id: "privacy", group: label("connections"), label: "Where your data goes", node: (
-      <Panel id="privacy" title="Where your data goes"><PrivacySettings where={where} /></Panel>
+    // Every way out, on a page of its own: they're what can send anything anywhere.
+    { id: "privacy", group: "privacy", label: NAMES.privacy, node: (
+      <Panel id="privacy" title="Every way out"><PrivacySettings where={where} /></Panel>
     ) },
-    { id: "devices", group: label("connections"), label: "Devices", node: (
-      <Panel id="devices" title="Devices">
-        <p className="muted">Rings, watches, the phone app, FIT files and upload keys.</p>
-        <div><Link className="btn btn-tonal" to="/devices"><Watch size={18} /> Devices</Link></div>
-      </Panel>
-    ) },
-    { id: "mealie", group: label("connections"), label: "Mealie", when: on.includes("NUTRITION"), node: (
+    { id: "mealie", group: "connections", label: "Mealie", when: on.includes("NUTRITION"), node: (
       <Panel id="mealie" title="Mealie"><MealieSettings /></Panel>
     ) },
-    { id: "assistant", group: label("connections"), label: "AI assistant", when: !!ai?.available, node: <AssistantSettingsCard /> },
-    { id: "connector", group: label("connections"), label: "AI connector (MCP)", node: (
+    { id: "assistant", group: "connections", label: "AI assistant", when: !!ai?.available, node: <AssistantSettingsCard /> },
+    { id: "connector", group: "connections", label: "AI connector (MCP)", node: (
       <Panel id="connector" title="AI connector (MCP)"><Connector water={water} onMade={() => setSignIns((n) => n + 1)} /></Panel>
     ) },
-    { id: "integrations", group: label("connections"), label: "Webhooks and Home Assistant", node: (
+    { id: "integrations", group: "connections", label: "Webhooks and Home Assistant", node: (
       <Panel id="integrations" title="Webhooks and Home Assistant"><IntegrationSettings /></Panel>
     ) },
-    { id: "watch", group: label("connections"), label: "Pebble watch", node: (
+    { id: "watch", group: "connections", label: "Pebble watch", node: (
       <Panel id="watch" title="Pebble watch">
-        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs {water ? "a mood, water, coffee or a toilet trip" : "a mood, coffee or a toilet trip"} with a tap. Connected watches are listed in Account › Signed in on.</p>
+        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs {water ? "a mood, water, coffee or a toilet trip" : "a mood, coffee or a toilet trip"} with a tap. Connected watches are listed in Look and account › Signed in on.</p>
       </Panel>
     ) },
-    { id: "appearance", group: label("appearance"), label: "Appearance in this browser", node: (
+    { id: "appearance", group: "appearance", label: "Appearance in this browser", node: (
       <Panel id="appearance" title="Appearance in this browser"><AppearanceSettings /></Panel>
     ) },
-    { id: "screens", group: label("appearance"), label: "Arranged screens", node: (
+    { id: "screens", group: "appearance", label: "Arranged screens", node: (
       <Panel id="screens" title="Arranged screens"><ArrangedScreens /></Panel>
     ) },
+    { id: "account", group: "appearance", label: "Account", node: (
+      <Panel id="account" title="Account">
+        <NameForm />
+        {user.hasPassword && <PasswordChange />}
+        {user.oidc && !user.hasPassword && <p className="muted">You sign in through single sign-on; your password is managed there.</p>}
+      </Panel>
+    ) },
+    { id: "signins", group: "appearance", label: "Signed in on", node: (
+      <Panel id="signins" title="Signed in on"><SignIns key={signIns} /></Panel>
+    ) },
   ];
-  const arranged = useArrange(layoutKey("settings"), "Settings", sections, { groups: GROUPS.map((g) => g.label) });
 
-  // The tab: from the address (#features, or a section's #digest), else the first.
+  // The page: from the address (#features, or a section's #digest), else Profile and goals.
   const hash = location.hash.slice(1);
   const ofSection = sections.find((x) => x.id === hash)?.group;
-  const group: Group = GROUPS.find((g) => g.id === hash || g.label === ofSection)?.id ?? "you";
-  const choose = (g: Group) => navigate({ hash: g === "you" ? "" : g }, { replace: true });
+  const group: Group = GROUPS.find((g) => g.id === hash)?.id ?? ofSection ?? "you";
+  // Arranging a page arranges its own sections; the others keep their places.
+  const arranged = useArrange(layoutKey("settings"), label(group), sections.filter((x) => x.group === group));
   useEffect(() => {
     // Links like /settings#digest land on their section.
     if (hash && sections.some((x) => x.id === hash)) setTimeout(() => document.getElementById(hash)?.scrollIntoView({ block: "start" }), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hash]);
-  const shown = arranged.shown.filter((x) => x.group === label(group));
-  // On a phone, each page opens from More on its own: its name is the title, and back goes to More.
-  const narrow = useNarrow();
+  const page = GROUPS.find((g) => g.id === group)!;
 
   return (
     <div className="page settings">
-      <PageHeader title={narrow ? label(group) : NAMES.settings} actions={arranged.button} />
-      <div className="settings-tabs">
-        <div className="tabs" role="tablist" aria-label="Settings">
-          {GROUPS.map((g) => (
-            <button key={g.id} type="button" role="tab" id={`tab-${g.id}`} aria-selected={group === g.id} aria-controls="settings-panel" className={group === g.id ? "is-active" : ""} onClick={() => choose(g.id)}>{g.label}</button>
-          ))}
-        </div>
-      </div>
-      <div id="settings-panel" role="tabpanel" aria-labelledby={`tab-${group}`}>
-        {shown.map((x) => <div key={x.id}>{x.node}</div>)}
-        {shown.length === 0 && <p className="muted">Everything here is hidden. Use Arrange, at the top, to show it again.</p>}
-      </div>
+      <PageHeader title={page.label} subtitle={page.sub} actions={arranged.button} />
+      {arranged.shown.map((x) => <div key={x.id}>{x.node}</div>)}
+      {arranged.shown.length === 0 && <p className="muted">Everything here is hidden. Use Arrange, at the top, to show it again.</p>}
     </div>
+  );
+}
+
+/** Health alerts' settings, loaded on their own (they come with the alerts). */
+function AlertSettingsPanel() {
+  const { data, error, reload } = useLoad(() => api.alerts(1), []);
+  return (
+    <section className="panel" id="alerts">
+      <h2>{NAMES.alerts}</h2>
+      <p className="muted">A heads-up when your readings look out of the ordinary for you. <Link to="/alerts">See your alerts</Link>.</p>
+      {error && <p className="notice notice-error">{error}</p>}
+      {!data && !error && <Spinner />}
+      {data && <AlertSettingsForm initial={data.settings} onSaved={reload} />}
+    </section>
   );
 }
 
@@ -207,7 +207,7 @@ function ArrangedScreens() {
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <p className="muted">Each page has an <ArrowUpDown size={14} style={{ verticalAlign: -2 }} /> Arrange button at the top: move what matters to the top, and hide what you don't use. Today, its quick actions and your features list are arranged the same way in the phone app.</p>
+      <p className="muted">Each page has an <ArrowUpDown size={14} style={{ verticalAlign: -2 }} /> Arrange button at the top: move what matters to the top, and hide what you don't use. Today, the + and Care are arranged the same way in the phone app.</p>
       <div className="button-row">
         <Button busy={busy} disabled={count === 0} onClick={async () => {
           setBusy(true);
@@ -242,13 +242,13 @@ function Features({ profile, water }: { profile: ProfileModel; water: boolean })
             <div className="feature-row">
               <Toggle disabled={busy} checked={isOn} onChange={(v) => void toggle(f.id, v)}
                 label={<>{f.name}{SENSITIVE.includes(f.id) && <Lock size={13} className="feature-lock" aria-label="Private" />}</>}
-                help={<>{f.id === "NUTRITION" && !water ? "A food diary with calories, protein, carbs, fat, coffee and drinks." : f.about}{offSidebar && " Hidden from your features list: arrange it to show it again."}</>} />
+                help={<>{f.id === "NUTRITION" && !water ? "A food diary with calories, protein, carbs, fat, coffee and drinks." : f.about}{offSidebar && " Hidden in Care: Arrange there shows it again."}</>} />
               {isOn && f.route ? <Link className="icon-btn" to={f.route} aria-label={`Open ${f.name}`} title={`Open ${f.name}`}><ChevronRight size={20} /></Link> : <span className="icon-btn-space" aria-hidden="true" />}
             </div>
             {f.id === "NUTRITION" && isOn && (
               <div className="feature-row feature-sub">
                 <Toggle disabled={waterBusy} checked={water} label="Water"
-                  help="Your water goal, the quick +250 ml, water among drinks, in Trends and on the watch. Off, drinks still count caffeine and alcohol."
+                  help="Your water goal, the quick +250 ml, water among drinks, in Body and on the watch. Off, drinks still count caffeine and alcohol."
                   onChange={async (v) => {
                     setWaterBusy(true);
                     try { await setField(F.NUTRITION_WATER, v); toast(v ? "Water is back" : "Water is hidden"); } catch (e) { errorToast(e); }
@@ -506,7 +506,7 @@ function Connector({ water, onMade }: { water: boolean; onMade: () => void }) {
             <code>{link}</code>
             <Button variant="ghost" onClick={() => { void navigator.clipboard?.writeText(link); toast("Copied"); }}><Copy size={16} /> Copy</Button>
           </div>
-          <p className="muted">This link is the key: keep it private. It's shown only now; it's listed in Account › Signed in on, where you can remove it.</p>
+          <p className="muted">This link is the key: keep it private. It's shown only now; it's listed in Look and account › Signed in on, where you can remove it.</p>
           <ul className="muted small" style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
             <li><strong>Claude</strong>: Settings › Connectors › Add custom connector, and paste the link.</li>
             <li><strong>Other MCP clients</strong>: add it as a remote (Streamable HTTP) server. The token can go in the URL as here, or as <code>Authorization: Bearer</code> to <code>/mcp</code>.</li>

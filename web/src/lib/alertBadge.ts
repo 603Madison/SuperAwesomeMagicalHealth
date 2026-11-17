@@ -6,8 +6,8 @@ import { useSession } from "./session";
 import { useViewing } from "./viewing";
 
 /*
- * How many health alerts the person hasn't seen yet, for the badges (Today's bell, the phone's
- * More tab, Health alerts in the sidebar). Asked when the app opens, when the tab comes back (at
+ * How many health alerts the person hasn't seen yet, for the badges (Today's bell, and the line
+ * about Health alerts on Body). Asked when the app opens, when the tab comes back (at
  * most once a minute) and every few minutes; Health alerts sets it to nothing once it marks them
  * seen. Only ever the person's own: never while viewing someone's share.
  */

@@ -268,3 +268,11 @@ test("night by night: oldest first, as drawn, a gap where one had none", () => {
   assert.equal(tickText("STEPS", 12_000, fmt), "12K");
   assert.equal(tickText("STEPS", 4_000, fmt), "4,000");
 });
+
+test("Body's line for Compare devices: heart rate at night first, else the first thing both measured", () => {
+  const line = (c: Parameters<typeof compare.compareLine>[0]) => plain(compare.compareLine(c, fmt) ?? "");
+  assert.equal(line({ a: strap, b: ring, metrics: [metric("ASLEEP"), metric("NIGHT_HEART_RATE")] }), "The ring read 3 bpm higher than the strap");
+  assert.equal(line({ a: strap, b: ring, metrics: [metric("HRV", { difference: -6, a: 50 })] }), "The ring read 6 ms (12%) lower than the strap");
+  assert.equal(compare.compareLine({ a: strap, b: ring, metrics: [] }, fmt), null);
+  assert.equal(compare.compareLine({ a: strap, metrics: [metric("ASLEEP")] }, fmt), null);
+});

@@ -1,28 +1,16 @@
-import type { Appointment, BladderTraining, DueDose, Meal, ScreenLayout, SupplyStatus } from "./types";
+import type {
+  AlertLevel, BladderTraining, DaySummary, DueDose, HealthAlert, Insight, Meal, Module, NowAction, NowActionKey, NowItem, TimelineKind,
+} from "./types";
 
 /*
- * Today's choices that don't need React (npm test covers them): what's up next and in what order,
- * the next bladder-training trip, which quick actions fit in the row, and the meals logged.
+ * Today's choices that don't need React (npm test covers them): reading the server's day feed
+ * (GET /api/feed: Right now and Your day), the bladder-training trip the feed doesn't carry, the
+ * line under the scores, the health alert that leads, the few insights below, and the meal it is.
  * Type imports only, so node can run it as it is.
  */
 
-/** How many quick actions fit in Today's row; the sixth place is More, which opens + Log. */
-export const QUICK_ROW = 5;
-
 /** A dose this close to its time counts as due now. */
 export const DUE_SOON_MS = 60 * 60_000;
-
-/** Something timed this close comes before a routine. */
-const SOON_MS = 2 * 60 * 60_000;
-
-/** One thing to do now: Up next's rows. */
-export type UpNext =
-  | { kind: "dose"; key: string; at: number; dose: DueDose; overdue: boolean }
-  | { kind: "appointment"; key: string; at: number; appointment: Appointment }
-  | { kind: "routine"; key: string; name: string }
-  | { kind: "trip"; key: string; at: number; every: number }
-  | { kind: "change"; key: string; at: number; name: string; since: number }
-  | { kind: "restock"; key: string; supply: SupplyStatus };
 
 /** The doses not taken or skipped yet that are due within the hour or overdue, earliest first. */
 export function dosesDue(due: DueDose[], now: number): DueDose[] {
@@ -32,11 +20,6 @@ export function dosesDue(due: DueDose[], now: number): DueDose[] {
 /** The doses not taken or skipped yet that come later today (not due yet). */
 export function dosesLater(due: DueDose[], now: number): DueDose[] {
   return due.filter((d) => !d.log && d.scheduledFor > now + DUE_SOON_MS).sort((a, b) => a.scheduledFor - b.scheduledFor);
-}
-
-/** Appointments between [from] and [to] (the day) that aren't over yet, earliest first. */
-export function appointmentsToday(list: Appointment[], from: number, to: number, now: number): Appointment[] {
-  return list.filter((a) => a.at >= from && a.at < to && a.at + (a.durationMinutes ?? 60) * 60_000 >= now).sort((a, b) => a.at - b.at);
 }
 
 /** The gap between trips on [date] (YYYY-MM-DD), in minutes: it grows by a step every few days, up to the goal. */
@@ -61,30 +44,9 @@ export function nextTrip(t: BladderTraining, date: string, trips: number[], now:
   return next > to ? null : next;
 }
 
-/**
- * Up next, most urgent first: what's overdue or due within two hours, by time; then routines;
- * then what's later today; then supplies to restock.
- */
-export function orderUpNext(items: UpNext[], now: number): UpNext[] {
-  const rank = (i: UpNext) => (i.kind === "restock" ? 3 : i.kind === "routine" ? 1 : i.at <= now + SOON_MS ? 0 : 2);
-  const time = (i: UpNext) => ("at" in i ? i.at : 0);
-  return [...items].sort((a, b) => rank(a) - rank(b) || time(a) - time(b));
-}
-
-/**
- * Today's quick row, from the offered actions in the person's order: until they arrange it, the
- * first [QUICK_ROW]; after, the ones they haven't put under More, still at most [QUICK_ROW]. The
- * rest are under More (+ Log has them all).
- */
-export function quickRow<T>(ordered: T[], id: (t: T) => string, layout?: ScreenLayout): { shown: T[]; more: T[] } {
-  const hidden = new Set(layout ? layout.hidden : ordered.slice(QUICK_ROW).map(id));
-  const shown = ordered.filter((t) => !hidden.has(id(t))).slice(0, QUICK_ROW);
-  const inRow = new Set(shown.map(id));
-  return { shown, more: ordered.filter((t) => !inRow.has(id(t))) };
-}
-
-const MEALS: { id: Meal; word: string }[] = [
-  { id: "BREAKFAST", word: "breakfast" }, { id: "LUNCH", word: "lunch" }, { id: "DINNER", word: "dinner" }, { id: "SNACK", word: "snacks" },
+const MEALS: { id: Meal; word: string; name: string; hour: number }[] = [
+  { id: "BREAKFAST", word: "breakfast", name: "Breakfast", hour: 8 }, { id: "LUNCH", word: "lunch", name: "Lunch", hour: 12.5 },
+  { id: "DINNER", word: "dinner", name: "Dinner", hour: 18.5 }, { id: "SNACK", word: "snacks", name: "Snacks", hour: 15.5 },
 ];
 
 /** "Breakfast, lunch logged": the meals with something in them, in the day's order; null with none. */
@@ -93,6 +55,177 @@ export function mealsLogged(meals: Meal[]): string | null {
   if (words.length === 0) return null;
   const text = words.join(", ");
   return `${text.charAt(0).toUpperCase()}${text.slice(1)} logged`;
+}
+
+/** The meal it is at [hour] (0–23, the person's clock), and what to call it: "Afternoon snack". */
+export function mealAt(hour: number): { meal: Meal; name: string } {
+  if (hour >= 5 && hour < 11) return { meal: "BREAKFAST", name: "Breakfast" };
+  if (hour >= 11 && hour < 15) return { meal: "LUNCH", name: "Lunch" };
+  if (hour >= 15 && hour < 17) return { meal: "SNACK", name: "Afternoon snack" };
+  if (hour >= 17 && hour < 21) return { meal: "DINNER", name: "Dinner" };
+  return { meal: "SNACK", name: "A snack" };
+}
+
+
+/** How the page writes times, durations and numbers (its own ways, so they match the rest of the app). */
+export interface Say {
+  time: (ms: number) => string;
+  hm: (minutes: number) => string;
+  num: (n: number) => string;
+}
+
+// ---- Right now, from the feed ----
+
+/** The actions this version knows how to do; a newer server's others show no button. */
+export const NOW_ACTIONS: NowActionKey[] = ["continence.change", "dose.take", "food.add", "energy.add", "voice.start", "appointment.open", "alert.open"];
+
+/** An item's action, if this version knows it; null otherwise (no button). */
+export function knownAction(item: Pick<NowItem, "action">): NowAction | null {
+  const a = item.action;
+  return a && (NOW_ACTIONS as string[]).includes(a.action) ? a : null;
+}
+
+/** What an action carries, read: the ids by name (an appointment's or an alert's also as plain "id"), times as numbers. */
+export interface ActionIds {
+  medicationId?: string;
+  scheduledFor?: number;
+  supplyId?: string;
+  meal?: Meal;
+  date?: string;
+  lessonId?: string;
+  appointmentId?: string;
+  alertId?: string;
+}
+
+const MEAL_IDS: Meal[] = ["BREAKFAST", "LUNCH", "DINNER", "SNACK"];
+
+export function actionIds(a: Pick<NowAction, "ids">): ActionIds {
+  const ids = a.ids ?? {};
+  const at = Number(ids.scheduledFor);
+  return {
+    medicationId: ids.medicationId || undefined,
+    scheduledFor: ids.scheduledFor && Number.isFinite(at) ? at : undefined,
+    supplyId: ids.supplyId || undefined,
+    meal: (MEAL_IDS as string[]).includes(ids.meal) ? (ids.meal as Meal) : undefined,
+    date: ids.date || undefined,
+    lessonId: ids.lessonId || undefined,
+    appointmentId: ids.appointmentId || ids.id || undefined,
+    alertId: ids.alertId || ids.id || undefined,
+  };
+}
+
+/** How soon a health alert in Right now asks to act, from the server's priority: 100 could need care now, 90 worth a doctor's look. */
+export function alertLevel(priority: number): AlertLevel {
+  return priority >= 100 ? "URGENT" : priority >= 90 ? "DOCTOR" : "WATCH";
+}
+
+/** The alert Today leads with: how soon to act, its title and a line. */
+export interface LeadAlert {
+  level: AlertLevel;
+  title: string;
+  body: string;
+  /** The Right now item it came from, left out of the rows below it. */
+  id?: string;
+}
+
+/** The health alert at the top of Today: the most pressing one in Right now (the server sends them most pressing first). */
+export function leadFromFeed(now: NowItem[]): LeadAlert | null {
+  const alerts = now.filter((i) => i.kind === "HEALTH_ALERT").sort((a, b) => b.priority - a.priority);
+  const top = alerts[0];
+  return top ? { level: alertLevel(top.priority), title: top.title, body: top.detail ?? "", id: top.id } : null;
+}
+
+/** The bladder-training trip the feed doesn't carry, as a Right now item: due now (or late) it presses; later today, gently. */
+export function tripItem(trip: { at: number; every: number }, now: number, say: Say): NowItem {
+  const due = trip.at <= now;
+  return {
+    id: "trip", kind: "OTHER", title: "Toilet trip", priority: due ? 75 : 35, at: trip.at, module: "CONTINENCE", page: "CONTINENCE",
+    detail: `${due ? "Now" : `Around ${say.time(trip.at)}`} · every ${say.hm(trip.every)}`,
+  };
+}
+
+/**
+ * Right now's rows: the feed's, most pressing first (and at the same priority, the soonest), with
+ * any the page adds ([extra]: the trip), less the alert that leads above them ([leadId]).
+ */
+export function rightNow(now: NowItem[], extra: NowItem[] = [], leadId?: string | null): NowItem[] {
+  return [...now, ...extra]
+    .filter((i) => i.id !== leadId)
+    .sort((a, b) => b.priority - a.priority || (a.at ?? Number.MAX_SAFE_INTEGER) - (b.at ?? Number.MAX_SAFE_INTEGER));
+}
+
+// ---- Your day, from the feed ----
+
+/** A timeline item's dot: the colour family it belongs to. A kind this version doesn't know gets a plain one. */
+export type DayDot = "sleep" | "food" | "activity" | "care" | "body" | "alert" | "other";
+
+const DOTS: Partial<Record<TimelineKind, DayDot>> = {
+  SLEEP: "sleep", NAP: "sleep",
+  MEAL: "food", DRINK: "food",
+  WORKOUT: "activity", FOCUS: "activity", ROUTINE: "activity", HABIT: "activity", VOICE_PRACTICE: "activity",
+  BLOOD_PRESSURE: "body", GLUCOSE: "body", WEIGHT: "body", MEASUREMENT: "body", PHOTO: "body",
+  DOSE_TAKEN: "care", DOSE_SKIPPED: "care", DOSE_CHANGE: "care", BATHROOM: "care", LEAK: "care", PRODUCT_CHANGE: "care", PELVIC_FLOOR: "care",
+  MOOD: "care", CHECK_IN: "care", CALM: "care", JOURNAL: "care", ENERGY: "care", OVERLOAD: "care", SYMPTOM: "care", APPOINTMENT: "care",
+  TRANSITION_MOMENT: "care", CYCLE_DAY: "care",
+  HEALTH_ALERT: "alert",
+};
+
+export const dotOf = (kind: string): DayDot => DOTS[kind as TimelineKind] ?? "other";
+
+/** The "Now" row on top of today's timeline: the latest heart rate while it's fresh, and the steps so far; null with neither. */
+export function nowLine(day: Pick<DaySummary, "heartRate" | "steps">, now: number, say: Say): string | null {
+  const latest = day.heartRate.length > 0 ? day.heartRate[day.heartRate.length - 1] : null;
+  const fresh = latest && now - latest.t <= 90 * 60_000 ? latest : null;
+  const parts = [fresh && `Heart rate ${say.num(fresh.v)}`, day.steps > 0 && `${say.num(day.steps)} steps so far`].filter(Boolean) as string[];
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+// ---- The line under the scores, the alert that leads, and For you ----
+
+/**
+ * One plain sentence under the scores, from readiness and the night (or the night alone, then
+ * activity). [unwell]: an active alert says the body may be fighting something off. Never
+ * alarming: a low score asks for an easier day, nothing more. Null without scores.
+ */
+export function scoreSentence(day: Pick<DaySummary, "readiness" | "sleep" | "activity">, unwell = false): string | null {
+  const r = day.readiness?.score;
+  const s = day.sleep?.score;
+  const a = day.activity?.score;
+  if (r == null && s == null && a == null) return null;
+  const night = s == null ? null : s >= 80 ? "Well rested" : s >= 65 ? "A fair night" : "A short night";
+  if (unwell) return `${night ? `${night}, but your` : "Your"} body may be working on something. Go easy today.`;
+  if (r != null) {
+    if (r >= 85) return night === "Well rested" ? "Well rested and well recovered. A good day to do more." : "Well recovered. A good day to do more.";
+    if (r >= 70) return `${night ? `${night}. ` : ""}A steady day: keep an even pace.`;
+    return night === "A short night" ? "A short night, so your body could use an easier day. Go gently." : "Your body could use an easier day. Go gently.";
+  }
+  if (night) return night === "Well rested" ? "Well rested. Make the most of it." : `${night}. Go easy on yourself today.`;
+  return a! >= 85 ? "A good, active day so far." : "There's still time to move a little today.";
+}
+
+/**
+ * The most serious health alert that's still active, for the card at the top of Today: the day's
+ * insights carry the active ones (most serious first, as the server sorts them), and the alert list,
+ * when it's loaded, says how serious each is. Null without one.
+ */
+export function leadAlert(insights: Insight[], alerts?: Pick<HealthAlert, "title" | "level" | "dismissedAt">[] | null): LeadAlert | null {
+  const active = insights.filter((i) => i.link === "ALERTS");
+  if (active.length === 0) return null;
+  const rank: Record<AlertLevel, number> = { URGENT: 0, DOCTOR: 1, WATCH: 2 };
+  const levelOf = (i: Insight): AlertLevel => {
+    if (i.tone === "alert") return "URGENT";
+    return alerts?.find((a) => a.title === i.title && a.dismissedAt == null)?.level ?? "DOCTOR";
+  };
+  const best = active.map((i) => ({ i, level: levelOf(i) })).sort((x, y) => rank[x.level] - rank[y.level])[0];
+  return { level: best.level, title: best.i.title, body: best.i.body };
+}
+
+/** Whether an active alert says the body may be fighting something off (the server's thermometer). */
+export const fightingSomething = (insights: Insight[]): boolean => insights.some((i) => i.link === "ALERTS" && i.icon === "thermometer");
+
+/** For you: at most [max] insights, never a health alert (the card at the top has that), none for a feature that's off. */
+export function forYou(insights: Insight[], on: Module[], max = 2): Insight[] {
+  return insights.filter((i) => i.link !== "ALERTS" && i.tone !== "alert" && (!i.module || on.includes(i.module))).slice(0, max);
 }
 
 /*
@@ -136,6 +269,12 @@ export function dateIn(ms: number, zone?: string | null): string {
   }
   const [y, m, d] = reading(ms, clock);
   return `${y}-${pad2(m)}-${pad2(d)}`;
+}
+
+/** The hour (0–23) the clock in [zone] shows at [ms]. */
+export function hourIn(ms: number, zone?: string | null): number {
+  const clock = clockIn(zone);
+  return clock ? reading(ms, clock)[3] : new Date(ms).getHours();
 }
 
 /** Today's date in [zone], as YYYY-MM-DD. */

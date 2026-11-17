@@ -61,6 +61,19 @@ export function withPaused(map: DataMap, path: DataPath, paused: boolean): DataM
   };
 }
 
+/**
+ * Where your data goes in one line, for You's row: how many ways out are on and paused, and that
+ * everything else stays put. Signing in (which can't be paused) isn't counted.
+ */
+export function privacyLine(map: Pick<DataMap, "destinations">): string {
+  const ways = map.destinations.filter((d) => d.pausable !== false);
+  const on = ways.filter((d) => d.state === "ON").length;
+  const paused = ways.filter((d) => d.state === "PAUSED").length;
+  if (on === 0 && paused === 0) return "Everything stays on your server";
+  const parts = [on > 0 && `${on} ${on === 1 ? "way" : "ways"} out on`, paused > 0 && `${paused} paused`].filter(Boolean);
+  return `${parts.join(", ")} · everything else stays on your server`;
+}
+
 /** What the toast says once it's saved. */
 export function pausedToast(d: Pick<DataDestination, "name">, paused: boolean): string {
   return paused ? `${d.name}: paused. Nothing goes until you turn it back on.` : `${d.name}: on again`;

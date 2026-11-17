@@ -4,7 +4,7 @@ import { Battery, Clock, Copy, FileUp, GitCompareArrows, HeartPulse, KeyRound, L
 import { api } from "../lib/api";
 import { num, shiftDate, today, when } from "../lib/format";
 import type { DaySummary, Device, DeviceChoices, Metric, SleepSummary } from "../lib/types";
-import { NAMES, NO_READINGS, compareOffered } from "../lib/nav";
+import { NAMES, NO_READINGS, bodyPath, compareOffered } from "../lib/nav";
 import { Button, Card, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
@@ -43,7 +43,7 @@ export function Devices() {
                     {KIND_LABEL[d.kind]}{d.model ? ` · ${d.model}` : ""}{d.firmware ? ` · firmware ${d.firmware}` : ""} · {d.lastSyncAt ? `synced ${when(d.lastSyncAt)}` : `added ${when(d.createdAt)}`}
                   </div>
                   {!NO_READINGS.includes(d.kind) && (
-                    <Link className="row-link" to={`/recent?device=${encodeURIComponent(d.id)}`} aria-label={`${NAMES.recent} from ${d.name}`}><Clock size={14} /> {NAMES.recent}</Link>
+                    <Link className="row-link" to={bodyPath("day", d.id)} aria-label={`${NAMES.recent} from ${d.name}`}><Clock size={14} /> {NAMES.recent}</Link>
                   )}
                 </div>
                 <div className="row-end">

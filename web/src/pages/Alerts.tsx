@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { HeartPulse, Info, Minus, Phone, Plus, Radar, SlidersHorizontal } from "lucide-react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { clearAlertBadge } from "../lib/alertBadge";
 import {
@@ -73,7 +74,7 @@ export function Alerts() {
       )
     ) },
     { id: "watching", label: "What it's watching", node: data && <Watching watching={data.watching} /> },
-    { id: "settings", label: "Settings", node: data && <AlertSettingsCard initial={data.settings} onSaved={load.reload} /> },
+    { id: "settings", label: "Settings", node: data && <SettingsLink /> },
   ];
   const arranged = useArrange(layoutKey("alerts"), "Health alerts", sections);
 
@@ -166,6 +167,15 @@ function AlertCard({ alert: a, isNew, clock, onPutAway }: { alert: HealthAlert; 
   );
 }
 
+/** The settings live with reminders: one way there. */
+function SettingsLink() {
+  return (
+    <Card title="Settings" icon={<SlidersHorizontal size={18} />} link={{ to: "/settings#alerts", label: "Open the settings for health alerts" }}>
+      <p className="muted">What it watches for, and how it tells you: in <Link to="/settings#alerts">Reminders, alerts and sharing</Link>.</p>
+    </Card>
+  );
+}
+
 /** What the alerts can watch with the person's devices, and how. */
 function Watching({ watching }: { watching: AlertWatch[] }) {
   return (
@@ -214,8 +224,8 @@ function Stepper({ name, label, help, value, onChange }: { name: AlertNumber; la
   );
 }
 
-/** The person's alert settings, saved together. */
-function AlertSettingsCard({ initial, onSaved }: { initial: AlertSettings; onSaved: () => void }) {
+/** The person's alert settings, saved together (Settings › Reminders, alerts and sharing). */
+export function AlertSettingsForm({ initial, onSaved }: { initial: AlertSettings; onSaved: () => void }) {
   const [saved, setSaved] = useState(initial);
   const [s, setS] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -237,7 +247,7 @@ function AlertSettingsCard({ initial, onSaved }: { initial: AlertSettings; onSav
     return `${r.min}–${r.max}${r.unit === "%" ? "%" : ` ${r.unit}`}`;
   };
   return (
-    <Card title="Settings" icon={<SlidersHorizontal size={18} />}>
+    <>
       <div className="form-stack alert-settings">
         <Toggle label="Health alerts" help="Watch your readings and say when something looks out of the ordinary for you." checked={s.enabled} onChange={(enabled) => set({ enabled })} />
         {s.enabled && (
@@ -258,6 +268,6 @@ function AlertSettingsCard({ initial, onSaved }: { initial: AlertSettings; onSav
           {settingsChanged(s, saved) && <Button variant="ghost" onClick={() => setS(saved)}>Undo changes</Button>}
         </div>
       </div>
-    </Card>
+    </>
   );
 }

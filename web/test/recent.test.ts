@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  RECENT_METRICS, RECENT_SECTIONS, drawnAsLine, lastSynced, nightDevice, nightMinutes, nightSummary, nothingRecorded, readingStats, readingsByMetric,
+  BODY_DAY_SECTIONS, BODY_DAY_TILES, RECENT_METRICS, RECENT_SECTIONS, againstUsual, devicesTogether, drawnAsLine, lastSynced, lowestPoint, mainNight, nightDevice,
+  nightMinutes, nightSummary, nothingRecorded, readingStats, readingsByMetric, usualOf,
   readingsSummary, signed, sleepSpans, stepsSummary, temperature, temperatureChangeText, temperatureText,
 } from "../src/lib/recent.ts";
 import { clockTime, hourTicks } from "../src/lib/today.ts";
@@ -268,4 +269,38 @@ test("nothing recorded: the chosen device's last sync, or the latest of them all
 
 test("the sections' ids are saved, so they stay as they are", () => {
   assert.deepEqual(RECENT_SECTIONS, ["sleep", "heart", "spo2", "hrv", "stress", "breathing", "temperature", "steps"]);
+  // Body at 24 hours shows the same ones, the tiles together.
+  assert.deepEqual([...BODY_DAY_SECTIONS].sort(), [...RECENT_SECTIONS].sort());
+  assert.ok(BODY_DAY_TILES.every((t) => RECENT_SECTIONS.includes(t)));
+});
+
+// ---- Body at 24 hours ----
+
+test("the night shown large is the longest; the lowest reading knows when it was", () => {
+  const night = (start: number, end: number): SleepSession => ({ start, end, stages: [] });
+  const nap = night(utc(2026, 11, 17, 14), utc(2026, 11, 17, 14, 40));
+  const main = night(utc(2026, 11, 16, 23), utc(2026, 11, 17, 7));
+  assert.equal(mainNight([nap, main]), main);
+  assert.equal(mainNight([]), null);
+  assert.deepEqual(lowestPoint({ points: [{ at: 1, value: 96 }, { at: 2, value: 92 }, { at: 3, value: 95 }] }), { at: 2, value: 92 });
+  assert.equal(lowestPoint({ points: [] }), null);
+});
+
+test("against the usual: a share above or below, or the usual within 5%", () => {
+  assert.equal(usualOf([48, null, 50, undefined]), 49);
+  assert.equal(usualOf([]), null);
+  const below = againstUsual(38, 49)!;
+  assert.equal(below.word, "below");
+  assert.equal(Math.round(below.share * 100), 22);
+  assert.equal(againstUsual(50, 49)!.word, "usual");
+  assert.equal(againstUsual(60, 49)!.word, "above");
+  assert.equal(againstUsual(60, null), null);
+});
+
+test("whose heart rate it is: the chosen device, the one there is, or them together", () => {
+  const devices = [{ id: "r", name: "Colmi R02" }, { id: "s", name: "Polar H10" }];
+  assert.equal(devicesTogether(devices), "Colmi R02 and Polar H10 together");
+  assert.equal(devicesTogether(devices, "s"), "Polar H10");
+  assert.equal(devicesTogether(devices.slice(0, 1)), "Colmi R02");
+  assert.equal(devicesTogether([]), null);
 });

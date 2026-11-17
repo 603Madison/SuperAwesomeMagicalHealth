@@ -108,11 +108,12 @@ export function Toggle({ checked, onChange, label, help, disabled }: { checked: 
 /** What Tab can reach in a dialog. */
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function Modal({ title, onClose, children, footer, wide, sheet, subtitle }: {
+export function Modal({ title, onClose, children, footer, wide, sheet, subtitle, className = "" }: {
   title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
   /** On phones, a sheet from the bottom of the screen. */
   sheet?: boolean;
   subtitle?: ReactNode;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -141,7 +142,7 @@ export function Modal({ title, onClose, children, footer, wide, sheet, subtitle 
   };
   return createPortal(
     <div className={`modal-backdrop ${sheet ? "has-sheet" : ""}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={dialog} tabIndex={-1} className={`modal ${wide ? "modal-wide" : ""} ${sheet ? "modal-sheet" : ""}`} role="dialog" aria-modal aria-label={title} onKeyDown={trap}>
+      <div ref={dialog} tabIndex={-1} className={`modal ${wide ? "modal-wide" : ""} ${sheet ? "modal-sheet" : ""} ${className}`} role="dialog" aria-modal aria-label={title} onKeyDown={trap}>
         <div className="modal-head">
           <div>
             <h2>{title}</h2>
@@ -309,7 +310,7 @@ export function PageHeader({ title, subtitle, actions, back }: { title: string; 
   const navigate = useNavigate();
   const parent = back === undefined ? backFor(location.pathname) : back;
   return (
-    <header className="page-header">
+    <header className={`page-header ${parent ? "" : "is-root"}`}>
       <div className="page-heading">
         {parent && (
           <button type="button" className="icon-btn page-back" aria-label="Back" title="Back"
@@ -339,13 +340,13 @@ export function CountBadge({ count, className = "" }: { count: number; className
   );
 }
 
-/** One row of a menu (Health, More): an icon, a title and one line under it, a badge, and a chevron. Opens [to]. */
+/** One row of a menu (You, Body's links): an icon if it helps, a title and one line under it, a badge, and a chevron. Opens [to]. */
 export function MenuRow({ to, icon, title, sub, badge, onClick }: {
-  to: string; icon: ReactNode; title: string; sub?: ReactNode; badge?: number; onClick?: () => void;
+  to: string; icon?: ReactNode; title: string; sub?: ReactNode; badge?: number; onClick?: () => void;
 }) {
   return (
-    <Link to={to} className="menu-row" onClick={onClick}>
-      <span className="menu-row-icon" aria-hidden="true">{icon}</span>
+    <Link to={to} className={`menu-row ${icon ? "" : "no-icon"}`} onClick={onClick}>
+      {icon && <span className="menu-row-icon" aria-hidden="true">{icon}</span>}
       <span className="menu-row-text">
         <span className="menu-row-title">{title}{badge != null && <CountBadge count={badge} />}</span>
         {sub && <span className="menu-row-sub">{sub}</span>}
@@ -363,24 +364,6 @@ export function MenuGroup({ title, children }: { title?: string; children: React
       <div className="menu-card">{children}</div>
     </section>
   );
-}
-
-/** The width where the sidebar gives way to the phone's tabs (styles.css). */
-const NARROW = "(max-width: 760px)";
-
-/** Whether the screen is phone-narrow (the tabs along the bottom show), following it as it changes. */
-export function useNarrow(): boolean {
-  const query = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(NARROW) : null;
-  const [narrow, setNarrow] = useState(() => query?.matches ?? false);
-  useEffect(() => {
-    if (!query) return;
-    const change = () => setNarrow(query.matches);
-    change();
-    query.addEventListener("change", change);
-    return () => query.removeEventListener("change", change);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return narrow;
 }
 
 /** Runs [load] when [deps] change; gives the result, any error, and a way to run it again. */

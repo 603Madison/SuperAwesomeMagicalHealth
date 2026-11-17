@@ -15,7 +15,7 @@ import { FullnessPicker, ScaleRow } from "../components/FieldKit";
 /*
  * What's being worn, and a change as one step: the "Wearing now" card at the top of the diary,
  * the Change sheet (what came off and how it was, what went on, when), and how each product goes.
- * Today's quick log and Up next open the same sheet. While viewing a share, nothing changes.
+ * Right now on Today and the + open the same sheet. While viewing a share, nothing changes.
  */
 
 /** Whether the diary keeps track of products for this person: the fields, or something already on. */
@@ -209,7 +209,7 @@ export function ChangeSheet({ initial, supplies, settings, recent, onClose, onSa
   );
 }
 
-/** The Change sheet from anywhere (Today's quick log, Up next): it loads what it needs itself. */
+/** The Change sheet from anywhere (Right now, the +, Care): it loads what it needs itself. */
 export function QuickChange({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const data = useLoad(() => Promise.all([
     api.supplies().catch(() => [] as Supply[]),

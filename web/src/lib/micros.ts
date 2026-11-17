@@ -1,7 +1,7 @@
 import type { ExtraNutrient, FoodEntry, MicroAim, Micronutrient, NutrientTargets, Nutrients, NutritionTarget, TrendDay } from "./types";
 
 /*
- * Vitamins, minerals, fibre and the finer fats, as the Food page, foods, Trends and the targets
+ * Vitamins, minerals, fibre and the finer fats, as the Food page, foods, Body and the targets
  * settings show them (npm test covers this). Food.kt's Micronutrient and ExtraNutrient, mirrored:
  * keep them in step. Type imports only, so node can run it as it is.
  */

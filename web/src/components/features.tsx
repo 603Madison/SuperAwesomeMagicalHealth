@@ -15,10 +15,10 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
-  { id: "ACTIVITY", name: "Activity", about: "Steps, calories, workouts, stress and the activity score.", route: "/activity", icon: Activity },
-  { id: "SLEEP", name: "Sleep", about: "Nights, sleep stages and the sleep score.", route: "/sleep", icon: Moon },
+  { id: "ACTIVITY", name: "Activity", about: "Steps, calories, workouts, stress and the activity score.", route: "/body?span=week#workouts", icon: Activity },
+  { id: "SLEEP", name: "Sleep", about: "Nights, sleep stages and the sleep score.", route: "/body?span=week#nights", icon: Moon },
   { id: "NUTRITION", name: "Food", about: "A food diary with calories, protein, carbs, fat, water, coffee and drinks.", route: "/food", icon: Salad },
-  { id: "BODY", name: "Body", about: "Weight and body fat.", route: "/body", icon: Weight },
+  { id: "BODY", name: "Weight", about: "Weight, body fat and body measurements.", route: "/body/weight", icon: Weight },
   { id: "VITALS", name: "Blood pressure & glucose", about: "Readings from a monitor or by hand, against your own targets.", route: "/vitals", icon: HeartPulse },
   { id: "HABITS", name: "Habits", about: "Small daily habits, with streaks that forgive a rest day.", route: "/habits", icon: ListChecks },
   { id: "MIND", name: "Mind", about: "Mood, a private journal, anxiety and depression check-ins, calming tools, and support when you need it.", route: "/mind", icon: Brain },
