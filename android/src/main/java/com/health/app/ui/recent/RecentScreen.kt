@@ -321,7 +321,7 @@ private fun Stats(stats: List<Recent.Stat>) {
     }
 }
 
-/** The night (or nights and naps): how long asleep, when, the stages on the page's time axis, and each stage's time. */
+/** The night (or nights and naps): how long asleep, when, each night's stages across its own hours, and each stage's time. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SleepCard(readings: RecentReadings, axis: TimeAxis, zone: ZoneId) {
@@ -337,14 +337,19 @@ private fun SleepCard(readings: RecentReadings, axis: TimeAxis, zone: ZoneId) {
         readings.sleep.sortedBy { it.start }.forEach { s ->
             Text(Recent.sessionLine(s, zone, named), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
         }
-        Spacer(Modifier.height(12.dp))
-        Hypnogram(
-            Recent.stagesIn(nights, axis.from, axis.to), axis.from, axis.to,
-            Modifier.padding(end = CHART_GUTTER).semantics { contentDescription = Recent.sleepDescription(totals) },
-            height = 96.dp,
-            ticks = axis.ticks.map { it.at },
-        )
-        TimeAxisLabels(axis)
+        // Each night on its own time span, so its stages are wide enough to read (the charts below
+        // share the day's axis, with the night shaded).
+        nights.forEach { night ->
+            val span = TimeAxis.of(night.start, night.end, zone, everyHours = 2)
+            Spacer(Modifier.height(12.dp))
+            Hypnogram(
+                Recent.stagesIn(listOf(night), night.start, night.end), night.start, night.end,
+                Modifier.padding(end = CHART_GUTTER).semantics { contentDescription = Recent.sleepDescription(Recent.totals(listOf(night))) },
+                height = 96.dp,
+                ticks = span.ticks.map { it.at },
+            )
+            TimeAxisLabels(span)
+        }
         Spacer(Modifier.height(10.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (totals.staged) {

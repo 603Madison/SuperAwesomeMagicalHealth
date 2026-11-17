@@ -55,6 +55,10 @@ it's about. When protein's behind, it suggests **meals you've actually eaten bef
 help, for the meal that's coming up, with one-tap Add. Features with nothing logged yet wait in
 one "Also today" card, and **+ Log** has every way to add something.
 
+**Last 24 hours**: everything your devices recorded over the last day on one timeline: each night's
+sleep stages, heart rate, blood oxygen, HRV, stress, breathing, skin temperature and steps, from all
+your devices together or one at a time, with the night shaded across every chart.
+
 **Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
 quick-add calories, make your own foods, copy yesterday's breakfast, bring in your
 [Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections
