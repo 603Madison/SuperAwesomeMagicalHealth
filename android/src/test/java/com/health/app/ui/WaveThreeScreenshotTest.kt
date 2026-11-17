@@ -64,7 +64,6 @@ import com.health.app.data.Palette
 import com.health.app.data.ThemeMode
 import com.health.app.devices.healthconnect.ExportKind
 import com.health.app.reminders.RunningFocus
-import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.modules.body.MeasurementsScreen
 import com.health.app.ui.modules.body.MeasurementsState
 import com.health.app.ui.modules.neuro.AboutMeView
@@ -377,11 +376,5 @@ class WaveThreeScreenshotTest {
     fun exportDark() {
         render(dark = true) { Frame { ExportScreen(ExportState(true, emptySet(), emptySet(), null), ExportActions(), today) } }
         save("export_dark")
-    }
-
-    @Test
-    fun hubWithEverything() {
-        render { Frame { HubScreen(Module.entries.toSet(), showMeasurements = true) {} } }
-        save("hub_wave3")
     }
 }

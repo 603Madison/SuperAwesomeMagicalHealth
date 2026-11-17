@@ -1,39 +1,57 @@
 package com.health.app.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ShowChart
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.Today
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
@@ -51,6 +69,8 @@ import com.health.app.attempt
 import com.health.app.ui.ai.AiAuditRoute
 import com.health.app.ui.ai.AiRoute
 import com.health.app.ui.ai.AiSettingsRoute
+import com.health.app.ui.body.BodyRoute
+import com.health.app.ui.body.BodySpan
 import com.health.app.ui.care.AppointmentEditorRoute
 import com.health.app.ui.care.AppointmentsRoute
 import com.health.app.ui.care.DigestRoute
@@ -72,7 +92,7 @@ import com.health.app.ui.devices.RingPairRoute
 import com.health.app.ui.devices.StrapPairRoute
 import com.health.app.ui.food.AddFoodRoute
 import com.health.app.ui.food.FoodRoute
-import com.health.app.ui.modules.HubRoute
+import com.health.app.ui.log.LogHost
 import com.health.app.ui.modules.continence.ContinenceRoute
 import com.health.app.ui.modules.continence.PelvicFloorRoute
 import com.health.app.ui.modules.cycle.CycleRoute
@@ -83,68 +103,90 @@ import com.health.app.ui.modules.mind.JournalEditorRoute
 import com.health.app.ui.modules.mind.JournalRoute
 import com.health.app.ui.modules.mind.MindRoute
 import com.health.app.ui.modules.mind.ScreenerRoute
-import com.health.app.ui.more.MoreRoute
-import com.health.app.ui.recent.RecentRoute
 import com.health.app.ui.settings.DIGEST_SETTINGS
 import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsRoute
 import com.health.app.ui.settings.WhereDataGoes
 import com.health.app.ui.settings.WhereDataGoesRoute
 import com.health.app.ui.today.TodayRoute
+import com.health.app.ui.today.TodayViewModel
 import com.health.app.ui.tracking.HabitsRoute
 import com.health.app.ui.tracking.MonitorPairRoute
 import com.health.app.ui.tracking.SymptomsRoute
 import com.health.app.ui.tracking.VitalsRoute
-import com.health.app.ui.trends.TrendsRoute
+import com.health.app.ui.you.YouRoute
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 
 /*
- * The app's frame and its map. Five tabs, always the same whatever's turned on: Today, 24 hours,
- * Health (every feature), Trends and More (records, devices, the assistant and Settings). Every
- * other page sits under one of them and has a way back; a link to a tab's own page switches to
- * that tab rather than stacking a second copy.
+ * The app's frame and its map. Along the bottom, always the same whatever's turned on: Today,
+ * Body, the round + in the middle (the log sheet, not a page), Care and You. Every other page
+ * sits under one of them and has a back arrow; a link to a tab's own page switches to that tab
+ * rather than stacking a second copy.
  */
 
 data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-/** The five tabs along the bottom. */
+/** The four tabs, the + between Body and Care. */
 val TABS: List<Tab> = listOf(
-    Tab("today", "Today", Icons.Rounded.Today),
-    Tab("recent", "24 hours", Icons.Rounded.History),
-    Tab("health", "Health", Icons.Rounded.Favorite),
-    Tab("trends", "Trends", Icons.AutoMirrored.Rounded.ShowChart),
-    Tab("more", "More", Icons.Rounded.Menu),
+    Tab("today", "Today", Icons.Rounded.WbSunny),
+    Tab("body", "Body", Icons.Rounded.MonitorHeart),
+    Tab("care", "Care", Icons.Rounded.FavoriteBorder),
+    Tab("you", "You", Icons.Rounded.Person),
 )
 
-/** The first part of a route ("settings" of "settings/you", "recent" of "recent?x=1"). */
+/** The first part of a route ("settings" of "settings/you", "body" of "body?x=1"). */
 private fun rootOf(route: String): String = route.substringBefore('?').substringBefore('/')
 
-/** The pages that sit under More: records, devices, the assistant and Settings. The rest sit under Health. */
-private val UNDER_MORE = setOf("more", "alerts", "digest", "reports", "devices", "settings", "assistant")
+/** The pages under You: devices, your records, the assistant and Settings. */
+private val UNDER_YOU = setOf("you", "devices", "digest", "reports", "assistant", "settings")
+
+/** The pages under Body: Health alerts, and comparing two devices. */
+private val UNDER_BODY = setOf("body", "alerts")
 
 /**
- * Which tab a route belongs to, for the tab bar to light: a tab's own page, More's pages (Health
- * alerts, Your week, Reports & export, Devices and what's in them, the assistant, Settings), Trends,
- * and everything else (each feature and its pages) under Health.
+ * Which tab a route belongs to, for the tab bar to light: a tab's own page, Body's (Health alerts,
+ * Compare devices), You's (devices, Your week, the report, the assistant, Settings), and everything
+ * else (each feature and its pages) under Care.
  */
 fun tabOf(route: String?): String? {
-    val root = route?.let(::rootOf) ?: return null
+    val r = route ?: return null
+    val root = rootOf(r)
     return when {
-        TABS.any { it.route == root } -> root
-        root in UNDER_MORE -> "more"
-        else -> "health"
+        root in UNDER_BODY || r.startsWith("devices/compare") -> "body"
+        root in UNDER_YOU -> "you"
+        root == "today" -> "today"
+        else -> "care"
     }
 }
 
 /** Whether [route] is one of the tabs' own pages (which a link switches to, never stacks). */
 fun isTab(route: String): Boolean = TABS.any { it.route == route.substringBefore('?') }
 
-/** Where an older link lands now: Settings was a tab and is now in More. */
-fun current(route: String): String = if (route == "settings") "more" else route
+/**
+ * Where an older link lands now: the last 24 hours and Trends are Body, Health is Care, More and
+ * Settings are You, Appearance and Account are one page.
+ */
+fun current(route: String): String = when (rootOf(route)) {
+    "recent", "trends" -> "body"
+    "health" -> "care"
+    "more" -> "you"
+    else -> when (route) {
+        "settings" -> "you"
+        "settings/account" -> SettingsPage.LOOK.route
+        else -> route
+    }
+}
 
-/** The meal it probably is now, for "Log food" from Today. */
+/** The span a link asks Body for: the last 24 hours ("recent"), or the week ("trends"); null for Body as it was. */
+fun spanOf(route: String): BodySpan? = when (rootOf(route)) {
+    "recent" -> BodySpan.DAY
+    "trends" -> BodySpan.WEEK
+    else -> null
+}
+
+/** The meal it probably is now, for logging food. */
 fun mealNow(time: LocalTime = LocalTime.now()): Meal = when (time.hour) {
     in 4..10 -> Meal.BREAKFAST
     in 11..14 -> Meal.LUNCH
@@ -184,20 +226,24 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
     }
     // Viewing someone's share: their shared features, read-only, with a way back.
     val viewing by c.viewing.collectAsState()
-    // Health alerts unseen and not put away (the person's own): on the More tab, and its row there.
-    val unseenAlerts by c.unseenAlerts.collectAsState()
-    val alerts = if (viewing == null) unseenAlerts else 0
     val entry by nav.currentBackStackEntryAsState()
     val scope = rememberCoroutineScope()
+    var logging by remember { mutableStateOf(false) }
+    // A span a link asked Body for ("recent", "trends"), until Body has it.
+    var bodyAsk by remember { mutableStateOf<BodySpan?>(null) }
+    fun go(route: String) {
+        spanOf(route)?.let { bodyAsk = it }
+        nav.go(route)
+    }
     // A notification asked for a page.
     LaunchedEffect(open) {
         if (open != null) {
-            nav.go(open)
+            go(open)
             onOpened()
         }
     }
     CompositionLocalProvider(LocalReadOnly provides (viewing != null)) {
-        AppFrame(selected = tabOf(entry?.destination?.route), snackbar = snackbar, onTab = { tab -> nav.go(tab) }, badges = mapOf("more" to alerts)) {
+        AppFrame(selected = tabOf(entry?.destination?.route), snackbar = snackbar, onTab = ::go, onLog = { logging = true }, canLog = viewing == null) {
             Column(Modifier.fillMaxSize()) {
                 viewing?.let { share ->
                     ViewingBanner(share.ownerName, onBack = {
@@ -205,55 +251,106 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
                         nav.navigate("today") { popUpTo("today") { inclusive = true } }
                     })
                 }
-                Box(Modifier.weight(1f)) { Routes(nav, alerts) }
+                Box(Modifier.weight(1f)) { Routes(nav, ::go, bodyAsk) { bodyAsk = null } }
             }
         }
+        if (viewing == null) Log(nav, entry, logging, onClose = { logging = false }, open = ::go)
     }
 }
 
+/** The + sheet, with Today's Right now (from Today's own day, while it's showing today). */
+@Composable
+private fun Log(nav: NavHostController, current: NavBackStackEntry?, showing: Boolean, onClose: () -> Unit, open: (String) -> Unit) {
+    val c = appContainer()
+    // Today stays at the bottom of the back stack: its day is the one Today shows (looked up again as the page changes).
+    val today = remember(current) { attempt { nav.getBackStackEntry("today") }.getOrNull() }
+    val vm = today?.let { viewModel(viewModelStoreOwner = it) { TodayViewModel(c) } }
+    val state = vm?.state?.collectAsState()?.value?.takeIf { it.date == it.today }
+    val summary = state?.summary
+    LogHost(
+        showing = showing, onClose = onClose, open = open, now = state?.feed?.now.orEmpty(), plan = state?.plan,
+        wearing = summary?.modules?.continence?.wearing, checkIn = summary?.checkIn, weightKg = summary?.weightKg,
+        takeDose = { med, at, name -> vm?.takeDose(med, at, name) },
+    )
+}
+
 /**
- * The app around its pages: the aurora backdrop, the five tabs along the bottom (each with a count
- * from [badges] by its route, shown above 0), and the snackbar.
+ * The app around its pages: the aurora backdrop, the tabs along the bottom with the round + in
+ * the middle ([onLog]; greyed while viewing a share, [canLog]), and the snackbar.
  */
 @Composable
-fun AppFrame(selected: String?, snackbar: SnackbarHostState, onTab: (String) -> Unit, badges: Map<String, Int> = emptyMap(), content: @Composable () -> Unit) {
+fun AppFrame(
+    selected: String?,
+    snackbar: SnackbarHostState,
+    onTab: (String) -> Unit,
+    onLog: () -> Unit = {},
+    canLog: Boolean = true,
+    content: @Composable () -> Unit,
+) {
     Backdrop {
         Scaffold(
             containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onBackground,
             snackbarHost = { SnackbarHost(snackbar) },
-            bottomBar = {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f)) {
-                    TABS.forEach { tab ->
-                        NavigationBarItem(
-                            selected = selected == tab.route,
-                            onClick = { onTab(tab.route) },
-                            icon = {
-                                val count = badges[tab.route] ?: 0
-                                if (count > 0) {
-                                    BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text(if (count > 99) "99+" else "$count") } }) {
-                                        Icon(tab.icon, com.health.app.ui.alerts.Alerts.countText(count))
-                                    }
-                                } else {
-                                    Icon(tab.icon, null)
-                                }
-                            },
-                            label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            colors = NavigationBarItemDefaults.colors(
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                    }
-                }
-            },
+            bottomBar = { TabBar(selected, onTab, onLog, canLog) },
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) { content() }
         }
     }
 }
 
-/** A page within a tab: its header gets a way back ([LocalBack]). */
+/** Today · Body · + · Care · You: fixed, never shifting. */
+@Composable
+private fun TabBar(selected: String?, onTab: (String) -> Unit, onLog: () -> Unit, canLog: Boolean) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.97f)) {
+        Column(Modifier.navigationBarsPadding()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp).selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
+                TABS.forEachIndexed { i, tab ->
+                    if (i == 2) LogButton(onLog, canLog)
+                    TabItem(tab, selected == tab.route) { onTab(tab.route) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TabItem(tab: Tab, selected: Boolean, onClick: () -> Unit) {
+    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        Modifier.weight(1f).fillMaxHeight().selectable(selected = selected, role = Role.Tab, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(tab.icon, null, tint = color, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(
+            tab.label, style = MaterialTheme.typography.labelMedium, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** The round + in the middle: it opens the log sheet. */
+@Composable
+private fun RowScope.LogButton(onClick: () -> Unit, enabled: Boolean) {
+    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            shape = CircleShape,
+            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            shadowElevation = if (enabled) 6.dp else 0.dp,
+            modifier = Modifier.size(56.dp).semantics { contentDescription = if (enabled) "Log something" else "Logging is off while you view a share" },
+        ) {
+            Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Add, null, modifier = Modifier.size(28.dp)) }
+        }
+    }
+}
+
+/** A page within a tab: its header gets a back arrow ([LocalBack]). */
 private fun NavGraphBuilder.page(
     route: String,
     nav: NavHostController,
@@ -268,24 +365,19 @@ private fun arg(name: String) = navArgument(name) { type = NavType.StringType; n
 private fun required(name: String) = navArgument(name) { type = NavType.StringType }
 
 @Composable
-private fun Routes(nav: NavHostController, alerts: Int) {
-    fun open(route: String) = nav.go(route)
+private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySpan?, onBodyAsked: () -> Unit) {
+    fun open(route: String) = go(route)
     fun back() { nav.popBackStack() }
     NavHost(nav, startDestination = "today") {
-        // ---- The five tabs' own pages: no way back, they're where back leads.
+        // ---- The tabs' own pages: no back arrow, they're where back leads.
         composable("today") {
-            TodayRoute(
-                onLogFood = { date -> nav.navigate("food/add/$date/${mealNow().name}") },
-                onOpenDevices = { open("devices") },
-                onOpen = ::open,
-            )
+            TodayRoute(onOpen = ::open)
         }
-        composable("recent") { RecentRoute(device = null) }
-        composable("health") { HubRoute(onOpen = ::open) }
-        composable("trends") { TrendsRoute(onRecent = { open("recent") }) }
-        composable("more") { MoreRoute(onOpen = ::open, unseenAlerts = alerts) }
+        composable("body") { BodyRoute(open = ::open, ask = bodyAsk, onAsked = onBodyAsked) }
+        composable("care") { CareTabPlaceholder(::open) }
+        composable("you") { YouRoute(::open) }
 
-        // ---- Food (in Health).
+        // ---- Food (under Care).
         page("food", nav) { FoodRoute(onAdd = { date, meal -> nav.navigate("food/add/$date/${meal.name}") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
         page("food/add/{date}/{meal}", nav, listOf(required("date"), required("meal"))) { back ->
             val date = attempt { LocalDate.parse(back.arguments?.getString("date")) }.getOrElse { LocalDate.now() }
@@ -293,7 +385,7 @@ private fun Routes(nav: NavHostController, alerts: Int) {
             AddFoodRoute(date, meal, onDone = ::back, onPrivacy = { open(WhereDataGoes.ROUTE) })
         }
 
-        // ---- Devices (in More): pairing, a device's last 24 hours, and comparing two.
+        // ---- Devices (under You): pairing, a device's last 24 hours, and (under Body) comparing two.
         page("devices", nav) {
             DevicesRoute(
                 onFindRing = { nav.navigate("devices/ring") },
@@ -303,20 +395,20 @@ private fun Routes(nav: NavHostController, alerts: Int) {
                 onCompare = { open("devices/compare") },
             )
         }
-        page("devices/recent?device={device}", nav, listOf(arg("device"))) { back -> RecentRoute(back.arguments?.getString("device"), onBack = ::back) }
+        page("devices/recent?device={device}", nav, listOf(arg("device"))) { back -> BodyRoute(open = ::open, device = back.arguments?.getString("device"), onBack = ::back) }
         page("devices/compare", nav) { CompareRoute(onBack = ::back) }
         page("devices/ring", nav) { RingPairRoute(onDone = ::back) }
         page("devices/strap", nav) { StrapPairRoute(onDone = ::back) }
         page("devices/monitor", nav) { MonitorPairRoute(onDone = ::back) }
 
-        // ---- Your records and the assistant (in More). Health alerts (ui/alerts) also open from Today's bell, alert insights and their notifications.
+        // ---- Health alerts (under Body; also from Today's bell and card, and their notifications), your records and the assistant (under You).
         page("alerts", nav) { com.health.app.ui.alerts.AlertsRoute(onBack = ::back) }
         page("digest", nav) { DigestRoute(onBack = ::back, onSettings = { open(DIGEST_SETTINGS) }) }
         page("reports", nav) { ReportsRoute(onBack = ::back) }
         page("assistant", nav) { AiRoute(onBack = ::back, onAudit = { open("assistant/audit") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
         page("assistant/audit", nav) { AiAuditRoute(onBack = ::back) }
 
-        // ---- Settings (in More), a page each, and the pages within them.
+        // ---- Settings (under You), a page each, and the pages within them.
         SettingsPage.entries.forEach { p -> page(p.route, nav) { SettingsRoute(p, onBack = ::back, onOpen = ::open) } }
         page("settings/conditions", nav) { com.health.app.ui.conditions.ConditionsRoute(onBack = ::back, onFields = { open("settings/fields") }) }
         page("settings/fields", nav) { com.health.app.ui.conditions.FieldsRoute(onBack = ::back) }
@@ -333,7 +425,7 @@ private fun Routes(nav: NavHostController, alerts: Int) {
         page("settings/watch", nav) { WatchRoute(onBack = ::back) }
         page("settings/export", nav) { com.health.app.ui.settings.ExportRoute(onBack = ::back, onOpen = ::open) }
 
-        // ---- The features (in Health), each with its pages.
+        // ---- The features (under Care), each with its pages.
         page("mind", nav) {
             MindRoute(
                 onJournal = { open("mind/journal") },

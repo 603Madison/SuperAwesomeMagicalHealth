@@ -17,6 +17,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import com.health.api.AiStatus
 import com.health.api.CheckIn
@@ -52,13 +54,12 @@ import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.components.Backdrop
 import com.health.app.ui.components.LocalLayoutStore
 import com.health.app.ui.components.MemoryLayoutStore
-import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.settings.SettingsActions
 import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.theme.HealthTheme
-import com.health.app.ui.today.QuickLogRow
-import com.health.app.ui.today.LogSheetContent
+import com.health.app.ui.log.LogSheetActions
+import com.health.app.ui.log.LogSheetContent
 import com.health.app.ui.today.TodayActions
 import com.health.app.ui.today.TodayLayout
 import com.health.app.ui.today.TodayScreen
@@ -75,9 +76,9 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * Arranging screens and the tidier Today, drawn to PNGs in android/build/outputs/screenshots
- * (arrange_*): Today as it comes, arranged, and with water off; the Arrange sheet; the quick
- * actions with "More"; the Health tab arranged; and Settings in its sections. Light and dark.
+ * Arranging screens, drawn to PNGs in android/build/outputs/screenshots (arrange_*): Today as it
+ * comes and arranged; the Arrange sheet; the + sheet's grid in the person's order and arranging
+ * it; Care arranged; and What you track. Light and dark.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -157,45 +158,43 @@ class ArrangeScreenshotTest {
 
     private val state = TodayState(today, today, summary, loading = false)
 
-    /** Food first, then water and the quick actions; insights and heart hidden. Check in first among the quick actions. */
+    /** For you first, then the scores (an older app's cards in the saved order are left out); Your day hidden. Check in first in the + sheet. */
     private val arranged = LayoutPrefs(
         mapOf(
             Layouts.TODAY to ScreenLayout(
-                listOf("FOOD", "WATER", "QUICK", "MEDS", "MIND", "SCORES", "HABITS"),
-                hidden = setOf(TodaySection.INSIGHTS.name, TodaySection.HEART.name, TodaySection.WORKOUTS.name),
+                listOf("FOOD", "INSIGHTS", "WATER", "QUICK", "MEDS", "SCORES", "UP_NEXT"),
+                hidden = setOf(TodaySection.DAY.name, TodaySection.HEART.name),
             ),
             Layouts.QUICK to ScreenLayout(listOf("CHECK_IN", "FOOD", "COFFEE", "MOOD"), hidden = setOf("WATER", "DRINK", "SYMPTOM", "BLOOD_PRESSURE", "GLUCOSE", "HABIT", "CALM", "SLEEP", "DOSE")),
         ),
     )
 
-    private fun today(dark: Boolean, name: String, layout: LayoutPrefs = LayoutPrefs(), water: Boolean = true) {
-        render(dark, layout) { Frame("today", modules) { TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = modules, water = water) } }
+    private fun today(dark: Boolean, name: String, layout: LayoutPrefs = LayoutPrefs()) {
+        render(dark, layout) { Frame("today", modules) { TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = modules) } }
         save(name)
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     fun todayDefaultLight() = today(false, "arrange_today_light")
 
     @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     fun todayDefaultDark() = today(true, "arrange_today_dark")
 
     @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
-    fun todayArrangedLight() = today(false, "arrange_today_arranged_light", arranged)
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
+    fun todayArrangedLight() {
+        today(false, "arrange_today_arranged_light", arranged)
+        val forYou = compose.onNodeWithText("For you").fetchSemanticsNode().boundsInRoot.top
+        val scores = compose.onNodeWithText("Readiness", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top
+        org.junit.Assert.assertTrue("For you is first", forYou < scores)
+        org.junit.Assert.assertEquals(0, compose.onAllNodesWithText("Your day").fetchSemanticsNodes().size)
+    }
 
     @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     fun todayArrangedDark() = today(true, "arrange_today_arranged_dark", arranged)
-
-    @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
-    fun todayWaterOffLight() = today(false, "arrange_today_water_off_light", water = false)
-
-    @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
-    fun todayWaterOffDark() = today(true, "arrange_today_water_off_dark", water = false)
 
     @Test
     fun todayNoScores() {
@@ -206,7 +205,7 @@ class ArrangeScreenshotTest {
 
     // ---- The Arrange sheet ----
 
-    private val todayItems = TodayLayout.sections(modules).map { ArrangeItem(it.name, TodayLayout.label(it, modules)) }
+    private val todayItems = TodayLayout.sections(modules).map { ArrangeItem(it.name, TodayLayout.label(it)) }
 
     private fun arrangeSheet(dark: Boolean, name: String) {
         render(dark, arranged) { Sheet { ArrangeContent(Layouts.TODAY, "Today", todayItems, {}) } }
@@ -221,36 +220,33 @@ class ArrangeScreenshotTest {
     @Config(qualifiers = "w411dp-h1100dp-xxhdpi")
     fun arrangeSheetDark() = arrangeSheet(true, "arrange_sheet_dark")
 
-    // ---- Quick actions with More, the More sheet, and choosing which show ----
+    // ---- The + sheet's grid, in the person's order, and arranging it (order only: everything tracked shows) ----
 
     private val quickModules = modules + setOf(Module.CYCLE, Module.CONTINENCE)
 
     private fun quick(dark: Boolean, name: String) {
         val available = TodayLayout.quickActions(quickModules)
-        val row = TodayLayout.quickRow(available, null)
-        render(dark) {
+        render(dark, arranged) {
             Sheet {
-                Column(Modifier.padding(horizontal = 16.dp)) { QuickLogRow(row, Units.METRIC, {}, {}) }
+                LogSheetContent(emptyList(), "1:42 PM", null, "", TodayLayout.grid(available, arranged.screens[Layouts.QUICK]), Units.METRIC, LogSheetActions())
                 Spacer(Modifier.height(24.dp))
-                LogSheetContent(TodayLayout.logGroups(available, null), Units.METRIC, {}, {})
-                ArrangeContent(
-                    Layouts.QUICK, "Quick log", available.map { ArrangeItem(it.name, it.label) }, {},
-                    hiddenMeans = "Under More", defaultHidden = TodayLayout.defaultUnderMore(available),
-                )
+                ArrangeContent(Layouts.QUICK, "the + sheet", available.map { ArrangeItem(it.name, it.label) }, {}, orderOnly = true)
             }
         }
         save(name)
+        // Nothing can be hidden from the grid.
+        org.junit.Assert.assertEquals(0, compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Hide", substring = true)).fetchSemanticsNodes().size)
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h1800dp-xxhdpi")
-    fun quickMoreLight() = quick(false, "arrange_quick_more_light")
+    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    fun quickMoreLight() = quick(false, "arrange_plus_grid_light")
 
     @Test
-    @Config(qualifiers = "w411dp-h1800dp-xxhdpi")
-    fun quickMoreDark() = quick(true, "arrange_quick_more_dark")
+    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
+    fun quickMoreDark() = quick(true, "arrange_plus_grid_dark")
 
-    // ---- The Health tab, arranged ----
+    // ---- Care (until its own page), in the person's order (Layouts.NAV) ----
 
     private val healthModules = Module.DEFAULT + setOf(Module.MIND, Module.CYCLE, Module.MEDICATIONS, Module.HABITS, Module.SYMPTOMS, Module.PHOTOS)
 
@@ -259,7 +255,7 @@ class ArrangeScreenshotTest {
     )
 
     private fun health(dark: Boolean, name: String) {
-        render(dark, healthArranged) { Frame("health", healthModules) { HubScreen(healthModules) {} } }
+        render(dark, healthArranged) { Frame("care", healthModules) { CareTabPlaceholder(open = {}, modules = healthModules) } }
         save(name)
     }
 
@@ -269,7 +265,7 @@ class ArrangeScreenshotTest {
     @Test
     fun healthArrangedDark() = health(true, "arrange_health_dark")
 
-    // ---- What you're tracking: features hidden from Health say so, and open from there ----
+    // ---- What you track: features hidden from Care say so, and open from there ----
 
     private val settings = Settings(
         server = "https://health.home.arpa", token = "t", serverName = "Health at home",

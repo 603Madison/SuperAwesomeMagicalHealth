@@ -193,47 +193,18 @@ class DeviceSourcesScreenshotTest {
         )
     }
 
-    private fun today(dark: Boolean, name: String) {
-        render(dark) { Frame("today") { TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions()) } }
-        // Down to the Heart card.
-        compose.onNodeWithText("Heart").assertExists()
-        save(name)
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
-    fun todayFromTwoDevicesLight() = today(false, "sources_today_light")
-
-    @Test
-    @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
-    fun todayFromTwoDevicesDark() = today(true, "sources_today_dark")
-
-    @Test
-    fun theLineOpensItsCardsSources() {
-        render { Frame("today") { TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions()) } }
-        // Activity, Sleep and Heart each have one; Activity's speaks for steps only.
-        val lines = compose.onAllNodesWithText("From 2 devices")
-        lines.assertCountEquals(3)
-        lines[0].performScrollTo().performClick()
-        compose.onNodeWithText("Use only Pebble Time 2 for steps").assertExists()
-        compose.onNodeWithText("Use only Pebble Time 2 for heart rate variability").assertDoesNotExist()
-    }
-
     @Test
     @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
     fun trendsFromTwoDevices() {
-        val days = (13 downTo 0).map { ago ->
-            val i = 13 - ago
+        val days = (6 downTo 0).map { ago ->
+            val i = 6 - ago
             com.health.api.TrendDay(
                 today.minusDays(ago.toLong()).toString(), steps = 6000 + (i * 397) % 4000, restingHeartRate = 52.0 + (i % 4),
                 hrv = 44.0 + (i * 3) % 9, sleepMinutes = 380 + (i * 17) % 80,
             )
         }
-        val state = com.health.app.ui.trends.TrendsState(
-            days = 14, trends = com.health.api.Trends(days.first().date, days.last().date, days), loading = false,
-            combined = combined, combinedSleep = combinedSleep,
-        )
-        render { Frame("trends") { com.health.app.ui.trends.TrendsScreen(state, Units.METRIC, Goals(), zone, com.health.app.ui.trends.TrendsActions()) } }
+        val span = Span(com.health.api.Trends(days.first().date, days.last().date, days), combined = combined, combinedSleep = combinedSleep)
+        render { Frame("body") { BodyOver(span, Units.METRIC, Goals(), zone) } }
         // Sleep, steps, resting heart rate and HRV each have one.
         compose.onAllNodesWithText("From 2 devices").assertCountEquals(4)
         save("sources_trends_light")

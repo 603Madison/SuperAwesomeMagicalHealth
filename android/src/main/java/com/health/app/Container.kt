@@ -27,6 +27,7 @@ import com.health.app.net.saveAllLayouts
 import com.health.app.net.saveScreenLayout
 import com.health.app.net.serverHealth
 import com.health.app.net.habitsForReminders
+import com.health.api.HealthAlert
 import com.health.api.HealthAlerts
 import com.health.app.net.alerts
 import com.health.app.reminders.AlertNotices
@@ -133,6 +134,14 @@ class Container(val context: Context) {
      */
     val unseenAlerts: StateFlow<Int> = _unseenAlerts.asStateFlow()
 
+    private val _alerts = MutableStateFlow<HealthAlerts?>(null)
+
+    /**
+     * The alerts last looked up (either window covers what's still active): Today's alert card and
+     * Body's Health alerts row. Never someone else's: alerts are only ever the person's own.
+     */
+    val alerts: StateFlow<HealthAlerts?> = _alerts.asStateFlow()
+
     /** The last [days] of the person's own alerts, [unseenAlerts] following; null when signed out or the server can't be reached. */
     suspend fun refreshAlerts(days: Int = Alerts.DAYS): HealthAlerts? {
         if (!settings.value.signedIn) return null
@@ -153,6 +162,14 @@ class Container(val context: Context) {
         synchronized(alertsLock) {
             unseenKnown = Alerts.mergeUnseen(unseenKnown, result.alerts, since, result.settings.enabled)
             _unseenAlerts.value = unseenKnown.size
+            _alerts.value = result
+        }
+    }
+
+    /** [changed] as it now is (put away): Today's card and Body's row follow. */
+    fun alertChanged(changed: HealthAlert) {
+        synchronized(alertsLock) {
+            _alerts.value = _alerts.value?.let { it.copy(alerts = Alerts.replace(it.alerts, changed)) }
         }
     }
 
@@ -547,6 +564,7 @@ class Container(val context: Context) {
         reminderCache.clear()
         alertNotices.clear()
         alertsSeen()
+        _alerts.value = null
         // Nothing personal stays in the notification shade.
         androidx.core.app.NotificationManagerCompat.from(context).cancelAll()
         monitors.clear()

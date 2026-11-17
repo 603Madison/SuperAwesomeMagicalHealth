@@ -86,7 +86,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /*
- * Connections & privacy › Where your data goes: each way something about the person can leave their server, as
+ * You › Where your data goes: each way something about the person can leave their server, as
  * the server lists it (GET /api/privacy), with a switch to pause or resume the ones that are set
  * up; then what this phone does (its Bluetooth devices, Health Connect, Gadgetbridge, and that the
  * app talks only to the server). Arranged under android.privacy. Only ever the person's own.

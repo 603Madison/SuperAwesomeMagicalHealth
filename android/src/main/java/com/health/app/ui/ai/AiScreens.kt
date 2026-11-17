@@ -218,8 +218,8 @@ fun AiAuditRoute(onBack: () -> Unit) {
 }
 
 /**
- * Connections & privacy › AI assistant: whether it's on for this person and what it may look at,
- * or turning it on (the chat itself is the Assistant, in More).
+ * Connections › AI assistant: whether it's on for this person and what it may look at,
+ * or turning it on (the chat itself is the Assistant, on You).
  */
 @Composable
 fun AiSettingsRoute(onBack: () -> Unit) {
@@ -243,7 +243,7 @@ fun AiSettingsRoute(onBack: () -> Unit) {
     }
 }
 
-/** The chat's name (More › Assistant), and its settings' (Connections & privacy › AI assistant). */
+/** The chat's name (You › Assistant), and its settings' (Connections › AI assistant). */
 const val ASSISTANT_TITLE = "Assistant"
 private const val SETTINGS_TITLE = "AI assistant"
 

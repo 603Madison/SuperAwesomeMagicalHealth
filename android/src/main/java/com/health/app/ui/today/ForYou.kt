@@ -26,18 +26,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,14 +49,13 @@ import com.health.api.Insight
 import com.health.api.Meal
 import com.health.api.Module
 import com.health.app.ui.AppIcons
-import com.health.app.ui.components.InfoCard
 import com.health.app.ui.modules.continence.SupplyArea
 import com.health.app.ui.theme.AppTheme
 import kotlin.math.roundToInt
 
 /**
- * Where an insight's page ([AppPage]) is in this app, and what it's called ("Open Trends"). The
- * phone keeps sleep, activity and the body's numbers in Trends (or Measurements, when they show),
+ * Where an insight's page ([AppPage]) is in this app, and what it's called ("Open Body"). The
+ * phone keeps sleep, activity and the body's numbers in Body (or Measurements, when they show),
  * and Autism & ADHD inside Mind when only Mind is on. Plain Kotlin, so it's tested without a phone.
  */
 object InsightLinks {
@@ -86,8 +78,10 @@ object InsightLinks {
         AppPage.NEURO -> if (Module.NEURO in modules) Target(page, "neuro", "Autism & ADHD") else Target(page, "mind", "Mind")
         AppPage.TRANSITION -> Target(page, "transition", "Transition")
         AppPage.PHOTOS -> Target(page, "photos", "Progress photos")
-        AppPage.BODY -> if (measurements) Target(page, "measurements", "Body measurements") else Target(page, "trends", "Trends")
-        AppPage.SLEEP, AppPage.ACTIVITY, AppPage.TRENDS -> Target(page, "trends", "Trends")
+        AppPage.BODY -> if (measurements) Target(page, "measurements", "Body measurements") else Target(page, "trends", "Body")
+        // Last night's at 24 hours; the rest over the week.
+        AppPage.SLEEP -> Target(page, "recent", "Body")
+        AppPage.ACTIVITY, AppPage.TRENDS -> Target(page, "trends", "Body")
         AppPage.DEVICES -> Target(page, "devices", "Devices")
         AppPage.ALERTS -> Target(page, "alerts", "Health alerts")
     }
@@ -101,7 +95,7 @@ object InsightLinks {
         val page = AppPage.of(insight) ?: return null
         if (readOnly && page.ownOnly) return null
         val here = when (page) {
-            // Trends (or Measurements) hold these, whatever's on.
+            // Body (or Measurements) holds these, whatever's on.
             AppPage.SLEEP, AppPage.ACTIVITY, AppPage.BODY, AppPage.TRENDS, AppPage.TODAY, AppPage.DEVICES -> true
             AppPage.SUPPLIES -> Module.CONTINENCE in modules || Module.CYCLE in modules
             AppPage.NEURO -> Module.NEURO in modules || Module.MIND in modules
@@ -115,7 +109,7 @@ object InsightLinks {
 
     /**
      * Today's insights to show: those for features that are on, less any that repeat a card
-     * that's showing ([Insight.shownBy]: the day's doses and today's appointment while Up next shows them, TodayPlan.showing).
+     * that's showing ([Insight.shownBy]: the day's doses and today's appointment while Right now shows them, TodayRows.showing).
      */
     fun shown(insights: List<Insight>, modules: Set<Module>, showing: Set<com.health.api.TodaySection>): List<Insight> =
         insights.filter { (it.module == null || it.module in modules) && (it.shownBy == null || it.shownBy !in showing) }
@@ -229,34 +223,5 @@ fun FoodIdeaChip(idea: FoodSuggestion, onAdd: ((FoodSuggestion) -> Unit)?, showN
         ) { inside() }
     } else {
         Surface(shape = shape, color = color, modifier = Modifier.padding(vertical = 6.dp).semantics(mergeDescendants = true) { contentDescription = idea.name }) { inside() }
-    }
-}
-
-/**
- * "For you": Today's insights as one card of [InsightRow]s, the first [shown] and "Show N more"
- * for the rest. [targetOf] says what each opens.
- */
-@Composable
-fun ForYouCard(
-    insights: List<Insight>,
-    targetOf: (Insight) -> InsightLinks.Target?,
-    onOpen: (InsightLinks.Target) -> Unit,
-    readOnly: Boolean = false,
-    onAdd: ((FoodSuggestion) -> Unit)? = null,
-    shown: Int = 3,
-    /** Amounts of food (the ideas' protein): not in eating disorder recovery. */
-    showNumbers: Boolean = true,
-) {
-    if (insights.isEmpty()) return
-    var all by rememberSaveable { mutableStateOf(false) }
-    val rows = if (all) insights else insights.take(shown)
-    InfoCard("For you", icon = Icons.Rounded.AutoAwesome) {
-        rows.forEachIndexed { i, insight ->
-            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            InsightRow(insight, targetOf(insight), onOpen, readOnly = readOnly, onAdd = onAdd, showNumbers = showNumbers)
-        }
-        if (insights.size > shown) {
-            TextButton(onClick = { all = !all }) { Text(if (all) "Show fewer" else "Show ${insights.size - shown} more") }
-        }
     }
 }

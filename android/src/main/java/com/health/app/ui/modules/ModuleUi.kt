@@ -128,7 +128,7 @@ object ModuleInfo {
     }
 
     /**
-     * A feature's id in the Health tab's arrangement ([com.health.api.Layouts.NAV], shared with the
+     * A feature's id in Care's arrangement ([com.health.api.Layouts.NAV], shared with the
      * web's sidebar): Food is the page [com.health.api.NavPage.FOOD] there, the rest their own names.
      */
     fun navId(module: Module): String = if (module == Module.NUTRITION) com.health.api.NavPage.FOOD.name else module.name

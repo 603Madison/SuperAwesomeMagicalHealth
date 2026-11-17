@@ -48,9 +48,6 @@ object WearText {
         return ((minutes / step.toDouble()).roundToInt() * step).coerceAtLeast(step)
     }
 
-    /** "7 h", "45 min": a short time for a row's title, to the nearest hour past one. */
-    fun hoursShort(minutes: Int): String = if (minutes < 60) "${minutes.coerceAtLeast(0)} min" else "${(minutes / 60.0).roundToInt()} h"
-
     /** What a change put on: its put-on, or, for a change from before that was recorded, a fresh one of what it took off. */
     fun putOnOf(e: ContinenceEntry): String? = when {
         e.kind != ContinenceKind.PAD_CHANGE || e.nothingOn -> null
@@ -219,12 +216,8 @@ object WearText {
     fun usualLine(w: ContinenceWearing): String? =
         w.typicalMinutes?.takeIf { w.supplyId != null }?.let { "You usually change these after about ${wornFor(rough(it))}" }
 
-    /** Whether a change reminder is due now (Up next's "Time to change"). */
+    /** Whether a change reminder is due now (the Wearing now card's "Time to change"). */
     fun changeDue(w: ContinenceWearing?, now: Long): Boolean = w?.supplyId != null && w.changeDueAt != null && w.changeDueAt!! <= now
-
-    /** "Time to change: Night briefs, 7 h": Up next's row ("briefs, 7 h" kept together, so the hours never sit on a line alone). */
-    fun dueTitle(w: ContinenceWearing, now: Long): String =
-        "Time to change: ${w.name ?: "what you have on"},\u00A0${hoursShort(onFor(w, now)).replace(' ', '\u00A0')}"
 
     /** "usually 7 h, often full, leaked through 1 in 12": a product's pattern, without its name. */
     fun productPattern(p: ProductStats): String = listOfNotNull(

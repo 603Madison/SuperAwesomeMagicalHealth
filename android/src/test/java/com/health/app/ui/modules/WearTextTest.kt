@@ -18,8 +18,6 @@ import com.health.api.TodaySection
 import com.health.app.ui.modules.continence.WearText
 import com.health.app.ui.modules.continence.continenceSections
 import com.health.app.ui.modules.continence.quickEntry
-import com.health.app.ui.today.TodayLayout
-import com.health.app.ui.today.TodayPlan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -250,8 +248,6 @@ class WearTextTest {
         assertEquals("6 h", WearText.wornFor(360))
         assertEquals(360, WearText.rough(372))
         assertEquals(105, WearText.rough(100))
-        assertEquals("6 h", WearText.hoursShort(375))
-        assertEquals("7 h", WearText.hoursShort(395))
         assertEquals("Pull-up", WearText.kindWord(SupplyKind.PULL_UP))
         assertEquals("Brief", WearText.kindWord(SupplyKind.BRIEF))
         assertEquals("Bed pad", WearText.kindWord(SupplyKind.BED_PAD))
@@ -269,7 +265,6 @@ class WearTextTest {
         assertFalse(WearText.changeDue(w.copy(changeDueAt = now + 60_000), now))
         assertFalse(WearText.changeDue(ContinenceWearing(since = 1, nothingOn = true, changeDueAt = 2), now))
         assertFalse(WearText.changeDue(null, now))
-        assertEquals("Time to change: Night briefs,\u00A07\u00A0h", WearText.dueTitle(w, now))
     }
 
     @Test
@@ -294,27 +289,5 @@ class WearTextTest {
         val quick = quickEntry(ContinenceKind.PAD_CHANGE, ContinenceSettings(defaultSupplyId = "d"), listOf(com.health.api.SupplyStatus(day)))
         assertEquals("d", quick.putOnSupplyId)
         assertNull(quick.supplyId)
-    }
-
-    @Test
-    fun `Up next has the change once it's due, and Today has a card for what's on`() {
-        val now = at(17, 30)
-        val modules = Module.DEFAULT + Module.CONTINENCE
-        val wearing = ContinenceWearing("d", "Day pants", SupplyKind.PULL_UP, at(11, 45), changeDueAt = at(16, 45))
-        val summary = DaySummary(date = today.toString(), modules = ModulesToday(continence = ContinenceDay(today.toString(), wearing = wearing)))
-        val visible = TodayLayout.sections(modules)
-        val items = TodayPlan.upNext(summary, modules, visible, now, zone, isToday = true)
-        val change = items.single { it.kind == TodayPlan.Kind.CHANGE }
-        assertEquals("Time to change: Day pants, 6 h", change.title.replace('\u00A0', ' '))
-        assertEquals("On since 11:45 AM", change.detail.plain())
-        assertEquals(at(16, 45), change.at)
-        // Not yet due, hidden, or not today: no row.
-        assertTrue(TodayPlan.upNext(summary, modules, visible, at(16), zone, isToday = true).none { it.kind == TodayPlan.Kind.CHANGE })
-        assertTrue(TodayPlan.upNext(summary, modules, visible - TodaySection.CONTINENCE, now, zone, isToday = true).none { it.kind == TodayPlan.Kind.CHANGE })
-        assertTrue(TodayPlan.upNext(summary, modules, visible, now, zone, isToday = false).isEmpty())
-        // A card, though nothing else is logged today.
-        assertEquals(TodayPlan.Place.CARD, TodayPlan.place(TodaySection.CONTINENCE, TodayPlan.Day(summary, modules, items, now, zone)))
-        val nothing = summary.copy(modules = ModulesToday(continence = ContinenceDay(today.toString())))
-        assertEquals(TodayPlan.Place.ALSO, TodayPlan.place(TodaySection.CONTINENCE, TodayPlan.Day(nothing, modules, emptyList(), now, zone)))
     }
 }

@@ -4,23 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
-import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.MonitorHeart
-import androidx.compose.material.icons.rounded.MonitorWeight
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.HorizontalDivider
@@ -29,149 +24,39 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.Goals
-import com.health.api.MeasurementInput
 import com.health.api.Module
-import com.health.api.Metric
 import com.health.api.Sample
 import com.health.api.TrendDay
 import com.health.api.Trends
 import com.health.api.Units
-import com.health.app.Container
-import com.health.app.attempt
+import com.health.api.VitalsTargets
 import com.health.app.ui.Format
+import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.components.AxisLabels
 import com.health.app.ui.components.BarChart
-import com.health.app.ui.components.ErrorCard
 import com.health.app.ui.components.Hint
-import com.health.app.ui.components.InfoCard
 import com.health.app.ui.components.LineChart
-import com.health.app.ui.components.Loading
-import com.health.app.ui.components.ScreenTitle
-import com.health.app.ui.components.SegmentedChoice
-import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.TitledCard
+import com.health.app.ui.modules.FeatureScreens
 import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.modules.Moods
-import com.health.app.ui.log.WeightDialog
+import com.health.app.ui.modules.Sections
+import com.health.app.ui.modules.TitleAction
+import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.theme.AppTheme
 import com.health.app.ui.tracking.TrackingTrend
 import com.health.app.ui.tracking.trackingTrendSections
-import com.health.app.ui.components.ArrangeItem
-import com.health.app.ui.components.showsField
-import com.health.app.ui.modules.ArrangeAction
-import com.health.app.ui.modules.TitleAction
-import androidx.compose.material.icons.rounded.Add
-import com.health.app.ui.modules.FeatureScreens
-import com.health.app.ui.modules.arrangedIn
-import com.health.app.ui.modules.Sections
-import com.health.api.Fields
-import com.health.api.VitalsTargets
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
-
-data class TrendsState(
-    val days: Int = 30,
-    val trends: Trends? = null,
-    val weights: List<Sample> = emptyList(),
-    val loading: Boolean = true,
-    val error: String? = null,
-    // Combined devices: today's readings more than one device measured, for "From 2 devices" under their charts (ui/components/Sources.kt).
-    val combined: List<com.health.api.CombinedValue> = emptyList(),
-    val combinedSleep: com.health.api.CombinedSleep? = null,
-)
-
-class TrendsViewModel(private val c: Container) : ViewModel() {
-    private val _state = MutableStateFlow(TrendsState())
-    val state: StateFlow<TrendsState> = _state.asStateFlow()
-
-    init {
-        load()
-        viewModelScope.launch { c.revision.drop(1).collect { load(quiet = true) } }
-    }
-
-    fun range(days: Int) {
-        _state.update { it.copy(days = days) }
-        load()
-    }
-
-    fun load(quiet: Boolean = false) {
-        val days = _state.value.days
-        _state.update { it.copy(loading = !quiet || it.trends == null, error = null) }
-        viewModelScope.launch {
-            try {
-                val trends = c.ui.trends(days)
-                val weights = attempt { c.ui.measurements(Metric.WEIGHT, maxOf(days, 90)) }.getOrDefault(emptyList())
-                _state.update { if (it.days == days) it.copy(trends = trends, weights = weights, loading = false) else it }
-                // Combined devices: today's, for the charts' "From 2 devices" (ui/components/Sources.kt).
-                attempt { c.ui.day(LocalDate.now(c.zone()).toString()) }.getOrNull()?.let { day ->
-                    _state.update { it.copy(combined = day.combined, combinedSleep = day.sleepSummary?.combined) }
-                }
-            } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message ?: "Couldn't load your trends") }
-            }
-        }
-    }
-
-    fun logWeight(kg: Double) = viewModelScope.launch {
-        attempt { c.ui.addMeasurement(MeasurementInput(Metric.WEIGHT, kg, System.currentTimeMillis())) }
-            .onSuccess { c.tell("Weight saved"); c.dataChanged() }
-            .onFailure { c.tell(it.message ?: "Couldn't save that") }
-    }
-
-    fun deleteWeight(id: Long) = viewModelScope.launch {
-        attempt { c.ui.deleteMeasurement(id) }
-            .onSuccess { c.dataChanged() }
-            .onFailure { c.tell(it.message ?: "Couldn't delete that") }
-    }
-}
-
-class TrendsActions(
-    val range: (Int) -> Unit = {},
-    val retry: () -> Unit = {},
-    val logWeight: (Double) -> Unit = {},
-    val deleteWeight: (Long) -> Unit = {},
-)
-
-@Composable
-fun TrendsRoute(onRecent: () -> Unit = {}) {
-    val c = appContainer()
-    val vm = viewModel { TrendsViewModel(c) }
-    val state by vm.state.collectAsState()
-    val settings by c.settings.collectAsState()
-    val profile by c.profile.collectAsState()
-    TrendsScreen(
-        state, settings.units, profile?.goals ?: Goals(), c.zone(),
-        TrendsActions(vm::range, { vm.load() }, { vm.logWeight(it) }, { vm.deleteWeight(it) }),
-        modules = com.health.app.ui.care.shownModules(),
-        vitalsTargets = profile?.vitalsTargets ?: VitalsTargets(),
-        water = showsField(Fields.NUTRITION_WATER),
-        micros = com.health.app.ui.food.showsMicros(),
-        // The last 24 hours (ui/recent) are only ever the person's own.
-        onRecent = onRecent.takeIf { !com.health.app.ui.care.LocalReadOnly.current },
-    )
-}
 
 /**
  * Trends' charts for the features that are on, in the default order: the sections of
@@ -202,48 +87,46 @@ fun trendsSections(modules: Set<Module>, water: Boolean = true, micros: Boolean 
     if (Module.ACTIVITY in modules) add(ArrangeItem("workouts", "Workouts"))
 }
 
-/** [onRecent], where given, opens the last 24 hours from the Sleep chart. */
+/**
+ * Body's week, month or year ([trends] over its days): the charts for the features on, in the
+ * person's order ([FeatureScreens.TRENDS]); weight with its weigh-ins ([weights]). [combined] and
+ * [combinedSleep] are today's readings more than one device measured ("From 2 devices" under their
+ * charts); [onRecent], where given, opens the last 24 hours from the Sleep chart.
+ */
 @Composable
-fun TrendsScreen(
-    state: TrendsState, units: Units, goals: Goals, zone: ZoneId, actions: TrendsActions, modules: Set<Module> = Module.DEFAULT,
+fun TrendSections(
+    trends: Trends,
+    weights: List<Sample>,
+    units: Units,
+    goals: Goals,
+    zone: ZoneId,
+    modules: Set<Module> = Module.DEFAULT,
     vitalsTargets: VitalsTargets = VitalsTargets(),
     water: Boolean = true,
     micros: Boolean = false,
+    combined: List<com.health.api.CombinedValue> = emptyList(),
+    combinedSleep: com.health.api.CombinedSleep? = null,
     onRecent: (() -> Unit)? = null,
+    onWeighIn: () -> Unit = {},
+    onDeleteWeight: (Long) -> Unit = {},
 ) {
-    var weighing by remember { mutableStateOf(false) }
-    val sections = trendsSections(modules, water, micros)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        ScreenTitle("Trends", "How things are going over time") {
-            ArrangeAction(FeatureScreens.TRENDS, "Trends", sections)
-        }
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SegmentedChoice(listOf(7, 30, 90), state.days, { "$it days" }, actions.range)
-            val trends = state.trends
-            when {
-                state.loading && trends == null -> Loading()
-                state.error != null && trends == null -> ErrorCard(state.error, actionLabel = "Try again", onAction = actions.retry)
-                trends != null -> {
-                    val days = trends.days
-                    val labels = axis(days)
-                    Sections(arrangedIn(FeatureScreens.TRENDS, sections)) { id ->
-                        when (id) {
-                            "scores" -> ScoresCard(days, labels)
-                            "weight" -> WeightCard(state.weights, units, goals, zone, onAdd = { weighing = true }, onDelete = actions.deleteWeight)
-                            "workouts" -> WorkoutsSummary(days)
-                            NUTRIENT -> NutrientTrendCard(days, trends.nutritionTarget, labels)
-                            // Combined devices: the chart's "From 2 devices", if today's reading has more than one (ui/components/Sources.kt).
-                            in TREND_CHARTS -> androidx.compose.runtime.CompositionLocalProvider(
-                                com.health.app.ui.components.LocalChartSources provides com.health.app.ui.components.Sources.chart(id, state.combined, state.combinedSleep, units, zone),
-                            ) { TrendChart(id, days, labels, goals, units, onRecent) }
-                            else -> TrackingTrend(id, days, labels, vitalsTargets)
-                        }
-                    }
-                }
+    val days = trends.days
+    val labels = axis(days)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Sections(arrangedIn(FeatureScreens.TRENDS, trendsSections(modules, water, micros))) { id ->
+            when (id) {
+                "scores" -> ScoresCard(days, labels)
+                "weight" -> WeightCard(weights, units, goals, zone, onAdd = onWeighIn, onDelete = onDeleteWeight)
+                "workouts" -> WorkoutsSummary(days)
+                NUTRIENT -> NutrientTrendCard(days, trends.nutritionTarget, labels)
+                // Combined devices: the chart's "From 2 devices", if today's reading has more than one (ui/components/Sources.kt).
+                in TREND_CHARTS -> androidx.compose.runtime.CompositionLocalProvider(
+                    com.health.app.ui.components.LocalChartSources provides com.health.app.ui.components.Sources.chart(id, combined, combinedSleep, units, zone),
+                ) { TrendChart(id, days, labels, goals, units, onRecent) }
+                else -> TrackingTrend(id, days, labels, vitalsTargets)
             }
         }
     }
-    if (weighing) WeightDialog(units, state.weights.lastOrNull()?.value, { weighing = false }) { actions.logWeight(it); weighing = false }
 }
 
 /** The chart of a chosen vitamin, mineral or the like (its id is saved: keep it). */
@@ -342,30 +225,39 @@ internal fun ChartCard(
     openLabel: String? = null,
     chart: @Composable () -> Unit,
 ) {
-    InfoCard(title, icon = icon, iconTint = tint, onOpen = onOpen, openLabel = openLabel) {
+    TitledCard(
+        title,
+        trailing = onOpen?.let { open ->
+            {
+                IconButton(onClick = open) {
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Open ${openLabel ?: title}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+    ) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(headline ?: "—", style = MaterialTheme.typography.headlineSmall)
+            Text(headline ?: "—", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = if (headline == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.width(6.dp))
             Text(if (headline == null) "nothing recorded yet" else caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
         }
-        Spacer(Modifier.height(10.dp))
-        chart()
-        AxisLabels(labels.first, labels.second, labels.third)
-        footer?.let { Hint(it, Modifier.padding(top = 6.dp)) }
-        // Combined devices: "From 2 devices", where TrendsScreen provides one for this chart (ui/components/Sources.kt).
+        Column {
+            chart()
+            AxisLabels(labels.first, labels.second, labels.third)
+        }
+        footer?.let { Hint(it) }
+        // Combined devices: "From 2 devices", where Body provides one for this chart (ui/components/Sources.kt).
         com.health.app.ui.components.LocalChartSources.current?.invoke()
     }
 }
 
 @Composable
 private fun ScoresCard(days: List<TrendDay>, labels: Triple<String, String?, String>) {
-    InfoCard("Scores", icon = Icons.Rounded.AutoAwesome) {
+    TitledCard("Scores") {
         listOf(
             Triple("Readiness", days.map { it.readiness?.toDouble() }, MaterialTheme.colorScheme.primary),
             Triple("Sleep", days.map { it.sleepScore?.toDouble() }, AppTheme.data.rem),
             Triple("Activity", days.map { it.activityScore?.toDouble() }, MaterialTheme.colorScheme.tertiary),
-        ).forEachIndexed { i, (name, values, color) ->
-            if (i > 0) Spacer(Modifier.height(10.dp))
+        ).forEach { (name, values, color) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.width(92.dp)) {
                     Text(name, style = MaterialTheme.typography.bodyMedium)
@@ -381,14 +273,14 @@ private fun ScoresCard(days: List<TrendDay>, labels: Triple<String, String?, Str
 @Composable
 private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: ZoneId, onAdd: () -> Unit, onDelete: (Long) -> Unit) {
     val readOnly = com.health.app.ui.care.LocalReadOnly.current
-    InfoCard("Weight", icon = Icons.Rounded.MonitorWeight, trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Weigh in", onAdd) })) {
+    TitledCard("Weight", trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Weigh in", onAdd) })) {
         if (weights.isEmpty()) {
             Hint(if (readOnly) "No weigh-ins yet." else "Weigh in now and then (or connect a smart scale through Health Connect) to see your trend.")
-            return@InfoCard
+            return@TitledCard
         }
         val latest = weights.last()
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(Format.weight(latest.value, units), style = MaterialTheme.typography.headlineSmall)
+            Text(Format.weight(latest.value, units), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(6.dp))
             val first = weights.first()
             val change = latest.value - first.value
@@ -401,9 +293,8 @@ private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: 
                 )
             }
         }
-        Spacer(Modifier.height(10.dp))
         LineChart(weights.map { Format.weightValue(it.value, units) }, color = MaterialTheme.colorScheme.secondary, goal = goals.targetWeightKg?.let { Format.weightValue(it, units) })
-        Spacer(Modifier.height(8.dp))
+        Column {
         weights.takeLast(4).reversed().forEachIndexed { i, w ->
             if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -416,6 +307,7 @@ private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: 
                 } else Spacer(Modifier.width(48.dp))
             }
         }
+        }
     }
 }
 
@@ -423,9 +315,9 @@ private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: 
 private fun WorkoutsSummary(days: List<TrendDay>) {
     val count = days.sumOf { it.workouts }
     val minutes = days.sumOf { it.workoutMinutes }
-    InfoCard("Workouts", icon = Icons.Rounded.FitnessCenter) {
+    TitledCard("Workouts") {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("$count", style = MaterialTheme.typography.headlineSmall)
+            Text("$count", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(6.dp))
             Text(
                 if (count == 0) "none in these ${days.size} days" else "in ${days.size} days · ${Format.minutes(minutes)} in all",
@@ -435,7 +327,6 @@ private fun WorkoutsSummary(days: List<TrendDay>) {
             )
         }
         if (count > 0) {
-            Spacer(Modifier.height(10.dp))
             BarChart(days.map { it.workoutMinutes.toDouble().takeIf { m -> m > 0 } }, color = MaterialTheme.colorScheme.primary, height = 56.dp)
         }
     }

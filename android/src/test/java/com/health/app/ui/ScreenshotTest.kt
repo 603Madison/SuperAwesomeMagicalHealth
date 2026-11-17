@@ -76,7 +76,6 @@ import com.health.api.ScoreBand
 import com.health.api.Screener
 import com.health.api.ScreenerDefinition
 import com.health.api.ScreenerResult
-import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.modules.continence.ContinenceActions
 import com.health.app.ui.modules.continence.ContinenceScreen
 import com.health.app.ui.modules.continence.ContinenceState
@@ -126,13 +125,9 @@ import com.health.app.ui.food.FoodState
 import com.health.app.ui.signin.SignInActions
 import com.health.app.ui.signin.SignInScreen
 import com.health.app.ui.theme.HealthTheme
-import com.health.app.ui.today.ScoreDetails
 import com.health.app.ui.today.TodayActions
 import com.health.app.ui.today.TodayScreen
 import com.health.app.ui.today.TodayState
-import com.health.app.ui.trends.TrendsActions
-import com.health.app.ui.trends.TrendsScreen
-import com.health.app.ui.trends.TrendsState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -252,45 +247,11 @@ class ScreenshotTest {
         )
     }
 
-    private val todayState get() = TodayState(today, today, summary, loading = false)
-
     @Test
-    fun todayLight() {
-        render { Frame("today") { TodayScreen(todayState, Units.METRIC, zone, TodayActions()) } }
-        save("today_light")
-    }
-
-    @Test
-    fun todayDark() {
-        render(dark = true) { Frame("today") { TodayScreen(todayState, Units.METRIC, zone, TodayActions()) } }
-        save("today_dark")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
-    fun todayWholePage() {
-        render { Frame("today") { TodayScreen(todayState, Units.IMPERIAL, zone, TodayActions()) } }
-        save("today_full_imperial")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
-    fun todayWholePageDarkOcean() {
-        render(dark = true, palette = Palette.OCEAN) { Frame("today") { TodayScreen(todayState, Units.METRIC, zone, TodayActions()) } }
-        save("today_full_dark_ocean")
-    }
-
-    @Test
-    fun todayEmpty() {
+    fun todayFirstDay() {
         val empty = DaySummary(date = today.toString(), goals = goals, nutritionTarget = NutritionTarget(2000, 110, 220, 67, 2000, "Your goal"))
-        render { Frame("today") { TodayScreen(TodayState(today, today, empty, loading = false), Units.METRIC, zone, TodayActions()) } }
-        save("today_empty")
-    }
-
-    @Test
-    fun scoreDetails() {
-        render { Backdrop { ScoreDetails("Readiness", summary.readiness!!) } }
-        save("score_readiness")
+        render { Frame("today") { TodayScreen(TodayState(today, today, empty, feed = com.health.api.DayFeed(today.toString()), loading = false), Units.METRIC, zone, TodayActions()) } }
+        save("today_first_day")
     }
 
     private val foodDay = FoodDay(
@@ -349,24 +310,22 @@ class ScreenshotTest {
         )
     }
 
-    private val trendsState = TrendsState(
-        days = 30,
-        trends = Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend)),
+    private val trendsState = Span(
+        Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend)),
         weights = (0 until 10).map { i -> Sample(Metric.WEIGHT, at(today.minusDays(27L - i * 3), 7), value = 67.3 - i * 0.1 + 0.1 * sin(i.toDouble()), id = i.toLong(), source = "Entered by hand") },
-        loading = false,
     )
 
     @Test
     fun trends() {
-        render { Frame("trends") { TrendsScreen(trendsState, Units.METRIC, goals, zone, TrendsActions()) } }
-        save("trends_light")
+        render { Frame("body") { BodyOver(trendsState, Units.METRIC, goals, zone) } }
+        save("body_month_light")
     }
 
     @Test
     @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
     fun trendsWholeDark() {
-        render(dark = true) { Frame("trends") { TrendsScreen(trendsState, Units.IMPERIAL, goals, zone, TrendsActions()) } }
-        save("trends_full_dark")
+        render(dark = true) { Frame("body") { BodyOver(trendsState, Units.IMPERIAL, goals, zone) } }
+        save("body_month_full_dark")
     }
 
     private val devicesState = DevicesState(
@@ -733,12 +692,6 @@ class ScreenshotTest {
         save("meds_editor")
     }
 
-    @Test
-    fun hub() {
-        render { Frame("health") { HubScreen(allModules, showMeasurements = true) {} } }
-        save("health_hub")
-    }
-
     private val modulesToday = ModulesToday(
         mind = MindDay(today.toString(), mood = 4.0, entries = 2, mindfulMinutes = 6.0, journal = 1),
         cycle = CycleToday(11, CyclePhase.FERTILE, 18, CycleDay(today.toString(), mucus = Mucus.WATERY)),
@@ -750,45 +703,9 @@ class ScreenshotTest {
 
 
     @Test
-    @Config(qualifiers = "w411dp-h3600dp-xxhdpi")
-    fun todayAllModulesLight() {
-        val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
-        render {
-            AppFrame("today", remember { SnackbarHostState() }, {}) {
-                TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = allModules)
-            }
-        }
-        save("today_all_modules_light")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h3600dp-xxhdpi")
-    fun todayAllModulesDark() {
-        val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
-        render(dark = true) {
-            AppFrame("today", remember { SnackbarHostState() }, {}) {
-                TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = allModules)
-            }
-        }
-        save("today_all_modules_dark")
-    }
-
-    @Test
-    fun todayModulesOnly() {
-        val only = setOf(Module.MIND, Module.CYCLE, Module.MEDICATIONS)
-        val state = TodayState(today, today, summary.copy(modules = modulesToday), loading = false)
-        render {
-            AppFrame("today", remember { SnackbarHostState() }, {}) {
-                TodayScreen(state, Units.METRIC, zone, TodayActions(), modules = only)
-            }
-        }
-        save("today_modules_only")
-    }
-
-    @Test
     @Config(qualifiers = "w411dp-h2400dp-xxhdpi")
     fun trendsWithModules() {
-        val days = trendsState.trends!!.days.mapIndexed { i, d ->
+        val days = trendsState.trends.days.mapIndexed { i, d ->
             d.copy(
                 mood = 3.0 + sin(i / 3.0), mindfulMinutes = if (i % 3 == 0) 5.0 else null,
                 flow = if (i in 21..25) listOf(Flow.MEDIUM, Flow.HEAVY, Flow.MEDIUM, Flow.LIGHT, Flow.SPOTTING)[i - 21] else null,
@@ -796,8 +713,8 @@ class ScreenshotTest {
                 dosesDue = 4, dosesTaken = if (i % 6 == 0) 3 else 4,
             )
         }
-        val state = trendsState.copy(trends = trendsState.trends!!.copy(days = days))
-        render { AppFrame("trends", remember { SnackbarHostState() }, {}) { TrendsScreen(state, Units.METRIC, goals, zone, TrendsActions(), modules = allModules) } }
-        save("trends_modules")
+        val state = trendsState.copy(trends = trendsState.trends.copy(days = days))
+        render { AppFrame("body", remember { SnackbarHostState() }, {}) { BodyOver(state, Units.METRIC, goals, zone, modules = allModules) } }
+        save("body_month_modules")
     }
 }

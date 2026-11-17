@@ -57,9 +57,6 @@ import com.health.app.ui.modules.mind.MindHome
 import com.health.app.ui.modules.mind.MindState
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.tracking.DrinksCard
-import com.health.app.ui.trends.TrendsActions
-import com.health.app.ui.trends.TrendsScreen
-import com.health.app.ui.trends.TrendsState
 import com.health.app.ui.trends.trendsSections
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
@@ -97,11 +94,9 @@ private object Arranged {
         )
     }
 
-    val trends = TrendsState(
-        days = 30,
-        trends = Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend)),
+    val trends = Span(
+        Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend)),
         weights = (0 until 10).map { i -> Sample(Metric.WEIGHT, at(today.minusDays(27L - i * 3), 7), value = 67.3 - i * 0.1 + 0.1 * sin(i.toDouble()), id = i.toLong(), source = "Entered by hand") },
-        loading = false,
     )
 
     /** Trends with weight and sleep first, and the scores and heart charts hidden. */
@@ -224,7 +219,7 @@ class FeatureArrangeScreenshotTest {
 
     private fun trends(dark: Boolean, name: String) {
         render(dark) {
-            Frame("trends") { TrendsScreen(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, TrendsActions(), modules = Arranged.modules) }
+            Frame("body") { BodyOver(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, modules = Arranged.modules) }
         }
         save(name)
     }
@@ -241,7 +236,7 @@ class FeatureArrangeScreenshotTest {
     @Config(qualifiers = "w411dp-h1800dp-xxhdpi")
     fun trendsWaterOff() {
         render {
-            Frame("trends") { TrendsScreen(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, TrendsActions(), modules = Arranged.modules, water = false) }
+            Frame("body") { BodyOver(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, modules = Arranged.modules, water = false) }
         }
         save("arranged_trends_water_off")
     }
@@ -321,10 +316,10 @@ class FeatureArrangeSheetScreenshotTest {
         layout.value = Arranged.prefs
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
-                AppFrame(selected = "trends", snackbar = remember { SnackbarHostState() }, onTab = {}) {
-                    TrendsScreen(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, TrendsActions(), modules = Arranged.modules)
+                AppFrame(selected = "body", snackbar = remember { SnackbarHostState() }, onTab = {}) {
+                    BodyOver(Arranged.trends, Units.METRIC, Arranged.goals, Arranged.zone, modules = Arranged.modules)
                 }
-                ArrangeSheet(FeatureScreens.TRENDS, "Trends", trendsSections(Arranged.modules), onDismiss = {})
+                ArrangeSheet(FeatureScreens.TRENDS, "Body over time", trendsSections(Arranged.modules), onDismiss = {})
             }
         }
         compose.waitForIdle()

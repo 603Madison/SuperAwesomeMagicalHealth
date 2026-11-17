@@ -64,7 +64,6 @@ import com.health.app.ui.devices.HealthConnectState
 import com.health.app.ui.food.FoodActions
 import com.health.app.ui.food.FoodScreen
 import com.health.app.ui.food.FoodState
-import com.health.app.ui.modules.HubScreen
 import com.health.app.ui.settings.SettingsActions
 import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsScreen
@@ -86,9 +85,6 @@ import com.health.app.ui.tracking.TrackingTodayActions
 import com.health.app.ui.tracking.VitalsActions
 import com.health.app.ui.tracking.VitalsScreen
 import com.health.app.ui.tracking.VitalsState
-import com.health.app.ui.trends.TrendsActions
-import com.health.app.ui.trends.TrendsScreen
-import com.health.app.ui.trends.TrendsState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -307,28 +303,6 @@ class TrackingScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h3200dp-xxhdpi")
-    fun todayTrackingLight() {
-        render {
-            Frame("today") {
-                TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions(tracking = TrackingTodayActions()), modules = trackingModules)
-            }
-        }
-        save("today_tracking_light")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h3200dp-xxhdpi")
-    fun todayTrackingDark() {
-        render(dark = true) {
-            Frame("today") {
-                TodayScreen(TodayState(today, today, summary, loading = false), Units.METRIC, zone, TodayActions(tracking = TrackingTodayActions(GlucoseUnit.MG_DL)), modules = trackingModules)
-            }
-        }
-        save("today_tracking_dark")
-    }
-
-    @Test
     @Config(qualifiers = "w411dp-h1600dp-xxhdpi")
     fun foodDrinks() {
         val food = FoodDay(
@@ -353,8 +327,8 @@ class TrackingScreenshotTest {
     @Test
     @Config(qualifiers = "w411dp-h4400dp-xxhdpi")
     fun trendsTracking() {
-        val state = TrendsState(30, Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend)), loading = false)
-        render { Frame("trends") { TrendsScreen(state, Units.METRIC, Goals(), zone, TrendsActions(), modules = trackingModules) } }
+        val span = Span(Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend)))
+        render { Frame("body") { BodyOver(span, Units.METRIC, Goals(), zone, modules = trackingModules) } }
         save("trends_tracking")
     }
 
@@ -383,11 +357,5 @@ class TrackingScreenshotTest {
         val settings = Settings(server = "https://health.home.arpa", token = "t", serverName = "Health at home", user = User("u1", "maddie", "Maddie", Role.ADMIN, createdAt = 0))
         render { Frame("settings") { SettingsScreen(SettingsPage.TRACKING, settings, Profile(timezone = "America/New_York", modules = all), SettingsActions()) } }
         save("settings_all_features")
-    }
-
-    @Test
-    fun hubAllFeatures() {
-        render { Frame("health") { HubScreen(all) {} } }
-        save("hub_all_features")
     }
 }

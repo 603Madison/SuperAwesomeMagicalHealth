@@ -7,58 +7,37 @@ import com.health.api.ScreenLayout
 import com.health.api.TodaySection
 
 /**
- * Which of Today's cards and quick actions show, and in what order, in plain Kotlin so it's tested
- * without a phone. The ids are the shared [TodaySection] and [QuickAction] names: arranging Today
- * here arranges it on the web too (docs/API.md, "Arranging screens").
+ * Which of Today's sections show, in what order, and the + sheet's grid, in plain Kotlin so it's
+ * tested without a phone. The ids are the shared [TodaySection] and [QuickAction] names: arranging
+ * Today here arranges it on the web too (docs/API.md, "Arranging screens"). Today's other
+ * TodaySection ids (the features' old cards, Quick log, Also today) stay saved, unused here.
  */
 object TodayLayout {
-    /** Whether [section] has a card here with [modules] on (and water, a field that can be hidden). */
-    fun applies(section: TodaySection, modules: Set<Module>, water: Boolean = true): Boolean {
-        fun on(vararg any: Module) = any.any { it in modules }
-        return when (section) {
-            TodaySection.SCORES, TodaySection.HEART -> on(Module.ACTIVITY, Module.SLEEP)
-            TodaySection.INSIGHTS, TodaySection.QUICK -> true
-            // Doses, today's appointments, a bladder-training trip, a routine, supplies to restock.
-            TodaySection.UP_NEXT -> on(Module.MEDICATIONS, Module.APPOINTMENTS, Module.CONTINENCE, Module.NEURO, Module.CYCLE)
-            // The features with nothing yet today.
-            TodaySection.ALSO -> modules.isNotEmpty()
-            TodaySection.MEDS -> on(Module.MEDICATIONS)
-            TodaySection.MIND -> on(Module.MIND)
-            TodaySection.CYCLE, TodaySection.LIFE_STAGE -> on(Module.CYCLE)
-            TodaySection.CONTINENCE -> on(Module.CONTINENCE)
-            // Bladder and bowel products, and period products.
-            TodaySection.SUPPLIES -> on(Module.CONTINENCE, Module.CYCLE)
-            // With Mind alone, its energy budget.
-            TodaySection.NEURO -> on(Module.NEURO, Module.MIND)
-            TodaySection.TRANSITION -> on(Module.TRANSITION)
-            TodaySection.VITALS -> on(Module.VITALS)
-            TodaySection.DRINKS, TodaySection.FOOD -> on(Module.NUTRITION)
-            TodaySection.WATER -> on(Module.NUTRITION) && water
-            TodaySection.SYMPTOMS -> on(Module.SYMPTOMS)
-            TodaySection.HABITS -> on(Module.HABITS)
-            TodaySection.HORMONES -> on(Module.HORMONES)
-            TodaySection.APPOINTMENTS -> on(Module.APPOINTMENTS)
-            TodaySection.ACTIVITY, TodaySection.STRESS, TodaySection.WORKOUTS -> on(Module.ACTIVITY)
-            TodaySection.SLEEP -> on(Module.SLEEP)
-            TodaySection.BODY -> on(Module.BODY)
-        }
+    /** Today's sections in the default order: the scores, Right now, Your day and For you. A health alert's card is always above them. */
+    val SECTIONS = listOf(TodaySection.SCORES, TodaySection.UP_NEXT, TodaySection.DAY, TodaySection.INSIGHTS)
+
+    /** Whether [section] is on Today with [modules] on: the scores need a device's features; the rest are everyone's. */
+    fun applies(section: TodaySection, modules: Set<Module>): Boolean = when (section) {
+        TodaySection.SCORES -> Module.ACTIVITY in modules || Module.SLEEP in modules
+        TodaySection.UP_NEXT, TodaySection.DAY, TodaySection.INSIGHTS -> true
+        else -> false
     }
 
     /** Today's sections for the features that are on, in the default order: what the Arrange sheet lists. */
-    fun sections(modules: Set<Module>, water: Boolean = true): List<TodaySection> = TodaySection.entries.filter { applies(it, modules, water) }
+    fun sections(modules: Set<Module>): List<TodaySection> = SECTIONS.filter { applies(it, modules) }
 
     /** The sections to draw, in the person's order, without those they've hidden. */
-    fun visible(modules: Set<Module>, water: Boolean, layout: ScreenLayout?): List<TodaySection> =
-        Layouts.visible(sections(modules, water), { it.name }, layout)
+    fun visible(modules: Set<Module>, layout: ScreenLayout?): List<TodaySection> = Layouts.visible(sections(modules), { it.name }, layout)
 
-    /** A section's name in the Arrange sheet ([TodaySection.label]); with only Mind on, its energy budget is "Energy". */
-    fun label(section: TodaySection, modules: Set<Module>): String = when {
-        section == TodaySection.NEURO && Module.NEURO !in modules -> "Energy"
+    /** A section's name on Today and in the Arrange sheet: Up next is called Right now. */
+    fun label(section: TodaySection): String = when (section) {
+        TodaySection.UP_NEXT -> "Right now"
+        TodaySection.SCORES -> "Scores"
         else -> section.label
     }
 
     /**
-     * The quick actions this app offers with [modules] on, in the default order: Water only while
+     * The ways to log this app offers with [modules] on, in the default order: Water only while
      * water is shown, Measurements only with their fields.
      */
     fun quickActions(modules: Set<Module>, water: Boolean = true, measurements: Boolean = false): List<QuickAction> =
@@ -70,29 +49,6 @@ object TodayLayout {
             }
         }
 
-    /** Under "More" until the person arranges them: all but the first [QuickAction.SHOWN]. */
-    fun defaultUnderMore(available: List<QuickAction>): Set<String> = available.drop(QuickAction.SHOWN).map { it.name }.toSet()
-
-    /** Today's Quick log row, and the rest (all of them are in the + Log sheet that "More" opens). */
-    data class QuickRow(val shown: List<QuickAction>, val more: List<QuickAction>)
-
-    /**
-     * Splits [available] into Today's Quick log row and the rest: in the person's order, at most
-     * [QuickAction.SHOWN] of those they haven't put under More (one row that never wraps or
-     * scrolls); until they've arranged them, the first [QuickAction.SHOWN].
-     */
-    fun quickRow(available: List<QuickAction>, layout: ScreenLayout?): QuickRow {
-        val ordered = Layouts.arrange(available, { it.name }, layout)
-        val under = layout?.hidden ?: defaultUnderMore(available)
-        val shown = ordered.filter { it.name !in under }.take(QuickAction.SHOWN)
-        return QuickRow(shown, ordered - shown.toSet())
-    }
-
-    /**
-     * The + Log sheet: every logging action for the features that are on, grouped by feature
-     * (null: everyone's, such as Check in), the groups in the order the person's quick actions
-     * first name them.
-     */
-    fun logGroups(available: List<QuickAction>, layout: ScreenLayout?): List<Pair<Module?, List<QuickAction>>> =
-        Layouts.arrange(available, { it.name }, layout).groupBy { it.module }.toList()
+    /** The + sheet's grid: every way to log for the features on, in the person's order (today.quick). None is left out. */
+    fun grid(available: List<QuickAction>, layout: ScreenLayout?): List<QuickAction> = Layouts.arrange(available, { it.name }, layout)
 }

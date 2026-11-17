@@ -49,9 +49,6 @@ import com.health.app.ui.food.MicrosCard
 import com.health.app.ui.food.MoreNutrients
 import com.health.app.ui.settings.NutrientTargetsScreen
 import com.health.app.ui.theme.HealthTheme
-import com.health.app.ui.trends.TrendsActions
-import com.health.app.ui.trends.TrendsScreen
-import com.health.app.ui.trends.TrendsState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -231,17 +228,17 @@ class MicrosScreenshotTest {
         )
     }
 
-    private val trends = TrendsState(days = 30, trends = Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend), target), loading = false)
+    private val trends = Span(Trends(today.minusDays(29).toString(), today.toString(), (0 until 30).map(::trend), target))
 
     @Test
     fun trendsChart() {
-        render { Frame("trends") { TrendsScreen(trends, Units.METRIC, Goals(), zone, TrendsActions(), modules = setOf(Module.NUTRITION), water = false, micros = true) } }
+        render { Frame("body") { BodyOver(trends, Units.METRIC, Goals(), zone, modules = setOf(Module.NUTRITION), water = false, micros = true) } }
         save("micros_trends_light")
     }
 
     @Test
     fun trendsChartDark() {
-        render(dark = true) { Frame("trends") { TrendsScreen(trends, Units.METRIC, Goals(), zone, TrendsActions(), modules = setOf(Module.NUTRITION), water = false, micros = true) } }
+        render(dark = true) { Frame("body") { BodyOver(trends, Units.METRIC, Goals(), zone, modules = setOf(Module.NUTRITION), water = false, micros = true) } }
         save("micros_trends_dark")
     }
 

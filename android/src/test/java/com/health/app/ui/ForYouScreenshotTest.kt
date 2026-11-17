@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.health.api.AppPage
 import com.health.api.DaySummary
 import com.health.api.DueDose
@@ -123,8 +124,16 @@ class ForYouScreenshotTest {
     private val modules = Module.DEFAULT + Module.MEDICATIONS
     private val notice = ServerNoticeState("0.2.0", "0.3.0")
 
-    /** Medications hidden on Today, so the day's doses aren't in Up next and show in "For you". */
-    private val noMedsCard = LayoutPrefs(mapOf(Layouts.TODAY to ScreenLayout(hidden = setOf(TodaySection.MEDS.name))))
+    /** Right now, with the day's doses in it: For you leaves out the insight that would repeat them. */
+    private val withDose = com.health.api.DayFeed(
+        today.toString(),
+        now = listOf(
+            com.health.api.NowItem(
+                "dose:m2", com.health.api.NowKind.DOSE_OVERDUE, "Estradiol", "2 mg · was due at 8:00 AM", page = AppPage.MEDS,
+                action = com.health.api.NowAction("Take", com.health.api.NowAction.DOSE_TAKE, mapOf("medicationId" to "m2", "scheduledFor" to at(8).toString())), priority = 85,
+            ),
+        ),
+    )
 
     private fun render(dark: Boolean = false, layout: LayoutPrefs = LayoutPrefs(), readOnly: Boolean = false, tab: String = "today", content: @Composable () -> Unit) {
         compose.setContent {
@@ -146,38 +155,45 @@ class ForYouScreenshotTest {
     }
 
     @Composable
-    private fun Today(opened: (String) -> Unit = {}, added: (FoodSuggestion) -> Unit = {}) {
+    private fun Today(opened: (String) -> Unit = {}, added: (FoodSuggestion) -> Unit = {}, feed: com.health.api.DayFeed = withDose) {
         TodayScreen(
-            TodayState(today, today, summary, loading = false), Units.METRIC, zone,
+            TodayState(today, today, summary, feed = feed, loading = false), Units.METRIC, zone,
             TodayActions(open = opened, addIdea = added), modules = modules, serverNotice = notice, now = at(14),
         )
     }
 
     @Test
     fun forYouLight() {
-        render(layout = noMedsCard) { Today() }
+        render { Today() }
         save("for_you_light")
     }
 
     @Test
     fun forYouDark() {
-        render(dark = true, layout = noMedsCard) { Today() }
+        render(dark = true) { Today() }
         save("for_you_dark")
     }
 
-    /** With Up next showing the doses, "For you" leaves them out (and has no "Show more"). */
+    /** With Right now showing the doses, For you leaves them out; without, they're in it. Two at most, either way. */
     @Test
-    fun forYouWithMedsCard() {
+    fun forYouLeavesOutWhatRightNowShows() {
         render { Today() }
         assertEquals(0, compose.onAllNodesWithContentDescription("2 doses still to take. Open Medications").fetchSemanticsNodes().size)
-        assertEquals(0, compose.onAllNodesWithText("Show 1 more").fetchSemanticsNodes().size)
-        save("for_you_meds_card_light")
+        assertEquals(0, compose.onAllNodesWithText("2,880 steps to go").fetchSemanticsNodes().size)
+        save("for_you_meds_in_right_now_light")
+    }
+
+    @Test
+    fun forYouWithoutRightNowHasTheDoses() {
+        render { Today(feed = com.health.api.DayFeed(today.toString())) }
+        compose.onNodeWithContentDescription("2 doses still to take. Open Medications").assertHasClickAction()
+        assertEquals(0, compose.onAllNodesWithText("Protein 46 g under target").fetchSemanticsNodes().size)
     }
 
     /** Viewing someone's share: the rows still open their pages, the ideas show without Add. */
     @Test
     fun forYouViewingDark() {
-        render(dark = true, layout = noMedsCard, readOnly = true) { Today() }
+        render(dark = true, readOnly = true) { Today() }
         assertEquals(0, compose.onAllNodesWithContentDescription("Add Greek yoghurt to dinner").fetchSemanticsNodes().size)
         save("for_you_viewing_dark")
     }
@@ -186,12 +202,11 @@ class ForYouScreenshotTest {
     fun rowsAreButtonsNamedForWhereTheyGo() {
         val opened = mutableListOf<String>()
         val added = mutableListOf<String>()
-        render(layout = noMedsCard) { Today(opened = { opened += it }, added = { added += it.name }) }
-        compose.onNodeWithContentDescription("2 doses still to take. Open Medications").assertHasClickAction().performClick()
-        compose.onNodeWithContentDescription("1h 5m less sleep than usual. Open Trends").assertHasClickAction().performClick()
-        compose.onNodeWithContentDescription("Protein 46 g under target. Open Food").assertHasClickAction().performClick()
-        assertEquals(listOf("meds", "trends", "food"), opened)
-        compose.onNodeWithContentDescription("Add Greek yoghurt to dinner").assertHasClickAction().performClick()
+        render { Today(opened = { opened += it }, added = { added += it.name }) }
+        compose.onNodeWithContentDescription("1h 5m less sleep than usual. Open Body").performScrollTo().assertHasClickAction().performClick()
+        compose.onNodeWithContentDescription("Protein 46 g under target. Open Food").performScrollTo().assertHasClickAction().performClick()
+        assertEquals(listOf("recent", "food"), opened)
+        compose.onNodeWithContentDescription("Add Greek yoghurt to dinner").performScrollTo().assertHasClickAction().performClick()
         assertEquals(listOf("Greek yoghurt"), added)
     }
 

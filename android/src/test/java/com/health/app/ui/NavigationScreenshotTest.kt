@@ -7,12 +7,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import com.health.api.AiStatus
 import com.health.api.Device
 import com.health.api.DeviceKind
 import com.health.api.DigestPrefs
@@ -24,24 +26,20 @@ import com.health.api.User
 import com.health.app.data.Palette
 import com.health.app.data.Settings
 import com.health.app.data.ThemeMode
+import com.health.app.devices.strap.PairedStrap
 import com.health.app.ui.care.DigestSettingsScreen
 import com.health.app.ui.components.LocalBack
 import com.health.app.ui.devices.DevicesActions
 import com.health.app.ui.devices.DevicesScreen
 import com.health.app.ui.devices.DevicesState
-import com.health.app.ui.modules.HubScreen
-import com.health.app.ui.more.MoreScreen
-import com.health.app.ui.more.MoreState
-import com.health.app.ui.recent.RecentActions
-import com.health.app.ui.recent.RecentFixtures
-import com.health.app.ui.recent.RecentScreen
-import com.health.app.ui.recent.RecentState
 import com.health.app.ui.settings.SettingsActions
 import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsScreen
 import com.health.app.ui.theme.HealthTheme
-import com.health.api.AiStatus
-import com.health.api.Units
+import com.health.app.ui.you.YouActions
+import com.health.app.ui.you.YouScreen
+import com.health.app.ui.you.YouState
+import com.health.app.ui.you.YouText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -51,12 +49,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.time.ZoneId
 import java.util.Locale
 
 /**
- * The app's map: the five tabs along the bottom, Health, More, and each Settings page, light and
- * dark; a page within a tab with its way back; and where each row goes. PNGs in
- * android/build/outputs/screenshots.
+ * The app's map: You (devices, records, Where your data goes and Settings in five groups), the
+ * Care tab until its own page is in, each Settings page, light and dark (You in Violet too), and
+ * a page within a tab with its back arrow; and where each row goes. PNGs in
+ * android/build/outputs/screenshots as you_* and nav_*.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -79,14 +79,16 @@ class NavigationScreenshotTest {
         goals = Goals(steps = 8000, activeCalories = 450, sleepMinutes = 480, protein = 120, targetWeightKg = 65.0, weeklyChangeKg = -0.25),
         digest = DigestPrefs(enabled = true, day = 7, hour = 18),
     )
+    private val zone = ZoneId.of("America/New_York")
+    private val now = 1_763_400_000_000L
 
     private fun render(
-        dark: Boolean = false, selected: String? = "more", back: (() -> Unit)? = null, onTab: (String) -> Unit = {}, badges: Map<String, Int> = emptyMap(),
+        dark: Boolean = false, palette: Palette = Palette.AURORA, selected: String? = "you", back: (() -> Unit)? = null, onTab: (String) -> Unit = {},
         content: @Composable () -> Unit,
     ) {
         compose.setContent {
-            HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
-                AppFrame(selected = selected, snackbar = remember { SnackbarHostState() }, onTab = onTab, badges = badges) {
+            HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = palette) {
+                AppFrame(selected = selected, snackbar = remember { SnackbarHostState() }, onTab = onTab) {
                     CompositionLocalProvider(LocalBack provides back) { content() }
                 }
             }
@@ -104,106 +106,100 @@ class NavigationScreenshotTest {
 
     private fun shows(text: String) = assertTrue("Shows $text", compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty())
 
-    private val more = MoreState(unseenAlerts = 3, compare = true, assistant = true, serverVersion = "0.7.1")
+    // ---- You
 
-    // ---- More
+    private val devices = listOf(
+        Device("r", DeviceKind.COLMI_RING, "aa", "Ring", battery = 78, lastSyncAt = now - 4 * 60_000L, createdAt = 0, samples = 4200),
+        Device("s", DeviceKind.HEART_RATE_STRAP, "bb", "Chest strap", battery = 90, lastSyncAt = now - 26 * 3_600_000L, createdAt = 0, samples = 900),
+        Device("m", DeviceKind.MANUAL, "manual", "Entered by hand", lastSyncAt = now - 3_600_000L, createdAt = 0, samples = 12),
+    )
+
+    private val you = YouState(
+        devices = YouText.devices(devices),
+        strap = PairedStrap("bb", "Chest strap", battery = 90),
+        assistant = true,
+        privacy = "2 ways out on · 1 paused",
+        week = "Slept more, walked less than last week",
+        serverVersion = "0.8.0",
+    )
 
     @Test
-    @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
-    fun moreLight() {
-        render(badges = mapOf("more" to 3)) { MoreScreen(more) {} }
-        listOf("Your records", "Health alerts", "Your week", "Reports & export", "Devices", "Compare devices", "Assistant", "Settings").forEach(::shows)
+    @Config(qualifiers = "w411dp-h1300dp-xxhdpi")
+    fun youLight() {
+        render { YouScreen(you, YouActions(), now = now, zone = zone) }
+        listOf("You", "Your devices", "Ring", "Synced 4 min ago · battery 78%", "Chest strap", "Ready · battery 90%", "Record tonight", "Manage devices").forEach(::shows)
+        listOf("Your week", "Slept more, walked less than last week", "A report for your doctor", "Assistant", "Where your data goes", "2 ways out on · 1 paused").forEach(::shows)
         SettingsPage.entries.forEach { shows(it.title) }
-        compose.onNodeWithContentDescription("3 new").assertExists()
-        // The More tab carries the count too.
-        compose.onNodeWithContentDescription("3 new health alerts", useUnmergedTree = true).assertExists()
-        save("nav_more_light")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
-    fun moreDark() {
-        render(dark = true, badges = mapOf("more" to 3)) { MoreScreen(more) {} }
-        save("nav_more_dark")
-    }
-
-    @Test
-    fun moreWithoutCompareOrAssistant() {
-        render(badges = mapOf("more" to 0)) { MoreScreen(MoreState()) {} }
-        // No alerts unseen: no count, on the row or the tab.
-        assertEquals(0, compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("new", substring = true)).fetchSemanticsNodes().size)
-        assertEquals(0, compose.onAllNodesWithText("Compare devices").fetchSemanticsNodes().size)
-        assertEquals(0, compose.onAllNodesWithText("Ask about your own data").fetchSemanticsNodes().size)
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
-    fun everyRowOfMoreGoesSomewhere() {
-        val opened = mutableListOf<String>()
-        render { MoreScreen(more) { opened += it } }
-        listOf("Health alerts", "Your week", "Reports & export", "Compare devices", "Assistant").forEach { compose.onNodeWithText(it).performScrollTo().performClick() }
-        compose.onAllNodesWithText("Devices")[1].performScrollTo().performClick()
-        SettingsPage.entries.forEach { compose.onNodeWithText(it.title).performScrollTo().performClick() }
-        assertEquals(
-            listOf("alerts", "digest", "reports", "devices/compare", "assistant", "devices") + SettingsPage.entries.map { it.route },
-            opened,
-        )
-    }
-
-    // ---- The tabs
-
-    @Test
-    fun theFiveTabsAndWhereTheyGo() {
-        val tapped = mutableListOf<String>()
-        render(selected = "recent", onTab = { tapped += it }) { RecentScreen(RecentState(readings = RecentFixtures.all, loading = false), Units.METRIC, RecentFixtures.zone, RecentActions(), now = RecentFixtures.now) }
-        listOf("Today", "24 hours", "Health", "Trends", "More").forEach { compose.onNodeWithText(it).performClick() }
-        assertEquals(listOf("today", "recent", "health", "trends", "more"), tapped)
-        // The 24 hours tab is a tab's own page: no way back.
-        assertEquals(0, compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Back")).fetchSemanticsNodes().size)
-        save("nav_tab_24_hours_light")
-    }
-
-    @Test
-    fun twentyFourHoursTabDark() {
-        render(dark = true, selected = "recent") { RecentScreen(RecentState(readings = RecentFixtures.all, loading = false), Units.METRIC, RecentFixtures.zone, RecentActions(), now = RecentFixtures.now) }
-        save("nav_tab_24_hours_dark")
-    }
-
-    // ---- Health
-
-    @Test
-    fun healthLight() {
-        var opened: String? = null
-        render(selected = "health") { HubScreen(modules, showMeasurements = true) { opened = it } }
-        shows("Food")
-        shows("Body measurements")
-        assertEquals(0, compose.onAllNodesWithText("Devices").fetchSemanticsNodes().size)
-        save("nav_health_light")
-        compose.onNodeWithText("Choose what you track").performScrollTo().performClick()
-        assertEquals(SettingsPage.TRACKING.route, opened)
+        // Entered by hand isn't a device to show.
+        assertEquals(0, compose.onAllNodesWithText("Entered by hand").fetchSemanticsNodes().size)
+        save("you_light")
     }
 
     @Test
     @Config(qualifiers = "w411dp-h1300dp-xxhdpi")
-    fun healthDark() {
-        render(dark = true, selected = "health") { HubScreen(modules, showMeasurements = true) {} }
-        save("nav_health_dark")
+    fun youDark() {
+        render(dark = true) { YouScreen(you, YouActions(), now = now, zone = zone) }
+        save("you_dark")
     }
 
-    // ---- A page within a tab has a way back
+    @Test
+    @Config(qualifiers = "w411dp-h1300dp-xxhdpi")
+    fun youVioletLight() {
+        render(palette = Palette.VIOLET) { YouScreen(you.copy(recordingSince = now - 2 * 3_600_000L), YouActions(), now = now, zone = zone) }
+        shows("Recording since")
+        shows("Stop")
+        save("you_violet_light")
+    }
+
+    @Test
+    fun youFirstRunHasAWayToAddADevice() {
+        render { YouScreen(YouState(), YouActions(), now = now, zone = zone) }
+        shows("No devices yet")
+        shows("Add a device")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1300dp-xxhdpi")
+    fun everyRowOfYouGoesSomewhere() {
+        val opened = mutableListOf<String>()
+        var recorded = 0
+        render { YouScreen(you, YouActions(open = { opened += it }, recordStrap = { recorded++ }), now = now, zone = zone) }
+        compose.onNode(hasContentDescription("Record tonight with Chest strap")).performClick()
+        listOf("Manage devices", "Your week", "A report for your doctor", "Assistant", "Where your data goes").forEach { compose.onNodeWithText(it).performScrollTo().performClick() }
+        SettingsPage.entries.forEach { compose.onNodeWithText(it.title).performScrollTo().performClick() }
+        assertEquals(1, recorded)
+        assertEquals(listOf("devices", "digest", "reports", "assistant", "settings/privacy") + SettingsPage.entries.map { it.route }, opened)
+    }
+
+    // ---- Care, until its own page is in
+
+    @Test
+    fun careTabLight() {
+        var opened: String? = null
+        render(selected = "care") {
+            CareTabPlaceholder(open = { opened = it }, modules = modules)
+        }
+        shows("Care")
+        shows("What you look after, soonest first")
+        save("nav_care_light")
+        compose.onNodeWithText("Choose what you track").performScrollTo().performClick()
+        assertEquals(SettingsPage.TRACKING.route, opened)
+    }
+
+    // ---- A page within a tab has a back arrow
 
     @Test
     fun aPageWithinHasAWayBack() {
         var back = 0
-        val ring = Device("r", DeviceKind.COLMI_RING, "aa", "COLMI R02_C301", lastSyncAt = RecentFixtures.now - 600_000L, createdAt = 0, samples = 4200)
-        val strap = Device("s", DeviceKind.HEART_RATE_STRAP, "bb", "Polar H10 7A2B", lastSyncAt = RecentFixtures.now - 900_000L, createdAt = 0, samples = 900)
-        render(back = { back++ }) { DevicesScreen(DevicesState(serverDevices = listOf(ring, strap), loading = false), DevicesActions(compare = {}), now = RecentFixtures.now) }
+        val ring = Device("r", DeviceKind.COLMI_RING, "aa", "COLMI R02_C301", lastSyncAt = now - 600_000L, createdAt = 0, samples = 4200)
+        val strap = Device("s", DeviceKind.HEART_RATE_STRAP, "bb", "Polar H10 7A2B", lastSyncAt = now - 900_000L, createdAt = 0, samples = 900)
+        render(back = { back++ }) { DevicesScreen(DevicesState(serverDevices = listOf(ring, strap), loading = false), DevicesActions(compare = {}), now = now) }
         save("nav_devices_with_back")
         compose.onNodeWithContentDescription("Back").performClick()
         assertEquals(1, back)
     }
 
-    // ---- Settings, a page each
+    // ---- Settings, five pages
 
     private fun settingsPage(page: SettingsPage, dark: Boolean, actions: SettingsActions = SettingsActions(), onOpen: (String) -> Unit = {}) {
         render(dark = dark) {
@@ -216,19 +212,12 @@ class NavigationScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
-    fun youLight() = settingsPage(SettingsPage.YOU, false)
-
-    @Test
-    @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
-    fun youDark() = settingsPage(SettingsPage.YOU, true)
-
-    @Test
     @Config(qualifiers = "w411dp-h2300dp-xxhdpi")
     fun trackingLight() {
         val opened = mutableListOf<String>()
         settingsPage(SettingsPage.TRACKING, false, onOpen = { opened += it })
-        shows("Hidden from the Health tab")
+        shows("What you track")
+        shows("Hidden from Care")
         compose.onNodeWithText("Your conditions and goals").performClick()
         compose.onNodeWithText("Fields").performClick()
         assertEquals(listOf("settings/conditions", "settings/fields"), opened)
@@ -242,12 +231,25 @@ class NavigationScreenshotTest {
     fun remindersLight() {
         val opened = mutableListOf<String>()
         settingsPage(SettingsPage.REMINDERS, false, onOpen = { opened += it })
-        listOf("Reminders", "Weekly digest", "Sharing").forEach { compose.onNodeWithText(it).performClick() }
-        assertEquals(listOf("settings/reminders", "settings/digest", "settings/sharing"), opened)
+        shows("Reminders, alerts and sharing")
+        listOf("Reminders", "Health alerts", "Weekly digest", "Sharing").forEach { compose.onNodeWithText(it).performClick() }
+        assertEquals(listOf("settings/reminders", "alerts", "settings/digest", "settings/sharing"), opened)
     }
 
     @Test
     fun remindersDark() = settingsPage(SettingsPage.REMINDERS, true)
+
+    @Test
+    @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
+    fun profileLight() {
+        settingsPage(SettingsPage.YOU, false)
+        shows("Profile and goals")
+        shows("Calorie estimates use")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
+    fun profileDark() = settingsPage(SettingsPage.YOU, true)
 
     @Test
     @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
@@ -255,15 +257,13 @@ class NavigationScreenshotTest {
         val opened = mutableListOf<String>()
         val web = mutableListOf<String>()
         settingsPage(SettingsPage.CONNECTIONS, false, SettingsActions(openWeb = { web += it }), onOpen = { opened += it })
-        // Where your data goes comes first.
-        val where = compose.onNodeWithText("Where your data goes").fetchSemanticsNode().positionInRoot.y
-        val sync = compose.onNodeWithText("Sync in the background").fetchSemanticsNode().positionInRoot.y
-        assertTrue(where < sync)
-        listOf("Where your data goes", "Mealie", "AI assistant", "Webhooks & Home Assistant", "Pebble watch", "Send to other apps").forEach {
+        // Where your data goes is on You, highlighted, not here.
+        assertEquals(0, compose.onAllNodesWithText("Where your data goes").fetchSemanticsNodes().size)
+        listOf("Mealie", "AI assistant", "Webhooks & Home Assistant", "Pebble watch", "Send to other apps").forEach {
             compose.onNodeWithText(it).performScrollTo().performClick()
         }
         compose.onNodeWithText("AI connector links").performScrollTo().performClick()
-        assertEquals(listOf("settings/privacy", "settings/mealie", "settings/ai", "settings/integrations", "settings/watch", "settings/export"), opened)
+        assertEquals(listOf("settings/mealie", "settings/ai", "settings/integrations", "settings/watch", "settings/export"), opened)
         assertEquals(listOf("connector"), web)
     }
 
@@ -272,28 +272,19 @@ class NavigationScreenshotTest {
     fun connectionsDark() = settingsPage(SettingsPage.CONNECTIONS, true)
 
     @Test
-    @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
-    fun appearanceLight() {
-        settingsPage(SettingsPage.APPEARANCE, false)
-        shows("4 screens arranged.")
-    }
-
-    @Test
-    @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
-    fun appearanceDark() = settingsPage(SettingsPage.APPEARANCE, true)
-
-    @Test
-    fun accountLight() {
+    @Config(qualifiers = "w411dp-h2000dp-xxhdpi")
+    fun lookAndAccountLight() {
         var signedOut = 0
-        settingsPage(SettingsPage.ACCOUNT, false, SettingsActions(signOut = { signedOut++ }))
-        shows("maddie on Health at home")
-        compose.onNodeWithText("Sign out").performClick()
+        settingsPage(SettingsPage.LOOK, false, SettingsActions(signOut = { signedOut++ }))
+        listOf("Look and account", "Theme", "Bold text", "4 screens arranged.", "maddie on Health at home").forEach(::shows)
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onAllNodesWithText("Sign out")[1].performClick()
         assertEquals(1, signedOut)
     }
 
     @Test
-    fun accountDark() = settingsPage(SettingsPage.ACCOUNT, true)
+    @Config(qualifiers = "w411dp-h2000dp-xxhdpi")
+    fun lookAndAccountDark() = settingsPage(SettingsPage.LOOK, true)
 
     @Test
     fun weeklyDigestSettings() {

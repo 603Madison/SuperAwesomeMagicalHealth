@@ -29,7 +29,7 @@ class InsightLinksTest {
     fun `every page has somewhere to go on the phone`() {
         val routes = AppPage.entries.associateWith { InsightLinks.target(it, all).route }
         assertEquals(null, routes[AppPage.TODAY])
-        assertEquals("trends", routes[AppPage.SLEEP])
+        assertEquals("recent", routes[AppPage.SLEEP])
         assertEquals("trends", routes[AppPage.ACTIVITY])
         assertEquals("trends", routes[AppPage.TRENDS])
         assertEquals("trends", routes[AppPage.BODY])
@@ -48,7 +48,7 @@ class InsightLinksTest {
     fun `the row reads as its title and the page it opens`() {
         assertEquals("2 doses still to take. Open Medications", InsightLinks.label(doses, InsightLinks.of(doses, all)!!))
         val sleep = Insight("info", "1h 5m less sleep than usual", "", "moon", link = AppPage.SLEEP)
-        assertEquals("1h 5m less sleep than usual. Open Trends", InsightLinks.label(sleep, InsightLinks.of(sleep, all)!!))
+        assertEquals("1h 5m less sleep than usual. Open Body", InsightLinks.label(sleep, InsightLinks.of(sleep, all)!!))
         val ready = Insight("warn", "Take it easy today", "", "battery-low", link = AppPage.TODAY)
         assertEquals("Take it easy today. Open your scores", InsightLinks.label(ready, InsightLinks.of(ready, all)!!))
     }

@@ -4,6 +4,7 @@ import com.health.api.AlertLevel
 import com.health.api.AlertSettings
 import com.health.api.AlertWatch
 import com.health.api.HealthAlert
+import com.health.api.HealthAlerts
 import com.health.app.ui.Format
 import com.health.app.ui.components.ArrangeItem
 import java.time.Instant
@@ -153,6 +154,33 @@ object Alerts {
 
     /** "1 new health alert", "3 new health alerts": the bell's words. */
     fun countText(count: Int): String = if (count == 1) "1 new health alert" else "$count new health alerts"
+
+    /** How long an alert stays active after it last changed, as the server's Today insights count it. */
+    const val ACTIVE_MS = 36 * 3_600_000L
+
+    /**
+     * Today's alert card: the most serious alert still active (alerts on, not put away, from the
+     * last [ACTIVE_MS]), the newest of those at its level; null with none.
+     */
+    fun mostSerious(data: HealthAlerts?, now: Long): HealthAlert? {
+        if (data == null || !data.settings.enabled) return null
+        return data.alerts
+            .filter { it.dismissedAt == null && maxOf(it.createdAt, it.end ?: it.start) >= now - ACTIVE_MS }
+            .minWithOrNull(compareBy<HealthAlert> { it.level.ordinal }.thenByDescending { it.createdAt })
+    }
+
+    /** What Body's Health alerts row says: "1 new · watching heart rate and blood oxygen"; "Off" with alerts off. */
+    fun bodyLine(unseen: Int, data: HealthAlerts?): String {
+        if (data != null && !data.settings.enabled) return "Off: nothing is being watched"
+        val watched = data?.watching.orEmpty().filter { it.watching }.map { it.what.lowercase() }
+        val what = when (watched.size) {
+            0 -> null
+            1 -> "watching ${watched[0]}"
+            else -> "watching ${watched.dropLast(1).joinToString(", ")} and ${watched.last()}"
+        }
+        val news = if (unseen > 0) "$unseen new" else "Nothing new"
+        return listOfNotNull(news, what).joinToString(" · ")
+    }
 
     /**
      * The unseen alerts the phone knows of (id to when made), once [fetched] (the alerts made since

@@ -73,11 +73,11 @@ class ArrangeEndToEndTest {
         token = api.login(base, "admin", "e2e-password", "Test phone").token
         val modules = api.saveProfile(Profile(timezone = zone.id, modules = Module.DEFAULT + Module.MIND)).modules
 
-        // Food moved to the top and insights hidden, saved the way the Arrange sheet saves it.
+        // Your day moved to the top and For you hidden, saved the way the Arrange sheet saves it.
         val sections = TodayLayout.sections(modules)
-        val moved = listOf(TodaySection.FOOD) + (sections - TodaySection.FOOD)
+        val moved = listOf(TodaySection.DAY) + (sections - TodaySection.DAY)
         api.saveScreenLayout(Layouts.TODAY, ScreenLayout(mergeOrder(emptyList(), moved.map { it.name }), setOf(TodaySection.INSIGHTS.name)))
-        // Check in first among the quick actions, and water under More.
+        // Check in first in the + sheet's grid, and water hidden (as the old Quick log's More once kept it).
         val actions = TodayLayout.quickActions(modules)
         val quickOrder = listOf(QuickAction.CHECK_IN) + (actions - QuickAction.CHECK_IN)
         api.saveScreenLayout(Layouts.QUICK, ScreenLayout(mergeOrder(emptyList(), quickOrder.map { it.name }), setOf(QuickAction.WATER.name)))
@@ -87,41 +87,43 @@ class ArrangeEndToEndTest {
         // Signed in again, as after reinstalling or on another phone: it all comes back.
         token = api.login(base, "admin", "e2e-password", "Another phone").token
         val prefs = api.layout()
-        val today = TodayLayout.visible(modules, water = true, prefs.screens[Layouts.TODAY])
-        assertEquals(TodaySection.FOOD, today.first())
+        val today = TodayLayout.visible(modules, prefs.screens[Layouts.TODAY])
+        assertEquals(TodaySection.DAY, today.first())
         assertFalse(TodaySection.INSIGHTS in today)
         assertEquals(sections.size - 1, today.size)
-        val quick = TodayLayout.quickRow(TodayLayout.quickActions(modules), prefs.screens[Layouts.QUICK])
-        assertEquals(QuickAction.CHECK_IN, quick.shown.first())
-        assertTrue(QuickAction.WATER in quick.more)
-        assertTrue(QuickAction.MOOD in quick.shown)
+        val grid = TodayLayout.grid(TodayLayout.quickActions(modules), prefs.screens[Layouts.QUICK])
+        assertEquals(QuickAction.CHECK_IN, grid.first())
+        // Everything tracked is in the grid, whatever was hidden from the old Quick log.
+        assertTrue(QuickAction.WATER in grid)
+        assertTrue(QuickAction.MOOD in grid)
         assertEquals(listOf(FoodSections.DRINKS, FoodSections.TOTALS), prefs.screens[FoodSections.KEY]?.order)
 
-        // Mind turned off, then Today arranged again on the phone: Mind keeps its place for when it's back.
-        val withoutMind = TodayLayout.sections(Module.DEFAULT).map { it.name }
+        // Without a ring's features (no scores), Today arranged again on the phone: the scores keep their place for when they're back.
+        val withoutScores = TodayLayout.sections(setOf(Module.NUTRITION)).map { it.name }
+        assertFalse(TodaySection.SCORES.name in withoutScores)
         val saved = prefs.screens[Layouts.TODAY]!!
-        val again = mergeOrder(saved.order, withoutMind.reversed())
+        val again = mergeOrder(saved.order, withoutScores.reversed())
         api.saveScreenLayout(Layouts.TODAY, saved.copy(order = again))
         val back = api.layout().screens[Layouts.TODAY]!!
-        assertEquals(saved.order.indexOf(TodaySection.MIND.name), back.order.indexOf(TodaySection.MIND.name))
-        // Reversed: what was last by default (Also today) is first.
-        assertEquals(TodaySection.ALSO, TodayLayout.visible(Module.DEFAULT, water = true, back).first())
-        assertEquals(TodaySection.BODY, TodayLayout.visible(Module.DEFAULT, water = true, back)[1])
+        assertEquals(saved.order.indexOf(TodaySection.SCORES.name), back.order.indexOf(TodaySection.SCORES.name))
+        // Reversed, and For you still hidden: Right now comes after Your day.
+        val shown = TodayLayout.visible(setOf(Module.NUTRITION), back)
+        assertEquals(listOf(TodaySection.DAY, TodaySection.UP_NEXT), shown)
 
         // An empty layout puts the screen back as it was.
         api.saveScreenLayout(Layouts.TODAY, ScreenLayout())
-        assertEquals(sections, TodayLayout.visible(modules, water = true, api.layout().screens[Layouts.TODAY]))
+        assertEquals(sections, TodayLayout.visible(modules, api.layout().screens[Layouts.TODAY]))
     }
 
     @Test
-    fun `water off hides the water field, keeps the person's other choices, and takes water off Today`() = runBlocking {
+    fun `water off hides the water field, keeps the person's other choices, and takes water out of the + sheet`() = runBlocking {
         token = api.login(base, "admin", "e2e-password", "Test phone").token
         val modules = api.saveProfile(Profile(timezone = zone.id, modules = Module.DEFAULT + Module.CONTINENCE + Module.CYCLE)).modules
         // Some choices of their own first: one field shown, one hidden.
         api.saveFieldChoices(FieldChoices(show = setOf(Fields.CONTINENCE_ACTIVITY), hide = setOf(Fields.CYCLE_BBT)))
         val before = api.fields()
         assertTrue(WaterSetting.isOn(before))
-        assertTrue(TodaySection.WATER in TodayLayout.sections(modules, WaterSetting.isOn(before)))
+        assertTrue(QuickAction.WATER in TodayLayout.quickActions(modules, WaterSetting.isOn(before)))
 
         // Settings › Features › Water, off.
         api.saveFieldChoices(WaterSetting.choices(api.fields(), on = false))
@@ -131,7 +133,6 @@ class ArrangeEndToEndTest {
         assertTrue(Fields.CONTINENCE_ACTIVITY in off.effective)
         assertFalse(Fields.CYCLE_BBT in off.effective)
         val water = WaterSetting.isOn(off)
-        assertFalse(TodaySection.WATER in TodayLayout.sections(modules, water))
         assertFalse(QuickAction.WATER in TodayLayout.quickActions(modules, water))
         assertFalse(FoodSections.items(water).any { it.id == FoodSections.WATER })
         assertEquals(setOf(ExportKind.WEIGHT), HealthConnectExportMapping.writable(setOf(ExportKind.WEIGHT, ExportKind.HYDRATION), off.effective))
