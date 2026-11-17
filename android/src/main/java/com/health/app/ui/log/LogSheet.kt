@@ -282,7 +282,7 @@ fun LogHost(
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     val today = LocalDate.now(zone)
     val modules = com.health.app.ui.care.shownModules()
-    val available = TodayLayout.quickActions(modules, showsField(Fields.NUTRITION_WATER), com.health.app.ui.modules.body.measurementsShown())
+    val available = TodayLayout.quickActions(modules, showsField(Fields.NUTRITION_WATER), com.health.app.ui.modules.body.measurementsShown(), energy = showsField(Fields.NEURO_ENERGY))
 
     fun quick(action: QuickAction) {
         onClose()

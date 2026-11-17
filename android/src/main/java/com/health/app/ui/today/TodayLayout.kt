@@ -40,11 +40,12 @@ object TodayLayout {
      * The ways to log this app offers with [modules] on, in the default order: Water only while
      * water is shown, Measurements only with their fields.
      */
-    fun quickActions(modules: Set<Module>, water: Boolean = true, measurements: Boolean = false): List<QuickAction> =
+    fun quickActions(modules: Set<Module>, water: Boolean = true, measurements: Boolean = false, energy: Boolean = true): List<QuickAction> =
         QuickAction.entries.filter { a ->
             (a.module == null || a.module in modules) && when (a) {
                 QuickAction.WATER -> water
                 QuickAction.MEASUREMENTS -> measurements
+                QuickAction.ENERGY -> energy
                 else -> true
             }
         }

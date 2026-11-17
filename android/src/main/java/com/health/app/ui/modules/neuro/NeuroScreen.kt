@@ -110,6 +110,7 @@ class NeuroActions(
 
 /** The parts of Autism & ADHD a person can turn on, with what each is. */
 val NEURO_TOOLS: List<Pair<String, String>> = listOf(
+    Fields.NEURO_ENERGY to "An energy budget, counted in spoons",
     Fields.NEURO_OVERLOAD to "Times things got too much: meltdowns, shutdowns and overwhelm",
     Fields.NEURO_SENSORY to "Your senses, and sensory overload",
     Fields.NEURO_BURNOUT to "Burnout, gently watched for",
@@ -181,7 +182,7 @@ fun neuroSections(fields: Set<String>, readOnly: Boolean = false): List<ArrangeI
     fun on(key: String) = key in fields
     if (quickShown(fields, readOnly)) add(ArrangeItem("quick", "Quick buttons"))
     if (on(Fields.NEURO_BURNOUT) || on(Fields.NEURO_MASKING) || on(Fields.NEURO_OVERLOAD)) add(ArrangeItem("lookafter", "Look after yourself"))
-    add(ArrangeItem("energy", "Energy today"))
+    if (on(Fields.NEURO_ENERGY)) add(ArrangeItem("energy", "Energy today"))
     if (on(Fields.NEURO_OVERLOAD) || on(Fields.NEURO_SENSORY)) add(ArrangeItem("overload", "Times things got too much"))
     add(ArrangeItem("insights", "What we've noticed"))
     if (checkInShown(fields)) add(ArrangeItem("checkins", "Check-ins"))

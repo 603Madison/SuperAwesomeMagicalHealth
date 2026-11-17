@@ -117,7 +117,7 @@ class Services(
     val deviceChoices = com.health.server.health.DeviceChoicesService(userSettings, records, days).also { c -> days.choices = { userId -> c.get(userId) } }
 
     // Autism & ADHD, transition and progress photos (neuro/, transition/, photos/).
-    val neuro = com.health.server.neuro.NeuroService(entries, userSettings, profiles, days, modules.cycle, clock)
+    val neuro = com.health.server.neuro.NeuroService(entries, userSettings, profiles, days, modules.cycle, clock, energyShown = { conditions.shows(it, com.health.api.Fields.NEURO_ENERGY) })
     val transition = com.health.server.transition.TransitionService(entries, userSettings, profiles, hormones, records, clock)
     val photos = com.health.server.photos.PhotoService(db, box, config.dataDir, profiles, records, clock).also { it.transition = transition }
     init {

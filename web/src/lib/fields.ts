@@ -57,6 +57,7 @@ export const F = {
 
   MIND_ENERGY_BUDGET: "mind.energyBudget",
 
+  NEURO_ENERGY: "neuro.energy",
   NEURO_ABOUT_ME: "neuro.aboutMe",
   NEURO_SENSORY: "neuro.sensory",
   NEURO_OVERLOAD: "neuro.overload",
@@ -89,7 +90,7 @@ export const F = {
 export const DEFAULT_FIELDS: string[] = [
   F.CONTINENCE_URGENCY, F.CONTINENCE_VOLUME, F.CONTINENCE_LEAK_SIZE, F.CONTINENCE_TRIGGERS, F.CONTINENCE_BRISTOL, F.CONTINENCE_PELVIC_FLOOR,
   F.CYCLE_FLOW, F.CYCLE_PAIN, F.CYCLE_SYMPTOM_SEVERITY, F.CYCLE_MUCUS, F.CYCLE_OVULATION_TEST, F.CYCLE_BBT, F.CYCLE_FERTILITY,
-  F.NEURO_ABOUT_ME, F.NEURO_CALM, F.NEURO_CARDS,
+  F.NEURO_ENERGY, F.NEURO_ABOUT_ME, F.NEURO_CALM, F.NEURO_CARDS,
   F.TRANSITION_MILESTONES, F.TRANSITION_CHANGES, F.TRANSITION_MOMENTS,
   F.NUTRITION_WATER,
   F.NUTRITION_MICROS,
@@ -139,6 +140,7 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
   { key: F.CYCLE_FERTILITY, module: "CYCLE", label: "Fertile window and ovulation" },
   { key: F.CYCLE_DISCHARGE, module: "CYCLE", label: "Discharge" },
   { key: F.MIND_ENERGY_BUDGET, module: "MIND", label: "Energy budget (spoons)" },
+  { key: F.NEURO_ENERGY, module: "NEURO", label: "Energy budget (spoons)" },
   { key: F.NEURO_ABOUT_ME, module: "NEURO", label: "About me" },
   { key: F.NEURO_SENSORY, module: "NEURO", label: "Sensory profile and overload" },
   { key: F.NEURO_OVERLOAD, module: "NEURO", label: "Meltdowns and shutdowns" },

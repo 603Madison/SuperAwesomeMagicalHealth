@@ -52,7 +52,7 @@ export function Neuro() {
   const all = ([
     { id: "about", label: "About me", on: has(F.NEURO_ABOUT_ME) || has(F.NEURO_SENSORY) },
     { id: "overwhelm", label: "Overwhelm", on: has(F.NEURO_OVERLOAD) || has(F.NEURO_SENSORY) },
-    { id: "energy", label: "Energy", on: has(F.MIND_ENERGY_BUDGET) || has(F.NEURO_SOCIAL) || has(F.NEURO_BURNOUT) },
+    { id: "energy", label: "Energy", on: has(F.NEURO_ENERGY) || has(F.NEURO_SOCIAL) },
     { id: "checkins", label: "Check-ins", on: has(F.NEURO_MASKING) || has(F.NEURO_EXECUTIVE) || has(F.NEURO_BURNOUT) || has(F.NEURO_MED_EFFECT) },
     { id: "focus", label: "Focus", on: has(F.NEURO_FOCUS) || has(F.NEURO_TIME) || has(F.NEURO_INTERESTS) },
     { id: "routines", label: "Routines", on: has(F.NEURO_ROUTINES) },
@@ -87,7 +87,7 @@ export function Neuro() {
       ) : arranged.render()}
       {tab === "about" && <AboutMe readOnly={readOnly} />}
       {tab === "overwhelm" && <Overwhelm readOnly={readOnly} />}
-      {tab === "energy" && <div className="grid grid-2"><EnergyBudgetCard readOnly={readOnly} /></div>}
+      {tab === "energy" && <div className="grid grid-2"><EnergyBudgetCard readOnly={readOnly} spoons={has(F.NEURO_ENERGY)} /></div>}
       {tab === "checkins" && <CheckIns readOnly={readOnly} />}
       {tab === "focus" && <Focus readOnly={readOnly} />}
       {tab === "routines" && <Routines readOnly={readOnly} />}
@@ -241,7 +241,8 @@ function OverloadDialog({ event, onClose, onSaved }: { event: OverloadEvent; onC
 }
 
 /** Spoons (or any unit): what the day started with, what used them, and the social battery. */
-export function EnergyBudgetCard({ readOnly, compact }: { readOnly: boolean; compact?: boolean }) {
+/** Today's energy: spoons (unless the person turned the energy budget off) and the social battery. */
+export function EnergyBudgetCard({ readOnly, compact, spoons = true }: { readOnly: boolean; compact?: boolean; spoons?: boolean }) {
   const { has } = useFields();
   const list = useLoad(() => api.energy(14).catch(() => [] as EnergyDay[]), []);
   const todayDay = list.data?.find((d) => d.date === today()) ?? { date: today(), spends: [] };
@@ -252,6 +253,16 @@ export function EnergyBudgetCard({ readOnly, compact }: { readOnly: boolean; com
   };
   const used = todayDay.spends.reduce((t, s) => t + s.amount, 0);
   const left = todayDay.startWith != null ? todayDay.startWith - used : undefined;
+  if (!spoons) {
+    if (!has(F.NEURO_SOCIAL)) return null;
+    return (
+      <Card title="Social battery" icon={<BatteryMedium size={18} />} className={compact ? "" : "span-2"}>
+        {readOnly
+          ? <p>{todayDay.socialBattery != null ? `${todayDay.socialBattery * 10}%` : "Not set today."}</p>
+          : <ScaleRow label="Social battery" min={0} max={10} low="Empty" high="Full" value={todayDay.socialBattery} onChange={(socialBattery) => save({ ...todayDay, socialBattery })} />}
+      </Card>
+    );
+  }
   return (
     <Card title="Energy today" icon={<BatteryMedium size={18} />} className={compact ? "" : "span-2"}>
       {todayDay.startWith == null ? (

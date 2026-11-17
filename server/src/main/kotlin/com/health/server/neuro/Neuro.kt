@@ -59,6 +59,8 @@ class NeuroService(
     private val days: DayService,
     private val cycle: CycleService,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Whether the person keeps the energy budget (spoons) on ([com.health.api.Fields.NEURO_ENERGY]). */
+    private val energyShown: suspend (String) -> Boolean = { true },
 ) : FeatureHooks {
     override val module = Module.NEURO
 
@@ -122,6 +124,10 @@ class NeuroService(
 
     suspend fun energyOn(userId: String, date: LocalDate): EnergyDay? =
         entries.list(userId, EntryKind.NEURO_ENERGY, date, date, EnergyDay.serializer()).lastOrNull()?.value
+
+    /** The day's energy as the person sees it: with the energy budget off, no spoons (the social battery stays). */
+    private suspend fun shownEnergy(userId: String, date: LocalDate): EnergyDay? =
+        energyOn(userId, date)?.let { if (energyShown(userId)) it else it.copy(startWith = null, spends = emptyList()) }
 
     suspend fun saveEnergy(userId: String, dateText: String, day: EnergyDay): EnergyDay {
         val date = runCatching { LocalDate.parse(dateText) }.getOrNull() ?: throw ApiError.badRequest("Days look like 2026-03-20")
@@ -362,7 +368,7 @@ class NeuroService(
     suspend fun today(userId: String, profile: Profile, date: LocalDate): Pair<NeuroToday, List<Pair<Int, Insight>>> {
         val zone = Days(Days.zoneOf(profile.timezone))
         val events = entries.list(userId, EntryKind.NEURO_EVENT, date, date, OverloadEvent.serializer()).map { it.value }
-        val energy = energyOn(userId, date)
+        val energy = shownEnergy(userId, date)
         val focus = entries.list(userId, EntryKind.NEURO_FOCUS, date, date, FocusSession.serializer()).map { it.value }
         val runs = entries.list(userId, EntryKind.NEURO_ROUTINE_RUN, date, date, RoutineRun.serializer()).map { it.value }
         val routines = routines(userId, all = false)
@@ -414,7 +420,7 @@ class NeuroService(
             )
         }
         val energy = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList().mapNotNull { d ->
-            energyOn(userId, d)?.let { Feed.energy(it, d, zone, Module.NEURO, AppPage.NEURO) }
+            shownEnergy(userId, d)?.let { Feed.energy(it, d, zone, Module.NEURO, AppPage.NEURO) }
         }
         val checks = entries.list(userId, EntryKind.NEURO_CHECKIN, from, to, NeuroCheckIn.serializer()).map { s ->
             val c = s.value
@@ -451,6 +457,7 @@ class NeuroService(
 
     /** Today's energy: what's left, or a gentle nudge to set it. */
     override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        if (!energyShown(userId)) return emptyList()
         val today = Days(Days.zoneOf(profile.timezone)).dateOf(at)
         return listOf(Feed.energyNow(energyOn(userId, today), today, Module.NEURO, AppPage.NEURO))
     }

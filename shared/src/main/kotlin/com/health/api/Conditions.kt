@@ -145,6 +145,8 @@ object Fields {
     const val MIND_ENERGY_BUDGET = "mind.energyBudget"
 
     // Autism and ADHD
+    /** The energy budget (spoons): on unless the person turns it off. */
+    const val NEURO_ENERGY = "neuro.energy"
     const val NEURO_ABOUT_ME = "neuro.aboutMe"
     const val NEURO_SENSORY = "neuro.sensory"
     const val NEURO_OVERLOAD = "neuro.overload"
@@ -182,7 +184,7 @@ object Fields {
     val DEFAULTS: Set<String> = setOf(
         CONTINENCE_URGENCY, CONTINENCE_VOLUME, CONTINENCE_LEAK_SIZE, CONTINENCE_TRIGGERS, CONTINENCE_BRISTOL, CONTINENCE_PELVIC_FLOOR,
         CYCLE_FLOW, CYCLE_PAIN, CYCLE_SYMPTOM_SEVERITY, CYCLE_MUCUS, CYCLE_OVULATION_TEST, CYCLE_BBT, CYCLE_FERTILITY,
-        NEURO_ABOUT_ME, NEURO_CALM, NEURO_CARDS,
+        NEURO_ENERGY, NEURO_ABOUT_ME, NEURO_CALM, NEURO_CARDS,
         TRANSITION_MILESTONES, TRANSITION_CHANGES, TRANSITION_MOMENTS,
         NUTRITION_WATER,
         NUTRITION_MICROS,
@@ -232,6 +234,7 @@ object Fields {
         CYCLE_FERTILITY to (Module.CYCLE to "Fertile window and ovulation"),
         CYCLE_DISCHARGE to (Module.CYCLE to "Discharge"),
         MIND_ENERGY_BUDGET to (Module.MIND to "Energy budget (spoons)"),
+        NEURO_ENERGY to (Module.NEURO to "Energy budget (spoons)"),
         NEURO_ABOUT_ME to (Module.NEURO to "About me"),
         NEURO_SENSORY to (Module.NEURO to "Sensory profile and overload"),
         NEURO_OVERLOAD to (Module.NEURO to "Meltdowns and shutdowns"),

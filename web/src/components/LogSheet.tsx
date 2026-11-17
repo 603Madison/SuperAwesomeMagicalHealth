@@ -103,7 +103,7 @@ function useActions(onDialog: (d: Dialog) => void): LogAction[] {
     { id: "BLOOD_PRESSURE", word: "Blood pressure", name: "Log blood pressure", icon: HeartPulse, run: () => onDialog("bp") },
     { id: "GLUCOSE", word: "Glucose", name: "Log glucose", icon: Droplets, run: () => onDialog("glucose") },
     { id: "HABIT", word: "Habits", name: "Tick off a habit", icon: ListChecks, run: go("/habits") },
-    { id: "ENERGY", word: "Energy", name: "Log energy and focus", icon: Sparkles, run: go("/neuro") },
+    { id: "ENERGY", word: "Energy", name: "Log energy and focus", icon: Sparkles, when: has(F.NEURO_ENERGY), run: go("/neuro") },
     { id: "OVERLOAD", word: "Too much", name: "Too much: calm mode", icon: Waves, when: has(F.NEURO_CALM), run: go("/calm") },
     { id: "CALM", word: "Calm", name: "Calm tools", icon: Wind, run: go("/mind#calm") },
     { id: "MOMENT", word: "Euphoria", name: "Log a moment of euphoria", icon: Sparkles, when: has(F.TRANSITION_MOMENTS), run: () => onDialog("moment") },
