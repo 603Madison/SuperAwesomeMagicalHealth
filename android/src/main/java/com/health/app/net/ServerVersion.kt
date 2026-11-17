@@ -32,7 +32,7 @@ object ServerVersion {
 
     /** What the notice on Today and in Settings says. */
     fun notice(server: String, app: String): String =
-        "Your server is on $server and this app is $app: some things (like turning water off and arranging screens) need the server updated."
+        "Your server is on $server and this app is $app. Update the server to get everything in this version."
 
     /** Which notice was put away: one per pair of versions, so a newer app asks again. */
     fun key(server: String, app: String): String = "$server>$app"

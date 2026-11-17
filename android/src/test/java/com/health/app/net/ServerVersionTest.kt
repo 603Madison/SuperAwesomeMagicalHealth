@@ -41,7 +41,7 @@ class ServerVersionTest {
     @Test
     fun `the notice says which versions, plainly`() {
         assertEquals(
-            "Your server is on 0.2.0 and this app is 0.3.0: some things (like turning water off and arranging screens) need the server updated.",
+            "Your server is on 0.2.0 and this app is 0.3.0. Update the server to get everything in this version.",
             ServerVersion.notice("0.2.0", "0.3.0"),
         )
         assertTrue(ServerVersion.HELP_URL.endsWith("#updating"))
