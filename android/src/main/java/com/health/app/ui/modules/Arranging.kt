@@ -70,10 +70,12 @@ object FeatureScreens {
     val COMPARE = key("compare")
     /** Settings › Where your data goes (ui/settings/WhereDataGoes.kt). */
     val PRIVACY = key("privacy")
+    /** Health alerts (ui/alerts/AlertsScreen.kt). */
+    val ALERTS = key("alerts")
 
     val ALL: List<String> = listOf(
         MIND, NEURO, CYCLE, CONTINENCE, CONTINENCE_PROGRESS, SUPPLIES, MEDS_TODAY, MEDS_LABS, VITALS, SYMPTOMS, HABITS,
-        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT, COMPARE, PRIVACY,
+        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT, COMPARE, PRIVACY, ALERTS,
     )
 
     private fun key(screen: String) = Layouts.screen(Layouts.ANDROID, screen)

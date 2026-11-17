@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { dayLabel, num, shiftDate, useToday } from "../lib/format";
 import type { Food as FoodItem, FoodDay, FoodEntry, Meal } from "../lib/types";
 import { Meter } from "../components/charts";
-import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
 import { MealPlanCard, MealieResults, useMealie } from "./Mealie";
 import { layoutKey } from "../lib/types";
@@ -68,16 +68,10 @@ export function Food() {
 
   return (
     <div className="page">
-      <header className="page-header">
-        <div>
-          <h1>Food</h1>
-          <p className="page-subtitle">{numbers ? "What you eat, against what you burn" : "What you eat, meal by meal"}</p>
-        </div>
-        <div className="page-actions">
-          <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(now, 1)} />
-          {arranged.button}
-        </div>
-      </header>
+      <PageHeader title="Food" subtitle={numbers ? "What you eat, against what you burn" : "What you eat, meal by meal"} actions={<>
+        <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(now, 1)} />
+        {arranged.button}
+      </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
       <div style={{ opacity: loading ? 0.6 : 1 }}>{arranged.render()}</div>
@@ -172,7 +166,7 @@ function Macros({ eaten, target }: { eaten: { protein: number; carbs: number; fa
   );
 }
 
-/** Water against its goal, a glass at a time. Only while water shows (Settings › Features › Food). */
+/** Water against its goal, a glass at a time. Only while water shows (Settings › What you're tracking › Features › Food). */
 function WaterCard({ day, readOnly, onChanged }: { day: FoodDay; readOnly: boolean; onChanged: () => void }) {
   const t = day.target;
   const glasses = Math.max(8, Math.ceil(t.waterMl / 250));

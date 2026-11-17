@@ -63,9 +63,10 @@ fun MoreRoute(onOpen: (String) -> Unit, unseenAlerts: Int = 0) {
     val viewing by c.viewing.collectAsState()
     var devices by remember { mutableStateOf<List<Device>>(emptyList()) }
     var ai by remember { mutableStateOf<AiStatus?>(null) }
-    // Each time More shows: devices may have come or gone, the assistant been turned on.
+    // Each time More shows: devices may have come or gone, the assistant been turned on, alerts come.
     LaunchedEffect(viewing) {
         if (viewing == null) {
+            c.refreshAlerts()
             devices = attempt { c.api.devices() }.getOrDefault(devices)
             ai = attempt { c.api.aiStatus() }.getOrNull()
         }

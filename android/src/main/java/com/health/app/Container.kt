@@ -27,7 +27,11 @@ import com.health.app.net.saveAllLayouts
 import com.health.app.net.saveScreenLayout
 import com.health.app.net.serverHealth
 import com.health.app.net.habitsForReminders
+import com.health.api.HealthAlerts
+import com.health.app.net.alerts
+import com.health.app.reminders.AlertNotices
 import com.health.app.reminders.DigestWorker
+import com.health.app.ui.alerts.Alerts
 import com.health.app.reminders.DoseOutbox
 import com.health.app.reminders.HabitReminder
 import com.health.app.reminders.MedsCache
@@ -114,11 +118,67 @@ class Container(val context: Context) {
         if (settings.value.signedIn && strapStore.recording.value != null && !strapRecorder.running) StrapService.start(context)
     }
 
+    // ---- Health alerts (ui/alerts): Today's bell, and a notification for each new one after a sync ----
+
+    /** Tells the person of new health alerts by notification (no push service: the phone asks after each sync). */
+    val alertNotices = AlertNotices(context)
+
+    private val alertsLock = Any()
+    private var unseenKnown: Map<String, Long> = emptyMap()
+    private val _unseenAlerts = MutableStateFlow(0)
+
+    /**
+     * How many health alerts are unseen and not put away (Today's bell; any other screen can show
+     * it too). Kept up to date by [refreshAlerts], which each sync calls ([checkAlerts]).
+     */
+    val unseenAlerts: StateFlow<Int> = _unseenAlerts.asStateFlow()
+
+    /** The last [days] of the person's own alerts, [unseenAlerts] following; null when signed out or the server can't be reached. */
+    suspend fun refreshAlerts(days: Int = Alerts.DAYS): HealthAlerts? {
+        if (!settings.value.signedIn) return null
+        val asked = System.currentTimeMillis()
+        val result = try {
+            api.alerts(days)
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            Log.w(TAG, "Couldn't look for health alerts: ${e.javaClass.simpleName}")
+            return null
+        }
+        alertsLoaded(result, days, asked)
+        return result
+    }
+
+    /** [result] is the server's word on the alerts of the [days] before [at]: the bell follows (a whole page's worth replaces what was known). */
+    fun alertsLoaded(result: HealthAlerts, days: Int, at: Long = System.currentTimeMillis()) {
+        val since = if (days >= Alerts.DAYS) Long.MIN_VALUE else at - days * 86_400_000L
+        synchronized(alertsLock) {
+            unseenKnown = Alerts.mergeUnseen(unseenKnown, result.alerts, since, result.settings.enabled)
+            _unseenAlerts.value = unseenKnown.size
+        }
+    }
+
+    /** Every alert is seen now (the alerts page opened), or [id] alone is (put away). */
+    fun alertsSeen(id: String? = null) {
+        synchronized(alertsLock) {
+            unseenKnown = if (id == null) emptyMap() else unseenKnown - id
+            _unseenAlerts.value = unseenKnown.size
+        }
+    }
+
+    /** After each sync (and a strap's upload while it records): the last two days' alerts, and a notification for each one not told of yet. */
+    suspend fun checkAlerts() {
+        val result = refreshAlerts(Alerts.RECENT_DAYS) ?: return
+        alertNotices.tell(result, reminders.canNotify())
+    }
+
     /** Medications kept on the phone for reminders, the reminders themselves, and doses waiting to be sent. */
     val medsCache = MedsCache(context)
     val reminderCache = ReminderCache(context)
     val reminders = Reminders(context, medsCache, ::zone, reminderCache)
     val doseOutbox = DoseOutbox(File(context.filesDir, "dose-outbox"))
+
+    init {
+        sync.afterEach = { checkAlerts() }
+    }
 
     /** One voice sender at a time, however many of the trainer's pages are open (ui/modules/transition/voice). */
     val voiceSending = kotlinx.coroutines.sync.Mutex()
@@ -485,6 +545,8 @@ class Container(val context: Context) {
         reminders.cancelAll()
         medsCache.clear()
         reminderCache.clear()
+        alertNotices.clear()
+        alertsSeen()
         // Nothing personal stays in the notification shade.
         androidx.core.app.NotificationManagerCompat.from(context).cancelAll()
         monitors.clear()

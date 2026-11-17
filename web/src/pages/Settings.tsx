@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpDown, Bot, ChevronRight, Copy, Home, Inbox, KeyRound, Lock, LogOut, Monitor, Package, Shield, Smartphone, Watch } from "lucide-react";
-import { useModules, useNavItems, useNavShown } from "../App";
+import { ArrowUpDown, Bot, ChevronRight, Copy, Home, KeyRound, Lock, LogOut, Monitor, Smartphone, Watch } from "lucide-react";
+import { useModules } from "../App";
 import type { Module } from "../lib/types";
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { KG_PER_LB, toKg, when } from "../lib/format";
 import { F, setField, useMicros, useWater } from "../lib/fields";
@@ -10,7 +10,8 @@ import { resetAllScreens, useLayoutStore, useScreenLayout } from "../lib/layout"
 import { PALETTES, usePrefs } from "../lib/prefs";
 import { session, useSession } from "../lib/session";
 import { LAYOUT_NAV, SENSITIVE, layoutKey, type Goals, type Profile as ProfileModel } from "../lib/types";
-import { Button, Field, IconButton, NumberInput, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Field, IconButton, NumberInput, PageHeader, Spinner, Toggle, errorToast, toast, useLoad, useNarrow } from "../components/ui";
+import { NAMES, SETTINGS_PAGES, type SettingsPage } from "../lib/nav";
 import { FEATURES } from "../components/features";
 import { PlacePicker } from "../components/PlacePicker";
 import { useArrange, type Section } from "../components/Arrange";
@@ -26,15 +27,13 @@ const RECORDED: { module: Module; name: string }[] = [
   { module: "BODY", name: "Body" },
 ];
 
-/** Settings, in a few groups: each is a tab, and /settings#digest lands on the digest's. */
-const GROUPS = [
-  { id: "you", label: "You" },
-  { id: "features", label: "Features" },
-  { id: "reminders", label: "Reminders & sharing" },
-  { id: "connections", label: "Connections" },
-  { id: "appearance", label: "Appearance" },
-] as const;
-type Group = (typeof GROUPS)[number]["id"];
+/**
+ * Settings, in a few pages (lib/nav.ts's SETTINGS_PAGES): on a wide screen each is a tab, on a
+ * phone each opens from More on its own. /settings#digest lands on the digest's section, and
+ * /settings#reminders on its page. The ids are kept from before (they're in links and saved).
+ */
+const GROUPS = SETTINGS_PAGES;
+type Group = SettingsPage;
 const label = (g: Group) => GROUPS.find((x) => x.id === g)!.label;
 
 /** The conditions and goals picked, with a way to change them. */
@@ -45,7 +44,7 @@ function TrackingSummary() {
     <>
       <p className="muted">Your conditions and goals decide which features and details the app shows.</p>
       {list.length > 0 && <div className="tag-list">{list.map((c) => <span key={c.id} className="chip is-static">{c.name}</span>)}</div>}
-      <NavLink to="/conditions" className="btn btn-tonal">{list.length ? "Change" : "Choose"}</NavLink>
+      <Link to="/conditions" className="btn btn-tonal">{list.length ? "Change" : "Choose"}</Link>
     </>
   );
 }
@@ -66,7 +65,7 @@ export function Settings() {
   const navigate = useNavigate();
   // A new connector link or upload key shows in the list of sign-ins at once.
   const [signIns, setSignIns] = useState(0);
-  // The place picker (for the weather) is in You and your goals while symptoms are on, or a place is set.
+  // The place picker (for the weather) is in Profile and goals while symptoms are on, or a place is set.
   const weather = !!profile && (on.includes("SYMPTOMS") || !!profile.place);
 
   /** Where a way out is set up, for Where your data goes: a section shown here (not hidden), or a tab. */
@@ -80,8 +79,8 @@ export function Settings() {
   };
 
   const sections: (Section & { group: string })[] = [
-    { id: "profile", group: label("you"), label: "You and your goals", node: (
-      <Panel id="profile" title="You and your goals">
+    { id: "profile", group: label("you"), label: "Profile and goals", node: (
+      <Panel id="profile" title="Profile and goals">
         <p className="muted">Your profile works out resting energy and calorie targets; goals shape your scores.</p>
         {profile ? <ProfileForm initial={profile} water={water} /> : <Spinner />}
         {profile && (on.includes("SYMPTOMS") || profile.place) && (
@@ -95,14 +94,14 @@ export function Settings() {
     { id: "nutrients", group: label("you"), label: "Nutrient targets", when: micros, node: (
       <Panel id="nutrients" title="Nutrient targets"><NutrientTargetsPanel /></Panel>
     ) },
-    { id: "account", group: label("you"), label: "Account", node: (
+    { id: "account", group: label("account"), label: "Account", node: (
       <Panel id="account" title="Account">
         <NameForm />
         {user.hasPassword && <PasswordChange />}
         {user.oidc && !user.hasPassword && <p className="muted">You sign in through single sign-on; your password is managed there.</p>}
       </Panel>
     ) },
-    { id: "signins", group: label("you"), label: "Signed in on", node: (
+    { id: "signins", group: label("account"), label: "Signed in on", node: (
       <Panel id="signins" title="Signed in on"><SignIns key={signIns} /></Panel>
     ) },
     { id: "tracking", group: label("features"), label: "What you're tracking", node: (
@@ -117,8 +116,8 @@ export function Settings() {
     { id: "fields", group: label("features"), label: "What to record", when: RECORDED.some((m) => on.includes(m.module)) || on.includes("CONTINENCE") || on.includes("CYCLE"), node: (
       <Panel id="fields" title="What to record">
         <p className="muted">What you're tracking decides what each form asks for. Show or hide any of it here; it's saved straight away.</p>
-        {on.includes("CONTINENCE") && <p><NavLink to="/bladder/settings">Bladder &amp; bowel settings</NavLink>: quick buttons, your own words and fields, bladder training.</p>}
-        {on.includes("CYCLE") && <p><NavLink to="/cycle/settings">Cycle settings</NavLink>: your own symptoms, lengths, reminders and plain wording.</p>}
+        {on.includes("CONTINENCE") && <p><Link to="/bladder/settings">Bladder &amp; bowel settings</Link>: quick buttons, your own words and fields, bladder training.</p>}
+        {on.includes("CYCLE") && <p><Link to="/cycle/settings">Cycle settings</Link>: your own symptoms, lengths, reminders and plain wording.</p>}
         {RECORDED.filter((m) => on.includes(m.module)).map((m) => (
           <details key={m.module} className="field-group">
             <summary>{m.name}</summary>
@@ -158,7 +157,7 @@ export function Settings() {
     ) },
     { id: "watch", group: label("connections"), label: "Pebble watch", node: (
       <Panel id="watch" title="Pebble watch">
-        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs {water ? "a mood, water, coffee or a toilet trip" : "a mood, coffee or a toilet trip"} with a tap. Connected watches are listed in You › Signed in on.</p>
+        <p className="muted">Install the SuperAwesomeMagicalHealth watch app, then open its settings in the Pebble app on your phone and sign in there. Your watch shows today's scores and doses, and logs {water ? "a mood, water, coffee or a toilet trip" : "a mood, coffee or a toilet trip"} with a tap. Connected watches are listed in Account › Signed in on.</p>
       </Panel>
     ) },
     { id: "appearance", group: label("appearance"), label: "Appearance in this browser", node: (
@@ -181,11 +180,12 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hash]);
   const shown = arranged.shown.filter((x) => x.group === label(group));
+  // On a phone, each page opens from More on its own: its name is the title, and back goes to More.
+  const narrow = useNarrow();
 
   return (
     <div className="page settings">
-      <PageHeader title="Settings" actions={arranged.button} />
-      <MoreLinks admin={user.role === "ADMIN"} />
+      <PageHeader title={narrow ? label(group) : NAMES.settings} actions={arranged.button} />
       <div className="settings-tabs">
         <div className="tabs" role="tablist" aria-label="Settings">
           {GROUPS.map((g) => (
@@ -201,27 +201,13 @@ export function Settings() {
   );
 }
 
-/** Phones show five tabs; the rest of the app is a tap away here, in the sidebar's order. */
-function MoreLinks({ admin }: { admin: boolean }) {
-  const on = useModules();
-  const items = useNavShown(useNavItems()).filter((i) => !i.tab);
-  return (
-    <nav className="phone-only more-links" aria-label="More">
-      {items.map((i) => <NavLink key={i.id} to={i.to} className="chip"><i.icon size={18} /> {i.label}</NavLink>)}
-      {(on.includes("CONTINENCE") || on.includes("CYCLE")) && <NavLink to="/supplies" className="chip"><Package size={18} /> Supplies</NavLink>}
-      <NavLink to="/digest" className="chip"><Inbox size={18} /> Your week</NavLink>
-      {admin && <NavLink to="/admin" className="chip"><Shield size={18} /> Admin</NavLink>}
-    </nav>
-  );
-}
-
 /** How many screens the person has arranged, and a way to put them all back. */
 function ArrangedScreens() {
   const count = useLayoutStore((s) => Object.keys(s.screens).length);
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <p className="muted">Each page has an <ArrowUpDown size={14} style={{ verticalAlign: -2 }} /> Arrange button at the top: move what matters to the top, and hide what you don't use. Today, its quick actions and the sidebar are arranged the same way in the phone app.</p>
+      <p className="muted">Each page has an <ArrowUpDown size={14} style={{ verticalAlign: -2 }} /> Arrange button at the top: move what matters to the top, and hide what you don't use. Today, its quick actions and your features list are arranged the same way in the phone app.</p>
       <div className="button-row">
         <Button busy={busy} disabled={count === 0} onClick={async () => {
           setBusy(true);
@@ -256,7 +242,7 @@ function Features({ profile, water }: { profile: ProfileModel; water: boolean })
             <div className="feature-row">
               <Toggle disabled={busy} checked={isOn} onChange={(v) => void toggle(f.id, v)}
                 label={<>{f.name}{SENSITIVE.includes(f.id) && <Lock size={13} className="feature-lock" aria-label="Private" />}</>}
-                help={<>{f.id === "NUTRITION" && !water ? "A food diary with calories, protein, carbs, fat, coffee and drinks." : f.about}{offSidebar && " Not in the sidebar: arrange it to show it again."}</>} />
+                help={<>{f.id === "NUTRITION" && !water ? "A food diary with calories, protein, carbs, fat, coffee and drinks." : f.about}{offSidebar && " Hidden from your features list: arrange it to show it again."}</>} />
               {isOn && f.route ? <Link className="icon-btn" to={f.route} aria-label={`Open ${f.name}`} title={`Open ${f.name}`}><ChevronRight size={20} /></Link> : <span className="icon-btn-space" aria-hidden="true" />}
             </div>
             {f.id === "NUTRITION" && isOn && (
@@ -520,7 +506,7 @@ function Connector({ water, onMade }: { water: boolean; onMade: () => void }) {
             <code>{link}</code>
             <Button variant="ghost" onClick={() => { void navigator.clipboard?.writeText(link); toast("Copied"); }}><Copy size={16} /> Copy</Button>
           </div>
-          <p className="muted">This link is the key: keep it private. It's shown only now; it's listed in You › Signed in on, where you can remove it.</p>
+          <p className="muted">This link is the key: keep it private. It's shown only now; it's listed in Account › Signed in on, where you can remove it.</p>
           <ul className="muted small" style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
             <li><strong>Claude</strong>: Settings › Connectors › Add custom connector, and paste the link.</li>
             <li><strong>Other MCP clients</strong>: add it as a remote (Streamable HTTP) server. The token can go in the URL as here, or as <code>Authorization: Bearer</code> to <code>/mcp</code>.</li>

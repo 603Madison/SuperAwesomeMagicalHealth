@@ -10,6 +10,8 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -182,6 +184,9 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
     }
     // Viewing someone's share: their shared features, read-only, with a way back.
     val viewing by c.viewing.collectAsState()
+    // Health alerts unseen and not put away (the person's own): on the More tab, and its row there.
+    val unseenAlerts by c.unseenAlerts.collectAsState()
+    val alerts = if (viewing == null) unseenAlerts else 0
     val entry by nav.currentBackStackEntryAsState()
     val scope = rememberCoroutineScope()
     // A notification asked for a page.
@@ -192,7 +197,7 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
         }
     }
     CompositionLocalProvider(LocalReadOnly provides (viewing != null)) {
-        AppFrame(selected = tabOf(entry?.destination?.route), snackbar = snackbar, onTab = { tab -> nav.go(tab) }) {
+        AppFrame(selected = tabOf(entry?.destination?.route), snackbar = snackbar, onTab = { tab -> nav.go(tab) }, badges = mapOf("more" to alerts)) {
             Column(Modifier.fillMaxSize()) {
                 viewing?.let { share ->
                     ViewingBanner(share.ownerName, onBack = {
@@ -200,15 +205,18 @@ fun MainScaffold(open: String? = null, onOpened: () -> Unit = {}) {
                         nav.navigate("today") { popUpTo("today") { inclusive = true } }
                     })
                 }
-                Box(Modifier.weight(1f)) { Routes(nav) }
+                Box(Modifier.weight(1f)) { Routes(nav, alerts) }
             }
         }
     }
 }
 
-/** The app around its pages: the aurora backdrop, the five tabs along the bottom, and the snackbar. */
+/**
+ * The app around its pages: the aurora backdrop, the five tabs along the bottom (each with a count
+ * from [badges] by its route, shown above 0), and the snackbar.
+ */
 @Composable
-fun AppFrame(selected: String?, snackbar: SnackbarHostState, onTab: (String) -> Unit, content: @Composable () -> Unit) {
+fun AppFrame(selected: String?, snackbar: SnackbarHostState, onTab: (String) -> Unit, badges: Map<String, Int> = emptyMap(), content: @Composable () -> Unit) {
     Backdrop {
         Scaffold(
             containerColor = Color.Transparent,
@@ -220,7 +228,16 @@ fun AppFrame(selected: String?, snackbar: SnackbarHostState, onTab: (String) -> 
                         NavigationBarItem(
                             selected = selected == tab.route,
                             onClick = { onTab(tab.route) },
-                            icon = { Icon(tab.icon, null) },
+                            icon = {
+                                val count = badges[tab.route] ?: 0
+                                if (count > 0) {
+                                    BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) { Text(if (count > 99) "99+" else "$count") } }) {
+                                        Icon(tab.icon, com.health.app.ui.alerts.Alerts.countText(count))
+                                    }
+                                } else {
+                                    Icon(tab.icon, null)
+                                }
+                            },
                             label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             colors = NavigationBarItemDefaults.colors(
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -251,7 +268,7 @@ private fun arg(name: String) = navArgument(name) { type = NavType.StringType; n
 private fun required(name: String) = navArgument(name) { type = NavType.StringType }
 
 @Composable
-private fun Routes(nav: NavHostController) {
+private fun Routes(nav: NavHostController, alerts: Int) {
     fun open(route: String) = nav.go(route)
     fun back() { nav.popBackStack() }
     NavHost(nav, startDestination = "today") {
@@ -266,7 +283,7 @@ private fun Routes(nav: NavHostController) {
         composable("recent") { RecentRoute(device = null) }
         composable("health") { HubRoute(onOpen = ::open) }
         composable("trends") { TrendsRoute(onRecent = { open("recent") }) }
-        composable("more") { MoreRoute(onOpen = ::open) }
+        composable("more") { MoreRoute(onOpen = ::open, unseenAlerts = alerts) }
 
         // ---- Food (in Health).
         page("food", nav) { FoodRoute(onAdd = { date, meal -> nav.navigate("food/add/$date/${meal.name}") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
@@ -292,7 +309,8 @@ private fun Routes(nav: NavHostController) {
         page("devices/strap", nav) { StrapPairRoute(onDone = ::back) }
         page("devices/monitor", nav) { MonitorPairRoute(onDone = ::back) }
 
-        // ---- Your records and the assistant (in More). Health alerts ("alerts") are registered with their screen.
+        // ---- Your records and the assistant (in More). Health alerts (ui/alerts) also open from Today's bell, alert insights and their notifications.
+        page("alerts", nav) { com.health.app.ui.alerts.AlertsRoute(onBack = ::back) }
         page("digest", nav) { DigestRoute(onBack = ::back, onSettings = { open(DIGEST_SETTINGS) }) }
         page("reports", nav) { ReportsRoute(onBack = ::back) }
         page("assistant", nav) { AiRoute(onBack = ::back, onAudit = { open("assistant/audit") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }

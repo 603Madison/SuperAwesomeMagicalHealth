@@ -80,10 +80,13 @@ class NavigationScreenshotTest {
         digest = DigestPrefs(enabled = true, day = 7, hour = 18),
     )
 
-    private fun render(dark: Boolean = false, selected: String? = "more", back: (() -> Unit)? = null, onTab: (String) -> Unit = {}, content: @Composable () -> Unit) {
+    private fun render(
+        dark: Boolean = false, selected: String? = "more", back: (() -> Unit)? = null, onTab: (String) -> Unit = {}, badges: Map<String, Int> = emptyMap(),
+        content: @Composable () -> Unit,
+    ) {
         compose.setContent {
             HealthTheme(mode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT, palette = Palette.AURORA) {
-                AppFrame(selected = selected, snackbar = remember { SnackbarHostState() }, onTab = onTab) {
+                AppFrame(selected = selected, snackbar = remember { SnackbarHostState() }, onTab = onTab, badges = badges) {
                     CompositionLocalProvider(LocalBack provides back) { content() }
                 }
             }
@@ -108,23 +111,27 @@ class NavigationScreenshotTest {
     @Test
     @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
     fun moreLight() {
-        render { MoreScreen(more) {} }
+        render(badges = mapOf("more" to 3)) { MoreScreen(more) {} }
         listOf("Your records", "Health alerts", "Your week", "Reports & export", "Devices", "Compare devices", "Assistant", "Settings").forEach(::shows)
         SettingsPage.entries.forEach { shows(it.title) }
         compose.onNodeWithContentDescription("3 new").assertExists()
+        // The More tab carries the count too.
+        compose.onNodeWithContentDescription("3 new health alerts", useUnmergedTree = true).assertExists()
         save("nav_more_light")
     }
 
     @Test
     @Config(qualifiers = "w411dp-h1500dp-xxhdpi")
     fun moreDark() {
-        render(dark = true) { MoreScreen(more) {} }
+        render(dark = true, badges = mapOf("more" to 3)) { MoreScreen(more) {} }
         save("nav_more_dark")
     }
 
     @Test
     fun moreWithoutCompareOrAssistant() {
-        render { MoreScreen(MoreState()) {} }
+        render(badges = mapOf("more" to 0)) { MoreScreen(MoreState()) {} }
+        // No alerts unseen: no count, on the row or the tab.
+        assertEquals(0, compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("new", substring = true)).fetchSemanticsNodes().size)
         assertEquals(0, compose.onAllNodesWithText("Compare devices").fetchSemanticsNodes().size)
         assertEquals(0, compose.onAllNodesWithText("Ask about your own data").fetchSemanticsNodes().size)
     }

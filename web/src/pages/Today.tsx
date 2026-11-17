@@ -1,7 +1,7 @@
 import { Fragment, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Activity as ActivityIcon, Baby, Brain, CalendarClock, CalendarHeart, Camera, ChevronRight, CircleDashed, Coffee, CupSoda, Droplet, Droplets, Dumbbell, Gauge, GlassWater,
+  Activity as ActivityIcon, Baby, Bell, Brain, CalendarClock, CalendarHeart, Camera, ChevronRight, CircleDashed, Clock, Coffee, CupSoda, Droplet, Droplets, Dumbbell, Gauge, GlassWater,
   Heart, HeartPulse, Infinity as InfinityIcon, ListChecks, Moon, Pill, Plus, Ruler, Salad, Smile, Sparkles, Stethoscope, Syringe, ThermometerSun, Watch, Waves,
   Weight, Wind, type LucideIcon,
 } from "lucide-react";
@@ -10,7 +10,9 @@ import { useModules } from "../App";
 import { MoodDialog } from "./Mind";
 import { api } from "../lib/api";
 import { F, useFields, useFoodNumbers, useWater } from "../lib/fields";
+import { useAlertBadge } from "../lib/alertBadge";
 import { clock, dayLabel, today, useDayPicker, useUnits } from "../lib/format";
+import { NAMES } from "../lib/nav";
 import { useScreenLayout } from "../lib/layout";
 import { useSession } from "../lib/session";
 import { QUICK_ROW, dosesLater, quickRow } from "../lib/today";
@@ -20,7 +22,7 @@ import {
   type Score, type TodaySection,
 } from "../lib/types";
 import { Meter } from "../components/charts";
-import { Button, CardAction, Card, DateNav, ErrorNotice, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, CardAction, Card, CountBadge, DateNav, ErrorNotice, Modal, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { ArrangeButton, ArrangePanel, useArrange, type Section } from "../components/Arrange";
 import { ACTIVITY_METRICS, HEART_METRICS, SourcesLink, combinedFor } from "../components/Sources";
 import { CheckInDialog, SleepDialog, WeightDialog, WorkoutDialog } from "../components/LogDialogs";
@@ -234,11 +236,14 @@ export function Today() {
       title: "Sleep", icon: Moon, to: "/sleep", open: "Sleep", line: data ? sleepLine(data) : null,
       extra: data?.sleepSummary?.combined && data.sleepSummary.combined.sources.length > 1 && <SourcesLink sleep={data.sleepSummary.combined} onChanged={changed} />,
     }, { log: log("Add a night", () => setOpen("sleep")) }),
-    // Today's heart opens the last 24 hours as recorded (only ever the person's own); another day's, Trends.
+    // Today's heart opens Last 24 hours as recorded (only ever the person's own), and says so; another day's, Trends.
     feature("HEART", true, {
-      title: "Heart", icon: HeartPulse, to: isToday && !readOnly ? "/recent" : "/trends", open: isToday && !readOnly ? "the last 24 hours" : "Trends",
+      title: "Heart", icon: HeartPulse, to: isToday && !readOnly ? "/recent" : "/trends", open: isToday && !readOnly ? NAMES.recent : NAMES.trends,
       line: data ? heartLine(data) : null,
-      extra: data && <SourcesLink values={combinedFor(data.combined, HEART_METRICS)} onChanged={changed} />,
+      extra: data && <>
+        <SourcesLink values={combinedFor(data.combined, HEART_METRICS)} onChanged={changed} />
+        {isToday && !readOnly && <Link className="row-link" to="/recent"><Clock size={14} aria-hidden="true" /> {NAMES.recent}</Link>}
+      </>,
     }, null),
     feature("STRESS", is("ACTIVITY"), {
       title: "Stress", icon: Gauge, to: "/activity", open: "Activity", line: stressLine(data?.stressDay, data?.resilience),
@@ -297,6 +302,7 @@ export function Today() {
         </div>
         <div className="page-actions">
           <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={now} />
+          {!readOnly && <AlertsBell />}
           <ArrangeButton title="Today" onClick={() => setArranging("cards")} />
           {!readOnly && <Button variant="primary" className="log-btn" onClick={() => setLogging(true)} aria-haspopup="dialog"><Plus size={18} aria-hidden="true" /> Log</Button>}
         </div>
@@ -454,5 +460,16 @@ export function ScoreDialog({ title, score, onClose }: { title: string; score: S
         ))}
       </ul>
     </Modal>
+  );
+}
+
+/** Today's bell: Health alerts, with how many haven't been seen yet. */
+function AlertsBell() {
+  const unseen = useAlertBadge();
+  return (
+    <Link to="/alerts" className="icon-btn today-bell" title={NAMES.alerts} aria-label={unseen ? `${NAMES.alerts}, ${unseen} new` : NAMES.alerts}>
+      <Bell size={20} aria-hidden="true" />
+      <CountBadge count={unseen} className="bell-badge" />
+    </Link>
   );
 }

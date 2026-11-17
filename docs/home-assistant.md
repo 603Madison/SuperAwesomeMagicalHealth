@@ -8,7 +8,7 @@ Two ways in, and they work well together:
 
 ## Sensors
 
-In SuperAwesomeMagicalHealth, open **Settings › Integrations** and make a **Home Assistant key**.
+In SuperAwesomeMagicalHealth, open **Settings › Connections & privacy › Webhooks and Home Assistant** and make a **Home Assistant key**.
 It's shown once. It can read `/api/integrations/state` and nothing else; revoke it there (or under
 your sign-ins) whenever you like.
 
@@ -57,12 +57,12 @@ Everything the state holds: `date`, `readiness`, `readiness_label`, `sleep_score
 `stress_state`, `water_ml`, `water_goal`, `weight_kg`, `doses_left_today`, `doses_taken_today`,
 `next_dose_at`, `device_battery_min`, `devices` (each device's battery by name) and `updated_at`.
 Values the server doesn't have are `null`. Medications appear only as counts and times, never
-names. With water turned off (in Settings › Features, under Food), `water_ml` and `water_goal` are left out.
+names. With water turned off (in Settings › What you're tracking › Features, under Food), `water_ml` and `water_goal` are left out.
 
 ## Webhooks
 
 In Home Assistant, make an automation with a **Webhook** trigger and note its ID. Then in
-SuperAwesomeMagicalHealth, **Settings › Integrations › Add a webhook** with the address
+SuperAwesomeMagicalHealth, **Settings › Connections & privacy › Webhooks and Home Assistant › Add a webhook** with the address
 `https://your-home-assistant:8123/api/webhook/<the ID>` and pick what to send. **Send a test**
 checks it straight away; the list shows each hook's last call.
 
