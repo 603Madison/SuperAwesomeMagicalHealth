@@ -135,4 +135,5 @@ enum class QuickAction(val label: String, val module: Module?) {
 @Serializable
 enum class NavPage(val label: String) {
     TODAY("Today"), TRENDS("Trends"), FOOD("Food"), REPORTS("Reports"), DEVICES("Devices"), CONDITIONS("What you're tracking"), ASSISTANT("Assistant"),
+    ALERTS("Health alerts"),
 }
