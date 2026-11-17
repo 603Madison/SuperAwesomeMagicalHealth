@@ -42,8 +42,20 @@ class SyncManager(
     /** Runs after each full sync, once data's in: writing to Health Connect (Settings › Export). */
     var afterSync: (suspend () -> Unit)? = null
 
+    /**
+     * Runs after every sync, whole or of one source (a strap's upload too), once the lock is let
+     * go: asking the server for new health alerts. Its failure is only logged.
+     */
+    var afterEach: (suspend () -> Unit)? = null
+
     /** Syncs every source that's set up, or only [onlyId]. Returns a line for people. */
-    suspend fun sync(onlyId: String? = null): String = mutex.withLock {
+    suspend fun sync(onlyId: String? = null): String {
+        val result = syncLocked(onlyId)
+        afterEach?.let { after -> attempt { after() }.onFailure { Log.w(TAG, "After a sync", it) } }
+        return result
+    }
+
+    private suspend fun syncLocked(onlyId: String?): String = mutex.withLock {
         var total = 0
         val problems = mutableListOf<String>()
         // Whose sync this is, fixed for all of it: a sign-out meanwhile can't send a batch elsewhere.

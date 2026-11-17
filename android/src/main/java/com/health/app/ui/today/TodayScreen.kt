@@ -28,7 +28,10 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material.icons.rounded.MonitorWeight
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +43,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -144,6 +148,10 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
     val settings by c.settings.collectAsState()
     val profile by c.profile.collectAsState()
     val readOnly = LocalReadOnly.current
+    // Health alerts unseen and not put away: the bell's count, looked up beside Today (never holding it up).
+    val alerts by c.unseenAlerts.collectAsState()
+    val revision by c.revision.collectAsState()
+    LaunchedEffect(readOnly, revision) { if (!readOnly) c.refreshAlerts() }
     TodayScreen(
         state = state,
         units = settings.units,
@@ -174,6 +182,7 @@ fun TodayRoute(onLogFood: (LocalDate) -> Unit, onOpenDevices: () -> Unit, onOpen
         foodNumbers = foodNumbers(),
         // Bladder training's next trip is the person's own (kept on the phone for reminders): never someone else's share.
         bladder = remember(state.summary, readOnly) { if (readOnly) null else c.reminderCache.bladder() },
+        alerts = alerts,
     )
 }
 
@@ -187,7 +196,8 @@ private enum class Sheet { MOOD, BLADDER, CHANGE, SYMPTOM, LOG, ARRANGE_TODAY, A
  * order ([Layouts.TODAY]); "+ Log" opens every way to log. [water] is whether water is shown (a
  * field that can be hidden), [measurements] whether body measurements are, [foodNumbers] whether
  * amounts of food are (not in eating disorder recovery). [bladder] is the person's bladder
- * training, for its next trip; [now] the time Up next works from.
+ * training, for its next trip; [now] the time Up next works from. [alerts] is how many health alerts
+ * are unseen and not put away: the bell in the title, which opens them (never while viewing a share).
  */
 @Composable
 fun TodayScreen(
@@ -202,6 +212,7 @@ fun TodayScreen(
     foodNumbers: Boolean = true,
     bladder: BladderTraining? = null,
     now: Long = System.currentTimeMillis(),
+    alerts: Int = 0,
 ) {
     var dialog by remember { mutableStateOf<Dialog?>(null) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
@@ -279,6 +290,7 @@ fun TodayScreen(
         PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = actions.refresh, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = if (logs) 96.dp else 24.dp)) {
                 ScreenTitle(Format.day(state.date, state.today), Format.longDay(state.date)) {
+                    if (alerts > 0 && !readOnly) AlertBell(alerts) { actions.open("alerts") }
                     IconButton(onClick = { actions.go(state.date.minusDays(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Day before") }
                     IconButton(onClick = { actions.go(state.date.plusDays(1)) }, enabled = state.date < state.today) {
                         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Day after")
@@ -635,5 +647,15 @@ private fun BodyCard(summary: DaySummary, units: Units, readOnly: Boolean, numbe
         val weight = summary.weightKg
         if (weight != null) Figure(Format.compact(Format.weightValue(weight, units)), Format.weightUnit(units), listOfNotNull(fat, goal).joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { null })
         else Figure(Format.compact(summary.bodyFat ?: 0.0) + "%", "body fat", goal?.replaceFirstChar(Char::uppercase))
+    }
+}
+
+/** Health alerts not seen yet: a bell with how many, which opens them. */
+@Composable
+private fun AlertBell(count: Int, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError) { Text(if (count > 9) "9+" else "$count") } }) {
+            Icon(Icons.Rounded.Notifications, com.health.app.ui.alerts.Alerts.countText(count))
+        }
     }
 }
