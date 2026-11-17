@@ -339,6 +339,24 @@ object Schema {
         ALTER TABLE foods ADD COLUMN ref TEXT;
         CREATE INDEX foods_ref ON foods(user_id, ref);
         """,
+        // Health alerts: one row a spell or night (its key), what it says sealed in data.
+        """
+        CREATE TABLE health_alerts (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            level TEXT NOT NULL,
+            start_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            seen_at INTEGER,
+            dismissed_at INTEGER,
+            data TEXT NOT NULL,
+            UNIQUE (user_id, key)
+        );
+        CREATE INDEX health_alerts_user ON health_alerts(user_id, created_at);
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

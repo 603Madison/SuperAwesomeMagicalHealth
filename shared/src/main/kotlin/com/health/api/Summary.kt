@@ -108,13 +108,13 @@ data class Insight(
 @Serializable
 enum class AppPage {
     TODAY, FOOD, MEDS, MIND, CYCLE, CONTINENCE, SUPPLIES, VITALS, HABITS, SYMPTOMS, HORMONES, APPOINTMENTS, NEURO, TRANSITION,
-    PHOTOS, BODY, SLEEP, ACTIVITY, TRENDS, DEVICES,
+    PHOTOS, BODY, SLEEP, ACTIVITY, TRENDS, DEVICES, ALERTS,
     ;
 
     /** The feature a page belongs to (shown to someone viewing a share only if it's shared), or null for the pages everyone has. */
     val module: Module?
         get() = when (this) {
-            TODAY, TRENDS, DEVICES, SUPPLIES -> null
+            TODAY, TRENDS, DEVICES, SUPPLIES, ALERTS -> null
             FOOD -> Module.NUTRITION
             MEDS -> Module.MEDICATIONS
             MIND -> Module.MIND
@@ -134,7 +134,7 @@ enum class AppPage {
         }
 
     /** Only the person's own (not while viewing someone's share). */
-    val ownOnly: Boolean get() = this == DEVICES
+    val ownOnly: Boolean get() = this == DEVICES || this == ALERTS
 
     companion object {
         /** A feature's own page. */

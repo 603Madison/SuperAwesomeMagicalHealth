@@ -61,8 +61,12 @@ fun Route.healthRoutes(services: Services) {
         val user = call.requireUser(services)
         // Pregnancy's nutrient targets would tell a viewer who doesn't see the cycle.
         val summary = services.days.summary(user.id, call.parameters["date"].orEmpty(), pregnancy = call.viewScope?.let { Module.CYCLE in it.modules } ?: true)
-        // Someone viewing shared data sees only the features shared with them.
-        call.respond(call.viewScope?.let { com.health.server.care.SharedView.limit(summary, it.modules) } ?: summary)
+        // Someone viewing shared data sees only the features shared with them; health alerts are the person's own.
+        val scope = call.viewScope
+        if (scope != null) return@get call.respond(com.health.server.care.SharedView.limit(summary, scope.modules))
+        val today = services.profiles.days(user.id).today(services.clock()).toString()
+        val alerts = if (summary.date == today) services.alerts.insights(user.id) else emptyList()
+        call.respond(if (alerts.isEmpty()) summary else summary.copy(insights = alerts + summary.insights))
     }
 
     get("/api/trends") {
@@ -174,6 +178,29 @@ fun Route.healthRoutes(services: Services) {
 
 /** Devices, upload keys, and data coming in from them. */
 fun Route.deviceRoutes(services: Services) {
+    // Health alerts. Never shared (see SharedView).
+    route("/api/alerts") {
+        get {
+            val user = call.requireUser(services)
+            call.respond(services.alerts.list(user.id, call.request.queryParameters["days"]?.toIntOrNull() ?: 30))
+        }
+        put("/settings") {
+            val user = call.requireUser(services)
+            call.respond(services.alerts.putSettings(user.id, call.receive<com.health.api.AlertSettings>()))
+        }
+        post("/seen") {
+            services.alerts.seen(call.requireUser(services).id, null)
+            call.respond(mapOf("ok" to true))
+        }
+        post("/{id}/seen") {
+            services.alerts.seen(call.requireUser(services).id, call.parameters["id"].orEmpty())
+            call.respond(mapOf("ok" to true))
+        }
+        post("/{id}/dismiss") {
+            val user = call.requireUser(services)
+            call.respond(services.alerts.dismiss(user.id, call.parameters["id"].orEmpty(), call.receive<com.health.api.AlertDismiss>().feedback))
+        }
+    }
     // The last day or so as recorded, from one device or all of them. Never shared (see SharedView).
     get("/api/recent") {
         val user = call.requireUser(services)

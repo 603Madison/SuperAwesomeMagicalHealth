@@ -166,6 +166,7 @@ class Services(
             com.health.server.modules.ContinenceHooks(modules.continence, clock, supplies),
             com.health.server.modules.SuppliesHooks(supplies, profiles, clock),
             com.health.server.modules.CycleHooks(modules.cycle, clock),
+            alerts,
         )
     }
 
@@ -174,6 +175,8 @@ class Services(
 
     /** The optional AI assistant (off until the admin turns it on; each person opts in). */
     val ai: com.health.server.ai.AiService by lazy { com.health.server.ai.AiService(this) }
+    /** Health alerts: concerning readings and the signs of getting ill. */
+    val alerts: com.health.server.insights.AlertService by lazy { com.health.server.insights.AlertService(this) }
     /** Settings › Where your data goes. */
     val privacyMap: com.health.server.platform.PrivacyService by lazy { com.health.server.platform.PrivacyService(this) }
 

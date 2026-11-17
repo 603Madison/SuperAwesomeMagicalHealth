@@ -186,7 +186,7 @@ object SharedView {
         Metric.RESTING_HEART_RATE, Metric.HRV, Metric.SPO2, Metric.RESPIRATORY_RATE, Metric.SKIN_TEMPERATURE, Metric.TEMPERATURE_DEVIATION -> Module.SLEEP
         Metric.WEIGHT, Metric.BODY_FAT, Metric.WAIST, Metric.HIPS, Metric.CHEST, Metric.BUST, Metric.UNDERBUST, Metric.SHOULDERS,
         Metric.NECK, Metric.UPPER_ARM, Metric.THIGH, Metric.CALF -> Module.BODY
-        Metric.BLOOD_PRESSURE_SYSTOLIC, Metric.BLOOD_PRESSURE_DIASTOLIC, Metric.BLOOD_GLUCOSE -> Module.VITALS
+        Metric.BLOOD_PRESSURE_SYSTOLIC, Metric.BLOOD_PRESSURE_DIASTOLIC, Metric.BLOOD_GLUCOSE, Metric.IRREGULAR_RHYTHM -> Module.VITALS
     }
 
     /** Checks a request that carries the header: only reading, and only what can be shared. */

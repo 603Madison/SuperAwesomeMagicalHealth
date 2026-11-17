@@ -48,6 +48,8 @@ enum class Metric(val unit: String, val aggregation: Aggregation, val label: Str
     UPPER_ARM("cm", Aggregation.LATEST, "Upper arm"),
     THIGH("cm", Aggregation.LATEST, "Thigh"),
     CALF("cm", Aggregation.LATEST, "Calf"),
+    /** From a chest strap's beat-to-beat timing: the share (0–100) of a five-minute window's 128-beat stretches that looked irregular (possibly atrial fibrillation; also extra beats, a loose strap or movement). */
+    IRREGULAR_RHYTHM("%", Aggregation.AVERAGE, "Irregular rhythm"),
 }
 
 /** One reading: at [start], or (for sums like steps) over [start]..[end]. */
