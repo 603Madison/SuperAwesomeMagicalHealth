@@ -65,6 +65,7 @@ the insight out while that card shows. The protein insight (today only) carries 
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
 | `GET /api/food/targets` · `PUT` | `NutrientTargets` / `NutrientTargetsChange`: each nutrient's reference intake, upper limit and the person's own target |
 | `POST /api/water` · `DELETE /api/water/{id}` | `WaterEntry` |
+| `GET /api/recent?hours=24&device=` | `RecentReadings`: the last hours as recorded (1–72, default 24), from one device or all: the nights and naps in it with their stages, and heart rate, blood oxygen, HRV, stress, breathing, temperature and steps (hourly), each with its points and a summary. Never shared |
 | `GET /api/mealie` · `PUT` · `DELETE` | `MealieStatus` / `MealieConnect`: the person's Mealie (its address and an API token, checked with Mealie before it's saved; the token is never returned) |
 | `GET /api/mealie/recipes?q=` | `MealieRecipes`: recipes in Mealie (2+ characters, up to 10), each with one serving as a `Food` when it has nutrition there |
 | `GET /api/mealie/recipes/{slug}` | `MealieRecipe` |

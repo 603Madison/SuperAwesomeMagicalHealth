@@ -65,6 +65,7 @@ class Services(
     val profiles = ProfileStore(db, clock)
     val devices = DeviceStore(db, clock)
     val records = Records(db, clock)
+    val recent = com.health.server.health.RecentService(records, devices, clock)
     val checkIns = CheckInStore(db)
     val days = DayService(db, profiles, records, clock)
     val ingest = Ingest(db, devices, records, days, profiles, clock)

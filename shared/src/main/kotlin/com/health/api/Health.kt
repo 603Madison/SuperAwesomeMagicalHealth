@@ -199,3 +199,48 @@ data class Point(val t: Long, val v: Double)
 
 @Serializable
 data class FitImportResult(val workouts: Int, val samples: Int, val sleep: Int, val message: String)
+
+// ---------------------------------------------------------------- The last 24 hours
+
+/** One reading in [RecentSeries]: at a time, or (for counts like steps) the total from [at] for its bucket. */
+@Serializable
+data class RecentPoint(val at: Long, val value: Double)
+
+/**
+ * One kind of reading over the window (GET /api/recent): its points, oldest first, and a summary.
+ * [metric] is null for a kind this version doesn't know (a newer server's): skip it.
+ * Counts (steps) come as totals per [bucketMinutes], with [total] for the window; the rest come as
+ * recorded (thinned to a few minutes apart when there are very many), with [min], [max],
+ * [average] and the [latest].
+ */
+@Serializable
+data class RecentSeries(
+    val metric: Metric? = null,
+    val points: List<RecentPoint> = emptyList(),
+    val min: Double? = null,
+    val max: Double? = null,
+    val average: Double? = null,
+    val latest: RecentPoint? = null,
+    val total: Double? = null,
+    val bucketMinutes: Int? = null,
+)
+
+/** A device with something recorded in the window (for choosing one). */
+@Serializable
+data class RecentDevice(val id: String, val name: String, val kind: DeviceKind? = null, val lastSyncAt: Long? = null)
+
+/**
+ * The last [hours] as recorded (GET /api/recent?hours=24&device=): the nights and naps in it with
+ * their stages, and each kind of reading, from [device] alone or (null) every device: heart rate
+ * merged in time, steps never counted twice. [devices] are every device with something in it.
+ */
+@Serializable
+data class RecentReadings(
+    val from: Long,
+    val to: Long,
+    val hours: Int = 24,
+    val device: String? = null,
+    val devices: List<RecentDevice> = emptyList(),
+    val sleep: List<SleepSession> = emptyList(),
+    val series: List<RecentSeries> = emptyList(),
+)

@@ -174,6 +174,12 @@ fun Route.healthRoutes(services: Services) {
 
 /** Devices, upload keys, and data coming in from them. */
 fun Route.deviceRoutes(services: Services) {
+    // The last day or so as recorded, from one device or all of them. Never shared (see SharedView).
+    get("/api/recent") {
+        val user = call.requireUser(services)
+        val hours = call.request.queryParameters["hours"]?.toIntOrNull() ?: 24
+        call.respond(services.recent.recent(user.id, hours, call.request.queryParameters["device"]))
+    }
     route("/api/devices") {
         get {
             val user = call.requireUser(services)
