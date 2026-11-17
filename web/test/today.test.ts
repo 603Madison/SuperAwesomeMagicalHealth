@@ -1,14 +1,14 @@
-// Today's choices (src/lib/today.ts): Right now's rows and order, Your day's timeline, the line
-// under the scores, the alert that leads, For you, the next bladder-training trip, the meal it
-// is, and days in the person's time zone (npm test).
+// Today's choices (src/lib/today.ts): reading the server's day feed (Right now's actions and order,
+// the alert that leads, Your day's dots, the Now row), the bladder-training trip, the line under
+// the scores, For you, the meal it is, and days in the person's time zone (npm test).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  appointmentsToday, dateIn, dayRows, dosesDue, dosesLater, forYou, hourIn, leadAlert, mealAt, mealsLogged, nextTrip, nowRows, orderNow, scoreSentence,
-  startOfDayIn, todayIn, trainingMinutes, wakings, zonedTime, type NowInput, type NowRow, type Say,
+  NOW_ACTIONS, actionIds, alertLevel, dateIn, dosesDue, dosesLater, dotOf, forYou, hourIn, knownAction, leadAlert, leadFromFeed, mealAt, mealsLogged, nextTrip,
+  nowLine, rightNow, scoreSentence, startOfDayIn, todayIn, trainingMinutes, tripItem, zonedTime, type Say,
 } from "../src/lib/today.ts";
-import type { Appointment, BladderTraining, DaySummary, DueDose, FoodEntry, Insight, Module, StageSpan, SupplyStatus } from "../src/lib/types.ts";
+import type { BladderTraining, DueDose, Insight, NowItem } from "../src/lib/types.ts";
 
 const DATE = "2026-11-13";
 const at = (hhmm: string) => new Date(`${DATE}T${hhmm}`).getTime();
@@ -25,14 +25,6 @@ test("doses due: overdue and within the hour, earliest first; taken, skipped and
   assert.deepEqual(dosesLater(due, NOW).map((d) => d.name), ["Progesterone"]);
 });
 
-test("today's appointments: on the day and not over yet", () => {
-  const a = (title: string, time: string, durationMinutes?: number): Appointment => ({ title, at: at(time), durationMinutes, questions: [], remindBefore: [] });
-  const from = at("00:00");
-  const to = from + 86_400_000;
-  const list = [a("Later", "15:30"), a("Over", "09:00", 30), a("Still on", "10:40", 60), a("Tomorrow", "00:00")];
-  list[3].at = to + 9 * 3_600_000;
-  assert.deepEqual(appointmentsToday(list, from, to, NOW).map((x) => x.title), ["Still on", "Later"]);
-});
 
 const training: BladderTraining = { enabled: true, intervalMinutes: 90, from: "08:00", to: "21:00", stepMinutes: 15, stepEveryDays: 7, goalMinutes: 180, startedOn: DATE };
 
@@ -59,7 +51,8 @@ test("the next trip: the last one plus the gap, not before the day starts, none 
   assert.equal(nextTrip({ ...training, enabled: false }, DATE, [], NOW), null);
 });
 
-// ---- Right now ----
+
+// ---- Right now and Your day, from the server's feed ----
 
 const say: Say = {
   time: (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; },
@@ -67,121 +60,68 @@ const say: Say = {
   num: (n) => String(Math.round(n)),
 };
 
-function day(change: Partial<DaySummary> = {}, modules: DaySummary["modules"] = {}): DaySummary {
-  return {
-    date: DATE, steps: 0, distanceM: 0, activeCalories: 0, naps: [], workouts: [], nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0 }, waterMl: 0,
-    insights: [], hourlySteps: [], heartRate: [], hasData: true, modules, combined: [],
-    goals: { steps: 8000, activeCalories: 400, sleepMinutes: 480, waterMl: 2000, workoutsPerWeek: 3, weeklyChangeKg: 0 } as DaySummary["goals"],
-    ...change,
-  };
-}
+const item = (id: string, kind: NowItem["kind"], priority: number, change: Partial<NowItem> = {}): NowItem => ({ id, kind, title: id, priority, ...change });
 
-const input = (d: DaySummary, on: Module[], change: Partial<NowInput> = {}): NowInput => ({
-  day: d, on, now: NOW, hour: 11, dayFrom: at("00:00"), dayTo: at("00:00") + 86_400_000, foodNumbers: true, ...change,
+test("an action this version knows gets a button; a newer server's doesn't", () => {
+  assert.equal(knownAction(item("a", "WEARING", 45, { action: { label: "Change", action: "continence.change", ids: { supplyId: "s1" } } }))?.label, "Change");
+  assert.equal(knownAction(item("b", "OTHER", 40, { action: { label: "Do", action: "something.new" as never } })), null);
+  assert.equal(knownAction(item("c", "FOOD_TODAY", 30)), null);
+  assert.deepEqual(NOW_ACTIONS, ["continence.change", "dose.take", "food.add", "energy.add", "voice.start", "appointment.open", "alert.open"]);
 });
 
-const wearing = { supplyId: "s1", name: "Night briefs", since: at("06:40"), changeDueAt: at("14:40") };
-const lowPads = { supply: { name: "Night pads", onHand: 3, reusable: false }, daysLeft: 2, low: true } as SupplyStatus;
-
-test("Right now: only what's live, and nothing from a feature that's off", () => {
-  const d = day({}, { meds: { date: DATE, due: [dose("Estradiol", "08:00")], asNeeded: [], extra: [], lowStock: [] }, continence: { wearing } as never });
-  assert.deepEqual(nowRows(input(d, []), say), []);
-  const rows = nowRows(input(d, ["CONTINENCE"], { wearingState: "dry so far" }), say);
-  assert.deepEqual(rows.map((r) => [r.kind, r.title, r.detail, r.action]), [["wearing", "Wearing Night briefs", "On since 6:40 · dry so far", "Change"]]);
-  // Nothing on: no row.
-  assert.deepEqual(nowRows(input(day({}, { continence: { wearing: { nothingOn: true, since: at("06:40") } } as never }), ["CONTINENCE"]), say), []);
-});
-
-test("Right now: what's due first by time, then what's on, later today, routines, food, restocks", () => {
-  const d = day({ nutrition: { calories: 1240, protein: 62, carbs: 0, fat: 0 }, nutritionTarget: { calories: 1900, protein: 90 } as DaySummary["nutritionTarget"] }, {
-    meds: { date: DATE, due: [dose("Estradiol", "08:00"), dose("Soon", "12:10"), dose("Later", "20:00"), dose("Vitamin D", "07:00", "TAKEN")], asNeeded: [], extra: [], lowStock: [] },
-    continence: { wearing } as never,
-    neuro: { overloadsToday: 0, routinesDue: ["Evening routine"], focusMinutes: 0, energyLeft: 6 },
-    lowSupplies: [lowPads],
+test("an action's ids, read: times as numbers, meals checked, an appointment's or alert's id by either name", () => {
+  assert.deepEqual(actionIds({ ids: { medicationId: "m1", scheduledFor: "1763380800000" } }), {
+    medicationId: "m1", scheduledFor: 1763380800000, supplyId: undefined, meal: undefined, date: undefined, lessonId: undefined, appointmentId: undefined, alertId: undefined,
   });
-  const rows = nowRows(input(d, ["MEDICATIONS", "CONTINENCE", "NEURO", "NUTRITION"], { plan: "chili" }), say);
-  assert.deepEqual(rows.map((r) => r.key), ["dose-Estradiol-" + at("08:00"), "dose-Soon-" + at("12:10"), "wearing", "routine-Evening routine", "energy", "food", "restock-Night pads"]);
-  const overdue = rows[0];
-  assert.equal(overdue.late, true);
-  assert.equal(overdue.detail, "Was due at 8:00 · 1 of 4 taken today");
-  assert.equal(rows[1].late, false);
-  const food = rows.find((r) => r.kind === "food")!;
-  assert.equal(food.title, "1240 of 1900 kcal");
-  assert.equal(food.detail, "62 g protein · tonight's plan: chili");
-  assert.ok(Math.abs(food.progress! - 1240 / 1900) < 1e-9);
-  assert.equal(food.meal, "LUNCH");
-  assert.equal(rows[rows.length - 1].action, "Restock");
+  assert.equal(actionIds({ ids: { meal: "LUNCH", date: "2026-11-13" } }).meal, "LUNCH");
+  assert.equal(actionIds({ ids: { meal: "ELEVENSES" } }).meal, undefined);
+  assert.equal(actionIds({ ids: { scheduledFor: "soon" } }).scheduledFor, undefined);
+  assert.equal(actionIds({ ids: { appointmentId: "a1" } }).appointmentId, "a1");
+  assert.equal(actionIds({ ids: { id: "a2" } }).appointmentId, "a2");
+  assert.equal(actionIds({ ids: { alertId: "x" } }).alertId, "x");
+  assert.equal(actionIds({}).supplyId, undefined);
 });
 
-test("Right now: with nothing due, the next dose today; none once they're all done", () => {
-  const meds = (due: DueDose[]) => day({}, { meds: { date: DATE, due, asNeeded: [], extra: [], lowStock: [] } });
-  const later = nowRows(input(meds([dose("Evening", "20:00"), dose("Night", "22:00"), dose("Morning", "08:00", "TAKEN")]), ["MEDICATIONS"]), say);
-  assert.deepEqual(later.map((r) => [r.title, r.detail, r.late]), [["Evening", "Due at 20:00 · 1 of 3 taken today", false]]);
-  assert.deepEqual(nowRows(input(meds([dose("Morning", "08:00", "TAKEN")]), ["MEDICATIONS"]), say), []);
-});
-
-test("Right now: food without amounts in recovery, and the change once it's due", () => {
-  const d = day({ nutrition: { calories: 900, protein: 40, carbs: 0, fat: 0 } }, { continence: { wearing: { ...wearing, changeDueAt: at("10:40") } } as never });
-  const rows = nowRows(input(d, ["NUTRITION", "CONTINENCE"], { foodNumbers: false, meals: ["LUNCH", "BREAKFAST"], plan: "chili" }), say);
-  assert.deepEqual(rows.map((r) => [r.kind, r.title, r.detail ?? null, r.progress ?? null]), [
-    ["wearing", "Time to change: Night briefs", "On since 6:40", null],
-    ["food", "Breakfast, lunch logged", "Tonight's plan: chili", null],
-  ]);
-  assert.equal(rows[0].late, true);
-});
-
-test("Right now's order on its own: overdue and soon by time, then on now, then later", () => {
-  const rows: NowRow[] = [
-    { key: "food", kind: "food", title: "" },
-    { key: "later", kind: "appointment", title: "", at: at("16:00") },
-    { key: "wear", kind: "wearing", title: "" },
-    { key: "soon", kind: "trip", title: "", at: at("12:30") },
-    { key: "late", kind: "dose", title: "", at: at("09:00"), late: true },
+test("the alert Today leads with comes from Right now: the most pressing, and it isn't repeated below", () => {
+  const now = [
+    item("wearing", "WEARING", 45, { at: at("06:40") }),
+    item("alert:2", "HEALTH_ALERT", 90, { title: "Oxygen dips", detail: "14 low readings" }),
+    item("dose:x", "DOSE_OVERDUE", 85, { at: at("08:00") }),
+    item("alert:1", "HEALTH_ALERT", 100, { title: "Fast, irregular rhythm", detail: "Call now if…" }),
   ];
-  assert.deepEqual(orderNow(rows, NOW).map((r) => r.key), ["late", "soon", "wear", "later", "food"]);
+  const lead = leadFromFeed(now)!;
+  assert.deepEqual(lead, { level: "URGENT", title: "Fast, irregular rhythm", body: "Call now if…", id: "alert:1" });
+  assert.deepEqual(rightNow(now, [], lead.id).map((i) => i.id), ["alert:2", "dose:x", "wearing"]);
+  assert.equal(leadFromFeed([item("food", "FOOD_TODAY", 30)]), null);
+  assert.deepEqual([100, 95, 90, 70, 60].map(alertLevel), ["URGENT", "DOCTOR", "DOCTOR", "WATCH", "WATCH"]);
 });
 
-// ---- Your day ----
-
-const stage = (s: StageSpan["stage"], from: string, to: string): StageSpan => ({ stage: s, start: at(from), end: at(to) });
-
-test("a night's wakings: the awake spans between sleep, not at its edges", () => {
-  assert.equal(wakings([stage("AWAKE", "00:00", "00:10"), stage("LIGHT", "00:10", "02:00"), stage("AWAKE", "02:00", "02:05"), stage("DEEP", "02:05", "03:00"), stage("AWAKE", "03:00", "03:05"), stage("REM", "03:05", "06:00"), stage("AWAKE", "06:00", "06:10")]), 2);
-  assert.equal(wakings([]), 0);
+test("Right now: most pressing first, the soonest at the same priority, with the trip the page adds", () => {
+  const now = [item("food", "FOOD_TODAY", 30), item("dose:b", "DOSE_DUE", 80, { at: at("12:10") }), item("dose:a", "DOSE_DUE", 80, { at: at("11:50") }), item("energy", "ENERGY_TODAY", 20)];
+  const due = tripItem({ at: at("11:00"), every: 105 }, NOW, say);
+  assert.deepEqual([due.title, due.detail, due.priority], ["Toilet trip", "Now · every 1h 45m", 75]);
+  const later = tripItem({ at: at("13:30"), every: 90 }, NOW, say);
+  assert.deepEqual([later.detail, later.priority], ["Around 13:30 · every 1h 30m", 35]);
+  assert.deepEqual(rightNow(now, [due]).map((i) => i.id), ["dose:a", "dose:b", "trip", "food", "energy"]);
+  assert.deepEqual(rightNow(now, [later]).map((i) => i.id), ["dose:a", "dose:b", "trip", "food", "energy"]);
 });
 
-test("Your day: newest first, a Now row on top, meals as one row each, what's ahead left out", () => {
-  const food = (meal: FoodEntry["meal"], name: string, kcal: number, time?: string): FoodEntry => ({
-    date: DATE, meal, name, nutrients: { calories: kcal, protein: 0, carbs: 0, fat: 0 }, servings: 1, serving: "1", loggedAt: time ? at(time) : undefined,
-  });
-  const d = day({
-    steps: 6240, heartRate: [{ t: at("11:00"), v: 72 }],
-    sleepSummary: {
-      start: at("00:00") - 3_600_000, end: at("06:50"), asleepMinutes: 462, inBedMinutes: 480, efficiency: 96, deepMinutes: 80, remMinutes: 112, lightMinutes: 250, awakeMinutes: 20, staged: true,
-      stages: [stage("LIGHT", "00:00", "02:00"), stage("AWAKE", "02:00", "02:05"), stage("DEEP", "02:05", "06:50")],
-    },
-    workouts: [{ type: "WALK", start: at("10:05"), end: at("10:43"), steps: 4120, avgHeartRate: 108, activeCalories: 150, id: "w1", manual: true }],
-  }, { meds: { date: DATE, due: [{ ...dose("Morning", "08:00"), log: { medicationId: "Morning", at: at("08:02"), status: "TAKEN" } }, dose("Evening", "20:00")], asNeeded: [], extra: [], lowStock: [] } });
-  const entries = [food("BREAKFAST", "Oatmeal", 300, "07:30"), food("BREAKFAST", "Coffee", 120, "07:32"), food("DINNER", "Chili", 700, "19:00"), food("LUNCH", "Salad", 610)];
-  const extra = [{ key: "b1", kind: "bladder" as const, at: at("09:10"), title: "Bathroom" }];
-  const rows = dayRows({ day: d, isToday: true, now: NOW, dayFrom: at("00:00"), foodNumbers: true, food: entries, extra }, say);
-  assert.deepEqual(rows.map((r) => r.title), [
-    "Heart rate 72 · 6240 steps so far", "Walk · 0h 38m", "Bathroom", "Morning", "Breakfast · 420 kcal", "Woke up · slept 7h 42m",
-  ]);
-  assert.equal(rows[0].at, null);
-  assert.equal(rows[1].detail, "4120 steps · heart rate 108 on average · 150 kcal");
-  assert.equal(rows[1].workoutId, "w1");
-  assert.equal(rows[3].detail, "Taken, on time");
-  assert.equal(rows[4].detail, "Oatmeal, Coffee");
-  assert.equal(rows[5].detail, "1h 20m deep · 1h 52m REM · awake once");
-  assert.equal(rows[5].stages?.length, 3);
-  // Another day: no Now row, and a meal without a time sits at its usual hour.
-  const past = dayRows({ day: d, isToday: false, now: NOW + 86_400_000, dayFrom: at("00:00"), foodNumbers: false, food: entries }, say);
-  assert.equal(past[0].title, "Dinner");
-  assert.ok(past.some((r) => r.title === "Lunch" && r.at === at("12:30")));
-  assert.ok(!past.some((r) => r.kind === "now"));
-  // Workouts say no calories in recovery.
-  assert.equal(past.find((r) => r.kind === "activity")!.detail, "4120 steps · heart rate 108 on average");
+test("Your day's dots: a colour family for each kind, a plain one for a kind this version doesn't know", () => {
+  assert.equal(dotOf("SLEEP"), "sleep");
+  assert.equal(dotOf("MEAL"), "food");
+  assert.equal(dotOf("WORKOUT"), "activity");
+  assert.equal(dotOf("BATHROOM"), "care");
+  assert.equal(dotOf("WEIGHT"), "body");
+  assert.equal(dotOf("HEALTH_ALERT"), "alert");
+  assert.equal(dotOf("OTHER"), "other");
+  assert.equal(dotOf("SOMETHING_NEW"), "other");
+});
+
+test("the Now row on top of today: a fresh heart rate and the steps so far", () => {
+  assert.equal(nowLine({ heartRate: [{ t: at("11:00"), v: 72 }], steps: 6240 }, NOW, say), "Heart rate 72 · 6240 steps so far");
+  // An hour and a half old is too old to say "now".
+  assert.equal(nowLine({ heartRate: [{ t: at("09:30"), v: 72 }], steps: 6240 }, NOW, say), "6240 steps so far");
+  assert.equal(nowLine({ heartRate: [], steps: 0 }, NOW, say), null);
 });
 
 // ---- The line under the scores, the alert that leads, For you ----
@@ -227,6 +167,10 @@ test("the meal it is, by the person's clock", () => {
     "Breakfast", "Breakfast", "Lunch", "Lunch", "Afternoon snack", "Afternoon snack", "Dinner", "Dinner", "A snack", "A snack",
   ]);
   assert.equal(mealAt(15).meal, "SNACK");
+  // The meals logged, in the day's order (Care's Food card, in recovery).
+  assert.equal(mealsLogged(["LUNCH", "BREAKFAST", "LUNCH"]), "Breakfast, lunch logged");
+  assert.equal(mealsLogged(["SNACK"]), "Snacks logged");
+  assert.equal(mealsLogged([]), null);
   // The hour where the person is, not the browser's.
   assert.equal(hourIn(Date.UTC(2026, 10, 13, 20, 30), "America/New_York"), 15);
   assert.equal(hourIn(Date.UTC(2026, 10, 13, 20, 30), "Pacific/Auckland"), 9);

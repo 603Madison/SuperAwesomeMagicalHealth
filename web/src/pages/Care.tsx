@@ -160,7 +160,7 @@ export function Care() {
           <AreaCard {...props}>
             {v && (
               <NowBox title="Voice practice" sub={[v.streakDays > 0 && `${v.streakDays} ${v.streakDays === 1 ? "day" : "days"} in a row`, `${num(v.minutesThisWeek)} min this week`].filter(Boolean).join(" · ")}
-                action={!readOnly && <Button variant="tonal" className="care-btn btn-soft" onClick={() => navigate("/transition/voice")}>Start</Button>} />
+                action={!readOnly && <Button variant="tonal" className="care-btn is-soft" onClick={() => navigate("/transition/voice")}>Start</Button>} />
             )}
             {line && <p className="care-line">{line}</p>}
             {pics != null && <Link to="/photos" className="care-link">{pics === 0 ? "Progress photos: none yet" : `${pics} progress ${pics === 1 ? "photo" : "photos"}`} <ChevronRight size={16} aria-hidden="true" /></Link>}

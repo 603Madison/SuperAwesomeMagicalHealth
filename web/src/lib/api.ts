@@ -1,5 +1,5 @@
 import type {
-  AdminSettings, AuthConfig, CheckIn, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
+  AdminSettings, AuthConfig, CheckIn, DayFeed, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
   ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
@@ -31,7 +31,7 @@ export function setSignedOutHandler(handler: () => void) {
 
 /** The paths that hold a person's health data: the ones someone they share with may read. */
 const SHARED_PATHS = [
-  "/api/day/", "/api/trends", "/api/series", "/api/food/", "/api/measurements", "/api/workouts", "/api/sleep", "/api/checkins/",
+  "/api/day/", "/api/feed", "/api/trends", "/api/series", "/api/food/", "/api/measurements", "/api/workouts", "/api/sleep", "/api/checkins/",
   "/api/mind/", "/api/cycle", "/api/continence/", "/api/meds", "/api/labs", "/api/vitals/", "/api/drinks", "/api/symptoms/",
   "/api/habits", "/api/hormones", "/api/appointments", "/api/supplies", "/api/neuro/", "/api/transition", "/api/photos",
   // Their field layout, filtered by the server to the features they shared.
@@ -160,6 +160,8 @@ export const api = {
   viewedProfile: () => request<Profile>("GET", "/api/profile", undefined, "shown"),
   saveProfile: (profile: Profile) => put<Profile>("/api/profile", profile),
   day: (date: string) => get<DaySummary>(`/api/day/${q(date)}`),
+  /** The day as one place: what's live now (today, one's own only) and the timeline, newest first. */
+  feed: (date: string) => get<DayFeed>(`/api/feed?date=${q(date)}`),
   trends: (days: number) => get<Trends>(`/api/trends?days=${days}`),
   series: (metric: Metric, from: number, to: number) => get<Point[]>(`/api/series?metric=${metric}&from=${from}&to=${to}`),
 

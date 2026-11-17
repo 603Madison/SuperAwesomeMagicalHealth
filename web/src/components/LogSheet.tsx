@@ -8,11 +8,11 @@ import {
 import { useModules } from "../App";
 import { api } from "../lib/api";
 import { F, useFields, useWater } from "../lib/fields";
-import { clock, today, useUnits } from "../lib/format";
+import { today, useUnits } from "../lib/format";
 import { useScreenLayout } from "../lib/layout";
 import { useSession } from "../lib/session";
-import { dosesDue, hourIn, mealAt } from "../lib/today";
-import { BODY_MEASUREMENTS, LAYOUT_QUICK, QUICK_ACTIONS, arrange, type DueDose, type QuickAction } from "../lib/types";
+import { actionIds, hourIn, knownAction, mealAt, type ActionIds } from "../lib/today";
+import { BODY_MEASUREMENTS, LAYOUT_QUICK, QUICK_ACTIONS, arrange, type Meal, type NowItem, type QuickAction } from "../lib/types";
 import { useReadOnly } from "../lib/viewing";
 import { useMealie } from "../pages/Mealie";
 import { MoodDialog } from "../pages/Mind";
@@ -115,8 +115,11 @@ function useActions(onDialog: (d: Dialog) => void): LogAction[] {
   return all.filter((a) => a.when !== false && (moduleOf(a.id) == null || on.includes(moduleOf(a.id)!)));
 }
 
+/** Each meal's name, for one that isn't the one it is now. */
+const MEAL_NAMES: Record<Meal, string> = { BREAKFAST: "Breakfast", LUNCH: "Lunch", DINNER: "Dinner", SNACK: "A snack" };
+
 /** Something to do right now, as a big tinted button: its words and what it does. */
-interface NowAction {
+interface NowButton {
   key: string;
   icon: LucideIcon;
   title: string;
@@ -134,46 +137,47 @@ function Sheet({ onClose, onDialog, onArrange }: { onClose: () => void; onDialog
   const tiles = arrange(actions, (a) => a.id, order);
   const mealie = useMealie();
   const date = today();
-  const day = useLoad(() => api.day(date).catch(() => null), [date]);
+  // What's live now, from the server's day feed: what's on to change, the doses due, and the meal it is.
+  const feed = useLoad(() => api.feed(date).catch(() => null), [date]);
   const planned = useLoad(() => (on.includes("NUTRITION") && mealie?.connected && !mealie.paused ? api.mealiePlan(date).catch(() => null) : Promise.resolve(null)), [date, !!mealie?.connected, !!mealie?.paused]);
   const [busy, setBusy] = useState<string | null>(null);
   const now = Date.now();
 
-  const take = async (d: DueDose) => {
-    setBusy(d.medicationId);
+  const take = async (item: NowItem, ids: ActionIds) => {
+    if (!ids.medicationId) return;
+    setBusy(item.id);
     try {
-      await api.logDose({ medicationId: d.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: d.scheduledFor, site: d.nextSite });
-      toast(`${d.name} taken`);
+      await api.logDose({ medicationId: ids.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: ids.scheduledFor });
+      toast(`${item.title} taken`);
       loggedSomething();
       onClose();
     } catch (e) { errorToast(e); }
     setBusy(null);
   };
 
-  // Right now: what's on to change, the doses due, and the meal it is.
-  const right: NowAction[] = [];
-  const m = day.data?.modules;
-  const w = m?.continence?.wearing;
-  if (on.includes("CONTINENCE") && w?.supplyId && !w.nothingOn) {
-    right.push({ key: "change", icon: Layers, tone: "primary", title: "Change", sub: `${w.name ?? "What you have on"}${w.since != null ? ` on since ${clock(w.since)}` : ""}`, run: () => onDialog("change") });
-  }
-  if (on.includes("MEDICATIONS")) {
-    for (const d of dosesDue(m?.meds?.due ?? [], now).slice(0, 2)) {
-      right.push({ key: `dose-${d.medicationId}-${d.scheduledFor}`, icon: Pill, tone: "primary", title: `Take ${d.name}`, sub: `${d.scheduledFor < now ? "Was due" : "Due"} at ${clock(d.scheduledFor)}`, run: () => void take(d) });
+  const right: NowButton[] = [];
+  for (const item of feed.data?.now ?? []) {
+    const action = knownAction(item);
+    if (!action) continue;
+    const ids = actionIds(action);
+    if (action.action === "continence.change") {
+      right.push({ key: item.id, icon: Layers, tone: "primary", title: action.label, sub: [item.title, item.detail].filter(Boolean).join(" · "), run: () => onDialog("change") });
+    } else if (action.action === "dose.take" && right.filter((r) => r.icon === Pill).length < 2) {
+      right.push({ key: item.id, icon: Pill, tone: "primary", title: `${action.label} ${item.title}`, sub: item.detail ?? "", run: () => void take(item, ids) });
+    } else if (action.action === "food.add") {
+      const meal = ids.meal ?? mealAt(hourIn(now, zone)).meal;
+      const name = meal === mealAt(hourIn(now, zone)).meal ? mealAt(hourIn(now, zone)).name : MEAL_NAMES[meal];
+      const plan = planned.data?.entries.find((e) => e.meal === "DINNER" && !e.logged) ?? planned.data?.entries.find((e) => e.meal === meal && !e.logged);
+      right.push({
+        key: item.id, icon: Salad, tone: "accent", title: name, sub: plan ? `Or tonight's plan: ${plan.title}, from Mealie` : item.detail ?? "Add what you're having",
+        run: () => { onClose(); navigate(`/food?add=${meal}`); },
+      });
     }
-  }
-  if (on.includes("NUTRITION")) {
-    const meal = mealAt(hourIn(now, zone));
-    const plan = planned.data?.entries.find((e) => e.meal === "DINNER" && !e.logged) ?? planned.data?.entries.find((e) => e.meal === meal.meal && !e.logged);
-    right.push({
-      key: "meal", icon: Salad, tone: "accent", title: meal.name, sub: plan ? `Or tonight's plan: ${plan.title}, from Mealie` : "Add what you're having",
-      run: () => { onClose(); navigate(`/food?add=${meal.meal}`); },
-    });
   }
 
   const time = new Date(now).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: zone });
   return (
-    <Modal sheet title="Log" subtitle={`now · ${time}`} onClose={onClose}>
+    <Modal sheet className="log-modal" title="Log" subtitle={`now · ${time}`} onClose={onClose}>
       {right.length > 0 && (
         <section className="log-section" aria-labelledby="log-now">
           <h3 id="log-now" className="log-section-title">Right now</h3>

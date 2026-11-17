@@ -74,8 +74,8 @@ export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; 
       { id: "anxiety", title: "Anxiety", value: (d: TrendDay) => d.anxiety, format: (v: number) => `${v.toFixed(1)} of 5`, kind: "line" as const, color: "var(--c3)", domain: [1, 5] as [number, number], note: "Lower is calmer" },
     ] : []),
     ...(on.includes("CONTINENCE") ? [
-      { id: "trips", title: "Toilet trips", value: (d: TrendDay) => d.voids, format: (v: number) => `${v} trips`, kind: "bar" as const, color: "var(--c1)" },
-      { id: "leaks", title: "Leaks", value: (d: TrendDay) => d.leaks, format: (v: number) => `${v} leaks`, kind: "bar" as const, color: "var(--c3)" },
+      { id: "trips", title: "Toilet trips", value: (d: TrendDay) => d.voids, format: (v: number) => `${num(v, v % 1 ? 1 : 0)} trips`, kind: "bar" as const, color: "var(--c1)" },
+      { id: "leaks", title: "Leaks", value: (d: TrendDay) => d.leaks, format: (v: number) => `${num(v, v % 1 ? 1 : 0)} leaks`, kind: "bar" as const, color: "var(--c3)" },
     ] : []),
     ...(on.includes("MEDICATIONS") ? [
       { id: "doses", title: "Doses taken", value: (d: TrendDay) => (d.dosesDue ? Math.round(((d.dosesTaken ?? 0) / d.dosesDue) * 100) : null), format: (v: number) => `${Math.round(v)}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },

@@ -1,38 +1,31 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Bell, CalendarClock, ChevronDown, ChevronRight, HeartPulse, Layers, ListChecks, Package, Phone, Pill, Salad, Sparkles, Thermometer, Timer, Watch, Wind,
+  Bell, CalendarClock, ChevronDown, ChevronRight, CircleDot, HeartPulse, Layers, Mic, Phone, Pill, RefreshCw, Salad, Sparkles, Thermometer, Timer, Watch, Wind,
   type LucideIcon,
 } from "lucide-react";
 import { FirstRunPrompt } from "./Conditions";
 import { useModules } from "../App";
-import { FACE_LABELS } from "./Mind";
-import { kindLabel } from "./Continence";
-import { severityWord } from "./Symptoms";
-import { RestockDialog } from "./Supplies";
 import { QuickChange } from "./Wearing";
-import { useMealie } from "./Mealie";
 import { useDigestRow } from "./CareLines";
 import { api } from "../lib/api";
 import { ALERT_LEVEL_TEXT } from "../lib/alerts";
 import { useAlertBadge } from "../lib/alertBadge";
-import { wearState } from "../lib/continence";
-import { F, useFields, useFoodNumbers } from "../lib/fields";
-import { dayLabel, dayOf, dayStart, dayZone, hm, num, shiftDate, today as todayDate, useDayPicker } from "../lib/format";
+import { F, useFields } from "../lib/fields";
+import { dayLabel, dayOf, dayZone, hm, num, today as todayDate, useDayPicker } from "../lib/format";
 import { NAMES } from "../lib/nav";
 import { useSession } from "../lib/session";
 import {
-  clockTime, dayRows, fightingSomething, forYou, hourIn, leadAlert, nextTrip, nowRows, scoreSentence, trainingMinutes, type DayRow, type NowKind,
-  type NowRow, type Say,
+  actionIds, clockTime, dotOf, fightingSomething, forYou, knownAction, leadAlert, leadFromFeed, nextTrip, nowLine, rightNow, scoreSentence, trainingMinutes,
+  tripItem, type LeadAlert, type Say,
 } from "../lib/today";
-import { LAYOUT_TODAY, type DaySummary, type Score, type SupplyStatus, type TodaySection } from "../lib/types";
+import { LAYOUT_TODAY, arrange, type DaySummary, type NowItem, type Score, type TimelineItem, type TodaySection } from "../lib/types";
 import { useReadOnly, useViewing } from "../lib/viewing";
-import { Meter } from "../components/charts";
-import { Button, CountBadge, ErrorNotice, Modal, Spinner, errorToast, toast, useLoad } from "../components/ui";
-import { ArrangeButton, ArrangePanel, type Section } from "../components/Arrange";
 import { useScreenLayout } from "../lib/layout";
-import { arrange } from "../lib/types";
-import { InsightRow } from "../components/Insights";
+import { Meter } from "../components/charts";
+import { Button, CountBadge, Modal, Spinner, ErrorNotice, errorToast, toast, useLoad } from "../components/ui";
+import { ArrangeButton, ArrangePanel, type Section } from "../components/Arrange";
+import { InsightRow, pagePath, usePageOpens } from "../components/Insights";
 import { WorkoutDialog } from "../components/LogDialogs";
 import { useLogged } from "../components/LogSheet";
 
@@ -44,8 +37,7 @@ import { useLogged } from "../components/LogSheet";
  * ids are shared with the phone app; the old cards' ids stay saved, unused here). The date picks
  * another day: then Right now goes, and Your day shows that day.
  *
- * Right now and Your day are made here from what the web loads (lib/today.ts) until the server's
- * GET /api/feed sends them.
+ * Right now and Your day come from the server's day feed (GET /api/feed), shown as it says them.
  */
 
 const RINGS: { key: "readiness" | "sleep" | "activity"; label: string; color: string }[] = [
@@ -62,8 +54,9 @@ const SECTIONS: { id: TodaySection; label: string }[] = [
   { id: "INSIGHTS", label: "For you" },
 ];
 
-const NOW_ICONS: Record<NowKind, LucideIcon> = {
-  wearing: Layers, dose: Pill, food: Salad, appointment: CalendarClock, routine: ListChecks, energy: Sparkles, trip: Timer, restock: Package, voice: Sparkles,
+const NOW_ICONS: Record<string, LucideIcon> = {
+  WEARING: Layers, DOSE_DUE: Pill, DOSE_OVERDUE: Pill, FOOD_TODAY: Salad, APPOINTMENT_SOON: CalendarClock, ENERGY_TODAY: Sparkles,
+  VOICE_PRACTICE_DUE: Mic, HEALTH_ALERT: HeartPulse,
 };
 
 export function Today() {
@@ -71,19 +64,18 @@ export function Today() {
   const [date, setDate, now] = useDayPicker();
   const logged = useLogged();
   const { data, error, loading, reload } = useLoad(() => api.day(date), [date, logged]);
+  const feed = useLoad(() => api.feed(date), [date, logged]);
   const zone = useSession((s) => s.profile?.timezone) || undefined;
   const on = useModules();
   const { has } = useFields();
-  const foodNumbers = useFoodNumbers();
   const readOnly = useReadOnly();
   const viewing = useViewing((s) => s.share);
   const navigate = useNavigate();
-  const is = (id: string) => on.includes(id as never);
+  const opens = usePageOpens();
   const isToday = date === now;
   const [score, setScore] = useState<{ title: string; score: Score } | null>(null);
   const [arranging, setArranging] = useState(false);
   const [changing, setChanging] = useState(false);
-  const [restock, setRestock] = useState<SupplyStatus | null>(null);
   const [workout, setWorkout] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -92,100 +84,83 @@ export function Today() {
   const conditions = useLoad(() => (viewing || skipFirstRun ? Promise.resolve(null) : api.conditions().catch(() => null)), [viewing, skipFirstRun]);
   const showFirstRun = !viewing && !skipFirstRun && conditions.data != null && conditions.data.conditions.length === 0;
 
-  // What Your day needs beyond the day's summary: the food diary, the bladder diary and moods for the day.
-  const back = Math.min(30, Math.max(1, Math.round((dayStart(todayDate()) - dayStart(date)) / 86_400_000) + 1));
-  const food = useLoad(() => (is("NUTRITION") ? api.foodDay(date).catch(() => null) : Promise.resolve(null)), [date, logged, is("NUTRITION")]);
-  const bladder = useLoad(() => (is("CONTINENCE") ? api.continence(back).catch(() => null) : Promise.resolve(null)), [date, logged, is("CONTINENCE")]);
-  const moods = useLoad(() => (is("MIND") ? api.moods(back).catch(() => null) : Promise.resolve(null)), [date, logged, is("MIND")]);
-  // How serious the active alert is (the person's own only).
-  const alerts = useLoad(() => (!readOnly && isToday ? api.alerts(3).catch(() => null) : Promise.resolve(null)), [readOnly, isToday, logged]);
-  // Bladder training's next trip: the person's own settings, today only.
-  const training = isToday && !readOnly && is("CONTINENCE") && has(F.CONTINENCE_BLADDER_TRAINING);
-  const settings = useLoad(() => (training ? api.continenceSettings().catch(() => null) : Promise.resolve(null)), [training]);
-  // Tonight's plan from Mealie, when it's connected and not paused.
-  const mealie = useMealie();
-  const plan = useLoad(() => (isToday && is("NUTRITION") && mealie?.connected && !mealie.paused ? api.mealiePlan(date).catch(() => null) : Promise.resolve(null)),
-    [date, isToday, !!mealie?.connected, !!mealie?.paused]);
+  // Bladder training's next trip (the feed doesn't carry it): the person's own settings and today's trips.
+  const training = isToday && !readOnly && on.includes("CONTINENCE") && has(F.CONTINENCE_BLADDER_TRAINING);
+  const trips = useLoad(() => (training ? Promise.all([api.continenceSettings(), api.continence(1)]).catch(() => null) : Promise.resolve(null)), [training, date, logged]);
 
-  const changed = () => { reload(); food.reload(); bladder.reload(); };
+  const changed = () => { reload(); feed.reload(); trips.reload(); };
   const say: Say = { time: (ms) => clockTime(ms, zone), hm, num: (n) => num(n) };
   const at = Date.now();
   const hour = new Date().getHours();
   const greeting = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
-  // ---- Right now ----
+  // ---- The alert, and Right now ----
+  const lead: LeadAlert | null = feed.data ? leadFromFeed(feed.data.now) : data && isToday && !readOnly ? leadAlert(data.insights) : null;
   const trip = (() => {
-    const t = settings.data?.bladderTraining;
-    if (!t || !bladder.data) return null;
-    const trips = bladder.data.filter((e) => (e.kind === "URINATION" || e.kind === "CATHETER") && dayOf(e.at) === date).map((e) => e.at);
-    const next = nextTrip(t, date, trips, at, dayZone());
-    return next == null ? null : { at: next, every: trainingMinutes(t, date) };
+    if (!trips.data) return null;
+    const [settings, entries] = trips.data;
+    const times = entries.filter((e) => (e.kind === "URINATION" || e.kind === "CATHETER") && dayOf(e.at) === date).map((e) => e.at);
+    const next = nextTrip(settings.bladderTraining, date, times, at, dayZone());
+    return next == null ? null : { at: next, every: trainingMinutes(settings.bladderTraining, date) };
   })();
-  const dinner = plan.data?.entries.find((e) => e.meal === "DINNER" && !e.logged)?.title ?? null;
-  const nowList: NowRow[] = data && isToday ? nowRows({
-    day: data, on, now: at, hour: hourIn(at, zone), dayFrom: dayStart(date), dayTo: dayStart(shiftDate(date, 1)), foodNumbers, trip, plan: dinner,
-    wearingState: data.modules.continence?.wearing?.wear ? wearState(data.modules.continence.wearing.wear).toLowerCase() : null,
-    meals: (food.data?.entries ?? []).map((e) => e.meal),
-  }, say) : [];
+  const nowList = isToday && feed.data ? rightNow(feed.data.now, trip ? [tripItem(trip, at, say)] : [], lead?.id) : [];
 
-  const act = async (row: NowRow) => {
-    switch (row.kind) {
-      case "wearing": setChanging(true); return;
-      case "food": navigate(`/food?add=${row.meal}`); return;
-      case "appointment": navigate("/appointments"); return;
-      case "routine": navigate("/neuro#routines"); return;
-      case "energy": case "voice": navigate(row.kind === "voice" ? "/transition/voice" : "/neuro"); return;
-      case "restock": if (row.supply) setRestock(row.supply); return;
-      case "dose": case "trip": {
-        setBusy(row.key);
-        try {
-          if (row.kind === "dose" && row.dose) {
-            const d = row.dose;
-            await api.logDose({ medicationId: d.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: d.scheduledFor, site: d.nextSite });
-            toast(`${d.name} taken`);
-          } else {
-            await api.saveContinence({ at: Date.now(), kind: "URINATION", triggers: [], pain: false, blood: false, night: false });
-            toast("Trip logged");
-          }
-          changed();
-        } catch (e) { errorToast(e); }
-        setBusy(null);
+  const act = async (item: NowItem) => {
+    if (item.id === "trip") return run(item.id, async () => {
+      await api.saveContinence({ at: Date.now(), kind: "URINATION", triggers: [], pain: false, blood: false, night: false });
+      toast("Trip logged");
+    });
+    const action = knownAction(item);
+    if (!action) return;
+    const ids = actionIds(action);
+    switch (action.action) {
+      case "continence.change": setChanging(true); return;
+      case "food.add": navigate(`/food?add=${ids.meal ?? "SNACK"}${ids.date && ids.date !== todayDate() ? `&date=${ids.date}` : ""}`); return;
+      case "energy.add": navigate("/neuro#energy"); return;
+      case "voice.start": navigate("/transition/voice"); return;
+      case "appointment.open": navigate("/appointments"); return;
+      case "alert.open": navigate("/alerts"); return;
+      case "dose.take": {
+        if (!ids.medicationId) return;
+        const due = data?.modules.meds?.due.find((d) => d.medicationId === ids.medicationId && d.scheduledFor === ids.scheduledFor);
+        return run(item.id, async () => {
+          await api.logDose({ medicationId: ids.medicationId!, at: Date.now(), status: "TAKEN", scheduledFor: ids.scheduledFor, site: due?.nextSite });
+          toast(`${item.title} taken`);
+        });
       }
     }
   };
+  const run = async (key: string, work: () => Promise<unknown>) => {
+    setBusy(key);
+    try { await work(); changed(); } catch (e) { errorToast(e); }
+    setBusy(null);
+  };
 
   // ---- Your day ----
-  const extra: DayRow[] = [];
-  for (const e of bladder.data ?? []) {
-    if (dayOf(e.at) !== date) continue;
-    extra.push({ key: `bladder-${e.id ?? e.at}`, kind: "bladder", at: e.at, to: "/bladder", title: e.kind === "URINATION" ? "Bathroom" : kindLabel(e.kind), detail: e.note });
-  }
-  for (const m of moods.data ?? []) {
-    if (dayOf(m.at) !== date) continue;
-    extra.push({ key: `mood-${m.id ?? m.at}`, kind: "mind", at: m.at, to: "/mind", title: `Mood: ${FACE_LABELS[Math.min(4, Math.max(0, Math.round(m.mood) - 1))].toLowerCase()}`, detail: m.feelings.slice(0, 3).join(", ") || undefined });
-  }
-  for (const s of data?.modules.symptoms?.entries ?? []) {
-    extra.push({ key: `symptom-${s.id ?? s.at}`, kind: "symptom", at: s.at, to: "/symptoms", title: s.symptom, detail: severityWord(s.severity) });
-  }
-  for (const mg of data?.modules.symptoms?.migraines ?? []) {
-    extra.push({ key: `migraine-${mg.start}`, kind: "symptom", at: mg.start, to: "/symptoms", title: "Migraine", detail: mg.end ? hm((mg.end - mg.start) / 60_000) : "Still going" });
-  }
-  const timeline = data ? dayRows({ day: data, isToday, now: at, dayFrom: dayStart(date), foodNumbers, food: food.data?.entries, extra }, say) : [];
+  const line = data && isToday ? nowLine(data, at, say) : null;
+  const open = (item: TimelineItem) => {
+    if (item.kind === "WORKOUT" && item.ref && !readOnly && data?.workouts.some((w) => w.id === item.ref && w.manual)) return setWorkout(item.ref);
+    if ((item.kind === "SLEEP" || item.kind === "NAP") && isToday && !readOnly) return navigate("/body");
+    if (item.page && opens(item.page)) navigate(pagePath(item.page, date));
+  };
+  const canOpen = (item: TimelineItem) => !!item.page && opens(item.page);
 
-  // ---- The alert, the scores' line and For you ----
-  const lead = data && isToday && !readOnly ? leadAlert(data.insights, alerts.data?.alerts) : null;
-  const rings = RINGS.filter((r) => (r.key === "readiness" ? is("SLEEP") || is("ACTIVITY") : r.key === "sleep" ? is("SLEEP") : is("ACTIVITY")));
-  const sentence = data ? scoreSentence(data, isToday && fightingSomething(data.insights)) : null;
+  // ---- The scores' line and For you ----
+  const rings = RINGS.filter((r) => (r.key === "readiness" ? on.includes("SLEEP") || on.includes("ACTIVITY") : r.key === "sleep" ? on.includes("SLEEP") : on.includes("ACTIVITY")));
+  const unwell = isToday && (lead?.title.toLowerCase().includes("fighting") || (data ? fightingSomething(data.insights) : false));
+  const sentence = data ? scoreSentence(data, unwell) : null;
   const digest = useDigestRow(!readOnly && isToday);
   const insights = data ? forYou(data.insights, on, digest ? 1 : 2) : [];
 
   const sections: Section[] = SECTIONS.map(({ id, label }) => {
     switch (id) {
       case "SCORES": return { id, label, when: rings.length > 0, node: data && <Scores day={data} rings={rings} sentence={sentence} readOnly={readOnly} onOpen={(title, s) => setScore({ title, score: s })} /> };
-      case "UP_NEXT": return { id, label, node: nowList.length > 0 && <RightNow rows={nowList} readOnly={readOnly} busy={busy} onAct={act} /> };
+      case "UP_NEXT": return { id, label, node: nowList.length > 0 && <RightNow items={nowList} readOnly={readOnly} busy={busy} onAct={act} /> };
       case "DAY": return {
-        id, label, node: data && <YourDay rows={timeline} isToday={isToday} readOnly={readOnly} link={!readOnly && isToday}
-          onOpen={(r) => (r.workoutId && !readOnly ? setWorkout(r.workoutId) : r.to && navigate(r.to))} />,
+        id, label, node: (
+          <YourDay items={feed.data?.items ?? null} error={feed.error} loading={feed.loading} onRetry={feed.reload} now={line} isToday={isToday} link={!readOnly && isToday}
+            sleep={data?.sleepSummary} zone={zone} onOpen={open} canOpen={canOpen} />
+        ),
       };
       default: return {
         id, label, node: data && (insights.length > 0 || digest) && (
@@ -213,7 +188,7 @@ export function Today() {
           <label className="today-date">
             <span>{new Date(`${date}T12:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</span>
             <ChevronDown size={16} aria-hidden="true" />
-            <input type="date" value={date} max={now} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Choose a day" />
+            <input type="date" value={date} max={now} onChange={(e) => e.target.value && setDate(e.target.value)} onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch { /* the browser opens it its own way */ } }} aria-label="Choose a day" />
           </label>
           <h1>{title}</h1>
           {!isToday && <button type="button" className="link-btn today-back" onClick={() => setDate(now)}>Back to today</button>}
@@ -227,10 +202,10 @@ export function Today() {
       {showFirstRun && isToday && <FirstRunPrompt onDismiss={() => { try { localStorage.setItem("samh.firstRun.skip", "1"); } catch { /* fine */ } setSkipFirstRun(true); }} />}
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {!data && loading && <div className="center-pad"><Spinner size={28} /></div>}
-      {data && (
+      {(data || feed.data) && (
         <div className="today-stack" style={{ opacity: loading ? 0.6 : 1, transition: "opacity 0.2s" }}>
-          {lead && <AlertCard alert={lead} />}
-          {shown.map((s) => s.node ? <Fragment key={s.id}>{s.node}</Fragment> : null)}
+          {lead && isToday && !readOnly && <AlertCard alert={lead} />}
+          {shown.map((s) => (s.node ? <Fragment key={s.id}>{s.node}</Fragment> : null))}
           {shown.length === 0 && !readOnly && <p className="muted arranged-empty">Everything on Today is hidden. <button type="button" className="link-btn" onClick={() => setArranging(true)}>Arrange</button> to show it again.</p>}
         </div>
       )}
@@ -239,23 +214,23 @@ export function Today() {
         intro="Move what matters most to the top, and hide what you don't use. A health alert always comes first." />}
       {score && <ScoreDialog title={score.title} score={score.score} onClose={() => setScore(null)} />}
       {changing && <QuickChange onClose={() => setChanging(false)} onSaved={changed} />}
-      {restock && <RestockDialog status={restock} onClose={() => setRestock(null)} onSaved={changed} />}
       {editing && <WorkoutDialog workout={editing} onClose={() => setWorkout(null)} onSaved={changed} />}
     </div>
   );
 }
 
 /** The health alert that's still active, most serious first: danger colours when it could need care now, a gentle tint otherwise. */
-function AlertCard({ alert }: { alert: NonNullable<ReturnType<typeof leadAlert>> }) {
+function AlertCard({ alert }: { alert: LeadAlert }) {
   const urgent = alert.level === "URGENT";
-  const Icon = urgent ? Phone : alert.title.toLowerCase().includes("oxygen") ? Wind : alert.title.toLowerCase().includes("fight") ? Thermometer : HeartPulse;
+  const words = alert.title.toLowerCase();
+  const Icon = urgent ? Phone : words.includes("oxygen") ? Wind : words.includes("fight") || words.includes("ill") ? Thermometer : HeartPulse;
   return (
     <Link to="/alerts" className={`alert-lead level-${alert.level.toLowerCase()}`} aria-label={`${ALERT_LEVEL_TEXT[alert.level]}: ${alert.title}. Open ${NAMES.alerts}`}>
       <span className="alert-lead-icon" aria-hidden="true"><Icon size={20} /></span>
       <span className="alert-lead-text">
         <span className="alert-lead-level">{ALERT_LEVEL_TEXT[alert.level]}</span>
         <span className="alert-lead-title">{alert.title}</span>
-        <span className="alert-lead-body">{alert.body}</span>
+        {alert.body && <span className="alert-lead-body">{alert.body}</span>}
       </span>
       <ChevronRight size={20} className="alert-lead-chevron" aria-hidden="true" />
     </Link>
@@ -266,7 +241,7 @@ function AlertCard({ alert }: { alert: NonNullable<ReturnType<typeof leadAlert>>
 function Ring({ score, color }: { score?: number; color: string }) {
   const size = 64;
   const stroke = 6;
-  const r = (size - stroke * 2) / 2 + 1;
+  const r = (size - stroke) / 2 - 1;
   const c = 2 * Math.PI * r;
   return (
     <svg className="score-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
@@ -316,24 +291,27 @@ function Scores({ day, rings, sentence, readOnly, onOpen }: {
 }
 
 /** Right now: one card of rows, each with its icon, title, one line and one button. */
-function RightNow({ rows, readOnly, busy, onAct }: { rows: NowRow[]; readOnly: boolean; busy: string | null; onAct: (r: NowRow) => void }) {
+function RightNow({ items, readOnly, busy, onAct }: { items: NowItem[]; readOnly: boolean; busy: string | null; onAct: (i: NowItem) => void }) {
   return (
     <section className="today-section" aria-labelledby="right-now">
       <h2 id="right-now" className="today-heading">Right now</h2>
       <ul className="now-card">
-        {rows.map((r) => {
-          const Icon = NOW_ICONS[r.kind];
-          const tone = r.kind === "food" ? "accent" : "primary";
+        {items.map((item) => {
+          const trip = item.id === "trip";
+          const Icon = trip ? Timer : NOW_ICONS[item.kind] ?? CircleDot;
+          const urgent = item.kind === "HEALTH_ALERT" && item.priority >= 100;
+          const tone = urgent ? "danger" : item.kind === "HEALTH_ALERT" ? "warn" : item.kind === "FOOD_TODAY" ? "accent" : item.kind === "OTHER" && !trip ? "plain" : "primary";
+          const action = trip ? { label: "Log trip" } : knownAction(item);
           return (
-            <li key={r.key} className={`now-row ${r.late ? "is-late" : ""}`}>
-              <span className={`now-icon tone-${tone}`} aria-hidden="true"><Icon size={20} /></span>
+            <li key={item.id} className={`now-row tone-${tone} ${item.kind === "DOSE_OVERDUE" ? "is-late" : ""}`}>
+              <span className={`now-icon tone-${tone}`} aria-hidden="true">{urgent ? <Phone size={20} /> : <Icon size={20} />}</span>
               <span className="now-text">
-                <span className="now-title">{r.title}</span>
-                {r.progress != null && <Meter value={r.progress * 100} max={100} color="var(--accent)" label={`${Math.round(r.progress * 100)}% of the day's target`} />}
-                {r.detail && <span className="now-detail">{r.detail}</span>}
+                <span className="now-title">{item.title}</span>
+                {item.progress != null && <Meter value={item.progress * 100} max={100} color={item.kind === "FOOD_TODAY" ? "var(--accent)" : "var(--primary)"} label={`${item.title}: ${Math.round(item.progress * 100)}%`} />}
+                {item.detail && <span className="now-detail">{item.detail}</span>}
               </span>
-              {!readOnly && r.action && (
-                <Button className={`now-action tone-${tone}`} busy={busy === r.key} onClick={() => onAct(r)} aria-label={`${r.action}: ${r.title}`}>{r.action}</Button>
+              {!readOnly && action && (
+                <Button className={`now-action tone-${tone}`} busy={busy === item.id} onClick={() => onAct(item)} aria-label={`${action.label}: ${item.title}`}>{action.label}</Button>
               )}
             </li>
           );
@@ -346,26 +324,30 @@ function RightNow({ rows, readOnly, busy, onAct }: { rows: NowRow[]; readOnly: b
 /** How many of Your day's rows show before "Show all". */
 const DAY_FIRST = 8;
 
-/** Your day: one timeline card, newest first, each row opening what it's about. */
-function YourDay({ rows, isToday, readOnly, link, onOpen }: { rows: DayRow[]; isToday: boolean; readOnly: boolean; link: boolean; onOpen: (r: DayRow) => void }) {
+/** Your day: one timeline card, newest first (the day's untimed things last), each row opening what it's about. */
+function YourDay({ items, error, loading, onRetry, now, isToday, link, sleep, zone, onOpen, canOpen }: {
+  items: TimelineItem[] | null; error: string | null; loading: boolean; onRetry: () => void; now: string | null; isToday: boolean; link: boolean;
+  sleep?: DaySummary["sleepSummary"]; zone?: string; onOpen: (i: TimelineItem) => void; canOpen: (i: TimelineItem) => boolean;
+}) {
   const [all, setAll] = useState(false);
-  const list = all ? rows : rows.slice(0, DAY_FIRST);
-  const row = (r: DayRow): ReactNode => {
+  const list = items ? (all ? items : items.slice(0, DAY_FIRST)) : [];
+  const row = (item: TimelineItem) => {
+    // Last night's stages, as a thin bar under it.
+    const stages = item.kind === "SLEEP" && sleep?.staged && sleep.stages.length > 0 && Math.abs(sleep.end - (item.end ?? item.at)) < 30 * 60_000 ? sleep.stages : null;
     const body = (
       <>
-        <span className={`day-time ${r.at == null ? "is-now" : ""}`}>{r.at == null ? "Now" : clockTime(r.at, dayZone())}</span>
-        <span className="day-dot-col" aria-hidden="true"><span className={`day-dot kind-${r.kind}`} /></span>
+        <span className="day-time">{item.allDay ? "All day" : clockTime(item.at, zone)}</span>
+        <span className="day-dot-col" aria-hidden="true"><span className={`day-dot dot-${dotOf(item.kind)}`} /></span>
         <span className="day-text">
-          <span className={r.at == null ? "day-now" : "day-title"}>{r.title}</span>
-          {r.detail && <span className="day-detail">{r.detail}</span>}
-          {r.stages && <StageBar stages={r.stages} />}
+          <span className="day-title">{item.title}</span>
+          {item.detail && <span className="day-detail">{item.detail}</span>}
+          {stages && <StageBar stages={stages} />}
         </span>
       </>
     );
-    const opens = (r.workoutId && !readOnly) || r.to;
     return (
-      <li key={r.key} className="day-row">
-        {opens ? <button type="button" className="day-row-btn" onClick={() => onOpen(r)}>{body}</button> : <div className="day-row-btn">{body}</div>}
+      <li key={item.id} className="day-row">
+        {canOpen(item) ? <button type="button" className="day-row-btn" onClick={() => onOpen(item)}>{body}</button> : <div className="day-row-btn">{body}</div>}
       </li>
     );
   };
@@ -376,13 +358,32 @@ function YourDay({ rows, isToday, readOnly, link, onOpen }: { rows: DayRow[]; is
         {link && <Link to="/body" className="today-heading-link">{NAMES.recent}</Link>}
       </div>
       <div className="day-card">
-        {rows.length === 0 ? (
-          <p className="muted day-empty">{isToday ? "Nothing yet today. What you log, and what your devices record, shows here." : "Nothing logged or recorded that day."}</p>
+        {error && !items ? (
+          <p className="day-empty day-failed" role="status">
+            <span>Couldn't load your day.</span>
+            <button type="button" className="link-btn" onClick={onRetry}><RefreshCw size={14} aria-hidden="true" /> Try again</button>
+          </p>
+        ) : !items ? (
+          loading ? <div className="center-pad"><Spinner /></div> : null
         ) : (
-          <ul className="day-rows">{list.map(row)}</ul>
+          <ul className="day-rows">
+            {now && (
+              <li className="day-row">
+                <Link to="/body" className="day-row-btn">
+                  <span className="day-time is-now">Now</span>
+                  <span className="day-dot-col" aria-hidden="true"><span className="day-dot dot-now" /></span>
+                  <span className="day-text"><span className="day-now">{now}</span></span>
+                </Link>
+              </li>
+            )}
+            {list.map(row)}
+            {items.length === 0 && !now && (
+              <li className="day-empty muted">{isToday ? "Nothing yet today. What you log, and what your devices record, shows here." : "Nothing logged or recorded that day."}</li>
+            )}
+          </ul>
         )}
-        {rows.length > DAY_FIRST && (
-          <button type="button" className="link-btn day-more" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show less" : `Show all ${rows.length}`}</button>
+        {items && items.length > DAY_FIRST && (
+          <button type="button" className="link-btn day-more" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show less" : `Show all ${items.length}`}</button>
         )}
       </div>
     </section>
