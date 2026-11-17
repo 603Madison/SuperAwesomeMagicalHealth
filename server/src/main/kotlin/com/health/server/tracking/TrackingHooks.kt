@@ -1,23 +1,30 @@
 package com.health.server.tracking
 
+import com.health.api.AppPage
 import com.health.api.BpCategory
 import com.health.api.DigestSection
+import com.health.api.DrinkKind
 import com.health.api.GlucoseContext
+import com.health.api.HabitSource
 import com.health.api.Module
 import com.health.api.Point
 import com.health.api.Profile
 import com.health.api.ReminderAction
 import com.health.api.ReportSectionKey
 import com.health.api.SuggestedQuestion
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.WebhookEvent
 import com.health.server.insights.DayService
 import com.health.server.insights.Scoring
 import com.health.server.insights.Stress
 import com.health.server.platform.FeatureHooks
+import com.health.server.platform.Feed
 import com.health.server.platform.Reminder
 import com.health.server.platform.ReportChart
 import com.health.server.platform.ReportSection
 import com.health.server.platform.ReportTable
+import com.health.server.platform.Say
 import com.health.server.platform.Scheduler
 import com.health.server.util.Days
 import kotlinx.serialization.json.JsonArray
@@ -241,6 +248,53 @@ class VitalsHooks(private val vitals: VitalsService, private val clock: () -> Lo
             }
         }
     }
+
+    /**
+     * Each blood pressure reading, and each glucose reading taken by hand or with a meter. A
+     * sensor's readings (every few minutes) are one item a day: the latest, and the time in range.
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val t = profile.vitalsTargets
+        val start = zone.start(from)
+        val end = zone.end(to)
+        val bp = vitals.bloodPressure(userId, start, end).map { r ->
+            TimelineItem(
+                Feed.id(TimelineKind.BLOOD_PRESSURE, r.id ?: r.at), TimelineKind.BLOOD_PRESSURE, r.at, title = "Blood pressure",
+                detail = Feed.line("${r.systolic}/${r.diastolic}", r.pulse?.let { "pulse $it" }, r.arm?.let { "$it arm" }),
+                module = Module.VITALS, page = AppPage.VITALS, ref = r.id,
+            )
+        }
+        val glucose = vitals.glucose(userId, start, end).groupBy { zone.dateOf(it.at) }.flatMap { (date, day) ->
+            val (cgm, rest) = day.partition { it.context == GlucoseContext.CGM }
+            // Readings from a device that sends many a day (through Health Connect) go with the sensor's.
+            val (sensor, single) = if (rest.size > SINGLE_READINGS) day to emptyList() else cgm to rest
+            val readings = single.map { g ->
+                TimelineItem(
+                    Feed.id(TimelineKind.GLUCOSE, g.id ?: g.at), TimelineKind.GLUCOSE, g.at, title = "Glucose",
+                    detail = Feed.line(VitalsService.glucoseText(g.mmolL, t.glucoseUnit), g.context.takeIf { it != GlucoseContext.OTHER }?.label?.lowercase()),
+                    module = Module.VITALS, page = AppPage.VITALS, ref = g.id,
+                )
+            }
+            val together = sensor.takeIf { it.isNotEmpty() }?.let { list ->
+                val latest = list.maxBy { it.at }
+                val (_, tir, _) = VitalsService.inRange(list, t)
+                TimelineItem(
+                    Feed.id(TimelineKind.GLUCOSE, "sensor:$date"), TimelineKind.GLUCOSE, list.minOf { it.at }, end = latest.at, title = "Glucose sensor",
+                    detail = Feed.line("latest ${VitalsService.glucoseText(latest.mmolL, t.glucoseUnit)}", "$tir% in range".takeIf { list.size >= 3 }, Say.plural(list.size, "reading"))
+                        ?.let(Feed::capitalised),
+                    module = Module.VITALS, page = AppPage.VITALS,
+                )
+            }
+            readings + listOfNotNull(together)
+        }
+        return bp + glucose
+    }
+
+    private companion object {
+        /** More glucose readings than this in a day are a sensor's, shown together. */
+        const val SINGLE_READINGS = 24
+    }
 }
 
 // ---------------------------------------------------------------- Drinks
@@ -296,6 +350,21 @@ class DrinksHooks(private val drinks: DrinksService) : FeatureHooks {
         val weeks = ((ChronoUnit.DAYS.between(since, to) + 1) / 7.0).coerceAtLeast(1.0)
         val perWeek = list.sumOf { it.standardDrinks } / weeks
         return if (perWeek >= 14) listOf(SuggestedQuestion("I've been having about ${perWeek.roundToInt()} drinks of alcohol a week. Could that be affecting my health?", "From the drinks you logged since $since", Module.NUTRITION)) else emptyList()
+    }
+
+    /** Each drink: what it was, how much, its caffeine and its alcohol. Water ones only while water is on. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val water = drinks.showsWater(userId)
+        return drinks.list(userId, from, to).filter { water || it.kind != DrinkKind.WATER }.map { d ->
+            TimelineItem(
+                Feed.id(TimelineKind.DRINK, d.id ?: d.at), TimelineKind.DRINK, d.at, title = d.name?.trim()?.ifEmpty { null } ?: d.kind.label,
+                detail = Feed.line(
+                    "${d.volumeMl} ml", d.caffeineMg.takeIf { it >= 1 }?.let { "${it.roundToInt()} mg caffeine" },
+                    d.alcoholG.takeIf { it > 0 }?.let { Feed.standardDrinks(it / 14.0) },
+                ),
+                module = Module.NUTRITION, page = AppPage.FOOD, ref = d.id,
+            )
+        }
     }
 }
 
@@ -405,6 +474,26 @@ class SymptomsHooks(private val symptoms: SymptomsService) : FeatureHooks {
         }
     }
 
+    /** Each symptom and migraine logged. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val entries = symptoms.entries(userId, from, to).map { e ->
+            TimelineItem(
+                Feed.id(TimelineKind.SYMPTOM, e.id ?: e.at), TimelineKind.SYMPTOM, e.at, end = e.durationMinutes?.let { e.at + it * 60_000L },
+                title = Feed.capitalised(e.symptom),
+                detail = Feed.line("${e.severity} of 10", Feed.words(e.bodyAreas, 2), e.durationMinutes?.let(Feed::duration), Feed.words(e.relief, 2)?.let { "tried $it" }),
+                module = Module.SYMPTOMS, page = AppPage.SYMPTOMS, ref = e.id,
+            )
+        }
+        val migraines = symptoms.migraines(userId, from, to).map { m ->
+            TimelineItem(
+                Feed.id(TimelineKind.SYMPTOM, m.id ?: m.start), TimelineKind.SYMPTOM, m.start, end = m.end, title = "Migraine",
+                detail = Feed.line("${m.severity} of 10 at its worst", "with aura".takeIf { m.aura }, m.end?.let { Feed.duration(((it - m.start) / 60_000).toInt()) } ?: "still going"),
+                module = Module.SYMPTOMS, page = AppPage.SYMPTOMS, ref = m.id,
+            )
+        }
+        return entries + migraines
+    }
+
     private companion object {
         val FACTOR_QUESTIONS = mapOf(
             "short_sleep" to "short nights", "stress" to "stress", "alcohol" to "alcohol", "more_caffeine" to "caffeine",
@@ -415,7 +504,7 @@ class SymptomsHooks(private val symptoms: SymptomsService) : FeatureHooks {
 
 // ---------------------------------------------------------------- Habits
 
-class HabitsHooks(private val habits: HabitsService) : FeatureHooks {
+class HabitsHooks(private val habits: HabitsService, private val clock: () -> Long = System::currentTimeMillis) : FeatureHooks {
     override val module = Module.HABITS
 
     override suspend fun digest(userId: String, profile: Profile, from: LocalDate, to: LocalDate): DigestSection? {
@@ -480,6 +569,32 @@ class HabitsHooks(private val habits: HabitsService) : FeatureHooks {
                     actions = if (k.habit.source == com.health.api.HabitSource.MANUAL) listOf(ReminderAction("done", "Done"), ReminderAction("open", "Open")) else listOf(ReminderAction("open", "Open")),
                     data = buildJsonObject { put("habit_id", k.habit.id) },
                     detailedData = buildJsonObject { put("habit_id", k.habit.id); put("habit", k.habit.name) },
+                )
+            }
+        }
+    }
+
+    /**
+     * Each habit done (or ticked part way) on the day, ticked by hand or done by what's recorded.
+     * "No alcohol" and "no caffeine after 2 pm" are only done once the day is; a water goal not while water is off.
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val water = habits.showsWater(userId)
+        val today = zone.dateOf(clock())
+        val dates = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList()
+        return dates.flatMap { date ->
+            habits.statuses(userId, date).filter { s ->
+                val source = s.habit.source
+                s.count > 0 && (water || source != HabitSource.WATER_GOAL) &&
+                    !(date >= today && (source == HabitSource.NO_ALCOHOL || source == HabitSource.CAFFEINE_CUTOFF))
+            }.map { s ->
+                val h = s.habit
+                val partWay = h.source == HabitSource.MANUAL && s.count < h.perDay
+                TimelineItem(
+                    Feed.id(TimelineKind.HABIT, "${h.id}:$date"), TimelineKind.HABIT, zone.start(date), allDay = true, title = h.name,
+                    detail = Feed.line(if (partWay) "${s.count} of ${h.perDay}" else "Done", s.streakDays.takeIf { it >= 2 }?.let { "$it days in a row" }),
+                    module = Module.HABITS, page = AppPage.HABITS, ref = h.id,
                 )
             }
         }

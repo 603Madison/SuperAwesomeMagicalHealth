@@ -190,6 +190,10 @@ class ContinenceService(
         supplies?.syncUse(userId, source(id), emptyMap(), clock())
     }
 
+    /** The entries from [from] to [to], oldest first, marked by night and with each change's wear time (for Today's timeline). */
+    suspend fun entriesBetween(userId: String, from: LocalDate, to: LocalDate): List<ContinenceEntry> =
+        worn(userId, from, to).filter { !LocalDate.parse(it.date!!).isBefore(from) }.sortedBy { it.at }
+
     /** A day's entries, as kept. */
     suspend fun entriesOn(userId: String, date: LocalDate): List<ContinenceEntry> =
         entries.list(userId, EntryKind.CONTINENCE, date, date, ContinenceEntry.serializer()).map { it.value.copy(id = it.id, date = it.date.toString()) }

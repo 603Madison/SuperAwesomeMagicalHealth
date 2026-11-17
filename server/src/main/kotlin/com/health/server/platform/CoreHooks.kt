@@ -1,5 +1,6 @@
 package com.health.server.platform
 
+import com.health.api.AppPage
 import com.health.api.ContinenceEntry
 import com.health.api.CycleDay
 import com.health.api.DeviceKind
@@ -7,16 +8,25 @@ import com.health.api.DigestSection
 import com.health.api.DoseLog
 import com.health.api.DoseStatus
 import com.health.api.JournalEntry
+import com.health.api.Meal
+import com.health.api.Metric
 import com.health.api.MindfulnessSession
 import com.health.api.Module
 import com.health.api.MoodEntry
+import com.health.api.NowAction
+import com.health.api.NowItem
+import com.health.api.NowKind
 import com.health.api.Profile
 import com.health.api.ReminderAction
 import com.health.api.ReportSectionKey
 import com.health.api.ScheduleKind
 import com.health.api.Screener
 import com.health.api.ScreenerResult
+import com.health.api.SleepSummary
+import com.health.api.TimelineItem
+import com.health.api.TimelineKind
 import com.health.api.TrendDay
+import com.health.api.Units
 import com.health.api.WebhookEvent
 import com.health.server.Services
 import com.health.server.modules.EntryKind
@@ -166,6 +176,25 @@ private class OverviewHooks(private val services: Services) : FeatureHooks {
         }
     }
 
+    /**
+     * The day's check-in, for the timeline. Everyone has it, but it's shared only with Mind, so it
+     * carries Mind when that's on (and no feature, so it's the person's own, when it isn't).
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val module = Module.MIND.takeIf { it in profile.modules }
+        return services.checkIns.range(userId, from, to).mapNotNull { (date, c) ->
+            val detail = Feed.line(
+                c.mood?.let { "mood $it of 5" }, c.energy?.let { "energy $it of 5" }, c.stress?.let { "stress $it of 5" },
+                c.soreness?.let { "soreness $it of 5" }, Feed.words(c.tags),
+            )?.let(Feed::capitalised) ?: c.note?.let { "With a note" } ?: return@mapNotNull null
+            TimelineItem(
+                Feed.id(TimelineKind.CHECK_IN, date), TimelineKind.CHECK_IN, zone.start(LocalDate.parse(date)), allDay = true,
+                title = "Check-in", detail = detail, module = module, page = AppPage.TODAY, ref = date,
+            )
+        }
+    }
+
     /** MORNING, and READINESS_LOW with it: once a day, when the night is in (or at 10:00). Webhooks only. */
     override suspend fun reminders(userId: String, profile: Profile, from: Long, to: Long): List<com.health.server.platform.Reminder> {
         val zone = zoneOf(profile)
@@ -292,6 +321,24 @@ private class SleepHooks(private val services: Services) : FeatureHooks {
         )
     }
 
+    /** Each day's night (the one that ended that morning) and its naps, as the day works them out. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        return services.days.stats(userId, from, to, zone).flatMap { day ->
+            listOfNotNull(day.sleep?.let { night(it, TimelineKind.SLEEP, profile, zone) }) + day.naps.map { night(it, TimelineKind.NAP, profile, zone) }
+        }
+    }
+
+    private fun night(s: SleepSummary, kind: TimelineKind, profile: Profile, zone: Days): TimelineItem {
+        val score = if (kind == TimelineKind.SLEEP) com.health.server.insights.Scoring.sleep(s, profile.goals, zone.zone)?.score else null
+        return TimelineItem(
+            id = Feed.id(kind, s.sessionId ?: s.start), kind = kind, at = s.start, end = s.end,
+            title = if (kind == TimelineKind.SLEEP) "Sleep" else "Nap",
+            detail = Feed.line("${Feed.duration(s.asleepMinutes)} asleep", score?.let { "sleep score $it" }),
+            module = Module.SLEEP, page = AppPage.SLEEP, ref = s.sessionId,
+        )
+    }
+
     override suspend fun fhir(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<JsonObject> {
         val zone = zoneOf(profile)
         return services.days.stats(userId, from, to, zone).mapNotNull { day ->
@@ -348,6 +395,20 @@ private class ActivityHooks(private val services: Services) : FeatureHooks {
         )
         val chart = ReportChart("Steps", "", listOf("Steps" to points(rows.map { LocalDate.parse(it.date) to it.steps?.toDouble() }, zone.zone)))
         return ReportSection(ReportSectionKey.ACTIVITY, summary, listOfNotNull(weeks, list.takeIf { it.rows.isNotEmpty() }), listOf(chart))
+    }
+
+    /** Each workout, recorded or entered. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        return services.records.workouts(userId, zone.start(from), zone.end(to)).map { w ->
+            val distance = w.distanceM?.takeIf { it > 0 }?.let { d -> if (profile.units == Units.IMPERIAL) "${Say.number(d / 1609.344)} mi" else "${Say.number(d / 1000)} km" }
+            TimelineItem(
+                id = Feed.id(TimelineKind.WORKOUT, w.id ?: w.start), kind = TimelineKind.WORKOUT, at = w.start, end = w.end,
+                title = w.name?.trim()?.ifEmpty { null } ?: w.type.label,
+                detail = Feed.line(Feed.duration(((w.end - w.start) / 60_000).toInt()), distance, w.avgHeartRate?.let { "average ${it.roundToInt()} bpm" }),
+                module = Module.ACTIVITY, page = AppPage.ACTIVITY, ref = w.id,
+            )
+        }
     }
 
     override suspend fun export(userId: String, profile: Profile, from: LocalDate, to: LocalDate): Map<String, List<List<String>>> {
@@ -409,6 +470,21 @@ private class BodyHooks(private val services: Services) : FeatureHooks {
             listOf("Weight" to points(rows.map { LocalDate.parse(it.date) to Say.weightValue(it.weightKg!!, profile.units) }, zone.zone)),
         )
         return ReportSection(ReportSectionKey.BODY, summary, emptyList(), listOf(chart))
+    }
+
+    /** Each weigh-in, with the body fat measured with it. */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val samples = services.records.samples(userId, zone.start(from), zone.end(to), listOf(Metric.WEIGHT, Metric.BODY_FAT))
+        val fat = samples.filter { it.metric == Metric.BODY_FAT }
+        return samples.filter { it.metric == Metric.WEIGHT }.distinctBy { it.start to it.value }.map { s ->
+            val bodyFat = fat.firstOrNull { kotlin.math.abs(it.start - s.start) <= 60_000 }?.value
+            TimelineItem(
+                id = Feed.id(TimelineKind.WEIGHT, s.id), kind = TimelineKind.WEIGHT, at = s.start, title = "Weight",
+                detail = Feed.line(Say.weight(s.value, profile.units), bodyFat?.let { "${Say.number(it)}% body fat" }),
+                module = Module.BODY, page = AppPage.BODY, ref = s.id.toString(),
+            )
+        }
     }
 
     override suspend fun fhir(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<JsonObject> {
@@ -486,7 +562,69 @@ private class NutritionHooks(private val services: Services) : FeatureHooks {
         }
         return files + ("water.csv" to listOf(listOf("date", "at", "ml")) + water.map { (date, ml, at) -> listOf(date, Csv.iso(at, zone), ml.toString()) })
     }
+
+    /**
+     * Each meal as one item (what was eaten, the meal and, unless numbers about food are off for
+     * the person, its calories), and water (while it's on). A meal is at its first food logged that day.
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val numbers = services.suggestions.numbers(userId)
+        val showsWater = services.days.showsWater(userId)
+        return dates(from, to).flatMap { date ->
+            val (entries, water) = services.foods.day(userId, date)
+            val start = zone.start(date)
+            val end = zone.end(date)
+            val meals = entries.groupBy { it.meal }.map { (meal, list) ->
+                val at = list.mapNotNull { it.loggedAt }.filter { it in start until end }.minOrNull() ?: zone.at(date, MEAL_TIMES.getValue(meal))
+                TimelineItem(
+                    id = Feed.id(TimelineKind.MEAL, "$date:${meal.name}"), kind = TimelineKind.MEAL, at = at,
+                    title = Feed.capitalised(Feed.words(list.map { it.name }) ?: meal.label),
+                    detail = Feed.line(meal.label, "${Say.count(list.sumOf { it.nutrients.calories })} kcal".takeIf { numbers }),
+                    module = Module.NUTRITION, page = AppPage.FOOD,
+                )
+            }
+            val glasses = if (!showsWater) emptyList() else water.map { w ->
+                TimelineItem(
+                    id = Feed.id(TimelineKind.DRINK, "water:${w.id}"), kind = TimelineKind.DRINK, at = w.at ?: start, title = "Water",
+                    detail = "${Say.count(w.ml)} ml", module = Module.NUTRITION, page = AppPage.FOOD, ref = w.id,
+                )
+            }
+            meals + glasses
+        }
+    }
+
+    /** Food so far today, with the meal it is now to add to: against the day's target, unless numbers about food are off. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        val zone = zoneOf(profile)
+        val today = zone.dateOf(at)
+        val (entries, _) = services.foods.day(userId, today)
+        val numbers = services.suggestions.numbers(userId)
+        val meal = com.health.server.food.Suggestions.mealAt(java.time.Instant.ofEpochMilli(at).atZone(zone.zone).toLocalTime())
+        val target = if (numbers) services.days.nutritionFor(userId, today).first.calories.takeIf { it > 0 } else null
+        val eaten = entries.sumOf { it.nutrients.calories }
+        val logged = Meal.entries.filter { m -> entries.any { it.meal == m } }
+        val detail = when {
+            entries.isEmpty() -> "Nothing logged yet"
+            target != null -> "${Say.count(eaten)} of ${Say.count(target)} kcal"
+            else -> Feed.capitalised(Feed.words(logged.map { it.label.lowercase() }, 4)!!) + " logged"
+        }
+        return listOf(
+            NowItem(
+                id = "food:$today", kind = NowKind.FOOD_TODAY, title = "Food today", detail = detail,
+                progress = target?.let { (eaten / it).coerceIn(0.0, 1.0) },
+                module = Module.NUTRITION, page = AppPage.FOOD,
+                action = NowAction("Add", NowAction.FOOD_ADD, mapOf("meal" to meal.name, "date" to today.toString())),
+                priority = 30,
+            ),
+        )
+    }
 }
+
+/** When a meal is, for one logged on another day (so its time says nothing about the meal). */
+private val MEAL_TIMES = mapOf(
+    Meal.BREAKFAST to LocalTime.of(8, 0), Meal.LUNCH to LocalTime.of(12, 30), Meal.SNACK to LocalTime.of(15, 0), Meal.DINNER to LocalTime.of(18, 30),
+)
 
 /** Fibre, sugar, saturated fat, sodium and each micronutrient, as CSV columns ("iron_mg", "vitamin_d_ug"). */
 internal val NUTRIENT_COLUMNS: List<String> =
@@ -568,6 +706,47 @@ private class MindHooks(private val services: Services) : FeatureHooks {
         )
     }
 
+    /**
+     * Moods, calm practice and journal entries (by kind only, never what was written). With Mind's
+     * energy budget and without Autism & ADHD (which shows the same days itself), the day's energy.
+     */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val moods = services.entries.list(userId, EntryKind.MOOD, from, to, MoodEntry.serializer()).map { s ->
+            TimelineItem(
+                Feed.id(TimelineKind.MOOD, s.id), TimelineKind.MOOD, s.value.at, title = "Mood",
+                detail = Feed.line(MOOD_WORDS.getOrNull(s.value.mood - 1), Feed.words(s.value.feelings)),
+                module = Module.MIND, page = AppPage.MIND, ref = s.id,
+            )
+        }
+        val calm = services.entries.list(userId, EntryKind.MINDFUL, from, to, MindfulnessSession.serializer()).map { s ->
+            TimelineItem(
+                Feed.id(TimelineKind.CALM, s.id), TimelineKind.CALM, s.value.at, end = s.value.at + (s.value.minutes * 60_000).toLong(),
+                title = CALM_NAMES[s.value.kind] ?: Feed.capitalised(s.value.kind.replace('-', ' ')),
+                detail = Feed.duration(s.value.minutes.roundToInt()), module = Module.MIND, page = AppPage.MIND, ref = s.id,
+            )
+        }
+        val journal = services.entries.list(userId, EntryKind.JOURNAL, from, to, JournalEntry.serializer()).map { s ->
+            TimelineItem(Feed.id(TimelineKind.JOURNAL, s.id), TimelineKind.JOURNAL, s.value.at, title = s.value.kind.label, module = Module.MIND, page = AppPage.MIND, ref = s.id)
+        }
+        val energy = if (energyBudget(userId, profile)) {
+            dates(from, to).mapNotNull { d -> services.neuro.energyOn(userId, d)?.let { Feed.energy(it, d, zone, Module.MIND, AppPage.MIND) } }
+        } else {
+            emptyList()
+        }
+        return moods + calm + journal + energy
+    }
+
+    /** Mind's energy budget for today (only without Autism & ADHD, which offers its own). */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        if (!energyBudget(userId, profile)) return emptyList()
+        val today = zoneOf(profile).dateOf(at)
+        return listOf(Feed.energyNow(services.neuro.energyOn(userId, today), today, Module.MIND, AppPage.MIND))
+    }
+
+    private suspend fun energyBudget(userId: String, profile: Profile) =
+        Module.NEURO !in profile.modules && services.conditions.shows(userId, com.health.api.Fields.MIND_ENERGY_BUDGET)
+
     override suspend fun fhir(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<JsonObject> {
         val zone = zoneOf(profile).zone
         return services.entries.list(userId, EntryKind.SCREENER, from, to, ScreenerResult.serializer()).map { stored ->
@@ -581,6 +760,15 @@ private class MindHooks(private val services: Services) : FeatureHooks {
         }
     }
 }
+
+/** Mood 1 to 5, in words (as the apps say it). */
+private val MOOD_WORDS = listOf("Very low", "Low", "Okay", "Good", "Great")
+
+/** The calm practices the apps offer, by name. */
+private val CALM_NAMES = mapOf(
+    "box-breathing" to "Box breathing", "breathing-478" to "4-7-8 breathing", "coherent-breathing" to "Coherent breathing",
+    "grounding" to "Grounding", "meditation" to "Meditation", "body-scan" to "Body scan",
+)
 
 private fun Screener.label() = when (this) {
     Screener.PHQ9 -> "PHQ-9"
@@ -865,6 +1053,19 @@ private class MedsHooks(private val services: Services) : FeatureHooks {
     }
 
     override suspend fun questions(userId: String, profile: Profile, since: LocalDate, to: LocalDate): List<com.health.api.SuggestedQuestion> = emptyList()
+
+    /** Each dose marked taken or skipped (on the day it was scheduled for, or taken). */
+    override suspend fun timeline(userId: String, profile: Profile, from: LocalDate, to: LocalDate): List<TimelineItem> {
+        val zone = zoneOf(profile)
+        val meds = services.modules.meds.list(userId, all = true).associateBy { it.id }
+        return services.modules.meds.doses(userId, from, to).map { Feed.dose(it, meds[it.medicationId], zone, Module.MEDICATIONS, AppPage.MEDS) }
+    }
+
+    /** Today's doses due within the hour, or whose time passed without a mark: Take. */
+    override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
+        val zone = zoneOf(profile)
+        return services.modules.meds.day(userId, zone.dateOf(at)).due.mapNotNull { Feed.doseNow(it, at, zone, Module.MEDICATIONS, AppPage.MEDS) }
+    }
 }
 
 internal fun scheduleText(s: com.health.api.MedSchedule): String = when (s.kind) {

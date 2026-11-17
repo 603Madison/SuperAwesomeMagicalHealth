@@ -2681,3 +2681,81 @@ export interface HealthAlerts {
 export interface AlertDismiss {
   feedback?: AlertFeedback;
 }
+
+// ---------------------------------------------------------------- Today's feed (Timeline.kt)
+
+/** What a timeline item is. OTHER stands in for a kind this version doesn't know (a newer server's). */
+export type TimelineKind =
+  | "SLEEP" | "NAP" | "WORKOUT" | "MEAL" | "DRINK" | "DOSE_TAKEN" | "DOSE_SKIPPED" | "DOSE_CHANGE"
+  | "BATHROOM" | "LEAK" | "PRODUCT_CHANGE" | "PELVIC_FLOOR" | "MOOD" | "CHECK_IN" | "CALM" | "JOURNAL"
+  | "ENERGY" | "OVERLOAD" | "FOCUS" | "ROUTINE" | "SYMPTOM" | "BLOOD_PRESSURE" | "GLUCOSE" | "WEIGHT" | "MEASUREMENT"
+  | "HABIT" | "APPOINTMENT" | "VOICE_PRACTICE" | "TRANSITION_MOMENT" | "CYCLE_DAY" | "PHOTO" | "HEALTH_ALERT" | "OTHER";
+
+/** One thing in the day's timeline ("Your day"). */
+export interface TimelineItem {
+  /** Stable: the kind and the source's own id ("dose_taken:4f2a…"). */
+  id: string;
+  kind: TimelineKind;
+  /** When it happened (or began). */
+  at: number;
+  /** When it ended, for things that last (a night, a workout, a migraine). */
+  end?: number;
+  /** Something of the day without a time of its own (a cycle day, a habit ticked, the check-in): `at` is the day's start. */
+  allDay?: boolean;
+  /** Short and plain: "Sleep", "Night brief", "Porridge and banana". */
+  title: string;
+  /** A factual line: "Changed · the one before was damp after 2 h 30 min", "Lunch · 610 kcal". */
+  detail?: string;
+  /** The feature it comes from (shown to someone viewing a share only if it's shared). */
+  module?: Module;
+  /** The page a tap opens. */
+  page?: AppPage;
+  /** What the apps can open or edit: the entry's id (a date, YYYY-MM-DD, for a day's entry like the cycle or the check-in). */
+  ref?: string;
+}
+
+/** What's live now ("Right now"). OTHER stands in for a kind this version doesn't know. */
+export type NowKind =
+  | "WEARING" | "DOSE_DUE" | "DOSE_OVERDUE" | "FOOD_TODAY" | "APPOINTMENT_SOON" | "ENERGY_TODAY" | "VOICE_PRACTICE_DUE" | "HEALTH_ALERT" | "OTHER";
+
+/** What a "Right now" item's one action does (NowAction's keys). */
+export type NowActionKey =
+  | "continence.change" | "dose.take" | "food.add" | "energy.add" | "voice.start" | "appointment.open" | "alert.open";
+
+/** The one thing a "Right now" item offers. */
+export interface NowAction {
+  /** The button's words: "Change", "Take", "Add", "Start", "Open". */
+  label: string;
+  /** What it does. A newer server may send a key this version doesn't know: leave the button out then. */
+  action: NowActionKey;
+  /** What it needs, by name: medicationId, scheduledFor (epoch ms), supplyId, meal, date, lessonId, appointmentId, alertId. */
+  ids?: Record<string, string>;
+}
+
+/** One live thing ("Right now"). */
+export interface NowItem {
+  /** Stable while it's the same thing ("dose:<medication>:<time>"). */
+  id: string;
+  kind: NowKind;
+  title: string;
+  detail?: string;
+  /** How far along, 0–1, where that means something (food against the day's target, time on against the usual). */
+  progress?: number;
+  module?: Module;
+  page?: AppPage;
+  action?: NowAction;
+  /** Higher comes first: 100 could need care now, 80s a dose, 70 time for a check, down to 20 for a gentle nudge. */
+  priority: number;
+  /** The moment it's about: a dose's time, an appointment's, when something went on. */
+  at?: number;
+}
+
+/**
+ * GET /api/feed?date=: `now` only for today and only for the person's own account (empty while
+ * viewing a share); `items` newest first, then the day's untimed things.
+ */
+export interface DayFeed {
+  date: string;
+  now: NowItem[];
+  items: TimelineItem[];
+}

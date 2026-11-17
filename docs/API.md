@@ -52,6 +52,66 @@ names the Today card that already shows the same thing (the day's doses: `MEDS`)
 the insight out while that card shows. The protein insight (today only) carries up to three
 `suggestions` (`FoodSuggestion`, as below) and names the top one or two in its body.
 
+### Today's feed
+
+| | |
+|---|---|
+| `GET /api/feed?date=YYYY-MM-DD` (default today) | `DayFeed`: `{date, now, items}` for Today's "Right now" and "Your day" |
+
+The day is the person's, in their time zone. Every feature that's on adds its part (the platform's
+`FeatureHooks.timeline` and `now`), so the apps need no other call to draw Today's two parts.
+
+`items` (`TimelineItem`) is one timeline of everything logged or recorded that day, newest first,
+then the day's untimed things (`allDay`: the check-in, a cycle day, habits done, the energy budget,
+whose `at` is the day's start). Each has a stable `id` (its kind and the source's id), a `kind`
+(`TimelineKind`), `at` and, for things that last, `end`, a short `title` and a factual `detail`
+("Changed · the one before was damp after 2 h 30 min", "Lunch · 610 kcal"), the `module` it belongs
+to, the `page` (`AppPage`) a tap opens, and `ref`, what the apps can open or edit (the entry's id;
+a date for a day's entry like the cycle or the check-in; none for a meal, which is several foods).
+
+| `kind` | From |
+|---|---|
+| `SLEEP`, `NAP` | The night that ended that day (with its sleep score) and naps (`SLEEP`) |
+| `WORKOUT` | Workouts, recorded or entered (`ACTIVITY`) |
+| `WEIGHT`, `MEASUREMENT` | Weigh-ins (with body fat) and body measurements taken together (`BODY`) |
+| `MEAL`, `DRINK` | Each meal as one item, at its first food logged that day; drinks; water while it's on (`NUTRITION`) |
+| `DOSE_TAKEN`, `DOSE_SKIPPED` | Doses marked (`MEDICATIONS`; without it, hormone medications' under `HORMONES`) |
+| `DOSE_CHANGE` | A hormone medication's start, or a change to its dose or schedule (`HORMONES`) |
+| `BATHROOM`, `LEAK`, `PRODUCT_CHANGE`, `PELVIC_FLOOR` | The bladder and bowel diary: trips, bowel movements and catheters; leaks, bowel accidents and wet nights; changes, with how the one taken off was; pelvic floor sets (`CONTINENCE`) |
+| `MOOD`, `CALM`, `JOURNAL` | Moods, calm practice, journal entries by kind only (`MIND`) |
+| `CHECK_IN` | The day's check-in (`MIND` when that's on, otherwise no module), and Autism & ADHD check-ins (`NEURO`) |
+| `ENERGY`, `OVERLOAD`, `FOCUS`, `ROUTINE` | The energy budget, times things got too much, focus, routines done (`NEURO`; the energy budget under `MIND` with Mind's energy budget and without Autism & ADHD) |
+| `SYMPTOM` | Symptoms and migraines (`SYMPTOMS`) |
+| `BLOOD_PRESSURE`, `GLUCOSE` | Each reading; a sensor's day as one item, with its time in range (`VITALS`) |
+| `HABIT` | Habits done that day, by hand or by what's recorded (`HABITS`) |
+| `APPOINTMENT` | The day's appointments, later ones too (`APPOINTMENTS`) |
+| `VOICE_PRACTICE`, `TRANSITION_MOMENT` | Voice practice; moments of euphoria and dysphoria (`TRANSITION`) |
+| `CYCLE_DAY` | The day logged, as its day in the cycle: bleeding, pain and symptoms (`CYCLE`) |
+| `PHOTO` | Photos added, by album and pose (`PHOTOS`) |
+| `HEALTH_ALERT` | Health alerts that began that day (no module, never shared) |
+| `OTHER` | A kind this version doesn't know (a newer server's): show its title and detail |
+
+`now` (`NowItem`) is only for today and only for the person's own account: the few live things,
+most pressing first (`priority`, higher first; then the soonest `at`), each with one `action`
+(`NowAction`: a `label`, an `action` key and the `ids` it needs). `progress` (0–1) is there where it
+means something.
+
+| `kind` | When | `action` (`ids`) |
+|---|---|---|
+| `HEALTH_ALERT` | An alert not put away (last 36 h); one that could need care now says when to call emergency services. Priority 100 urgent, 90 a doctor's look, 60 to keep an eye on | Open: `alert.open` (`alertId`) |
+| `DOSE_OVERDUE`, `DOSE_DUE` | Today's scheduled doses not marked: past their time (85), or due within the hour (80) | Take: `dose.take` (`medicationId`, `scheduledFor`) |
+| `APPOINTMENT_SOON` | The next three in the next seven days, not over yet: today 75, tomorrow 55, later 35 | Open: `appointment.open` (`appointmentId`) |
+| `WEARING` | What's on now (bladder and bowel), with how long and the usual: 70 once a change reminder is due, else 45 | Change: `continence.change` (`supplyId`) |
+| `VOICE_PRACTICE_DUE` | With a voice plan, no practice yet today, not a rest day, from its reminder time (40) | Start: `voice.start` (`lessonId`, the next lesson) |
+| `FOOD_TODAY` | Food so far against the day's target (30) | Add: `food.add` (`meal`, the meal it is now, and `date`) |
+| `ENERGY_TODAY` | The energy budget: what's left, or a nudge to set it (65 when running low, else 25 or 20) | Add: `energy.add` (`date`) |
+
+Without numbers about food (`FieldLayout.foodNumbers` false: eating disorder recovery), meals have
+no calories and `FOOD_TODAY` says which meals were logged, with no `progress`. With water turned
+off, water isn't listed. Viewing a share (`X-SAMH-View`), `now` is empty and `items` keeps only the
+shared features' items: never health alerts, nothing without a module, and no page the viewer
+can't open; meals lose their calories when the owner's or the viewer's numbers about food are off.
+
 ## Food
 
 | | |
@@ -630,7 +690,8 @@ viewing a share can't send one.
 | `POST /api/shares` · `PUT /{id}` · `DELETE /{id}` | `ShareRequest` / `ShareChange` (the owner, or the viewer leaving) |
 
 A viewer sends `X-SAMH-View: <ownerId>` with GET requests to see the owner's data, limited to the
-shared features (and to those the owner has on): `/api/day` and `/api/trends` leave the rest out,
+shared features (and to those the owner has on): `/api/day`, `/api/trends` and `/api/feed` leave the rest out
+(the feed with no "Right now" and no health alerts),
 `/api/profile` gives only units, time zone, goals and the features shared, and each feature's own
 endpoints need it shared (`/api/series` and `/api/measurements` by their `metric`; photos only with
 `PHOTOS`). `/api/fields` gives only the shared features' fields, without the conditions behind them;
