@@ -59,6 +59,28 @@ one "Also today" card, and **+ Log** has every way to add something.
 sleep stages, heart rate, blood oxygen, HRV, stress, breathing, skin temperature and steps, from all
 your devices together or one at a time, with the night shaded across every chart.
 
+**Health alerts**: a heads-up when your readings look out of the ordinary for you, worth a doctor's
+look, or urgent. It watches for a heart rate that stays high at rest (above 120 by default, for
+10 minutes, not while walking or working out) or low while awake, an **irregular rhythm** from a
+chest strap's beat-to-beat timing, blood oxygen that stays low awake or dips night after night, and
+the **signs of coming down with something** (resting heart rate up, HRV down, temperature and
+breathing up together, against your own usual, allowing for the cycle). Each says how soon to act
+and what else it could be; anything that could need care now says when to call emergency services.
+They come to the phone as notifications (and the browser, if you turn that on), sit at the top of
+Today, and turn into questions for your next appointment. You set the lines. They're a heads-up
+from consumer devices, never a diagnosis: if you feel unwell, trust that over any reading.
+
+**Compare devices**: two devices' nights side by side (a ring against a chest strap, say), over
+only the minutes both were measuring: sleep and its stages, bedtimes, heart rate overnight and its
+lowest, HRV, blood oxygen, breathing, temperature and steps, with how far apart they read on
+average and how steady that is. A good way to learn how far to trust a cheap ring.
+
+**Where your data goes** (Settings): every way anything about you can leave your server (the food
+database, the weather, Mealie, the assistant, AI connector links, webhooks, browser notifications,
+the weekly email, shares, Home Assistant, signing in): who's at the other end, what goes and when,
+with a switch to pause each one for yourself. Everything else stays put, and the apps load nothing
+from anywhere else (no fonts, trackers or adverts).
+
 **Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
 quick-add calories, make your own foods, copy yesterday's breakfast, bring in your
 [Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections
@@ -347,6 +369,12 @@ Settings given here win at every start; the rest are on the Admin page.
     QRing app) directly over Bluetooth, no Colmi app needed: heart rate, steps, calories,
     distance, sleep stages, blood oxygen, HRV and stress, and skin temperature on the R09 and
     R10. The app turns on the ring's own measurements for them.
+  - **Heart rate chest straps**: any standard Bluetooth strap (Polar H9 and H10, Garmin HRM,
+    Wahoo TICKR, Coospo, Decathlon and the rest) directly, no vendor app or account: heart rate
+    and beat-to-beat timing, from which the app works out HRV and checks the rhythm. Press Record
+    before bed and it records all night alongside the ring. A strap reads the heart's own electrical
+    beat, so where it measured, its heart rate is used, and it counts most for resting heart rate
+    and HRV: wear it now and then to see how far your ring is off.
   - **Health Connect**: anything that writes to it, like Garmin Connect, Fitbit, Samsung Health,
     Oura or Gadgetbridge.
   - **Gadgetbridge's database export**, for the many devices Gadgetbridge supports.

@@ -199,6 +199,11 @@ class AlertsTest {
             assertTrue(first["limits"]!!.jsonPrimitive.content.contains("not a diagnosis"))
             assertEquals("Heart rhythm", first["watching"]!!.jsonArray[1].jsonObject.str("what"))
             assertTrue(first["watching"]!!.jsonArray[1].jsonObject.str("how").contains("chest strap"))
+            // The AI connector can read them, with what to make of them.
+            val link = admin.postJson("/api/me/connectors", "{}").obj().str("url").substringAfter("localhost")
+            val call = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"health_alerts","arguments":{}}}"""
+            val text = client.post(link) { json(call) }.obj()["result"]!!.jsonObject["content"]!!.jsonArray[0].jsonObject.str("text")
+            assertTrue(text, text.contains("doctor: Your heart rate stayed high at rest") && text.contains("not a diagnosis"))
             // The same spell, looked at again later, is still one alert.
             clock += 5 * minute
             assertEquals(1, admin.get("/api/alerts").obj()["alerts"]!!.jsonArray.size)

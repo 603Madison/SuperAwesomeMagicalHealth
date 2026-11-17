@@ -379,6 +379,15 @@ class McpServer(private val services: Services) {
             schema(daysProperty(7, 60), account),
         ) { caller, args -> syncCheck(accountOf(caller, args), args.int("days")?.coerceIn(1, 60) ?: 7) },
         Tool(
+            "health_alerts", "Health alerts",
+            "The person's health alerts: when a reading looked out of the ordinary for them, worth a doctor's look or urgent " +
+                "(a heart rate high at rest or low while awake, a chest strap's irregular rhythm, low blood oxygen, the signs of " +
+                "getting ill, a resting heart rate that stayed up), with the readings behind each, the advice given, and what " +
+                "the person said about it. A heads-up from consumer devices, not a diagnosis: say so, and if one could be urgent, " +
+                "encourage getting care rather than reasoning it away.",
+            schema(daysProperty(30, 365), account),
+        ) { caller, args -> healthAlerts(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 30) },
+        Tool(
             "profile", "Profile and goals",
             "The person's profile (birth year, height, which calorie formula, units, time zone), goals, and how today's " +
                 "calorie and macro targets were worked out (resting energy, active calories, weight change aimed for).",
@@ -1685,6 +1694,29 @@ class McpServer(private val services: Services) {
 
     private fun requireAdmin(caller: Caller) {
         if (!caller.user.isAdmin) error("The server's log is for admins; this connector belongs to ${caller.user.username}")
+    }
+
+    private suspend fun healthAlerts(user: User, days: Int): String = buildString {
+        val all = services.alerts.list(user.id, days)
+        val zone = services.profiles.days(user.id)
+        if (!all.settings.enabled) appendLine("Health alerts are turned off for ${user.username}.")
+        appendLine("Watching: " + all.watching.joinToString("; ") { "${it.what}: ${it.how}" } + ".")
+        appendLine(
+            "Lines: high heart rate ${all.settings.highHeartRate} bpm at rest, low ${all.settings.lowHeartRate} bpm awake, " +
+                "blood oxygen ${all.settings.lowOxygen}%; getting ill ${if (all.settings.illness) "on" else "off"}, rhythm ${if (all.settings.rhythm) "on" else "off"}.",
+        )
+        appendLine()
+        if (all.alerts.isEmpty()) appendLine("No alerts in the last $days days.")
+        all.alerts.forEach { a ->
+            val day = zone.dateOf(a.start)
+            appendLine("- ${day} ${a.level.name.lowercase()}: ${a.title}.${if (a.dismissedAt != null) " Put away${a.feedback?.let { f -> " (${f.label.lowercase()})" } ?: ""}." else ""}")
+            appendLine("  ${a.body}")
+            if (a.evidence.isNotEmpty()) appendLine("  Readings: " + a.evidence.joinToString("; ") { "${it.label} ${it.value}" })
+            if (a.devices.isNotEmpty()) appendLine("  From: ${a.devices.joinToString()}")
+            appendLine("  Advice given: ${a.advice}")
+        }
+        appendLine()
+        appendLine(all.limits)
     }
 
     /** The account a tool is asked about: the link's own, or (every-account links) any named one. */
