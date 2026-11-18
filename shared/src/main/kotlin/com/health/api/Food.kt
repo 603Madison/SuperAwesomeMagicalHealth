@@ -155,7 +155,13 @@ data class NutrientTargets(val items: List<NutrientTargetSetting>, val basis: St
 data class NutrientTargetsChange(val own: Map<String, Double> = emptyMap())
 
 @Serializable
-enum class FoodSource { CUSTOM, OPEN_FOOD_FACTS, MEALIE }
+enum class FoodSource {
+    CUSTOM,
+    OPEN_FOOD_FACTS,
+    MEALIE,
+    /** USDA FoodData Central: everyday foods ("Banana, raw") and US packaged foods. */
+    USDA,
+}
 
 /** A food that can be logged: [nutrients] are for one [serving] (which weighs [servingGrams], if known). */
 @Serializable

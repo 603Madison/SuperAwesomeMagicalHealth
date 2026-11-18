@@ -35,6 +35,12 @@ data class AdminSettings(
     val oidcClientSecretSet: Boolean,
     /** The address to register with the identity provider as the redirect URI. */
     val redirectUri: String,
+    /** Whether a USDA FoodData Central API key is saved (it's never sent back). */
+    val usdaApiKeySet: Boolean = false,
+    /** The medical records apps whose client secret is saved (secrets are never sent back). */
+    val recordSecretsSet: List<com.health.api.RecordProvider> = emptyList(),
+    /** The address to register with Epic and athenahealth as the app's redirect URI. */
+    val recordsRedirectUri: String = "",
     /** Settings fixed by environment variables, which win at every start. */
     val fromEnvironment: List<String>,
     val version: String,
@@ -45,6 +51,10 @@ data class SettingsChange(
     val settings: ServerSettings,
     /** Null keeps the saved secret; empty removes it. */
     val oidcClientSecret: String? = null,
+    /** Null keeps the saved key; empty removes it. */
+    val usdaApiKey: String? = null,
+    /** Medical records apps' client secrets to change: an empty one removes it; one left out is kept. */
+    val recordSecrets: Map<com.health.api.RecordProvider, String> = emptyMap(),
 )
 
 @Serializable
@@ -117,6 +127,8 @@ fun Route.adminRoutes(services: Services) {
             }
             services.settings.update { next }
             change.oidcClientSecret?.let { services.settings.setOidcClientSecret(it.trim()) }
+            change.usdaApiKey?.let { services.settings.setUsdaApiKey(it.trim()) }
+            change.recordSecrets.forEach { (provider, secret) -> services.settings.setRecordSecret(provider, secret.trim()) }
             call.respond(adminSettings(services, call))
         }
 
@@ -138,6 +150,9 @@ private suspend fun adminSettings(services: Services, call: io.ktor.server.appli
     settings = services.settings.get(),
     oidcClientSecretSet = services.settings.oidcClientSecret().isNotEmpty(),
     redirectUri = redirectUri(services, call),
+    usdaApiKeySet = services.settings.usdaApiKey().isNotEmpty(),
+    recordSecretsSet = com.health.api.RecordProvider.entries.filter { services.settings.recordSecret(it).isNotEmpty() },
+    recordsRedirectUri = "${com.health.server.auth.publicBase(services, call)}${com.health.server.records.RecordsService.CALLBACK_PATH}",
     fromEnvironment = services.config.overrides.keys.filter { it in ServerConfig.OVERRIDES }.sorted(),
     version = Services.version,
 )

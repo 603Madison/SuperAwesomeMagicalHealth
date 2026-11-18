@@ -158,7 +158,7 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
     try {
       // Mail is saved on its own (below): keep whatever it is now, not what this page loaded with.
       const smtp = settings.smtp !== undefined ? (await api.adminSmtp().catch(() => null))?.settings ?? settings.smtp : undefined;
-      onSaved(await api.saveSettings(smtp ? { ...settings, smtp } : settings, secret ? secret : undefined));
+      onSaved(await api.saveSettings(smtp ? { ...settings, smtp } : settings, secret ? { oidcClientSecret: secret } : {}));
       setSecret("");
       toast("Saved");
     } catch (e) { errorToast(e); }

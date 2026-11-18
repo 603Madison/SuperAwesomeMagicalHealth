@@ -276,6 +276,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false,
                 val from = when (food.source) {
                     FoodSource.OPEN_FOOD_FACTS -> "Open Food Facts"
                     FoodSource.MEALIE -> "Mealie"
+                    FoodSource.USDA -> "USDA"
                     FoodSource.CUSTOM -> null
                 }
                 listOfNotNull(food.brand, from).takeIf { it.isNotEmpty() }?.let {

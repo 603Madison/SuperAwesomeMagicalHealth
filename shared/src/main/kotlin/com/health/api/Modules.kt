@@ -859,6 +859,10 @@ data class LabResult(
     val note: String? = null,
     val id: String? = null,
     val date: String? = null,
+    /** Where it came from when it wasn't entered here: the organization of a connected medical record. */
+    val source: String? = null,
+    /** Set by the server for one from a medical record ("record:<connection>:<its id there>"), to know it again. */
+    val ref: String? = null,
 )
 
 // ---------------------------------------------------------------- Today

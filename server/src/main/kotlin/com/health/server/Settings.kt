@@ -43,7 +43,36 @@ data class ServerSettings(
     val smtp: com.health.server.platform.SmtpSettings = com.health.server.platform.SmtpSettings(),
     /** Let webhooks and Mealie reach addresses on private networks (Home Assistant and Mealie usually live on one). */
     val webhooksPrivateNetworks: Boolean = true,
+    /** Search USDA FoodData Central for foods once an API key is set (the search terms go to api.nal.usda.gov). */
+    val usdaFoods: Boolean = true,
+    /** Medical records from patient portals: the app registered with each system (secrets are set apart). */
+    val records: RecordsSettings = RecordsSettings(),
 )
+
+/**
+ * The apps this server registered to read people's medical records from their patient portals:
+ * with Epic (fhir.epic.com) and athenahealth (its developer portal). Each one's client secret, for
+ * lasting access, is kept sealed apart ([SettingsStore.recordSecret]).
+ */
+@Serializable
+data class RecordsSettings(
+    val epic: PortalApp = PortalApp(),
+    val athena: PortalApp = PortalApp(),
+) {
+    fun of(provider: com.health.api.RecordProvider): PortalApp = when (provider) {
+        com.health.api.RecordProvider.EPIC -> epic
+        com.health.api.RecordProvider.ATHENA -> athena
+    }
+
+    /** The systems that are on, with a client ID. */
+    val providers: List<com.health.api.RecordProvider> get() = com.health.api.RecordProvider.entries.filter { of(it).ready }
+}
+
+/** One registered app: on or off, and the client ID the system gave it. */
+@Serializable
+data class PortalApp(val enabled: Boolean = false, val clientId: String = "") {
+    val ready: Boolean get() = enabled && clientId.isNotBlank()
+}
 
 /** The server's settings, kept in the database and changed from the admin page. */
 class SettingsStore(private val db: Database, private val secrets: SecretBox) {
@@ -73,6 +102,25 @@ class SettingsStore(private val db: Database, private val secrets: SecretBox) {
         } else {
             update("INSERT OR REPLACE INTO settings (key, value) VALUES ('oidc.clientSecret', ?)", secrets.seal(secret, "oidc.clientSecret"))
         }
+    }
+
+    /** USDA FoodData Central's API key (from api.data.gov), sealed; empty when there's none. */
+    suspend fun usdaApiKey(): String = secret("usda.apiKey")
+
+    suspend fun setUsdaApiKey(key: String) = setSecret("usda.apiKey", key)
+
+    /** A records app's client secret, sealed; empty when there's none (it's then a public client, with PKCE alone). */
+    suspend fun recordSecret(provider: com.health.api.RecordProvider): String = secret("records.${provider.name.lowercase()}.clientSecret")
+
+    suspend fun setRecordSecret(provider: com.health.api.RecordProvider, value: String) = setSecret("records.${provider.name.lowercase()}.clientSecret", value)
+
+    private suspend fun secret(key: String): String = db.tx {
+        one("SELECT value FROM settings WHERE key = ?", key) { it.string("value") }
+    }?.let { runCatching { secrets.open(it, key) }.getOrNull() }.orEmpty()
+
+    private suspend fun setSecret(key: String, value: String) = db.tx {
+        if (value.isEmpty()) update("DELETE FROM settings WHERE key = ?", key)
+        else update("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, secrets.seal(value, key))
     }
 
     private companion object {

@@ -1,7 +1,7 @@
 import type {
   AdminSettings, AuthConfig, CheckIn, DayFeed, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
-  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory,
+  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
@@ -16,6 +16,13 @@ import type {
   NutrientTargets, RecentReadings, DeviceComparison, DataMap, DataPath, HealthAlerts, HealthAlert, AlertSettings, AlertFeedback,
 } from "./types";
 import { viewingOwner } from "./viewing";
+
+/** Secrets for PUT /api/admin/settings (the server's SettingsChange): never sent back, only set. */
+export interface SettingsSecrets {
+  oidcClientSecret?: string;
+  usdaApiKey?: string;
+  recordSecrets?: Partial<Record<RecordProvider, string>>;
+}
 
 /** An error from the server, with a message meant for people. */
 export class ApiError extends Error {
@@ -492,6 +499,7 @@ export const api = {
   resetPassword: (id: string, password: string) => post<unknown>(`/api/admin/users/${q(id)}/password`, { password }),
   signOutUser: (id: string) => del<unknown>(`/api/admin/users/${q(id)}/sessions`),
   adminSettings: () => get<AdminSettings>("/api/admin/settings"),
-  saveSettings: (settings: ServerSettings, oidcClientSecret?: string) => put<AdminSettings>("/api/admin/settings", { settings, oidcClientSecret }),
+  /** Saves the server's settings; each secret given is changed (an empty one removes it), the rest kept. */
+  saveSettings: (settings: ServerSettings, secrets: SettingsSecrets = {}) => put<AdminSettings>("/api/admin/settings", { settings, ...secrets }),
   testOidc: (oidc: OidcSettings) => post<{ ok: boolean; message: string }>("/api/admin/oidc/test", oidc),
 };

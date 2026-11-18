@@ -61,6 +61,8 @@ class PrivacyService(private val services: Services) {
         val shares = services.sharing.list(user.id).given
         val emails = profile.digest.emailEnabled && !profile.digest.email.isNullOrBlank()
         val mail = server.smtp
+        val usdaKey = services.settings.usdaApiKey().isNotEmpty()
+        val records = services.medicalRecords.connections(user.id)
         val destinations = listOfNotNull(
             DataDestination(
                 DataPath.FOOD_DATABASE, "Open Food Facts", "A non-profit food database anyone can use",
@@ -68,6 +70,21 @@ class PrivacyService(private val services: Services) {
                 what = "The words you search for and the barcodes you scan. Never who you are or what you ate.",
                 whenSent = "When you search for a food or scan a barcode",
                 state = state(DataPath.FOOD_DATABASE, true, server.foodDatabase), setUp = null,
+            ),
+            DataDestination(
+                DataPath.USDA_FOODS, "USDA FoodData Central", "The US Department of Agriculture's food database",
+                hosts = listOf("api.nal.usda.gov"),
+                what = "The words you search for, with this server's key. Never who you are or what you ate.",
+                whenSent = "When you search for a food",
+                state = state(DataPath.USDA_FOODS, usdaKey, server.usdaFoods), setUp = null,
+            ),
+            DataDestination(
+                DataPath.HEALTH_RECORDS, "Medical records", "Your hospital, clinic or practice's patient portal (Epic or athenahealth)",
+                hosts = (services.medicalRecords.hosts(user.id) + listOfNotNull("open.epic.com".takeIf { com.health.api.RecordProvider.EPIC in server.records.providers })).distinct(),
+                what = "You sign in on your portal's own page; then this server asks it for your record. Nothing of yours is sent to it. Finding your organization on Epic asks Epic's public list.",
+                whenSent = "When you connect, and once a day after to bring your record up to date",
+                state = state(DataPath.HEALTH_RECORDS, records.isNotEmpty(), server.records.providers.isNotEmpty()),
+                count = records.size, setUp = "records",
             ),
             DataDestination(
                 DataPath.WEATHER, "Open-Meteo", "A free weather service",

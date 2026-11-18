@@ -363,7 +363,7 @@ export interface Food {
   servingGrams?: number;
   brand?: string;
   barcode?: string;
-  source: "CUSTOM" | "OPEN_FOOD_FACTS" | "MEALIE";
+  source: "CUSTOM" | "OPEN_FOOD_FACTS" | "MEALIE" | "USDA";
   id?: string;
   uses: number;
   /** Where it came from, to know it again: "mealie:<recipe id>". */
@@ -691,6 +691,21 @@ export interface ServerSettings {
   smtp?: SmtpSettings;
   /** Let webhooks call addresses on private networks. */
   webhooksPrivateNetworks?: boolean;
+  /** Search USDA FoodData Central once an API key is set. */
+  usdaFoods?: boolean;
+  /** Medical records: the app registered with each system (secrets are set apart). */
+  records?: RecordsSettings;
+}
+
+/** One registered medical records app: on or off, and the client ID the system gave it. */
+export interface PortalApp {
+  enabled: boolean;
+  clientId: string;
+}
+
+export interface RecordsSettings {
+  epic: PortalApp;
+  athena: PortalApp;
 }
 
 /** Mail for weekly digests; the password is set apart, at /api/admin/smtp. */
@@ -707,6 +722,12 @@ export interface AdminSettings {
   settings: ServerSettings;
   oidcClientSecretSet: boolean;
   redirectUri: string;
+  /** Whether a USDA FoodData Central API key is saved (never sent back). */
+  usdaApiKeySet?: boolean;
+  /** The medical records apps whose client secret is saved (never sent back). */
+  recordSecretsSet?: RecordProvider[];
+  /** The address to register with Epic and athenahealth as the redirect URI. */
+  recordsRedirectUri?: string;
   fromEnvironment: string[];
   version: string;
 }
@@ -1129,6 +1150,10 @@ export interface LabResult {
   note?: string;
   id?: string;
   date?: string;
+  /** Where it came from when it wasn't entered here: the organization of a connected medical record. */
+  source?: string;
+  /** Set by the server for one from a medical record, to know it again. */
+  ref?: string;
 }
 
 export interface CycleToday {
@@ -2659,7 +2684,7 @@ export interface MealiePlanEntry {
 /** Every way something about a person can leave the server (GET /api/privacy). */
 export type DataPath =
   | "FOOD_DATABASE" | "WEATHER" | "MEALIE" | "AI_ASSISTANT" | "AI_CONNECTORS" | "WEBHOOKS" | "BROWSER_PUSH" | "EMAIL" | "SHARES"
-  | "HOME_ASSISTANT" | "SIGN_IN";
+  | "HOME_ASSISTANT" | "SIGN_IN" | "USDA_FOODS" | "HEALTH_RECORDS";
 
 /** ON: set up and in use. PAUSED: set up, but paused by the person. NOT_SET_UP: nothing goes. OFF_ON_SERVER: the admin turned it off for everyone. */
 export type DataPathState = "ON" | "PAUSED" | "NOT_SET_UP" | "OFF_ON_SERVER";
@@ -2870,4 +2895,72 @@ export interface DayFeed {
   date: string;
   now: NowItem[];
   items: TimelineItem[];
+}
+
+// ---------------------------------------------------------------- Medical records (Records.kt)
+
+/** The health record systems this server can read from. */
+export type RecordProvider = "EPIC" | "ATHENA";
+export const RECORD_PROVIDERS: Record<RecordProvider, string> = { EPIC: "Epic", ATHENA: "athenahealth" };
+
+/** Somewhere to connect: an organization on Epic, or athenahealth's practices. */
+export interface RecordOrganization {
+  name: string;
+  fhirBaseUrl: string;
+  provider: RecordProvider;
+}
+
+export type RecordKind = "LAB" | "VITAL" | "MEDICATION" | "CONDITION" | "ALLERGY" | "IMMUNIZATION" | "PROCEDURE";
+export const RECORD_KINDS: Record<RecordKind, string> = {
+  LAB: "Lab results", VITAL: "Vital signs", MEDICATION: "Medications", CONDITION: "Conditions",
+  ALLERGY: "Allergies", IMMUNIZATION: "Immunizations", PROCEDURE: "Procedures",
+};
+export type RecordFlag = "HIGH" | "LOW" | "ABNORMAL";
+
+/** One patient portal connected. Its access never leaves the server. */
+export interface RecordConnection {
+  id: string;
+  organization: string;
+  fhirBaseUrl: string;
+  provider: RecordProvider;
+  connectedAt: number;
+  lastSyncAt?: number;
+  /** What went wrong last time, said plainly; missing when all's well. */
+  problem?: string;
+  /** Whether it brings itself up to date once a day; otherwise each sign-in does once. */
+  keepsUpdating: boolean;
+  counts: Partial<Record<RecordKind, number>>;
+}
+
+export interface HealthRecords {
+  /** The systems the server's admin has set up; none, and there's nothing to connect to. */
+  providers: RecordProvider[];
+  paused: boolean;
+  connections: RecordConnection[];
+}
+
+export interface RecordItem {
+  id: string;
+  connectionId: string;
+  kind: RecordKind;
+  title: string;
+  detail?: string;
+  date?: string;
+  at?: number;
+  status?: string;
+  flag?: RecordFlag;
+  organization: string;
+  /** For a medication: to offer as a new medication here. */
+  medication?: Medication;
+}
+
+export interface RecordConnect {
+  organization: string;
+  fhirBaseUrl: string;
+  provider: RecordProvider;
+  app?: boolean;
+}
+
+export interface RecordAuthorize {
+  url: string;
 }

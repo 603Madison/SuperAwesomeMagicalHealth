@@ -48,6 +48,12 @@ data class ServerConfig(
             "SAMH_OIDC_SCOPES",
             "SAMH_LOCAL_LOGIN",
             "SAMH_FOOD_DATABASE",
+            "SAMH_USDA_FOODS",
+            "SAMH_USDA_API_KEY",
+            "SAMH_EPIC_CLIENT_ID",
+            "SAMH_EPIC_CLIENT_SECRET",
+            "SAMH_ATHENA_CLIENT_ID",
+            "SAMH_ATHENA_CLIENT_SECRET",
         )
     }
 }

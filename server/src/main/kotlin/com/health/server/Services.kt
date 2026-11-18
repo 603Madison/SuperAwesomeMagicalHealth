@@ -183,6 +183,7 @@ class Services(
     val alerts: com.health.server.insights.AlertService by lazy { com.health.server.insights.AlertService(this) }
     /** Settings › Where your data goes. */
     val privacyMap: com.health.server.platform.PrivacyService by lazy { com.health.server.platform.PrivacyService(this) }
+    val medicalRecords: com.health.server.records.RecordsService by lazy { com.health.server.records.RecordsService() }
 
     override fun close() {
         db.close()
@@ -230,6 +231,11 @@ class Services(
                     publicUrl = env["SAMH_PUBLIC_URL"]?.trimEnd('/') ?: current.publicUrl,
                     localLogin = flag("SAMH_LOCAL_LOGIN") ?: current.localLogin,
                     foodDatabase = flag("SAMH_FOOD_DATABASE") ?: current.foodDatabase,
+                    usdaFoods = flag("SAMH_USDA_FOODS") ?: current.usdaFoods,
+                    records = current.records.copy(
+                        epic = env["SAMH_EPIC_CLIENT_ID"]?.trim()?.let { PortalAppOf(it) } ?: current.records.epic,
+                        athena = env["SAMH_ATHENA_CLIENT_ID"]?.trim()?.let { PortalAppOf(it) } ?: current.records.athena,
+                    ),
                     oidc = current.oidc.copy(
                         enabled = if (env["SAMH_OIDC_ISSUER"] != null && env["SAMH_OIDC_CLIENT_ID"] != null) true else current.oidc.enabled,
                         issuer = env["SAMH_OIDC_ISSUER"] ?: current.oidc.issuer,
@@ -242,9 +248,15 @@ class Services(
                 )
             }
             env["SAMH_OIDC_CLIENT_SECRET"]?.let { settings.setOidcClientSecret(it.trim()) }
+            env["SAMH_USDA_API_KEY"]?.let { settings.setUsdaApiKey(it.trim()) }
+            env["SAMH_EPIC_CLIENT_SECRET"]?.let { settings.setRecordSecret(com.health.api.RecordProvider.EPIC, it.trim()) }
+            env["SAMH_ATHENA_CLIENT_SECRET"]?.let { settings.setRecordSecret(com.health.api.RecordProvider.ATHENA, it.trim()) }
         }
         sessions.purgeExpired()
     }
+
+    /** A records app from its environment variable: on with a client ID, off without one. */
+    private fun PortalAppOf(clientId: String) = PortalApp(enabled = clientId.isNotEmpty(), clientId = clientId)
 
     /** Sets a new password for the break-glass admin (from the command line) and returns it. */
     suspend fun resetBreakGlass(password: String?): Pair<String, String> {

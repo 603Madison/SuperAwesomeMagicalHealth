@@ -694,6 +694,33 @@ portions without calorie or macro numbers (the numbers are still there, for logg
 logged until the person checks the estimate and logs it with `POST /api/food/entries`. Someone
 viewing a share can't send one.
 
+## Medical records
+
+A hospital, clinic or practice's own record of the person, read from its patient portal through
+the standard patient API (SMART on FHIR, R4) of **Epic** (MyChart) and **athenahealth**
+(athenaPatient). Read-only: nothing is ever written back. The server's admin registers an app with
+each system once (Admin › Medical records: client ID, optional client secret for lasting access,
+and the redirect URI below); people then connect their own portals. Access tokens are sealed on the
+server and never sent to the apps. Never shared (no `X-SAMH-View`), not offered to the assistant or
+connector links, and gated by `DataPath.HEALTH_RECORDS`.
+
+| | |
+|---|---|
+| `GET /api/records` | `HealthRecords`: the systems set up on this server, whether it's paused, and each `RecordConnection` with counts by `RecordKind` |
+| `GET /api/records/organizations?q=` | `RecordOrganization[]`: Epic organizations matching `q` from Epic's public endpoint list (`https://open.epic.com/Endpoints/R4`, kept a week), and athenahealth's single entry ("A practice on athenahealth", `https://api.platform.athenahealth.com/fhir/r4`), for the systems set up |
+| `POST /api/records/connect` | `RecordConnect` → `RecordAuthorize`: the portal's sign-in address (SMART discovery at `{fhirBaseUrl}/.well-known/smart-configuration`; PKCE S256; `state` bound to the person, ten minutes; scopes `launch/patient openid fhirUser offline_access patient/*.read`) |
+| `GET /api/records/callback?code=&state=` | Where the portal sends the browser back (the redirect URI to register: `{public URL}/api/records/callback`). Exchanges the code (with the client secret when one is set), saves the connection, brings the record in, then redirects to `/records?connected={id}` on the web, or `samhealth://records?connected={id}` for the phone app (`?error=` with a plain sentence when something went wrong) |
+| `POST /api/records/{id}/sync` | Brings that record up to date now (refreshing access where it lasts) → `RecordConnection` |
+| `DELETE /api/records/{id}?keep=false` | Disconnects: forgets its access, and with `keep=false` (the default) removes everything it brought in, labs too; `keep=true` keeps what's here |
+| `GET /api/records/items?kind=&connection=` | `RecordItem[]`, newest first |
+
+What's read, per connection: `Patient` (only to check it's the person's own), lab `Observation`s
+(also saved as `LabResult`s with `source` = the organization and `ref` = `record:{connection}:{id}`,
+so they chart in Labs and are never added twice), vital-sign `Observation`s, `MedicationRequest`s,
+`Condition`s, `AllergyIntolerance`s, `Immunization`s and `Procedure`s. A kind the portal doesn't
+offer is skipped quietly. With lasting access (a refresh token), each connection is brought up to
+date once a day; without, each sign-in brings it up to date once.
+
 ## Sharing
 
 | | |

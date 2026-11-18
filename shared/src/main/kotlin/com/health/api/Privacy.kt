@@ -11,6 +11,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class DataPath {
     FOOD_DATABASE, WEATHER, MEALIE, AI_ASSISTANT, AI_CONNECTORS, WEBHOOKS, BROWSER_PUSH, EMAIL, SHARES, HOME_ASSISTANT, SIGN_IN,
+    /** USDA FoodData Central, for food searches. */
+    USDA_FOODS,
+    /** Connected medical records (Epic patient portals). */
+    HEALTH_RECORDS,
 }
 
 @Serializable
