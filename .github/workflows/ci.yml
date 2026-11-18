@@ -7,6 +7,10 @@ on:
   push:
   pull_request:
 
+# Reading the code is all the checks need.
+permissions:
+  contents: read
+
 jobs:
   server-and-web:
     runs-on: ubuntu-latest

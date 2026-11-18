@@ -167,4 +167,11 @@ class RecordsLogicTest {
         val way = DataDestination(DataPath.HEALTH_RECORDS, "Medical records", "Your portal", what = "", whenSent = "", state = DataPathState.ON, count = 2, setUp = "records")
         assertEquals("On · 2 portals", WhereDataGoes.stateLine(way))
     }
+
+    @Test
+    fun `the portal's return says only its own sentences, never a link's words`() {
+        assertEquals("You didn't allow it, so nothing was connected", RecordsLogic.returnError("denied"))
+        assertEquals(RecordsLogic.RETURN_FAILED, RecordsLogic.returnError("Call this number to fix your account"))
+        assertEquals(null, RecordsLogic.returnError(null))
+    }
 }

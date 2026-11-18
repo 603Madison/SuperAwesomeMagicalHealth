@@ -28,9 +28,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.commit || github.sha }}
+          # The token isn't left in .git/config for the tests and builds to find.
+          persist-credentials: false
 
       - name: Check version
         run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::A version looks like v1.2.3"
+            exit 1
+          fi
           VERSION_NAME=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' android/build.gradle.kts)
           if [ "v$VERSION_NAME" != "$TAG" ]; then
             echo "::error::$TAG doesn't match versionName $VERSION_NAME in android/build.gradle.kts"
@@ -47,8 +53,15 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Tests
+        run: |
+          (cd web && npm ci --no-audit --no-fund && npm run build)
+          node --test pebble/test/*.test.js
+          ./gradlew --no-daemon :android:testDebugUnitTest :server:test
+
       # Every release must be signed with the same key, or installed copies can't be updated
-      # (see CLAUDE.md). It lives in repository secrets, never in git.
+      # (see CLAUDE.md). It lives in repository secrets, never in git, and is on disk only for the
+      # signed build (after the tests, whose dependencies never see it), then deleted.
       - name: Restore signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -65,12 +78,6 @@ jobs:
           fi
           echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Tests
-        run: |
-          (cd web && npm ci --no-audit --no-fund && npm run build)
-          node --test pebble/test/*.test.js
-          ./gradlew --no-daemon :android:testDebugUnitTest :server:test
-
       - name: Build the signed APK
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
@@ -78,6 +85,10 @@ jobs:
           ./gradlew --no-daemon :android:assembleRelease
           cp android/build/outputs/apk/release/android-release.apk "SuperAwesomeMagicalHealth-$TAG.apk"
           sha256sum SuperAwesomeMagicalHealth-*.apk
+
+      - name: Forget the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
 
       - uses: astral-sh/setup-uv@v10.3.3
       # The watch app carries the same version as everything else (major.minor on the watch).
@@ -94,7 +105,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --depth=1 origin "${{ github.sha }}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" fetch --depth=1 origin "${{ github.sha }}"
           git show "${{ github.sha }}:release-notes/$TAG.md" > notes.md 2>/dev/null || echo "SuperAwesomeMagicalHealth $TAG" > notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "SuperAwesomeMagicalHealth-$TAG.apk" "SuperAwesomeMagicalHealth-watch-$TAG.pbw" --clobber
@@ -113,6 +124,9 @@ jobs:
   # The server and web app, for amd64 and arm64 (a Raspberry Pi), at
   # ghcr.io/<owner>/superawesomemagicalhealth:<version> and :latest, whatever the repository is called.
   image:
+    # Only once the release (its version check and tests) has passed: installs that update
+    # themselves pull this image.
+    needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -123,9 +137,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
 
       - name: Image name and tags
         run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::A version looks like v1.2.3"
+            exit 1
+          fi
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/superawesomemagicalhealth"
           VERSION="${TAG#v}"
           {

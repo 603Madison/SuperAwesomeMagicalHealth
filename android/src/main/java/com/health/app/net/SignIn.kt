@@ -62,8 +62,11 @@ class SignIn(private val context: Context, private val api: ServerApi, private v
         prefs.signIn(server, signedIn.token ?: throw ServerException(0, "The server sent no sign-in"), signedIn.user, config.serverName)
     }
 
-    /** Opens the server's sign-in page in a browser tab. */
-    fun startBrowserSignIn(server: String) {
+    /**
+     * Starts a browser sign-in: a new secret, and the pairing code ("123 456") the person sees here
+     * and checks on the server's page before allowing it. Then [openBrowserSignIn].
+     */
+    fun prepareBrowserSignIn(server: String): String {
         val verifier = token(48)
         val state = token(24)
         pending.edit {
@@ -71,6 +74,13 @@ class SignIn(private val context: Context, private val api: ServerApi, private v
             putString("verifier", verifier)
             putString("state", state)
         }
+        return pairingCode(challenge(verifier))
+    }
+
+    /** Opens the server's sign-in page in a browser tab, for the sign-in [prepareBrowserSignIn] started. */
+    fun openBrowserSignIn(server: String) {
+        val verifier = pending.getString("verifier", null) ?: return
+        val state = pending.getString("state", null) ?: return
         val url = "$server/connect-app".toUri().buildUpon()
             .appendQueryParameter("challenge", challenge(verifier))
             .appendQueryParameter("state", state)
@@ -105,6 +115,19 @@ class SignIn(private val context: Context, private val api: ServerApi, private v
             .filter { it.isNotBlank() }.distinct().joinToString(" ").take(60).ifBlank { "Android phone" }
 
         fun token(bytes: Int): String = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(bytes).also(random::nextBytes))
+
+        /**
+         * The six digits ("123 456") both the app and the server's page show for a sign-in, worked
+         * out from its challenge (as the web's `pairingCode`), so the person can see the page is
+         * for the sign-in they started here, not one another app started.
+         */
+        fun pairingCode(challenge: String): String {
+            val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            var n = 0L
+            for (ch in challenge) n = (n * 64 + alphabet.indexOf(ch).coerceAtLeast(0)) % 1_000_000L
+            val digits = n.toString().padStart(6, '0')
+            return "${digits.take(3)} ${digits.drop(3)}"
+        }
 
         /** The PKCE S256 challenge for [verifier]. */
         fun challenge(verifier: String): String =

@@ -33,9 +33,13 @@ data class ServerConfig(
             proxies = env["SAMH_PROXIES"]?.trim()?.toIntOrNull()?.coerceIn(1, 10) ?: 1,
             clientIpHeader = env["SAMH_CLIENT_IP_HEADER"]?.trim()?.takeIf { it.matches(Regex("[A-Za-z0-9-]{1,64}")) },
             adminUsername = env["SAMH_ADMIN_USERNAME"]?.ifBlank { null } ?: "admin",
-            adminPassword = env["SAMH_ADMIN_PASSWORD"]?.ifBlank { null },
+            // A placeholder copied from an example is known to everyone: a password is made instead.
+            adminPassword = env["SAMH_ADMIN_PASSWORD"]?.ifBlank { null }?.takeUnless { it.trim().lowercase() in PLACEHOLDER_PASSWORDS },
             overrides = env.filterKeys { it in OVERRIDES }.filterValues { it.isNotBlank() },
         )
+
+        /** Example passwords that must never become the admin's. */
+        val PLACEHOLDER_PASSWORDS = setOf("change-me-please", "change-me", "changeme", "password", "admin", "...")
 
         val OVERRIDES = setOf(
             "SAMH_PUBLIC_URL",

@@ -96,7 +96,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     private fun backFromPortal(intent: Intent, link: android.net.Uri) {
         setIntent(Intent(intent).setData(null))
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
-        RecordsReturn.pending.value = RecordsLogic.Return(link.getQueryParameter("connected"), link.getQueryParameter("error"), link.getQueryParameter("confirm"))
+        RecordsReturn.pending.value = RecordsLogic.Return(link.getQueryParameter("connected"), RecordsLogic.returnError(link.getQueryParameter("error")), link.getQueryParameter("confirm"))
         openRoute.value = RecordsLogic.ROUTE
     }
 

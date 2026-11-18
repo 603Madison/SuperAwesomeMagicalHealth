@@ -141,10 +141,23 @@ export function youLine(records: HealthRecords | null | undefined, now: number):
  * What the portal said on its way back (?connected=…, ?error=…, or ?confirm=… for the page to
  * confirm the sign-in with the server), and the address without it.
  */
+/**
+ * What each code in ?error= means (the server's RecordsService.RETURN_ERRORS). The page says only
+ * these, never the address's own words, so a link made up elsewhere can't put text on it.
+ */
+export const RETURN_ERRORS: Record<string, string> = {
+  expired: "That sign-in expired or was already used. Try connecting again",
+  "someone-else": "That sign-in was started by someone else on this server, so nothing was connected",
+  denied: "You didn't allow it, so nothing was connected",
+  refused: "The portal didn't connect it. Try again in a moment",
+};
+const RETURN_FAILED = "Something went wrong connecting your portal. Try again in a moment";
+
 export function returnFrom(search: string): { connected: string | null; error: string | null; confirm: string | null; rest: string } {
   const params = new URLSearchParams(search);
   const connected = params.get("connected");
-  const error = params.get("error");
+  const code = params.get("error");
+  const error = code == null ? null : Object.prototype.hasOwnProperty.call(RETURN_ERRORS, code) ? RETURN_ERRORS[code] : RETURN_FAILED;
   const confirm = params.get("confirm");
   for (const key of ["connected", "error", "confirm"]) params.delete(key);
   const rest = params.toString();

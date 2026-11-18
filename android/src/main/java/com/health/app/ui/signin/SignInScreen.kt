@@ -63,7 +63,10 @@ import kotlinx.coroutines.launch
 /** What signing in needs from the rest of the app (so it can be drawn on its own). */
 class SignInActions(
     val checkServer: suspend (String) -> AuthConfig,
-    val browserSignIn: (String) -> Unit,
+    /** Starts a browser sign-in and returns its pairing code, to show before the page opens. */
+    val browserSignIn: (String) -> String,
+    /** Opens the page for the sign-in just started. */
+    val openBrowser: (String) -> Unit = {},
     val passwordSignIn: suspend (server: String, username: String, password: String) -> Unit,
 )
 
@@ -77,7 +80,8 @@ fun SignInRoute(finishing: Boolean, error: String?) {
         error = error,
         actions = SignInActions(
             checkServer = { c.api.authConfig(it) },
-            browserSignIn = { c.signIn.startBrowserSignIn(it) },
+            browserSignIn = { c.signIn.prepareBrowserSignIn(it) },
+            openBrowser = { c.signIn.openBrowserSignIn(it) },
             passwordSignIn = { s, u, p -> c.signIn.signInWithPassword(s, u, p) },
         ),
     )
@@ -117,6 +121,22 @@ fun SignInScreen(
     var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    // A browser sign-in just started: its server and the pairing code to check on the page.
+    var pairing by remember { mutableStateOf<Pair<String, String>?>(null) }
+    pairing?.let { (server, code) ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pairing = null },
+            title = { Text("Your code: $code") },
+            text = { Text("The sign-in page will show the same code. Only allow it there if they match.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    pairing = null
+                    actions.openBrowser(server)
+                }) { Text("Open the sign-in page") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { pairing = null }) { Text("Cancel") } },
+        )
+    }
 
     fun check() {
         val server = ServerApi.normalize(address)
@@ -202,7 +222,7 @@ fun SignInScreen(
                                 val (server, auth) = current
                                 if (ServerAddress.unencrypted(server)) UnencryptedNotice()
                                 auth.oidc?.let { oidc ->
-                                    Button(onClick = { actions.browserSignIn(server) }, modifier = Modifier.fillMaxWidth()) {
+                                    Button(onClick = { pairing = server to actions.browserSignIn(server) }, modifier = Modifier.fillMaxWidth()) {
                                         Icon(Icons.Rounded.Login, null, Modifier.size(18.dp))
                                         Text(oidc.label, modifier = Modifier.padding(start = 8.dp))
                                     }

@@ -4,6 +4,7 @@ import { Smartphone } from "lucide-react";
 import { api } from "../lib/api";
 import { useSession } from "../lib/session";
 import { Button } from "../components/ui";
+import { pairingCode } from "../lib/pairing";
 
 /** Where the app sends the code (its own address, registered on the phone). */
 const APP_REDIRECT = "samhealth://signed-in";
@@ -21,7 +22,8 @@ export function ConnectApp() {
   const [done, setDone] = useState(false);
   const challenge = params.get("challenge") ?? "";
   const state = params.get("state") ?? "";
-  const device = params.get("device") ?? "your phone";
+  // Said as the link says it: any app could have opened this page.
+  const device = (params.get("device") ?? "").replace(/[^\p{L}\p{N} ._()'-]/gu, "").trim().slice(0, 60) || "a phone";
   const valid = /^[A-Za-z0-9_-]{43}$/.test(challenge) && /^[A-Za-z0-9_-]{8,128}$/.test(state);
 
   const approve = async () => {
@@ -54,9 +56,11 @@ export function ConnectApp() {
           <>
             <h1>Sign in to the app?</h1>
             <p className="login-sub">
-              The SuperAwesomeMagicalHealth app on {device} wants to sign in to {config?.serverName ?? "this server"} as{" "}
+              An app that says it's SuperAwesomeMagicalHealth on {device} wants to sign in to {config?.serverName ?? "this server"} as{" "}
               <strong>{user?.displayName}</strong> ({user?.username}). It will see and add to your health data, and send in data from your wearables.
             </p>
+            <div className="pairing-code" aria-label={`Pairing code ${pairingCode(challenge)}`}>{pairingCode(challenge)}</div>
+            <p className="login-sub">Your app shows a code too. Only sign in if it's the same as this one.</p>
             {error && <div className="notice notice-error">{error}</div>}
             <Button variant="primary" className="wide" busy={busy} onClick={approve}>Sign in to the app</Button>
             <Button variant="ghost" className="wide" onClick={() => window.close()}>Cancel</Button>

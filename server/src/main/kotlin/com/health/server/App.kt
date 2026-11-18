@@ -22,6 +22,7 @@ import com.health.server.platform.feedRoutes
 import com.health.server.records.recordsRoutes
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -82,7 +83,7 @@ fun Application.module(services: Services) {
         header("X-Frame-Options", "DENY")
         header(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' data: blob: https://images.openfoodfacts.org; style-src 'self' 'unsafe-inline'; " +
+            "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; " +
                 "script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; " +
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
@@ -91,6 +92,12 @@ fun Application.module(services: Services) {
     install(
         io.ktor.server.application.createApplicationPlugin("Hsts") {
             onCall { call -> if (call.onHttps(services)) call.response.header("Strict-Transport-Security", "max-age=31536000") }
+        },
+    )
+    // Health data is never kept in a browser's or a proxy's cache (a shared computer's disk, say).
+    install(
+        io.ktor.server.application.createApplicationPlugin("NoStoreApi") {
+            onCall { call -> if (call.request.path().startsWith("/api/")) call.response.header(HttpHeaders.CacheControl, "private, no-store") }
         },
     )
     install(CallLogging) {

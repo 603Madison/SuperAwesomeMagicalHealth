@@ -295,7 +295,12 @@ class RecordsTest {
     private suspend fun HttpClient.returned(query: String): String {
         val r = get("/api/records/callback?$query").seen()
         assertEquals(HttpStatusCode.Found, r.status)
-        return r.headers[HttpHeaders.Location]!!
+        val location = r.headers[HttpHeaders.Location]!!
+        // Errors come back as codes, never sentences; the apps say them as these do.
+        val code = param(location, "error") ?: return location
+        assertTrue(code, code == "failed" || code in RecordsService.RETURN_ERRORS)
+        val said = RecordsService.RETURN_ERRORS[code] ?: "failed"
+        return "${location.substringBefore('?')}?error=${java.net.URLEncoder.encode(said, Charsets.UTF_8)}"
     }
 
     /**

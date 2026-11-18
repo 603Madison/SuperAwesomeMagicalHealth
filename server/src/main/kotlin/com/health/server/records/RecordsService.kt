@@ -304,8 +304,12 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
         return connections(userId).first { it.id == id }
     }
 
+    /**
+     * The address the browser goes on to. An error goes as a short code the apps turn into its
+     * sentence ([RETURN_ERRORS]), so a link made up elsewhere can't put words of its own on the page.
+     */
     private fun back(app: Boolean, confirm: String? = null, error: String? = null): String {
-        val query = confirm?.let { "confirm=${encode(it)}" } ?: "error=${encode(error.orEmpty())}"
+        val query = confirm?.let { "confirm=${encode(it)}" } ?: "error=${encode(RETURN_ERRORS.entries.firstOrNull { it.value == error }?.key ?: "failed")}"
         return if (app) "$APP_RETURN?$query" else "$WEB_RETURN?$query"
     }
 
@@ -625,6 +629,11 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
         const val UNREACHABLE = "The portal didn't answer. It'll try again later"
         const val DISCONNECTED = "Disconnected: what it brought in is kept here. Connect again to bring it up to date"
         const val NOT_YOURS = "The portal sent a record that isn't yours, so nothing was brought in"
+        /** The codes the portal's return can carry, and what the apps say for each (any other code: "failed"). */
+        val RETURN_ERRORS: Map<String, String> by lazy {
+            mapOf("expired" to EXPIRED, "someone-else" to SOMEONE_ELSE, "denied" to DENIED, "refused" to PORTAL_REFUSED)
+        }
+
         const val EXPIRED = "That sign-in expired or was already used. Try connecting again"
         const val SOMEONE_ELSE = "That sign-in was started by someone else on this server, so nothing was connected"
         const val DENIED = "You didn't allow it, so nothing was connected"

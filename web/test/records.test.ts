@@ -95,7 +95,10 @@ test("You's line says where it stands now", () => {
 
 test("back from the portal: what it said, and the address without it", () => {
   assert.deepEqual(returnFrom("?connected=c1"), { connected: "c1", error: null, confirm: null, rest: "" });
-  assert.deepEqual(returnFrom("?error=The+portal+said+no&x=1"), { connected: null, error: "The portal said no", confirm: null, rest: "?x=1" });
+  assert.deepEqual(returnFrom("?error=denied&x=1"), { connected: null, error: "You didn't allow it, so nothing was connected", confirm: null, rest: "?x=1" });
+  // Words of a link's own are never shown: anything but a known code reads as the plain failure.
+  assert.equal(returnFrom("?error=Call+this+number+to+fix+your+account").error, "Something went wrong connecting your portal. Try again in a moment");
+  assert.equal(returnFrom("?error=constructor").error, "Something went wrong connecting your portal. Try again in a moment");
   assert.deepEqual(returnFrom("?confirm=tok123"), { connected: null, error: null, confirm: "tok123", rest: "" });
   assert.deepEqual(returnFrom(""), { connected: null, error: null, confirm: null, rest: "" });
 });

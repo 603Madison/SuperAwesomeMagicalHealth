@@ -23,8 +23,14 @@
 web/node_modules/
 web/dist/
 
-# A server's data folder, when run from a checkout.
+# A server's data folder, when run from a checkout (and Compose's, next to its file): the database,
+# photos and the key that unseals them. Never commit any of it.
 /data/
+/deploy/data/
+secret.key
+*.db
+*.db-wal
+*.db-shm
 
 # Claude Code worktrees and local settings.
 /.claude/

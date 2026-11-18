@@ -149,6 +149,21 @@ object RecordsLogic {
     /** How the portal sent the app back to samhealth://records: ?connected=, ?error=, or ?confirm= to confirm with the server. */
     data class Return(val connected: String? = null, val error: String? = null, val confirm: String? = null)
 
+    /**
+     * What each code in the return's `error` means (the server's RecordsService.RETURN_ERRORS). Only
+     * these are said, never the link's own words, so a link from another app can't put text here.
+     */
+    val RETURN_ERRORS = mapOf(
+        "expired" to "That sign-in expired or was already used. Try connecting again",
+        "someone-else" to "That sign-in was started by someone else on this server, so nothing was connected",
+        "denied" to "You didn't allow it, so nothing was connected",
+        "refused" to "The portal didn't connect it. Try again in a moment",
+    )
+    const val RETURN_FAILED = "Something went wrong connecting your portal. Try again in a moment"
+
+    /** The sentence for an `error` code from the portal's return. */
+    fun returnError(code: String?): String? = code?.let { RETURN_ERRORS[it] ?: RETURN_FAILED }
+
     /** A lab result from a connected record: the server brings it back, so it isn't deleted here. */
     fun fromRecord(lab: LabResult): Boolean = lab.source != null || lab.ref?.startsWith("record:") == true
 

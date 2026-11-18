@@ -1,5 +1,6 @@
 # SuperAwesomeMagicalHealth server: `podman compose up -d` (or `docker compose up -d`).
 # Everything it keeps (accounts, health data, food log, saved sign-ins, its encryption key) is in ./data.
+# That folder is private: it's ignored by git (never commit it), and back it up somewhere safe.
 # Keeping USDA's food list on the server (Admin › Food search) adds about 105 MB there (4 MB for everyday foods only).
 services:
   superawesomemagicalhealth:
@@ -7,6 +8,8 @@ services:
     container_name: superawesomemagicalhealth
     restart: unless-stopped
     ports:
+      # Behind a reverse proxy (with SAMH_TRUST_PROXY), publish it on this machine only, so nobody
+      # on the network can reach it around the proxy: "127.0.0.1:8090:8080".
       - "8090:8080"
     volumes:
       # :Z relabels the folder for SELinux (Fedora, RHEL); harmless elsewhere.
@@ -17,8 +20,8 @@ services:
       # SAMH_TRUST_PROXY: "true"
       # Behind Cloudflare, so each visitor's own address is known:
       # SAMH_CLIENT_IP_HEADER: CF-Connecting-IP
-      # The break-glass admin's first password (otherwise one is generated and logged once).
-      # SAMH_ADMIN_PASSWORD: change-me-please
+      # The break-glass admin's first password, 12 characters or more (otherwise one is generated and logged once).
+      # SAMH_ADMIN_PASSWORD:
       # Single sign-on with Authentik, if you'd rather set it here than on the admin page:
       # SAMH_OIDC_ISSUER: https://auth.example.com/application/o/superawesomemagicalhealth/
       # SAMH_OIDC_CLIENT_ID: ...

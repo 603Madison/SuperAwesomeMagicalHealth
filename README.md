@@ -351,7 +351,9 @@ podman exec superawesomemagicalhealth /opt/samh/bin/samh-server reset-admin-pass
 Turning off **People can sign in with a password** leaves only the break-glass admin able to use
 one, so there's always a way in if Authentik is down.
 
-Behind a reverse proxy, set `SAMH_PUBLIC_URL` and `SAMH_TRUST_PROXY=true`.
+Behind a reverse proxy, set `SAMH_PUBLIC_URL` and `SAMH_TRUST_PROXY=true`, and publish the port on
+the machine only (`127.0.0.1:8090:8080`): otherwise anyone on the network could reach the server
+around the proxy and claim any address in its headers.
 
 ## Settings from the environment
 

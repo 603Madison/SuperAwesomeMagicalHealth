@@ -17,6 +17,8 @@ After=network-online.target
 [Container]
 Image=ghcr.io/603madison/superawesomemagicalhealth:latest
 ContainerName=superawesomemagicalhealth
+# Behind a reverse proxy (with SAMH_TRUST_PROXY), publish on this machine only, so nobody on the
+# network can reach it around the proxy: PublishPort=127.0.0.1:8090:8080
 PublishPort=8090:8080
 # A named volume; or a folder, e.g. Volume=%h/superawesomemagicalhealth:/data:Z
 Volume=superawesomemagicalhealth-data:/data:Z

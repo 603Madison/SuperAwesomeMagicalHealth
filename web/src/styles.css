@@ -2253,3 +2253,6 @@ button.day-row-btn:hover .day-title, a.day-row-btn:hover .day-now { color: var(-
 @media (max-width: 760px) {
   .records-sections { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The app sign-in's pairing code (ConnectApp): big and easy to compare with the app's. */
+.pairing-code { margin: 6px auto 2px; padding: 10px 18px; border-radius: 14px; background: var(--surface-2); font-size: 2rem; font-weight: var(--w-bold); letter-spacing: 0.08em; text-align: center; font-variant-numeric: tabular-nums; }

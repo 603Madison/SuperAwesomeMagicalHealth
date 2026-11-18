@@ -13,3 +13,8 @@ keystore/
 local.properties
 *.apk
 *.jks
+# A server's data (database, photos, its key) never goes into an image.
+data/
+deploy/data/
+**/secret.key
+**/*.db
