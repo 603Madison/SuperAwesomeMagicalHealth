@@ -21,13 +21,14 @@
   `transition/`, `photos/` (sealed files under the data folder), `ai/` (the optional assistant).
   Each feature plugs into digests, reports, exports, reminders and appointment questions through
   `platform/FeatureHooks`, listed in `Services.hooks`. `IntegrationTest` covers the features
-  working together. Food's outside sources are in `food/`: Open Food Facts, and each person's
+  working together. Food's outside sources are in `food/`: USDA FoodData Central (the food database, `UsdaFoods.kt`,
+  with the admin's key; `FoodFinder.kt` merges), Open Food Facts (an opt-in fallback, English only), and each person's
   Mealie (`Mealie.kt`: its token sealed in `UserSettingsStore` under `food.mealie`, never sent
   back; `/api/mealie` is never shared; nothing is written to Mealie). A person's own settings go
   in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature). Anything the
   server calls on someone's behalf (webhooks, Mealie, push) uses an OkHttp client with
   `util/OutboundDns` (checked addresses only) and no redirects; `ServerConfig.outboundLoopback` is
-  for tests only. Logs never carry what someone wrote. **Every way out** (Open Food Facts, the
+  for tests only. Logs never carry what someone wrote. **Every way out** (USDA, Open Food Facts, the
   weather, Mealie, the assistant, connector links, webhooks, push, email, shares, Home Assistant)
   asks `services.privacy.allows(userId, DataPath.…)` first and is listed in
   `platform/Privacy.kt`'s map (Settings › Where your data goes): a new one gets a `DataPath`, a gate

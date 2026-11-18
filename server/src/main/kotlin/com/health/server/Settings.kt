@@ -32,8 +32,11 @@ data class ServerSettings(
     val publicUrl: String = "",
     /** Whether accounts other than the break-glass admin may sign in with a password. */
     val localLogin: Boolean = true,
-    /** Look foods up in Open Food Facts (the search terms and barcodes go to openfoodfacts.org). */
-    val foodDatabase: Boolean = true,
+    /**
+     * Also ask Open Food Facts when USDA doesn't know a food (the search terms and barcodes go to
+     * openfoodfacts.org). Off for new servers: USDA FoodData Central is the food database.
+     */
+    val foodDatabase: Boolean = false,
     /** Air pressure for symptom patterns, and place search (a rough place goes to open-meteo.com). */
     val weather: Boolean = true,
     /** Where people can turn for support, shown in Mind: set them for where your people live. */

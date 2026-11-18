@@ -55,6 +55,8 @@ class Services(
     val clock: () -> Long = System::currentTimeMillis,
     /** Where Open Food Facts is (a test server in tests). */
     foodDatabaseUrls: OpenFoodFacts.Urls = OpenFoodFacts.Urls(),
+    /** Where USDA FoodData Central's search is (a test server in tests). */
+    usdaFoodsUrl: String = com.health.server.food.UsdaFoods.SEARCH_URL,
 ) : AutoCloseable {
     val users = UserStore(db, passwords, clock)
     val sessions = SessionStore(db, clock)
@@ -79,6 +81,10 @@ class Services(
     val foodDatabase = OpenFoodFacts(http, db, clock, foodDatabaseUrls)
     /** Whether Open Food Facts may be asked on [userId]'s behalf: on for the server, and not paused by them. */
     suspend fun foodDatabaseFor(userId: String): Boolean = settings.get().foodDatabase && privacy.allows(userId, com.health.api.DataPath.FOOD_DATABASE)
+    /** USDA FoodData Central, the food database (with the admin's key). */
+    val usdaFoods = com.health.server.food.UsdaFoods(http, db, clock, usdaFoodsUrl)
+    /** Searches and barcodes: USDA, and Open Food Facts as the fallback where it's switched on. */
+    val foodFinder = com.health.server.food.FoodFinder(this)
     val foods = FoodStore(db, clock)
     val entries = EntryStore(db, box, clock)
     val modules = ModuleService(

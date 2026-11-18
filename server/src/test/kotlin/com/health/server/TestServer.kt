@@ -32,10 +32,11 @@ fun testServices(
     config: ServerConfig = ServerConfig(dataDir = Files.createTempDirectory("samh-test").toFile(), adminPassword = "break-glass-pw", outboundLoopback = true),
     clock: () -> Long = System::currentTimeMillis,
     foodUrls: OpenFoodFacts.Urls = OpenFoodFacts.Urls("http://127.0.0.1:9/search", "http://127.0.0.1:9/product/"),
+    usdaUrl: String = "http://127.0.0.1:9/fdc/v1/foods/search",
 ): Services {
     val db = Database.inMemory()
     Schema.migrate(db)
-    return Services(config, db, SecretBox(Random.bytes(32)), passwords = Passwords(iterations = 1_000), clock = clock, foodDatabaseUrls = foodUrls)
+    return Services(config, db, SecretBox(Random.bytes(32)), passwords = Passwords(iterations = 1_000), clock = clock, foodDatabaseUrls = foodUrls, usdaFoodsUrl = usdaUrl)
 }
 
 fun serverTest(services: Services = testServices(), block: suspend ApplicationTestBuilder.(Services) -> Unit) = testApplication {

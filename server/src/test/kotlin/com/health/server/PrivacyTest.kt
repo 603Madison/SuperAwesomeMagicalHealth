@@ -25,6 +25,9 @@ class PrivacyTest {
     @Test
     fun `every way out is listed, and pausing one stops it`() = serverTest { s ->
         val me = runBlocking { s.users.byUsername("admin")!!.id }
+        // Open Food Facts, USDA's fallback, is off for new servers: this one has it on.
+        assertEquals("OFF_ON_SERVER", adminBrowser().get("/api/privacy").obj().state(DataPath.FOOD_DATABASE))
+        runBlocking { s.settings.update { it.copy(foodDatabase = true) } }
         val admin = adminBrowser()
         val map = admin.get("/api/privacy").obj()
         assertEquals(
@@ -42,11 +45,12 @@ class PrivacyTest {
         assertEquals("OFF_ON_SERVER", map.state(DataPath.AI_ASSISTANT))
         assertTrue(map["note"]!!.jsonPrimitive.content.startsWith("Everything else stays on this server"))
 
-        // The food database: asked (and, in tests, unreachable) until paused, then never asked.
-        assertNotNull(admin.get("/api/foods/search?q=banana").obj()["onlineError"]?.takeIf { it.toString() != "null" })
+        // The food database: asked (and, in tests, unreachable) until paused, then never asked; with no
+        // USDA key either, search says what it needs.
+        assertEquals("The food database didn't answer; try again in a moment", admin.get("/api/foods/search?q=banana").obj().str("onlineError"))
         val paused = admin.putJson("/api/privacy/FOOD_DATABASE", """{"paused":true}""").obj()
         assertEquals("PAUSED", paused.state(DataPath.FOOD_DATABASE))
-        assertNull(admin.get("/api/foods/search?q=banana").obj()["onlineError"]?.takeIf { it.toString() != "null" })
+        assertTrue(admin.get("/api/foods/search?q=banana").obj().str("onlineError").startsWith("Food search needs a free USDA key"))
         assertFalse(runBlocking { s.foodDatabaseFor(me) })
         assertEquals("ON", admin.putJson("/api/privacy/FOOD_DATABASE", """{"paused":false}""").obj().state(DataPath.FOOD_DATABASE))
         assertTrue(runBlocking { s.foodDatabaseFor(me) })

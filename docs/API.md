@@ -121,8 +121,8 @@ can't open; meals lose their calories when the owner's or the viewer's numbers a
 | `PATCH /api/food/entries/{id}` · `DELETE …` | `FoodEntryChange` → `FoodEntry` |
 | `POST /api/food/copy` | `{from, to, meal?}`: copies a day's meal (or whole day) to another day |
 | `GET /api/food/suggestions?date=&meal=` | `FoodSuggestions`: ideas from the last 120 days for `meal` (without one, the meal it is now in the person's time zone: breakfast until 10:30, lunch until 15:00, a snack until 17:00, dinner until 21:30, then a snack) |
-| `GET /api/foods/search?q=` | `FoodSearch`: the person's foods, then Open Food Facts |
-| `GET /api/foods/barcode/{code}` | `Food`, or 404 |
+| `GET /api/foods/search?q=` | `FoodSearch`: the person's foods (`mine`), then in `online` USDA FoodData Central's everyday foods (Foundation, SR Legacy, FNDDS; up to 8) and packaged foods (Branded; up to 15), then Open Food Facts' (English names only) where it's switched on and USDA found fewer than 5. Each food once: one with the barcode of a food before it (leading zeros aside) or the same name and brand is left out. The apps put the person's Mealie recipes after `mine`. `onlineError` says, in plain words, when nothing could be asked (no USDA key, turned off, paused) or nothing answered |
+| `GET /api/foods/barcode/{code}` | `Food`: the person's own, else USDA's packaged food with exactly that `gtinUpc` (digits only, leading zeros aside; searched as scanned and as a 12-digit UPC-A, 13-digit EAN and 14-digit GTIN), else Open Food Facts' where it's switched on. 404 when nobody knows it (a miss is kept a day); 409 with a plain sentence when neither can be asked (no USDA key and Open Food Facts off) |
 | `GET /api/foods/recent` | `[Food]`: the person's foods, most used first |
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
 | `GET /api/food/targets` · `PUT` | `NutrientTargets` / `NutrientTargetsChange`: each nutrient's reference intake, upper limit and the person's own target |
@@ -159,7 +159,10 @@ without its numbers).
 and vitamins, each in its `unit`) to an amount; with `fiber`, `sugar`, `saturatedFat` and
 `sodiumMg` (the `ExtraNutrient`s), a nutrient that's missing is unknown, never 0, and sums and
 servings keep it that way (`Nutrients.plus`, `times`). Entries stored before micronutrients read
-with none. Open Food Facts foods carry every `Micronutrient.offKey` the product has (grams per
+with none. USDA foods carry each `Micronutrient` FoodData Central gives, by nutrient number (per 100 g
+in its own unit, G, MG or UG; vitamin A as RAE, vitamin D as D2 + D3 or from a label's IU, folate as
+DFE; omega-3 has no one number and is left out), per serving where there is one (a packaged food's
+label, a survey food's first real portion), else per 100 g. Open Food Facts foods carry every `Micronutrient.offKey` the product has (grams per
 100 g, turned into each unit with `fromGrams`; per serving where the label gives a serving, using
 the `_serving` value for what's only given that way). What a person types (`POST /api/foods`,
 `PUT`, and `POST /api/food/entries` with `nutrients`) is checked: each micronutrient 0 or more and

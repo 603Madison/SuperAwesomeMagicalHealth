@@ -51,7 +51,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.Food
-import com.health.api.FoodSource
 import com.health.api.Meal
 import com.health.api.Nutrients
 import com.health.app.attempt
@@ -205,11 +204,14 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
                     item { SectionTitle(MealieText.GROUP) }
                     item { PausedNote(WhereDataGoes.paused("Mealie"), Modifier.padding(start = 20.dp, end = 16.dp), onOpen = actions.privacy) }
                 }
-                item { SectionTitle("Open Food Facts") }
-                when {
-                    results.onlineError != null -> item { Hint(results.onlineError.orEmpty(), Modifier.padding(horizontal = 20.dp)) }
-                    results.online.isEmpty() -> item { Hint("Nothing found. Try fewer words, or make it a new food.", Modifier.padding(horizontal = 20.dp)) }
-                    else -> items(results.online.size) { i -> CardItem(i, results.online.size) { FoodRow(results.online[i], numbers, micros) { actions.pick(results.online[i]) } } }
+                // USDA's foods, then Open Food Facts' where it filled in, each under its name.
+                FoodSources.groups(results.online).forEach { (title, foods) ->
+                    item { SectionTitle(title) }
+                    items(foods.size) { i -> CardItem(i, foods.size) { FoodRow(foods[i], numbers, micros) { actions.pick(foods[i]) } } }
+                }
+                if (results.online.isEmpty()) {
+                    item { SectionTitle(FoodSources.NONE_TITLE) }
+                    item { Hint(results.onlineError ?: "Nothing found. Try fewer words, or make it a new food.", Modifier.padding(horizontal = 20.dp)) }
                 }
             }
         }
@@ -222,7 +224,7 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
         AlertDialog(
             onDismissRequest = actions.dismissUnknown,
             title = { Text("Not known yet") },
-            text = { Text("Nobody has added barcode $code to Open Food Facts. Add it as a food of your own? You'll find it by name or barcode next time.") },
+            text = { Text(FoodSources.unknownBarcode(code)) },
             confirmButton = { TextButton(onClick = { creating = code; actions.dismissUnknown() }) { Text("Add it") } },
             dismissButton = { TextButton(onClick = actions.dismissUnknown) { Text("Not now") } },
         )
@@ -273,13 +275,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false,
         title = { Text(food.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val from = when (food.source) {
-                    FoodSource.OPEN_FOOD_FACTS -> "Open Food Facts"
-                    FoodSource.MEALIE -> "Mealie"
-                    FoodSource.USDA -> "USDA"
-                    FoodSource.CUSTOM -> null
-                }
-                listOfNotNull(food.brand, from).takeIf { it.isNotEmpty() }?.let {
+                listOfNotNull(food.brand, FoodSources.name(food.source)).takeIf { it.isNotEmpty() }?.let {
                     Hint(it.joinToString(" · "))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

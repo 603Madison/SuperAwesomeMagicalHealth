@@ -27,6 +27,7 @@ import com.health.api.DaySummary
 import com.health.api.ErrorBody
 import com.health.api.Food
 import com.health.api.FoodEntryInput
+import com.health.api.FoodSource
 import com.health.api.Meal
 import com.health.api.Metric
 import com.health.api.Nutrients
@@ -1052,7 +1053,7 @@ class McpServer(private val services: Services) {
         appendLine("SuperAwesomeMagicalHealth ${Services.version}, up ${span(uptime)}.")
         val settings = services.settings.get()
         if (caller.user.isAdmin) {
-            appendLine("Public address: ${settings.publicUrl.ifBlank { "(not set)" }}. Single sign-on: ${if (settings.oidc.enabled) "on (${settings.oidc.issuer})" else "off"}. Food database: ${if (settings.foodDatabase) "Open Food Facts" else "off"}.")
+            appendLine("Public address: ${settings.publicUrl.ifBlank { "(not set)" }}. Single sign-on: ${if (settings.oidc.enabled) "on (${settings.oidc.issuer})" else "off"}. Food database: USDA FoodData Central ${if (!settings.usdaFoods) "off" else if (services.settings.usdaApiKey().isNotEmpty()) "on" else "(no key)"}, Open Food Facts fallback ${if (settings.foodDatabase) "on" else "off"}.")
             val fixed = services.config.overrides.keys.filter { it in ServerConfig.OVERRIDES }.sorted()
             if (fixed.isNotEmpty()) appendLine("Set by environment: ${fixed.joinToString()}.")
         }
@@ -1393,11 +1394,14 @@ class McpServer(private val services: Services) {
     private suspend fun searchFoods(user: User, query: String): String {
         if (query.length < 2) error("Search for at least two letters")
         val mine = services.foods.search(user.id, query)
-        val online = if (services.foodDatabaseFor(user.id)) runCatching { services.foodDatabase.search(query) }.getOrDefault(emptyList()) else emptyList()
+        val online = services.foodFinder.search(user.id, query, mine).online
         fun line(f: Food) = "- ${f.name}${f.brand?.let { " ($it)" } ?: ""}, per ${f.serving}: ${nutrientText(f.nutrients)}${f.barcode?.let { ", barcode $it" } ?: ""}"
         return buildString {
             if (mine.isNotEmpty()) { appendLine("The person's foods:"); mine.forEach { appendLine(line(it)) } }
-            if (online.isNotEmpty()) { appendLine("Open Food Facts:"); online.take(15).forEach { appendLine(line(it)) } }
+            online.take(20).groupBy { it.source }.forEach { (source, foods) ->
+                appendLine(if (source == FoodSource.USDA) "USDA FoodData Central:" else "Open Food Facts:")
+                foods.forEach { appendLine(line(it)) }
+            }
         }.ifBlank { "Nothing found for \"$query\"." }
     }
 
@@ -1408,7 +1412,7 @@ class McpServer(private val services: Services) {
         val servings = args.number("servings") ?: 1.0
         val barcode = args.string("barcode")
         val input = if (barcode != null) {
-            val food = services.foods.byBarcode(user.id, barcode) ?: (if (services.foodDatabaseFor(user.id)) services.foodDatabase.barcode(barcode) else null) ?: error("No food with barcode $barcode; give its name and calories instead")
+            val food = services.foods.byBarcode(user.id, barcode) ?: services.foodFinder.barcode(user.id, barcode) ?: error("No food with barcode $barcode; give its name and calories instead")
             FoodEntryInput(date.toString(), meal, servings, food = food)
         } else {
             val calories = args.number("calories") ?: error("Give the calories (or a barcode)")

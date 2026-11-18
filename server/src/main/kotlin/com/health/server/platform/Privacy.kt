@@ -68,14 +68,14 @@ class PrivacyService(private val services: Services) {
                 DataPath.FOOD_DATABASE, "Open Food Facts", "A non-profit food database anyone can use",
                 hosts = listOf("search.openfoodfacts.org", "world.openfoodfacts.org"),
                 what = "The words you search for and the barcodes you scan. Never who you are or what you ate.",
-                whenSent = "When you search for a food or scan a barcode",
+                whenSent = "Only when USDA FoodData Central doesn't know a food you search for or scan, where this server has it switched on",
                 state = state(DataPath.FOOD_DATABASE, true, server.foodDatabase), setUp = null,
             ),
             DataDestination(
                 DataPath.USDA_FOODS, "USDA FoodData Central", "The US Department of Agriculture's food database",
                 hosts = listOf("api.nal.usda.gov"),
-                what = "The words you search for, with this server's key. Never who you are or what you ate.",
-                whenSent = "When you search for a food",
+                what = "The words you search for and the barcodes you scan, with this server's key. Never who you are or what you ate.",
+                whenSent = "When you search for a food or scan a barcode",
                 state = state(DataPath.USDA_FOODS, usdaKey, server.usdaFoods), setUp = null,
             ),
             DataDestination(

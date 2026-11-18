@@ -683,6 +683,7 @@ export interface ServerSettings {
   serverName: string;
   publicUrl: string;
   localLogin: boolean;
+  /** Also ask Open Food Facts when USDA doesn't know a food (off for new servers). */
   foodDatabase: boolean;
   crisisResources: CrisisResource[];
   oidc: OidcSettings;
