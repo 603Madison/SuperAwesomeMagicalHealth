@@ -28,10 +28,16 @@ class PrivacyTest {
         val admin = adminBrowser()
         val map = admin.get("/api/privacy").obj()
         assertEquals(
-            listOf("FOOD_DATABASE", "WEATHER", "MEALIE", "AI_ASSISTANT", "AI_CONNECTORS", "WEBHOOKS", "BROWSER_PUSH", "EMAIL", "SHARES", "HOME_ASSISTANT"),
+            listOf(
+                "FOOD_DATABASE", "USDA_FOODS", "HEALTH_RECORDS", "WEATHER", "MEALIE", "AI_ASSISTANT", "AI_CONNECTORS", "WEBHOOKS", "BROWSER_PUSH",
+                "EMAIL", "SHARES", "HOME_ASSISTANT",
+            ),
             map["destinations"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content },
         )
         assertEquals("ON", map.state(DataPath.FOOD_DATABASE))
+        // USDA needs a key, and medical records an app registered with Epic or athenahealth: neither is set up here.
+        assertEquals("NOT_SET_UP", map.state(DataPath.USDA_FOODS))
+        assertEquals("OFF_ON_SERVER", map.state(DataPath.HEALTH_RECORDS))
         assertEquals("NOT_SET_UP", map.state(DataPath.MEALIE))
         assertEquals("OFF_ON_SERVER", map.state(DataPath.AI_ASSISTANT))
         assertTrue(map["note"]!!.jsonPrimitive.content.startsWith("Everything else stays on this server"))
