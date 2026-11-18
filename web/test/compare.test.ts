@@ -77,6 +77,7 @@ test("where a device is worn: by its kind, else by its name, a strap before a wa
   assert.equal(placement("GADGETBRIDGE", "Coospo H808S"), "strap");
   assert.equal(placement("OTHER", "Wahoo TICKR"), "strap");
   assert.equal(placement("HEALTH_CONNECT", "Health Connect"), null);
+  assert.equal(placement("HEALTH_CONNECT", "Phone"), "phone");
   assert.equal(placement(undefined, "My script"), null);
 });
 
@@ -152,8 +153,8 @@ test("differences with their sign, and nothing at all as ±0", () => {
 test("how far apart, in plain words", () => {
   assert.equal(metricSentence(metric("NIGHT_HEART_RATE"), words, fmt).join(" · "),
     "The ring read 3 bpm higher than the strap · 4 apart on average · from −1 to +7 · 9 nights");
-  assert.equal(metricSentence(metric("LOWEST_HEART_RATE", { difference: -2.4, apart: 2.6, lowest: -4, highest: 1, count: 2 }), words, fmt).join(" · "),
-    "The ring read 2 bpm lower than the strap · 3 apart on average · from −4 to +1 · 2 nights");
+  assert.equal(metricSentence(metric("LOWEST_HEART_RATE", { difference: -2.4, apart: 2.6, lowest: -4, highest: 1, count: 4 }), words, fmt).join(" · "),
+    "The ring read 2 bpm lower than the strap · 3 apart on average · from −4 to +1 · 4 nights");
 });
 
 test("HRV also as a share of the one compared against", () => {
@@ -168,8 +169,15 @@ test("time asleep, times, blood oxygen, breathing and steps each in their own wo
   assert.equal(metricSentence(metric("SPO2", { difference: -0.8, apart: 1, lowest: -1.5, highest: 0.2 }), words, fmt)[0], "The ring read 0.8 points lower than the strap");
   assert.equal(metricSentence(metric("RESPIRATORY_RATE", { difference: 1.2 }), words, fmt)[0], "The ring read 1.2 breaths a minute higher than the strap");
   const steps = shortNames({ name: "Pebble Time 2", kind: "PEBBLE" }, { name: "Pixel 9", kind: "PHONE" });
-  assert.equal(metricSentence(metric("STEPS", { count: 6, difference: -1240, apart: 1300, lowest: -2100, highest: 340 }), steps, fmt).join(" · "),
-    "The phone counted 1,240 fewer steps than the watch · 1,300 apart on average · from −2,100 to +340 · 6 days");
+  // Steps: as a share, over only the hours both were counting; a day's totals say nothing.
+  assert.equal(metricSentence(metric("STEPS", { count: 6, a: 4000, b: 2760, difference: -1240, apart: 1300, lowest: -2100, highest: 340, pairs: 41 }), steps, fmt).join(" · "),
+    "In the 41 hours both were counting, the phone counted 31% fewer steps than the watch · 6 days");
+  assert.equal(metricSentence(metric("STEPS", { count: 6, a: 4000, b: 2760, difference: -1240, pairs: 1 }), steps, fmt)[0],
+    "In the one hour both were counting, the phone counted 31% fewer steps than the watch");
+  // An older server, without the hours.
+  assert.equal(metricSentence(metric("STEPS", { count: 6, a: 4000, b: 2760, difference: -1240 }), steps, fmt)[0], "The phone counted 31% fewer steps than the watch");
+  assert.equal(metricSentence(metric("STEPS", { count: 6, a: 4000, b: 4001, difference: 1, pairs: 30 }), steps, fmt)[0],
+    "In the 30 hours both were counting, the phone and the watch counted about the same steps");
 });
 
 test("a night with no difference at the end of the range is plain 0", () => {
@@ -177,10 +185,15 @@ test("a night with no difference at the end of the range is plain 0", () => {
   assert.equal(metricSentence(metric("ASLEEP", { difference: 31, apart: 31, lowest: 0, highest: 74 }), words, fmt)[2], "from 0 min to +1 h 14 min");
 });
 
-test("the same on average; one night alone has no spread", () => {
+test("the same on average; too few nights say it's early, not how far apart they usually are", () => {
   assert.equal(metricSentence(metric("NIGHT_HEART_RATE", { difference: 0.3 }), words, fmt)[0], "The ring and the strap read the same on average");
   assert.deepEqual(metricSentence(metric("NIGHT_HEART_RATE", { count: 1, lowest: 3, highest: 3 }), words, fmt),
-    ["The ring read 3 bpm higher than the strap", "1 night"]);
+    ["The ring read 3 bpm higher than the strap", "only 1 night so far: a few more will show what's usual"]);
+  assert.deepEqual(metricSentence(metric("NIGHT_HEART_RATE", { count: 2 }), words, fmt),
+    ["The ring read 3 bpm higher than the strap", "only 2 nights so far: a few more will show what's usual"]);
+  const phone = shortNames({ name: "COLMI R02_C301", kind: "COLMI_RING" }, { name: "Phone", kind: "HEALTH_CONNECT" });
+  assert.deepEqual(metricSentence(metric("STEPS", { count: 1, a: 1054, b: 576, difference: -478, pairs: 5 }), phone, fmt),
+    ["In the 5 hours both were counting, the phone counted 45% fewer steps than the ring", "only 1 day so far: a few more will show what's usual"]);
   // The same every night: no range.
   assert.deepEqual(metricSentence(metric("NIGHT_HEART_RATE", { count: 3, apart: 3, lowest: 3, highest: 3 }), words, fmt),
     ["The ring read 3 bpm higher than the strap", "3 apart on average", "3 nights"]);
@@ -273,6 +286,8 @@ test("Body's line for Compare devices: heart rate at night first, else the first
   const line = (c: Parameters<typeof compare.compareLine>[0]) => plain(compare.compareLine(c, fmt) ?? "");
   assert.equal(line({ a: strap, b: ring, metrics: [metric("ASLEEP"), metric("NIGHT_HEART_RATE")] }), "The ring read 3 bpm higher than the strap");
   assert.equal(line({ a: strap, b: ring, metrics: [metric("HRV", { difference: -6, a: 50 })] }), "The ring read 6 ms (12%) lower than the strap");
+  assert.equal(line({ a: strap, b: ring, metrics: [metric("NIGHT_HEART_RATE", { count: 1 })] }), "Only 1 night together so far");
+  assert.equal(line({ a: strap, b: ring, metrics: [metric("STEPS", { count: 2 })] }), "Only 2 days together so far");
   assert.equal(compare.compareLine({ a: strap, b: ring, metrics: [] }, fmt), null);
   assert.equal(compare.compareLine({ a: strap, metrics: [metric("ASLEEP")] }, fmt), null);
 });

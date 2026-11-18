@@ -220,6 +220,7 @@ class HealthConnectConduit(
                 kind = HealthConnectMapping.kind(origin),
                 identifier = origin,
                 name = HealthConnectMapping.friendlyName(origin),
+                model = if (HealthConnectMapping.isPhone(origin)) android.os.Build.MODEL?.takeIf { it.isNotBlank() } else null,
             ),
             samples = samples,
             sleep = sleep,

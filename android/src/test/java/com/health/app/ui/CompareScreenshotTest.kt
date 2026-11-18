@@ -119,6 +119,14 @@ class CompareScreenshotTest {
     }
 
     @Test
+    @Config(qualifiers = "w411dp-h1100dp-xxhdpi")
+    fun phoneAgainstRingOneDay() {
+        render { page(CompareState(a = f.RING, b = f.phoneSteps.id, comparison = f.phoneVsRing, loading = false))() }
+        shows("In the 4 hours both were counting, the phone counted 58% fewer steps than the ring · only 1 day so far: a few more will show what's usual")
+        save("compare-phone-ring-one-day")
+    }
+
+    @Test
     fun oneDeviceOnly() {
         render { page(CompareState(comparison = f.oneDevice, loading = false))() }
         shows("One device so far")

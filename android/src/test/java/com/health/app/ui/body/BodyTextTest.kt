@@ -93,6 +93,9 @@ class BodyTextTest {
         )
         assertEquals("The ring read 3 bpm higher than the strap", BodyText.compareLine(c, Units.METRIC))
         assertNull(BodyText.compareLine(c.copy(metrics = emptyList()), Units.METRIC))
+        // Too soon to say how they usually differ.
+        assertEquals("Only 1 night together so far", BodyText.compareLine(c.copy(metrics = listOf(ComparedMetric(CompareKey.NIGHT_HEART_RATE, 1, 55.0, 58.0, 3.0, 3.0, 3.0, 3.0))), Units.METRIC))
+        assertEquals("Only 2 days together so far", BodyText.compareLine(c.copy(metrics = listOf(ComparedMetric(CompareKey.STEPS, 2, 800.0, 900.0, 100.0, 100.0, 50.0, 150.0))), Units.METRIC))
         assertNull(BodyText.compareLine(null, Units.METRIC))
     }
 }

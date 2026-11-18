@@ -90,6 +90,8 @@ class CompareService(
         /** Heart rate is set side by side five minutes at a time, the rest half an hour at a time. */
         private const val HEART_MS = 5 * 60_000L
         private const val SPELL_MS = 30 * 60_000L
+        /** Fewer steps than this in an hour isn't counting them: a phone picked up off a table, a hand moving. */
+        const val STEP_FLOOR = 20.0
         /** A night's times are counted from 6 pm the evening before. */
         private val EVENING: LocalTime = LocalTime.of(18, 0)
 
@@ -160,12 +162,43 @@ class CompareService(
             return ma.keys.filter { it in mb }.sorted().map { Triple(it * width, ma.getValue(it), mb.getValue(it)) }
         }
 
-        /** Each device's own steps for the day; compared only when both counted some. */
+        /**
+         * Steps over only the hours both devices were counting: an hour each counted at least
+         * [STEP_FLOOR] in. A phone counts only while it's carried and a ring all day, so a day's
+         * totals would set the hours a phone sat on a table against the ring. Rings keep steps by
+         * the hour, so an hour is as fine as they can be lined up; a reading over several hours is
+         * shared out between them by time. [ComparedValue.pairs] is how many hours.
+         */
         fun steps(a: List<StoredSample>?, b: List<StoredSample>?, day: LongRange): ComparedValue? {
-            val sa = a.orEmpty().filter { it.start in day }.sumOf { it.value }
-            val sb = b.orEmpty().filter { it.start in day }.sumOf { it.value }
-            if (sa <= 0 && sb <= 0) return null
-            return ComparedValue(CompareKey.STEPS, sa.takeIf { it > 0 }?.roundToInt()?.toDouble(), sb.takeIf { it > 0 }?.roundToInt()?.toDouble())
+            if (a.isNullOrEmpty() || b.isNullOrEmpty()) return null
+            val ha = hourly(a, day)
+            val hb = hourly(b, day)
+            val both = ha.keys.filter { (ha[it] ?: 0.0) >= STEP_FLOOR && (hb[it] ?: 0.0) >= STEP_FLOOR }
+            if (both.isEmpty()) return null
+            return ComparedValue(CompareKey.STEPS, both.sumOf { ha.getValue(it) }.roundToInt().toDouble(), both.sumOf { hb.getValue(it) }.roundToInt().toDouble(), both.size)
+        }
+
+        /** Steps in each hour of [day] (numbered from its start, so they're the clock's hours), a reading over several hours shared out by time. */
+        fun hourly(samples: List<StoredSample>, day: LongRange): Map<Long, Double> {
+            val zero = day.first
+            val hours = HashMap<Long, Double>()
+            for (s in samples) {
+                if (s.value <= 0) continue
+                val end = s.end?.takeIf { it > s.start } ?: s.start
+                if (end < day.first || s.start > day.last) continue
+                if (end == s.start) {
+                    hours.merge((s.start - zero).floorDiv(HOUR), s.value, Double::plus)
+                    continue
+                }
+                var h = (s.start - zero).floorDiv(HOUR)
+                while (zero + h * HOUR < end) {
+                    val from = maxOf(s.start, zero + h * HOUR, day.first)
+                    val to = minOf(end, zero + (h + 1) * HOUR, day.last + 1)
+                    if (to > from) hours.merge(h, s.value * (to - from) / (end - s.start), Double::plus)
+                    h++
+                }
+            }
+            return hours
         }
 
         /** Over every night both had a value: their averages, the average difference (b − a) and how far apart. */
@@ -182,6 +215,7 @@ class CompareService(
                 apart = round(differences.map(::abs).average()),
                 lowest = round(differences.min()),
                 highest = round(differences.max()),
+                pairs = both.sumOf { it.pairs },
             )
         }
 

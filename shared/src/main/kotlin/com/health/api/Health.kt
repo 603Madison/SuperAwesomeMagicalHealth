@@ -272,8 +272,9 @@ enum class CompareKey(val label: String, val unit: String) {
 
 /**
  * Two devices' values for one thing on one night (or day). Readings are compared only over the
- * time both measured: five minutes at a time for heart rate, half an hour for the rest, [pairs]
- * being how many such spells there were. Sleep and steps are each device's own (pairs 0). For
+ * time both measured: five minutes at a time for heart rate, half an hour for the rest, and for
+ * steps the hours both were counting, [pairs] being how many such spells there were. Sleep is each
+ * device's own (pairs 0). For
  * [CompareKey.BEDTIME] and [CompareKey.WAKE], minutes after 6 pm the evening before.
  */
 @Serializable
@@ -303,6 +304,8 @@ data class ComparedMetric(
     /** The smallest and largest difference on a night: how steady it is. */
     val lowest: Double,
     val highest: Double,
+    /** The spells both measured in, over all of them: for steps, the hours both were counting. */
+    val pairs: Int = 0,
 )
 
 /**
@@ -322,4 +325,9 @@ data class DeviceComparison(
     val metrics: List<ComparedMetric> = emptyList(),
     /** Newest first; only nights either device recorded something in. */
     val nights: List<ComparedNight> = emptyList(),
-)
+) {
+    companion object {
+        /** Nights (or days) before the page says how two devices usually differ; fewer, and it says it's early. */
+        const val ENOUGH = 3
+    }
+}

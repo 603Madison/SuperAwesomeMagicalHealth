@@ -98,7 +98,7 @@ export function Compare() {
           </ul>
         )}
         <p className="muted small">
-          Readings are set side by side only where both were measuring: heart rate five minutes at a time, the rest half an hour at a time. Sleep and steps are each device's own.
+          Readings are set side by side only where both were measuring: heart rate five minutes at a time, steps an hour at a time (only the hours both were counting), the rest half an hour at a time. Sleep is each device's own.
           {placement(a!.kind, a!.name) === "strap" && " A chest strap reads the heart's own electrical beat, which makes it a good one to compare against."}
         </p>
       </Card>
@@ -173,7 +173,9 @@ export function Compare() {
 
 /** Which colour is which device, and their names where the page calls them "ring" and "strap". */
 function DeviceKey({ names, a, b }: { names: ShortNames; a: RecentDevice; b: RecentDevice }) {
-  const label = (which: "a" | "b", d: RecentDevice) => (names.words ? `${title(names, which)}: ${d.name}` : d.name);
+  // "Ring: COLMI R02_C301", but "Phone" alone where that's its name.
+  const label = (which: "a" | "b", d: RecentDevice) =>
+    names.words && d.name.trim().toLowerCase() !== names[which].toLowerCase() ? `${title(names, which)}: ${d.name}` : d.name;
   return (
     <ul className="legend compare-key">
       <li><span className="legend-key" style={{ background: A_COLOR }} aria-hidden="true" /><span><strong>{label("a", a)}</strong>, compared against</span></li>

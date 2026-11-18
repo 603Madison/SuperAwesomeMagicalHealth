@@ -179,8 +179,9 @@ export type CompareKey =
 
 /**
  * Two devices' values for one thing on one night (or day). Readings are compared only over the
- * time both measured, [pairs] being how many such spells there were; sleep and steps are each
- * device's own (pairs 0). For BEDTIME and WAKE, minutes after 6 pm the evening before.
+ * time both measured (for steps, the hours both were counting), [pairs] being how many such spells
+ * there were; sleep is each device's own (pairs 0). For BEDTIME and WAKE, minutes after 6 pm the
+ * evening before.
  */
 export interface ComparedValue {
   key: CompareKey;
@@ -211,6 +212,8 @@ export interface ComparedMetric {
   /** The smallest and largest difference on a night: how steady it is. */
   lowest: number;
   highest: number;
+  /** The spells both measured in, over all of them: for steps, the hours both were counting. Missing from older servers. */
+  pairs?: number;
 }
 
 /**

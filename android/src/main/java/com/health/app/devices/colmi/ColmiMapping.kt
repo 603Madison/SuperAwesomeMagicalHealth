@@ -12,6 +12,7 @@ import java.time.ZoneId
 /** What the ring recorded, as the server's samples and sleep sessions. Times are wall-clock in [zone]. */
 object ColmiMapping {
     private const val QUARTER_MS = 15 * 60_000L
+    private const val HOUR_MS = 60 * 60_000L
 
     /** Average kilocalories a step burns, for when the ring's own calories don't make sense. */
     private const val KCAL_PER_STEP = 0.04
@@ -26,11 +27,20 @@ object ColmiMapping {
             if (t > now) null else Sample(Metric.HEART_RATE, t, value = bpm.toDouble())
         }
 
-    /** Steps, active calories and distance, each over its quarter hour. */
-    fun activity(slots: List<StepSlot>, zone: ZoneId): List<Sample> = slots.flatMap { slot ->
+    /**
+     * Steps, active calories and distance, each over the time the ring kept them for. Rings number
+     * their slots in quarter hours, but many keep a whole hour in each (every slot on the hour):
+     * then each is an hour long, not the first quarter of one.
+     */
+    fun activity(slots: List<StepSlot>, zone: ZoneId): List<Sample> {
+        val hourly = slots.groupBy { it.date }.mapValues { (_, day) -> day.all { it.quarter % 4 == 0 } }
+        return slots.flatMap { slot -> activity(slot, zone, if (hourly[slot.date] == true) HOUR_MS else QUARTER_MS) }
+    }
+
+    private fun activity(slot: StepSlot, zone: ZoneId, length: Long): List<Sample> {
         val start = at(slot.date.atStartOfDay().plusMinutes(slot.quarter * 15L), zone)
-        val end = start + QUARTER_MS
-        buildList {
+        val end = start + length
+        return buildList {
             if (slot.steps > 0) add(Sample(Metric.STEPS, start, end, slot.steps.toDouble()))
             if (slot.distanceM > 0) add(Sample(Metric.DISTANCE, start, end, slot.distanceM.toDouble()))
             val kcal = plausibleCalories(slot)

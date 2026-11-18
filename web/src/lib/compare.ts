@@ -50,6 +50,20 @@ export const knownKey = (key: string): key is CompareKey => Object.prototype.has
 /** Counted by the day rather than the night. */
 const BY_DAY: CompareKey[] = ["STEPS", "DAY_HEART_RATE"];
 
+/** Nights (or days) before the page says how two devices usually differ, as the server's DeviceComparison.ENOUGH. */
+export const ENOUGH = 3;
+
+/** "1 day", "9 nights". */
+function counted(key: CompareKey, n: number, locale?: string): string {
+  const word = BY_DAY.includes(key) ? (n === 1 ? "day" : "days") : n === 1 ? "night" : "nights";
+  return `${n.toLocaleString(locale)} ${word}`;
+}
+
+/** "the one hour", "the 5 hours": the hours both devices were counting steps. */
+function hoursBoth(n: number, locale?: string): string {
+  return n === 1 ? "the one hour" : `the ${n.toLocaleString(locale)} hours`;
+}
+
 // ---- Which device is which ----
 
 export type Placement = "ring" | "watch" | "strap" | "phone";
@@ -72,6 +86,7 @@ export function placement(kind: DeviceKind | undefined, name: string): Placement
   if (words.some((w) => CHEST_WORDS.includes(w) || STRAP_MODEL.test(w))) return "strap";
   if (words.some((w) => w === "ring" || w === "oura" || w === "colmi")) return "ring";
   if (words.some((w) => WRIST_WORDS.includes(w))) return "watch";
+  if (words.includes("phone")) return "phone";
   return null;
 }
 
@@ -203,15 +218,27 @@ function sentenceUnit(key: CompareKey, fmt: CompareFormat): string {
 /**
  * How far apart two devices read on one thing, in plain words, as parts to join with " · ":
  * "The ring read 3 bpm higher than the strap", "4 apart on average", "from −1 to +7", "9 nights".
- * HRV also as a share of [a]'s average: "6 ms (12%) lower".
+ * HRV also as a share of [a]'s average: "6 ms (12%) lower". Steps as a share too, over only the
+ * hours both were counting: "In the 5 hours both were counting, the ring counted 83% more steps
+ * than the phone". With fewer than [ENOUGH] nights, it says it's early rather than how far apart
+ * they usually are.
  */
 export function metricSentence(m: ComparedMetric, names: ShortNames, fmt: CompareFormat): string[] {
   const unit = COMPARE_KEYS[m.key].unit;
   const b = called(names, "b", true);
   const a = called(names, "a");
   const d = m.difference;
+  const hours = m.key === "STEPS" && (m.pairs ?? 0) > 0 ? m.pairs! : 0;
   let lead: string;
-  if (noDifference(m.key, d, fmt)) {
+  if (unit === "steps") {
+    const share = m.a > 0 ? Math.round((Math.abs(d) / m.a) * 100) : 0;
+    // As a share of a's; without one to share out, the difference itself.
+    const amount = share > 0 ? `${share}% ${d > 0 ? "more" : "fewer"} steps`
+      : m.a > 0 || noDifference(m.key, d, fmt) ? "" : `${size(m.key, d, fmt)} ${d > 0 ? "more" : "fewer"} steps`;
+    const who = hours > 0 ? called(names, "b") : b;
+    const said = amount ? `${who} counted ${amount} than ${a}` : `${who} and ${a} counted about the same steps`;
+    lead = hours > 0 ? `In ${hoursBoth(hours, fmt.locale)} both were counting, ${said}` : said;
+  } else if (noDifference(m.key, d, fmt)) {
     lead = `${b} and ${a} read the same on average`;
   } else {
     const amount = size(m.key, d, fmt);
@@ -219,7 +246,6 @@ export function metricSentence(m: ComparedMetric, names: ShortNames, fmt: Compar
     switch (unit) {
       case "min": lead = `${b} counted ${amount} ${up ? "more" : "less"} than ${a}`; break;
       case "clock": lead = `${b} put it ${amount} ${up ? "later" : "earlier"} than ${a}`; break;
-      case "steps": lead = `${b} counted ${amount} ${up ? "more" : "fewer"} steps than ${a}`; break;
       default: {
         const share = m.key === "HRV" && m.a > 0 ? ` (${Math.round((Math.abs(d) / m.a) * 100)}%)` : "";
         lead = `${b} read ${amount}${sentenceUnit(m.key, fmt)}${share} ${up ? "higher" : "lower"} than ${a}`;
@@ -227,14 +253,17 @@ export function metricSentence(m: ComparedMetric, names: ShortNames, fmt: Compar
     }
   }
   const parts = [lead];
+  if (m.count < ENOUGH) {
+    parts.push(`only ${counted(m.key, m.count, fmt.locale)} so far: a few more will show what's usual`);
+    return parts;
+  }
   // The range's ends: "−1", "+7", and a night with no difference as plain "0".
   const end = (v: number) => (noDifference(m.key, v, fmt) ? size(m.key, 0, fmt) : signedText(m.key, v, fmt));
-  if (m.count > 1) {
+  if (unit !== "steps") {
     parts.push(`${size(m.key, m.apart, fmt)} apart on average`);
     if (m.lowest !== m.highest) parts.push(`from ${end(m.lowest)} to ${end(m.highest)}`);
   }
-  const day = BY_DAY.includes(m.key);
-  parts.push(`${m.count.toLocaleString(fmt.locale)} ${day ? (m.count === 1 ? "day" : "days") : m.count === 1 ? "night" : "nights"}`);
+  parts.push(counted(m.key, m.count, fmt.locale));
   return parts;
 }
 
@@ -245,13 +274,14 @@ export function knownMetrics(metrics: ComparedMetric[]): ComparedMetric[] {
 
 /**
  * Compare devices in one line, for Body's row: how far apart the two read on heart rate at night
- * (or the first thing both measured): "The ring read 3 bpm higher than the strap". Null with
- * nothing both measured.
+ * (or the first thing both measured): "The ring read 3 bpm higher than the strap", or "Only 1
+ * night together so far" before there's [ENOUGH] to say. Null with nothing both measured.
  */
 export function compareLine(c: Pick<DeviceComparison, "a" | "b" | "metrics">, fmt: CompareFormat): string | null {
   const metrics = knownMetrics(c.metrics);
   const m = metrics.find((x) => x.key === "NIGHT_HEART_RATE") ?? metrics[0];
   if (!m || !c.a || !c.b) return null;
+  if (m.count < ENOUGH) return `Only ${counted(m.key, m.count, fmt.locale)} together so far`;
   return metricSentence(m, shortNames(c.a, c.b), fmt)[0];
 }
 

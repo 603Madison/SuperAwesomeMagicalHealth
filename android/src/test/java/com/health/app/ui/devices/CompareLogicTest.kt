@@ -48,6 +48,8 @@ class CompareLogicTest {
         assertEquals("ring", Compare.noun(DeviceKind.HEALTH_CONNECT, "Oura"))
         assertEquals("strap", Compare.noun(DeviceKind.HEART_RATE_STRAP, "Anything"))
         assertNull(Compare.noun(DeviceKind.HEALTH_CONNECT, "Health Connect"))
+        // Health Connect's own count of the phone's steps.
+        assertEquals("phone", Compare.noun(DeviceKind.HEALTH_CONNECT, "Phone"))
         assertNull(Compare.noun(null, "Something new"))
     }
 
@@ -64,9 +66,11 @@ class CompareLogicTest {
         // Nothing apart at all: no "0 apart", no "from 0 to 0".
         val level = metric(CompareKey.ASLEEP, 3, 428.0, 428.0, 0.0, 0.2, -0.3, 0.3)
         assertEquals("The ring and the watch counted the same on average · 3 nights", Compare.sentence(level, ringAndWatch, locale = us))
-        // One night: nothing about spread.
+        // Too few nights: it says it's early, not how far apart they usually are.
         val once = metric(CompareKey.NIGHT_HEART_RATE, 1, 56.0, 58.0, 2.0, 2.0, 2.0, 2.0)
-        assertEquals("The ring read 2 bpm higher than the strap · 1 night", Compare.sentence(once, ringAndStrap, locale = us))
+        assertEquals("The ring read 2 bpm higher than the strap · only 1 night so far: a few more will show what's usual", Compare.sentence(once, ringAndStrap, locale = us))
+        val twice = metric(CompareKey.NIGHT_HEART_RATE, 2, 56.0, 58.0, 2.0, 3.0, 1.0, 3.0)
+        assertEquals("The ring read 2 bpm higher than the strap · only 2 nights so far: a few more will show what's usual", Compare.sentence(twice, ringAndStrap, locale = us))
     }
 
     @Test
@@ -83,8 +87,18 @@ class CompareLogicTest {
         assertEquals("The ring said you fell asleep 12 min later than the watch did", Compare.headline(metric(CompareKey.BEDTIME, 3, 320.0, 332.0, 12.0, 12.0, 8.0, 15.0), ringAndWatch, locale = us))
         assertEquals("The ring said you woke 8 min earlier than the watch did", Compare.headline(metric(CompareKey.WAKE, 3, 760.0, 752.0, -8.0, 8.0, -9.0, -6.0), ringAndWatch, locale = us))
         assertEquals("The ring and the watch agreed on the time, on average", Compare.headline(metric(CompareKey.WAKE, 3, 760.0, 760.2, 0.2, 2.0, -2.0, 2.0), ringAndWatch, locale = us))
-        val steps = metric(CompareKey.STEPS, 3, 9114.0, 8510.0, -604.0, 604.0, -900.0, -300.0)
-        assertEquals("The ring counted 604 fewer steps a day than the watch · 604 apart on average · from −900 to −300 · 3 days", Compare.sentence(steps, ringAndWatch, locale = us))
+        // Steps: as a share, over only the hours both were counting.
+        val steps = metric(CompareKey.STEPS, 3, 9114.0, 8510.0, -604.0, 604.0, -900.0, -300.0).copy(pairs = 31)
+        assertEquals("In the 31 hours both were counting, the ring counted 7% fewer steps than the watch · 3 days", Compare.sentence(steps, ringAndWatch, locale = us))
+        assertEquals("In the one hour both were counting, the ring counted 7% fewer steps than the watch", Compare.headline(steps.copy(pairs = 1), ringAndWatch, locale = us))
+        assertEquals("The ring counted 7% fewer steps than the watch", Compare.headline(steps.copy(pairs = 0), ringAndWatch, locale = us))
+        assertEquals("In the 31 hours both were counting, the ring and the watch counted about the same steps", Compare.headline(steps.copy(b = 9115.0, difference = 1.0), ringAndWatch, locale = us))
+        // The ring against the phone, on the first day.
+        val phone = Compare.names(RecentDevice("r", "COLMI R02_C301", DeviceKind.COLMI_RING), RecentDevice("p", "Phone", DeviceKind.HEALTH_CONNECT))
+        assertEquals(
+            "In the 5 hours both were counting, the phone counted 45% fewer steps than the ring · only 1 day so far: a few more will show what's usual",
+            Compare.sentence(metric(CompareKey.STEPS, 1, 1054.0, 576.0, -478.0, 478.0, -478.0, -478.0).copy(pairs = 5), phone, locale = us),
+        )
         val skin = metric(CompareKey.SKIN_TEMPERATURE, 3, 33.2, 33.6, 0.4, 0.4, 0.3, 0.5)
         assertEquals("The ring read 0.4 °C warmer than the watch", Compare.headline(skin, ringAndWatch, locale = us))
         // A °F difference is 9/5 as big.

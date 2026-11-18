@@ -92,6 +92,7 @@ object Compare {
                 words.any { it in CHEST_WORDS || STRAP_MODEL.matches(it) } -> "strap"
                 "ring" in words || "oura" in words || "colmi" in words -> "ring"
                 words.any { it in WRIST_WORDS } -> "watch"
+                "phone" in words -> "phone"
                 else -> null
             }
         }
@@ -238,6 +239,7 @@ object Compare {
     fun headline(m: ComparedMetric, names: Names, units: Units = Units.METRIC, locale: Locale = Locale.getDefault()): String {
         val b = names.subject(names.b)
         val a = names.within(names.a)
+        if (m.key == CompareKey.STEPS) return stepsHeadline(m, names, locale)
         if (none(m.key, m.difference, units)) {
             return when (m.key.unit) {
                 "min", "steps" -> "$b and $a counted the same on average"
@@ -251,7 +253,6 @@ object Compare {
             "min" -> "$b counted $x ${if (up) "more" else "less"} ${thing(m.key)} than $a"
             "clock" -> if (m.key == CompareKey.BEDTIME) "$b said you fell asleep $x ${if (up) "later" else "earlier"} than $a did"
             else "$b said you woke $x ${if (up) "later" else "earlier"} than $a did"
-            "steps" -> "$b counted $x ${if (up) "more" else "fewer"} steps a day than $a"
             "bpm" -> "$b read $x bpm ${if (up) "higher" else "lower"} than $a"
             "ms" -> "$b read $x ms ${if (up) "higher" else "lower"} than $a" + (percent(m)?.let { " ($it% ${if (up) "higher" else "lower"})" } ?: "")
             "%" -> "$b read $x% ${if (up) "higher" else "lower"} than $a"
@@ -261,6 +262,29 @@ object Compare {
         }
     }
 
+    /**
+     * Steps, as a share of a's, over only the hours both were counting: "In the 5 hours both were
+     * counting, the phone counted 45% fewer steps than the ring". A day's totals say little: a phone
+     * counts only while it's carried, a ring all day.
+     */
+    private fun stepsHeadline(m: ComparedMetric, names: Names, locale: Locale): String {
+        val a = names.within(names.a)
+        val share = if (m.a > 0) (abs(m.difference) / m.a * 100).roundToInt() else 0
+        val more = if (m.difference > 0) "more" else "fewer"
+        val amount = when {
+            share > 0 -> "$share% $more steps"
+            m.a > 0 || none(m.key, m.difference) -> null
+            else -> "${number(m.key, m.difference, locale)} $more steps"
+        }
+        val hours = m.pairs
+        val b = if (hours > 0) names.within(names.b) else names.subject(names.b)
+        val said = if (amount != null) "$b counted $amount than $a" else "$b and $a counted about the same steps"
+        return if (hours > 0) "In ${hoursBoth(hours)} both were counting, $said" else said
+    }
+
+    /** "the one hour", "the 5 hours". */
+    private fun hoursBoth(n: Int): String = if (n == 1) "the one hour" else "the ${Format.number(n)} hours"
+
     /** HRV's difference as a share of a's average, rounded: 12 for 12%. Null where that says nothing. */
     fun percent(m: ComparedMetric): Int? {
         if (m.a <= 0) return null
@@ -269,19 +293,25 @@ object Compare {
 
     /**
      * The card's line: "The ring read 3 bpm higher than the strap · 4 apart on average · from −1
-     * to +7 · 9 nights". How far apart and the spread only when there's more than one night to say
-     * it of, and something to say ("0 apart", "from 0 to 0" are left out).
+     * to +7 · 9 nights". With fewer than [DeviceComparison.ENOUGH] nights, it says it's early
+     * instead of how far apart they usually are. Nothing that says nothing ("0 apart", "from 0 to 0").
      */
     fun sentence(m: ComparedMetric, names: Names, units: Units = Units.METRIC, locale: Locale = Locale.getDefault()): String {
+        if (m.count < DeviceComparison.ENOUGH) return "${headline(m, names, units, locale)} · ${early(m)}"
         val lowest = signed(m.key, m.lowest, units, locale)
         val highest = signed(m.key, m.highest, units, locale)
+        // Steps are over different hours each day, so a day's difference says little on its own.
+        val spread = m.key != CompareKey.STEPS
         return listOfNotNull(
             headline(m, names, units, locale),
-            if (m.count > 1 && !none(m.key, m.apart, units)) "${amount(m.key, m.apart, units, locale)} apart on average" else null,
-            if (m.count > 1 && lowest != highest) "from $lowest to $highest" else null,
+            if (spread && !none(m.key, m.apart, units)) "${amount(m.key, m.apart, units, locale)} apart on average" else null,
+            if (spread && lowest != highest) "from $lowest to $highest" else null,
             count(m.key, m.count),
         ).joinToString(" · ")
     }
+
+    /** With fewer than [DeviceComparison.ENOUGH] nights: "only 1 night so far: a few more will show what's usual". */
+    fun early(m: ComparedMetric): String = "only ${count(m.key, m.count)} so far: a few more will show what's usual"
 
     // ---- Night by night
 

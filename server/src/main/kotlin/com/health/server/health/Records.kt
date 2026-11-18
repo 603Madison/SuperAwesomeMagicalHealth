@@ -18,20 +18,44 @@ import com.health.server.insights.DeviceRef
 import com.health.server.util.Random
 import kotlinx.serialization.builtins.ListSerializer
 
+/** What a device is called when it first sends something. */
+object DeviceNames {
+    /** Health Connect's own count of the phone's steps: its source has an id where a name would be. */
+    private const val PHONE = "com.android.healthconnect.phone"
+
+    /** A name that's only an id: a letter or two, then a long run of hex digits. */
+    private val MACHINE = Regex("[a-z]{0,2}[0-9a-f]{16,}", RegexOption.IGNORE_CASE)
+
+    fun machineMade(name: String): Boolean = MACHINE.matches(name.trim())
+
+    /** The name sent, unless it's empty or only an id: then "Phone" for the phone's own steps, or the kind of device. */
+    fun of(info: DeviceInfo, identifier: String = info.identifier.trim()): String {
+        val given = info.name.trim().take(120)
+        return when {
+            given.isNotEmpty() && !machineMade(given) -> given
+            identifier.startsWith(PHONE) -> "Phone"
+            else -> info.kind.label
+        }
+    }
+}
+
 /** The devices each person's data came from. Entries made by hand belong to a "device" of their own. */
 class DeviceStore(private val db: Database, private val clock: () -> Long = System::currentTimeMillis) {
     /** The device's id, adding it the first time it sends anything; refreshes its name and battery. */
     fun upsert(tx: Tx, userId: String, info: DeviceInfo, synced: Boolean): String = with(tx) {
         val identifier = info.identifier.trim().take(200).ifBlank { throw ApiError.badRequest("A device needs an identifier") }
-        val name = info.name.trim().take(120).ifBlank { info.kind.label }
-        val existing = one("SELECT id FROM devices WHERE user_id = ? AND kind = ? AND identifier = ?", userId, info.kind, identifier) { it.string("id") }
+        val name = DeviceNames.of(info, identifier)
+        val existing = one("SELECT id, name FROM devices WHERE user_id = ? AND kind = ? AND identifier = ?", userId, info.kind, identifier) { it.string("id") to it.string("name") }
         if (existing != null) {
+            val (existingId, existingName) = existing
+            // A name that was only an id (as older apps sent) gives way to a real one; a name the person chose stays.
+            val rename = DeviceNames.machineMade(existingName) && !DeviceNames.machineMade(name)
             update(
-                """UPDATE devices SET model = COALESCE(?, model), firmware = COALESCE(?, firmware), battery = COALESCE(?, battery),
-                   last_sync_at = CASE WHEN ? THEN ? ELSE last_sync_at END WHERE id = ?""",
-                info.model?.take(120), info.firmware?.take(60), info.battery?.coerceIn(0, 100), synced, clock(), existing,
+                """UPDATE devices SET name = CASE WHEN ? THEN ? ELSE name END, model = COALESCE(?, model), firmware = COALESCE(?, firmware),
+                   battery = COALESCE(?, battery), last_sync_at = CASE WHEN ? THEN ? ELSE last_sync_at END WHERE id = ?""",
+                rename, name, info.model?.take(120), info.firmware?.take(60), info.battery?.coerceIn(0, 100), synced, clock(), existingId,
             )
-            return existing
+            return existingId
         }
         val id = Random.id()
         update(

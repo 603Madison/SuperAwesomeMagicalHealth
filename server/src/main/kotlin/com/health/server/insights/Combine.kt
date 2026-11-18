@@ -88,6 +88,7 @@ object Combine {
                 words.any { it in CHEST_WORDS || STRAP_MODEL.matches(it) } -> Placement.CHEST
                 "ring" in words || "oura" in words || "colmi" in words -> Placement.FINGER
                 words.any { it in WRIST_WORDS } -> Placement.WRIST
+                "phone" in words -> Placement.PHONE
                 else -> Placement.OTHER
             }
         }

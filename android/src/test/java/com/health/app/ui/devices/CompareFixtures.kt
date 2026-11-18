@@ -128,6 +128,20 @@ object CompareFixtures {
         )
     }
 
+    // ---- The phone's own steps checked against the ring: one day, over the hours both were counting.
+
+    val phoneSteps = RecentDevice("dev-phone-steps", "Phone", DeviceKind.HEALTH_CONNECT, lastSyncAt = now - 15 * MINUTE)
+
+    val phoneVsRing: DeviceComparison by lazy {
+        val day = today.minusDays(1).toString()
+        DeviceComparison(
+            days = 14, from = today.minusDays(13).toString(), to = today.toString(), a = ring, b = phoneSteps,
+            devices = listOf(ring, phoneSteps),
+            metrics = listOf(ComparedMetric(CompareKey.STEPS, 1, 1023.0, 432.0, -591.0, 591.0, -591.0, -591.0, pairs = 4)),
+            nights = listOf(ComparedNight(day, values = listOf(v(CompareKey.STEPS, 1023.0, 432.0, 4)))),
+        )
+    }
+
     // ---- The ring checked against the watch: three nights, each with both nights' stages.
 
     val ringVsWatch: DeviceComparison by lazy {

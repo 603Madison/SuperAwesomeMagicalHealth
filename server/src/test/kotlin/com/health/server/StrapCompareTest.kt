@@ -8,6 +8,8 @@ import com.health.api.Sample
 import com.health.api.SleepSession
 import com.health.api.SleepStage
 import com.health.api.StageSpan
+import com.health.server.health.CompareService
+import com.health.server.health.DeviceNames
 import com.health.server.health.StoredSample
 import com.health.server.insights.Combine
 import com.health.server.insights.DeviceRef
@@ -21,6 +23,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -136,6 +139,73 @@ class StrapCompareTest {
             assertEquals(-3.0, turned["metrics"]!!.jsonArray.map { it.jsonObject }.first { it.str("key") == "NIGHT_HEART_RATE" }["difference"]!!.jsonPrimitive.double, 1e-9)
             assertEquals(HttpStatusCode.BadRequest, admin.get("/api/devices/compare?a=${ids["COLMI R02_C301"]}&b=${ids["COLMI R02_C301"]}").status)
             assertEquals(HttpStatusCode.NotFound, admin.get("/api/devices/compare?a=nope").status)
+        }
+    }
+
+    @Test
+    fun `steps are set side by side over only the hours both were counting`() {
+        val ringRef = DeviceRef("ring", "COLMI R02_C301", DeviceKind.COLMI_RING)
+        val phone = DeviceRef("phone", "Phone", DeviceKind.HEALTH_CONNECT)
+        fun steps(device: DeviceRef, from: Long, to: Long?, value: Double) = StoredSample(nextId++, device.id, device.name, false, Metric.STEPS, from, to, value)
+        fun at(h: Int, m: Int = 0) = h * hour + m * minute
+        val day = 0L until 24 * hour
+        // The ring keeps a whole hour in each reading.
+        val ringSteps = listOf(7 to 153.0, 8 to 198.0, 9 to 55.0, 10 to 64.0, 12 to 200.0, 16 to 263.0, 17 to 409.0, 19 to 14.0)
+            .map { (h, v) -> steps(ringRef, at(h), at(h + 1), v) }
+        // The phone counts only while it's carried: walks a few minutes long, and a step or three when it's picked up.
+        val phoneSteps = listOf(
+            steps(phone, at(6, 45), at(6, 48), 3.0), // before the ring was on
+            steps(phone, at(7, 15), at(7, 19), 26.0), steps(phone, at(7, 49), at(7, 51), 84.0),
+            steps(phone, at(8, 13), null, 98.0), steps(phone, at(8, 18), at(8, 18), 14.0),
+            steps(phone, at(9, 48), null, 3.0), // picked up off the table: not counting
+            steps(phone, at(12, 59), null, 3.0),
+            steps(phone, at(16, 56), at(16, 58), 139.0),
+            steps(phone, at(17, 17), at(17, 19), 27.0), steps(phone, at(17, 20), at(17, 21), 14.0),
+            steps(phone, at(17, 50), at(18, 10), 60.0), // half in each hour
+        )
+        val v = CompareService.steps(ringSteps, phoneSteps, day)!!
+        // 7, 8, 16 and 17: the hours both counted at least 20.
+        assertEquals(4, v.pairs)
+        assertEquals(153.0 + 198 + 263 + 409, v.a!!, 1e-9)
+        assertEquals(110.0 + 112 + 139 + 71, v.b!!, 1e-9)
+        // A reading over two hours is shared out between them.
+        val hourly = CompareService.hourly(phoneSteps, day)
+        assertEquals(71.0, hourly[17]!!, 1e-9)
+        assertEquals(30.0, hourly[18]!!, 1e-9)
+        // (A day's totals would have set the ring's 1,356 against the phone's 471.)
+        // Nothing both counted: nothing to compare.
+        assertNull(CompareService.steps(ringSteps, phoneSteps.filter { it.start < at(7) }, day))
+        assertNull(CompareService.steps(ringSteps, null, day))
+    }
+
+    @Test
+    fun `a device sent with only an id for a name gets a real one, and a name the person chose stays`() {
+        val phoneId = "com.android.healthconnect.phone.jb58517a34cda394cb89e25b2a0d76959"
+        assertTrue(DeviceNames.machineMade("Jb58517a34cda394cb89e25b2a0d76959"))
+        assertFalse(DeviceNames.machineMade("COLMI R02_C301"))
+        assertFalse(DeviceNames.machineMade("Polar H10 1A2B3C4D"))
+        assertEquals("Phone", DeviceNames.of(DeviceInfo(DeviceKind.HEALTH_CONNECT, phoneId, "Jb58517a34cda394cb89e25b2a0d76959")))
+        assertEquals("Health Connect", DeviceNames.of(DeviceInfo(DeviceKind.HEALTH_CONNECT, "com.example.abc", "0123456789abcdef0123")))
+        assertEquals("Fitbit Charge 6", DeviceNames.of(DeviceInfo(DeviceKind.HEALTH_CONNECT, "com.fitbit.FitbitMobile", "Fitbit Charge 6")))
+
+        serverTest(testServices()) { s ->
+            val me = runBlocking { s.users.byUsername("admin")!!.id }
+            runBlocking {
+                // As it was saved before: the id as its name.
+                s.db.tx { update("INSERT INTO devices (id, user_id, kind, identifier, name, created_at) VALUES (?, ?, ?, ?, ?, ?)", "hc", me, DeviceKind.HEALTH_CONNECT, phoneId, "Jb58517a34cda394cb89e25b2a0d76959", 0L) }
+                // An older app sends the id again; the server still knows it's the phone.
+                s.ingest.ingest(me, IngestBatch(DeviceInfo(DeviceKind.HEALTH_CONNECT, phoneId, "Jb58517a34cda394cb89e25b2a0d76959"), samples = listOf(Sample(Metric.STEPS, 1_000_000L, value = 12.0))))
+                assertEquals("Phone", s.devices.list(me).single { it.id == "hc" }.name)
+                // Renamed by the person: kept, whatever the app sends.
+                s.devices.rename(me, "hc", "My Pixel")
+                s.ingest.ingest(me, IngestBatch(DeviceInfo(DeviceKind.HEALTH_CONNECT, phoneId, "Phone", model = "Pixel 9"), samples = listOf(Sample(Metric.STEPS, 2_000_000L, value = 12.0))))
+                val device = s.devices.list(me).single { it.id == "hc" }
+                assertEquals("My Pixel", device.name)
+                assertEquals("Pixel 9", device.model)
+                // A strap's model number and a ring's address are names, not ids.
+                s.ingest.ingest(me, IngestBatch(DeviceInfo(DeviceKind.COLMI_RING, "30:36:43:34:C3:01", "COLMI R02_C301"), samples = listOf(Sample(Metric.STEPS, 3_000_000L, value = 5.0))))
+                assertTrue(s.devices.list(me).any { it.name == "COLMI R02_C301" })
+            }
         }
     }
 

@@ -222,10 +222,18 @@ is a `DeviceKind`: `COLMI_RING`, `PEBBLE`, `GARMIN`, `HEALTH_CONNECT`, `GADGETBR
 
 **Comparing two devices.** Readings are set side by side only over the time both measured: heart
 rate five minutes at a time, the rest half an hour at a time (`ComparedValue.pairs` counts the
-spells). A night is both devices' sleep together, or 10 pm to 7 am without any; sleep and steps
-are each device's own. `BEDTIME` and `WAKE` are minutes after 6 pm on the evening before the
-night's `date` (the morning it ended), in the person's time zone. Nights are newest first, and
-only those either device recorded something in.
+spells). Steps are compared over only the hours of the day both counted at least 20 in (a phone
+counts only while it's carried; rings keep steps by the hour), a reading over several hours shared
+out between them; their `pairs` are those hours, and `ComparedMetric.pairs` adds them up. A night
+is both devices' sleep together, or 10 pm to 7 am without any; sleep is each device's own.
+`BEDTIME` and `WAKE` are minutes after 6 pm on the evening before the night's `date` (the morning
+it ended), in the person's time zone. Nights are newest first, and only those either device
+recorded something in. With fewer than `DeviceComparison.ENOUGH` (3) nights or days for a thing,
+the apps say it's early rather than how far apart the devices usually read.
+
+A device sent with only an id for a name (Health Connect's own count of the phone's steps sends
+one) is called "Phone" for that, or by its kind otherwise; a saved name that was only an id gives
+way to a real one on the next sync, and a name the person chose is never changed.
 
 ### More than one device
 

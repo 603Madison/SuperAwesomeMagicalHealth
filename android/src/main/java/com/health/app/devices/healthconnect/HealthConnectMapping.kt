@@ -41,8 +41,12 @@ object HealthConnectMapping {
         record.metadata.dataOrigin.packageName != ownPackage &&
             record.metadata.clientRecordId?.startsWith(HealthConnectExportMapping.PREFIX) != true
 
+    /** Health Connect's own count of the phone's steps: its source has an id where a name would be. */
+    fun isPhone(packageName: String) = packageName.startsWith("com.android.healthconnect.phone")
+
     /** A name people recognise for the app that wrote some data. */
     fun friendlyName(packageName: String): String = NAMES[packageName] ?: when {
+        isPhone(packageName) -> "Phone"
         isPebble(packageName) -> "Pebble"
         packageName.startsWith("nodomain.freeyourgadget.gadgetbridge") -> "Gadgetbridge"
         packageName.contains("garmin", ignoreCase = true) -> "Garmin"

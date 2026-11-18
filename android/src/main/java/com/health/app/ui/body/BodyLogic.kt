@@ -124,13 +124,18 @@ object BodyText {
     /** The order Compare devices' one line looks for a reading both devices measured. */
     private val COMPARE_FIRST = listOf(CompareKey.NIGHT_HEART_RATE, CompareKey.LOWEST_HEART_RATE, CompareKey.ASLEEP, CompareKey.HRV, CompareKey.DEEP)
 
-    /** Compare devices' one line: how the devices read against each other ("The ring read 3 bpm higher than the strap"); null with nothing yet. */
+    /**
+     * Compare devices' one line: how the devices read against each other ("The ring read 3 bpm
+     * higher than the strap"), or "Only 1 night together so far" while that's all there is; null
+     * with nothing yet.
+     */
     fun compareLine(c: DeviceComparison?, units: Units): String? {
         if (c == null) return null
         val a = c.a ?: return null
         val b = c.b ?: return null
         val metric = COMPARE_FIRST.firstNotNullOfOrNull { key -> c.metrics.firstOrNull { it.key == key && it.count > 0 } }
             ?: c.metrics.firstOrNull { it.count > 0 } ?: return null
+        if (metric.count < DeviceComparison.ENOUGH) return "Only ${Compare.count(metric.key, metric.count)} together so far"
         return Compare.headline(metric, Compare.names(a, b), units)
     }
 

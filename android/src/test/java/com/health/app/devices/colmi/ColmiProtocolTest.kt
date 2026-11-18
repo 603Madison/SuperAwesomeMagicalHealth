@@ -135,10 +135,26 @@ class ColmiProtocolTest {
     @Test
     fun `activity becomes quarter-hour steps, distance and calories`() {
         val zone = ZoneId.of("UTC")
-        val samples = ColmiMapping.activity(listOf(StepSlot(LocalDate.of(2026, 1, 1), 4, 400, 15.0, 300)), zone)
-        val start = LocalDate.of(2026, 1, 1).atTime(1, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+        val day = LocalDate.of(2026, 1, 1)
+        val samples = ColmiMapping.activity(listOf(StepSlot(day, 4, 400, 15.0, 300), StepSlot(day, 5, 100, 4.0, 80)), zone)
+        val start = day.atTime(1, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
         assertEquals(setOf(Metric.STEPS, Metric.DISTANCE, Metric.ACTIVE_CALORIES), samples.map { it.metric }.toSet())
-        assertTrue(samples.all { it.start == start && it.end == start + 15 * 60_000L })
+        assertTrue(samples.filter { it.start == start }.all { it.end == start + 15 * 60_000L })
+        assertEquals(6, samples.size)
+    }
+
+    @Test
+    fun `a ring that keeps a whole hour in each slot gives hour-long readings`() {
+        val zone = ZoneId.of("UTC")
+        val day = LocalDate.of(2026, 11, 17)
+        // Every slot on the hour (7:00, 8:00, 17:00), as the R02 sends them: each holds the hour.
+        val slots = listOf(StepSlot(day, 28, 153, 6.0, 110), StepSlot(day, 32, 198, 8.0, 140), StepSlot(day, 68, 409, 16.0, 300))
+        val steps = ColmiMapping.activity(slots, zone).filter { it.metric == Metric.STEPS }
+        assertEquals(listOf(7, 8, 17), steps.map { java.time.Instant.ofEpochMilli(it.start).atZone(zone).hour })
+        assertTrue(steps.all { it.end == it.start + 60 * 60_000L })
+        // Another day with a quarter off the hour is read in quarters, whatever this one does.
+        val other = ColmiMapping.activity(slots + StepSlot(day.plusDays(1), 29, 50, 2.0, 40), zone).filter { it.metric == Metric.STEPS && it.start >= day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() }
+        assertEquals(15 * 60_000L, other.single().end!! - other.single().start)
     }
 
     @Test
