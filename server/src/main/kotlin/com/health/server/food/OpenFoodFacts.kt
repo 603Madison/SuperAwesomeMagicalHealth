@@ -8,7 +8,6 @@ import com.health.api.Nutrients
 import com.health.server.Services
 import com.health.server.db.Database
 import com.health.server.util.fetchString
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -23,7 +22,8 @@ import kotlin.math.roundToInt
 /**
  * Open Food Facts (openfoodfacts.org), the open food database: searches and barcodes. Answers are
  * kept for a week, so the same search or barcode isn't asked for twice. Only the words searched
- * and the barcodes scanned are sent; never who's asking.
+ * and the barcodes scanned are sent; never who's asking. Searches are in English: a product found
+ * by name shows only with an English name (its own, or its main one where that's English).
  */
 class OpenFoodFacts(
     private val http: OkHttpClient,
@@ -36,49 +36,35 @@ class OpenFoodFacts(
         val product: String = "https://world.openfoodfacts.org/api/v2/product/",
     )
 
+    private val lookups = FoodLookups(db, clock)
+
     suspend fun search(text: String): List<Food> {
         val query = text.trim().take(100)
         if (query.length < 2) return emptyList()
-        return cached("search2:${query.lowercase()}") {
+        // "search3:" since searches are in English (the 2 since foods carry vitamins and minerals).
+        return lookups.cached("search3:${query.lowercase()}") {
             val url = urls.search.toHttpUrl().newBuilder()
                 .addQueryParameter("q", query)
+                .addQueryParameter("langs", "en")
                 .addQueryParameter("page_size", "25")
                 .addQueryParameter("fields", FIELDS)
                 .build()
             val json = ApiJson.parseToJsonElement(http.fetchString(request(url.toString()))).jsonObject
-            (json["hits"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::toFood) }.distinctBy { it.barcode ?: it.name }
+            (json["hits"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let { p -> toFood(p, englishOnly = true) } }.distinctBy { it.barcode ?: it.name }
         }
     }
 
     suspend fun barcode(code: String): Food? {
         val clean = code.filter { it.isDigit() }.take(20)
         if (clean.length < 6) return null
-        return cached("barcode2:$clean") {
+        return lookups.cached("barcode2:$clean", briefMisses = true) {
             val json = try {
                 ApiJson.parseToJsonElement(http.fetchString(request("${urls.product}$clean?fields=$FIELDS"))).jsonObject
             } catch (e: com.health.server.util.HttpException) {
                 if (e.code == 404) return@cached emptyList() else throw e
             }
-            listOfNotNull((json["product"] as? JsonObject)?.let(::toFood))
+            listOfNotNull((json["product"] as? JsonObject)?.let { toFood(it) })
         }.firstOrNull()
-    }
-
-    /** An answer kept for a week under [key] ("search2:", "barcode2:": the 2 since foods carry vitamins and minerals), or [fetch]ed. */
-    private suspend fun cached(key: String, fetch: suspend () -> List<Food>): List<Food> {
-        val now = clock()
-        val kept = db.tx {
-            one("SELECT data, fetched_at FROM food_lookups WHERE key = ?", key) { it.string("data") to it.long("fetched_at") }
-        }
-        if (kept != null && now - kept.second < KEEP_MS) {
-            runCatching { ApiJson.decodeFromString(FoodList, kept.first) }.getOrNull()?.let { return it }
-        }
-        val fresh = fetch()
-        db.tx {
-            update("INSERT OR REPLACE INTO food_lookups (key, data, fetched_at) VALUES (?, ?, ?)", key, ApiJson.encodeToString(FoodList, fresh), now)
-            // Keep the table small: lookups older than a month go.
-            update("DELETE FROM food_lookups WHERE fetched_at < ?", now - 30 * DAY_MS)
-        }
-        return fresh
     }
 
     private fun request(url: String) = Request.Builder().url(url)
@@ -87,14 +73,17 @@ class OpenFoodFacts(
         .build()
 
     companion object {
-        private const val FIELDS = "code,product_name,product_name_en,brands,nutriments,serving_size,serving_quantity"
-        private const val DAY_MS = 24L * 3600 * 1000
-        private const val KEEP_MS = 7 * DAY_MS
-        private val FoodList = ListSerializer(Food.serializer())
+        private const val FIELDS = "code,lang,product_name,product_name_en,brands,nutriments,serving_size,serving_quantity"
 
-        /** A product as a food: per serving where the label gives one, else per 100 g. */
-        fun toFood(product: JsonObject): Food? {
-            val name = (product.text("product_name") ?: product.text("product_name_en"))?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        /**
+         * A product as a food: per serving where the label gives one, else per 100 g. Its English
+         * name first; with [englishOnly] (searches), one with no English name isn't a food here
+         * (its main name counts only where its main language is English).
+         */
+        fun toFood(product: JsonObject, englishOnly: Boolean = false): Food? {
+            val english = product.text("product_name_en")?.trim()?.takeIf { it.isNotEmpty() }
+            val main = product.text("product_name")?.trim()?.takeIf { it.isNotEmpty() }
+            val name = english ?: main?.takeIf { !englishOnly || product.text("lang")?.trim()?.lowercase() == "en" } ?: return null
             val n = product["nutriments"] as? JsonObject ?: return null
             val kcal = n.number("energy-kcal_100g") ?: n.number("energy_100g")?.let { it / 4.184 } ?: return null
             if (kcal < 0 || kcal > 900) return null
@@ -151,7 +140,8 @@ class OpenFoodFacts(
             m to grams * m.fromGrams
         }.toMap()
 
-        private fun round(n: Nutrients): Nutrients {
+        /** Calories and macros to a tenth, vitamins and minerals to about three figures. */
+        internal fun round(n: Nutrients): Nutrients {
             fun r(v: Double) = (v * 10).roundToInt() / 10.0
             return Nutrients(
                 r(n.calories), r(n.protein), r(n.carbs), r(n.fat), n.fiber?.let(::r), n.sugar?.let(::r), n.saturatedFat?.let(::r), n.sodiumMg?.let(::r),
@@ -160,7 +150,7 @@ class OpenFoodFacts(
         }
 
         /** Three significant figures or so: vitamin B12's 0.24 µg keeps its digits, potassium's 412 mg needs none. */
-        private fun significant(v: Double): Double {
+        internal fun significant(v: Double): Double {
             val places = when {
                 v >= 100 -> 0
                 v >= 10 -> 1

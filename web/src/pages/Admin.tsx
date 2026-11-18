@@ -7,6 +7,7 @@ import type { AdminSettings, ServerSettings, SmtpSettings, User } from "../lib/t
 import { Button, errorToast, Field, Menu, Modal, PageHeader, Spinner, toast, Toggle, useLoad } from "../components/ui";
 import { AiAdminCard } from "./Assistant";
 import { RecordsAdmin, type RecordSecrets } from "./AdminRecords";
+import { FoodSearchPanel } from "./AdminFood";
 
 export function Admin() {
   return (
@@ -17,6 +18,7 @@ export function Admin() {
         <Users />
       </section>
       <AiAdminCard />
+      <FoodSearchPanel />
       <ServerPanels />
     </div>
   );
@@ -161,7 +163,10 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
     try {
       // Mail is saved on its own (below): keep whatever it is now, not what this page loaded with.
       const smtp = settings.smtp !== undefined ? (await api.adminSmtp().catch(() => null))?.settings ?? settings.smtp : undefined;
-      onSaved(await api.saveSettings(smtp ? { ...settings, smtp } : settings, { ...(secret ? { oidcClientSecret: secret } : {}), recordSecrets }));
+      // Food search is saved on its own too (FoodSearchPanel).
+      const food = (await api.adminSettings().catch(() => null))?.settings;
+      const foodNow = food ? { foodDatabase: food.foodDatabase, usdaFoods: food.usdaFoods, usdaLocal: food.usdaLocal } : {};
+      onSaved(await api.saveSettings({ ...(smtp ? { ...settings, smtp } : settings), ...foodNow }, { ...(secret ? { oidcClientSecret: secret } : {}), recordSecrets }));
       setSecret("");
       setRecordSecrets({});
       toast("Saved");
@@ -179,7 +184,6 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
             <input value={settings.publicUrl} placeholder={window.location.origin} onChange={(e) => setSettings({ ...settings, publicUrl: e.target.value })} />
           </Field>
           <Toggle label="People can sign in with a password" help="Off: everyone but the break-glass admin signs in through single sign-on." checked={settings.localLogin} onChange={(localLogin) => setSettings({ ...settings, localLogin })} />
-          <Toggle label="Look foods up in Open Food Facts" help={`Food searches and scanned barcodes are sent to openfoodfacts.org (nothing about who asked). Off: people use their own foods only.${lockedNote("SAMH_FOOD_DATABASE")}`} checked={settings.foodDatabase} onChange={(foodDatabase) => setSettings({ ...settings, foodDatabase })} />
           {settings.weather !== undefined && <Toggle label="Weather for symptom patterns" help="Air pressure from open-meteo.com for the town people choose, and the place search. Only a rough place is sent, nothing about who asked." checked={settings.weather} onChange={(weather) => setSettings({ ...settings, weather })} />}
           {settings.webhooksPrivateNetworks !== undefined && <Toggle label="Webhooks may call home networks" help="Lets people's webhooks reach addresses on private networks, where Home Assistant usually lives. Off: public addresses only." checked={settings.webhooksPrivateNetworks} onChange={(webhooksPrivateNetworks) => setSettings({ ...settings, webhooksPrivateNetworks })} />}
         </div>

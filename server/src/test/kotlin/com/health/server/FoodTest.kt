@@ -4,6 +4,7 @@ import com.health.server.food.OpenFoodFacts
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -27,7 +28,7 @@ class FoodTest {
                 return when {
                     request.path!!.startsWith("/search") -> MockResponse().setBody(
                         """{"hits":[
-                            {"code":"0894700010137","brands":["Chobani"],"product_name":"Nonfat Greek Yogurt","serving_size":"1 cup (170 g)","serving_quantity":170,
+                            {"code":"0894700010137","lang":"en","brands":["Chobani"],"product_name":"Nonfat Greek Yogurt","serving_size":"1 cup (170 g)","serving_quantity":170,
                              "nutriments":{"energy-kcal_100g":52.9,"proteins_100g":9.41,"carbohydrates_100g":3.53,"fat_100g":0,"sodium_100g":0.0382}},
                             {"code":"1","product_name":"No nutrition facts"}]}""",
                     )
@@ -44,7 +45,9 @@ class FoodTest {
     @After
     fun stop() = off.shutdown()
 
+    // Open Food Facts, USDA's fallback, switched on (with no USDA key, it's what's asked).
     private fun services() = testServices(foodUrls = OpenFoodFacts.Urls(off.url("/search").toString(), off.url("/product/").toString()))
+        .also { runBlocking { it.settings.update { s -> s.copy(foodDatabase = true) } } }
 
     @Test
     fun `products become foods per serving, and kilojoules turn into kilocalories`() {

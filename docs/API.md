@@ -121,8 +121,8 @@ can't open; meals lose their calories when the owner's or the viewer's numbers a
 | `PATCH /api/food/entries/{id}` · `DELETE …` | `FoodEntryChange` → `FoodEntry` |
 | `POST /api/food/copy` | `{from, to, meal?}`: copies a day's meal (or whole day) to another day |
 | `GET /api/food/suggestions?date=&meal=` | `FoodSuggestions`: ideas from the last 120 days for `meal` (without one, the meal it is now in the person's time zone: breakfast until 10:30, lunch until 15:00, a snack until 17:00, dinner until 21:30, then a snack) |
-| `GET /api/foods/search?q=` | `FoodSearch`: the person's foods, then Open Food Facts |
-| `GET /api/foods/barcode/{code}` | `Food`, or 404 |
+| `GET /api/foods/search?q=` | `FoodSearch`: the person's foods (`mine`), then in `online` USDA FoodData Central's everyday foods (Foundation, SR Legacy, FNDDS; up to 8) and packaged foods (Branded; up to 15), then Open Food Facts' (English names only) where it's switched on and USDA found fewer than 5. Each food once: one with the barcode of a food before it (leading zeros aside) or the same name and brand is left out. The apps put the person's Mealie recipes after `mine`. `onlineError` says, in plain words, when nothing could be asked (no USDA key, turned off, paused) or nothing answered |
+| `GET /api/foods/barcode/{code}` | `Food`: the person's own, else USDA's packaged food with exactly that `gtinUpc` (digits only, leading zeros aside; searched as scanned and as a 12-digit UPC-A, 13-digit EAN and 14-digit GTIN), else Open Food Facts' where it's switched on. 404 when nobody knows it (a miss is kept a day); 409 with a plain sentence when neither can be asked (no USDA key and Open Food Facts off) |
 | `GET /api/foods/recent` | `[Food]`: the person's foods, most used first |
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
 | `GET /api/food/targets` · `PUT` | `NutrientTargets` / `NutrientTargetsChange`: each nutrient's reference intake, upper limit and the person's own target |
@@ -159,7 +159,10 @@ without its numbers).
 and vitamins, each in its `unit`) to an amount; with `fiber`, `sugar`, `saturatedFat` and
 `sodiumMg` (the `ExtraNutrient`s), a nutrient that's missing is unknown, never 0, and sums and
 servings keep it that way (`Nutrients.plus`, `times`). Entries stored before micronutrients read
-with none. Open Food Facts foods carry every `Micronutrient.offKey` the product has (grams per
+with none. USDA foods carry each `Micronutrient` FoodData Central gives, by nutrient number (per 100 g
+in its own unit, G, MG or UG; vitamin A as RAE, vitamin D as D2 + D3 or from a label's IU, folate as
+DFE; omega-3 has no one number and is left out), per serving where there is one (a packaged food's
+label, a survey food's first real portion), else per 100 g. Open Food Facts foods carry every `Micronutrient.offKey` the product has (grams per
 100 g, turned into each unit with `fromGrams`; per serving where the label gives a serving, using
 the `_serving` value for what's only given that way). What a person types (`POST /api/foods`,
 `PUT`, and `POST /api/food/entries` with `nutrients`) is checked: each micronutrient 0 or more and
@@ -826,3 +829,27 @@ log to); every-account links never see them. `tools/list` describes each tool.
 `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/{id}`,
 `POST /api/admin/users/{id}/password`, `DELETE /api/admin/users/{id}/sessions`,
 `GET/PUT /api/admin/settings`, `POST /api/admin/oidc/test`.
+
+**USDA's food list on this server** (Admin › Food search; `ServerSettings.usdaLocal`: `use`,
+`packaged`, `autoUpdate`). With `use` and a copy here, food searches and barcodes are answered from
+`usda-foods.db` in the data folder and nothing leaves the server; until a copy is here, the online
+service answers where a key is set (and `onlineError` says the copy isn't here yet), else Open Food
+Facts where it's on.
+
+| | |
+|---|---|
+| `GET /api/admin/usda-local` | `UsdaLocalStatus`: `ready`; `working`, `phase` and `progress` (0–1) while a download is under way; the copy's `release` (date), `packaged`, `foods` and `bytes` on disk; `lastUpdated`, `lastChecked`, `nextCheck`; `newer` (a newer release's date, from the last check); `error` and `errorAt` (the last failure, in plain words); and roughly what each choice takes (`everydayDownload`, `everydayDisk`, `allDownload`, `allDisk`, in bytes) |
+| `POST /api/admin/usda-local/download` | Downloads the latest release (everyday foods, and packaged ones with `usdaLocal.packaged`) in the background → `UsdaLocalStatus`; 409 if one is under way |
+| `POST /api/admin/usda-local/check` | Looks for a newer release now → `UsdaLocalStatus` |
+| `DELETE /api/admin/usda-local` | Stops a download under way and removes the copy → `UsdaLocalStatus` |
+
+The files are found on USDA's download page (`https://fdc.nal.usda.gov/download-datasets/`, public
+domain) by their names, `FoodData_Central_{foundation_food,sr_legacy_food,survey_food,branded_food}_json_{date}.zip`,
+the newest of each kind. Free space is checked first (the largest file, the new copy and a margin);
+each file goes to a temporary file in the data folder, is read as it streams into a new copy beside
+the one in use (never whole into memory), and is deleted; the new copy is swapped in at once when
+complete, so search keeps working from the old one meanwhile, and a failure keeps it. Redirects are
+followed only to the same host over https. Each month (while `use` is on) the server looks for a
+newer release; with `autoUpdate` it downloads it too, the same way, and a failure waits for the
+next check. The copy keeps each food's name, brand, barcode, data type, serving and nutrients per
+serving, with an FTS5 index (a LIKE search where SQLite has no FTS5).

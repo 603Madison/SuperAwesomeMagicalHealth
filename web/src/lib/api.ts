@@ -1,7 +1,7 @@
 import type {
   AdminSettings, AuthConfig, CheckIn, DayFeed, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
-  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider,
+  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider, UsdaLocalStatus,
   HealthRecords, RecordAuthorize, RecordConnect, RecordConnection, RecordItem, RecordKind, RecordOrganization,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
@@ -519,4 +519,9 @@ export const api = {
   /** Saves the server's settings; each secret given is changed (an empty one removes it), the rest kept. */
   saveSettings: (settings: ServerSettings, secrets: SettingsSecrets = {}) => put<AdminSettings>("/api/admin/settings", { settings, ...secrets }),
   testOidc: (oidc: OidcSettings) => post<{ ok: boolean; message: string }>("/api/admin/oidc/test", oidc),
+  // USDA's food list kept on this server (Admin › Food search).
+  usdaLocal: () => get<UsdaLocalStatus>("/api/admin/usda-local"),
+  downloadUsdaLocal: () => post<UsdaLocalStatus>("/api/admin/usda-local/download"),
+  checkUsdaLocal: () => post<UsdaLocalStatus>("/api/admin/usda-local/check"),
+  removeUsdaLocal: () => del<UsdaLocalStatus>("/api/admin/usda-local"),
 };

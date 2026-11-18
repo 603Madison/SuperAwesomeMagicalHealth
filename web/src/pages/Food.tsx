@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ArrowRightLeft, Barcode, Copy, GlassWater, Lightbulb, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
 import { api } from "../lib/api";
@@ -17,6 +17,7 @@ import { amountText, logSuggestion } from "../components/Insights";
 import { FoodPhotoFlow, SnapPhoto } from "./FoodPhoto";
 import { CarriedLine, CarriedList, MicrosCard, MoreNutrients } from "./FoodMicros";
 import { scaled, typedNutrients, type NutrientKey } from "../lib/micros";
+import { sourceGroups, sourceName } from "../lib/foodSources";
 
 const MEALS: { id: Meal; label: string }[] = [
   { id: "BREAKFAST", label: "Breakfast" },
@@ -253,7 +254,7 @@ function MealCard({ meal, day, readOnly, numbers, onAdd, onEdit, onChanged, onRe
   );
 }
 
-/** Adding something eaten: search (your foods, then Open Food Facts), a barcode, recent foods, a quick add, or a new food. */
+/** Adding something eaten: search (your foods, Mealie, then USDA and Open Food Facts), a barcode, recent foods, a quick add, or a new food. */
 function AddFood({ date, meal, numbers, micros, onClose, onAdded }: { date: string; meal: Meal; numbers: boolean; micros: boolean; onClose: () => void; onAdded: () => void }) {
   const [tab, setTab] = useState<"search" | "recent" | "quick" | "new">("search");
   const [chosen, setChosen] = useState<FoodItem | null>(null);
@@ -311,8 +312,12 @@ function SearchFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: 
           {results?.mine.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
           {/* Mealie answers on its own, alongside the food database. */}
           <MealieResults query={isBarcode ? "" : query} numbers={numbers} onChoose={onChoose} onFound={setFromMealie} />
-          {results && results.online.length > 0 && <div className="result-group-title">Open Food Facts</div>}
-          {results?.online.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
+          {results && sourceGroups(results.online).map((g, k) => (
+            <Fragment key={`${g.title}-${k}`}>
+              <div className="result-group-title">{g.title}</div>
+              {g.foods.map((f, i) => <FoodRow key={`${f.barcode}-${i}`} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}
+            </Fragment>
+          ))}
           {results?.onlineError && <p className="muted small">{results.onlineError}</p>}
           {results && results.mine.length === 0 && results.online.length === 0 && !results.onlineError && !fromMealie && <p className="muted">Nothing found. Try other words, or add it as a new food.</p>}
         </div>
@@ -348,6 +353,8 @@ function Servings({ food, date, meal, numbers, micros, onBack, onClose, onAdded 
   const [busy, setBusy] = useState(false);
   const count = Number(servings.replace(",", ".")) || 0;
   const n = useMemo(() => scaled(food.nutrients, count), [food, count]);
+  // Where a food found online came from ("from USDA"); a Mealie recipe says so in its own way.
+  const from = food.source === "USDA" || food.source === "OPEN_FOOD_FACTS" ? `from ${sourceName(food.source)}` : null;
   const save = async () => {
     if (count <= 0) return;
     setBusy(true);
@@ -360,7 +367,7 @@ function Servings({ food, date, meal, numbers, micros, onBack, onClose, onAdded 
   };
   return (
     <Modal title={food.name} onClose={onClose} footer={<><Button variant="ghost" onClick={onBack}>Back</Button><Button variant="primary" busy={busy} onClick={save}>Add</Button></>}>
-      {food.brand && <p className="muted">{food.brand}{food.source === "OPEN_FOOD_FACTS" ? " · from Open Food Facts" : ""}</p>}
+      {(food.brand || from) && <p className="muted">{[food.brand, from].filter(Boolean).join(" · ")}</p>}
       <form className="two-col" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <Field label={`Servings of ${food.serving}`}>
           <input autoFocus inputMode="decimal" value={servings} onChange={(e) => {

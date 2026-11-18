@@ -1,5 +1,6 @@
 # SuperAwesomeMagicalHealth server: `podman compose up -d` (or `docker compose up -d`).
 # Everything it keeps (accounts, health data, food log, saved sign-ins, its encryption key) is in ./data.
+# Keeping USDA's food list on the server (Admin › Food search) adds about 105 MB there (4 MB for everyday foods only).
 services:
   superawesomemagicalhealth:
     image: ghcr.io/603madison/superawesomemagicalhealth:latest

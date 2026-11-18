@@ -25,7 +25,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
-import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 @Serializable
@@ -33,8 +32,6 @@ data class CopyRequest(val from: String, val to: String, val meal: Meal? = null)
 
 @Serializable
 data class Copied(val copied: Int)
-
-private val log = LoggerFactory.getLogger("samh.food")
 
 /** The food diary, the person's foods, the food database, and water. */
 fun Route.foodRoutes(services: Services) {
@@ -102,24 +99,16 @@ fun Route.foodRoutes(services: Services) {
             val user = call.requireUser(services)
             val query = call.request.queryParameters["q"].orEmpty().trim()
             val mine = services.foods.search(user.id, query)
-            var problem: String? = null
-            val online = if (!services.foodDatabaseFor(user.id) || query.length < 2) emptyList() else try {
-                services.foodDatabase.search(query)
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                log.warn("Open Food Facts search failed: {}", e.message)
-                problem = "The food database didn't answer; try again in a moment"
-                emptyList()
-            }
-            // Foods the person already has come first; the database's copies of them are left out.
-            val known = mine.mapNotNull { it.barcode }.toSet()
-            call.respond(FoodSearch(mine, online.filter { it.barcode == null || it.barcode !in known }, problem))
+            // Foods the person already has come first (the apps put Mealie's recipes next), then USDA's
+            // everyday and packaged foods, then Open Food Facts: each food once.
+            val found = services.foodFinder.search(user.id, query, mine)
+            call.respond(FoodSearch(mine, found.online, found.problem))
         }
         get("/barcode/{code}") {
             val user = call.requireUser(services)
             val code = call.parameters["code"].orEmpty().filter { it.isDigit() }
             val food = services.foods.byBarcode(user.id, code)
-                ?: (if (services.foodDatabaseFor(user.id)) runCatching { services.foodDatabase.barcode(code) }.onFailure { log.warn("Open Food Facts barcode lookup failed: {}", it.message) }.getOrNull() else null)
+                ?: services.foodFinder.barcode(user.id, code)
                 ?: throw ApiError.notFound("That barcode isn't in the food database yet; add the food yourself")
             call.respond(food)
         }

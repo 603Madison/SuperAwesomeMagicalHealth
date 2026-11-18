@@ -57,6 +57,11 @@ class Services(
     foodDatabaseUrls: OpenFoodFacts.Urls = OpenFoodFacts.Urls(),
     /** Where Epic's list of organizations and athenahealth are (a test server in tests). */
     recordsUrls: com.health.server.records.RecordsService.Urls = com.health.server.records.RecordsService.Urls(),
+    /** Where USDA FoodData Central's search is (a test server in tests). */
+    usdaFoodsUrl: String = com.health.server.food.UsdaFoods.SEARCH_URL,
+    /** USDA's download page, for the copy kept on this server, and the data folder's free space (both stand-ins in tests). */
+    usdaDownloadsUrl: String = com.health.server.food.UsdaLocal.PAGE_URL,
+    usdaFreeSpace: (() -> Long)? = null,
 ) : AutoCloseable {
     val users = UserStore(db, passwords, clock)
     val sessions = SessionStore(db, clock)
@@ -81,6 +86,16 @@ class Services(
     val foodDatabase = OpenFoodFacts(http, db, clock, foodDatabaseUrls)
     /** Whether Open Food Facts may be asked on [userId]'s behalf: on for the server, and not paused by them. */
     suspend fun foodDatabaseFor(userId: String): Boolean = settings.get().foodDatabase && privacy.allows(userId, com.health.api.DataPath.FOOD_DATABASE)
+    /** USDA FoodData Central, the food database (with the admin's key). */
+    val usdaFoods = com.health.server.food.UsdaFoods(http, db, clock, usdaFoodsUrl)
+    /** USDA's food list kept on this server, where the admin chooses it (searches and scans then never leave it). */
+    val usdaLocal = com.health.server.food.UsdaLocal(
+        config.dataDir, db, settings, http, clock, usdaDownloadsUrl,
+        loopback = { config.outboundLoopback },
+        freeSpace = usdaFreeSpace ?: { config.dataDir.usableSpace },
+    )
+    /** Searches and barcodes: USDA, and Open Food Facts as the fallback where it's switched on. */
+    val foodFinder = com.health.server.food.FoodFinder(this)
     val foods = FoodStore(db, clock)
     val entries = EntryStore(db, box, clock)
     val modules = ModuleService(
@@ -189,6 +204,7 @@ class Services(
     val medicalRecords: com.health.server.records.RecordsService by lazy { com.health.server.records.RecordsService(this, recordsUrls) }
 
     override fun close() {
+        usdaLocal.local.close()
         db.close()
     }
 

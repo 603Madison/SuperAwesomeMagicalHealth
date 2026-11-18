@@ -683,6 +683,7 @@ export interface ServerSettings {
   serverName: string;
   publicUrl: string;
   localLogin: boolean;
+  /** Also ask Open Food Facts when USDA doesn't know a food (off for new servers). */
   foodDatabase: boolean;
   crisisResources: CrisisResource[];
   oidc: OidcSettings;
@@ -693,6 +694,8 @@ export interface ServerSettings {
   webhooksPrivateNetworks?: boolean;
   /** Search USDA FoodData Central once an API key is set. */
   usdaFoods?: boolean;
+  /** USDA's food list kept on this server instead of asking its online service. */
+  usdaLocal?: UsdaLocalSettings;
   /** Medical records: the app registered with each system (secrets are set apart). */
   records?: RecordsSettings;
 }
@@ -716,6 +719,35 @@ export interface SmtpSettings {
   security: "NONE" | "STARTTLS" | "TLS";
   username: string;
   from: string;
+}
+
+/** The server's UsdaLocalSettings: use the copy on this server; with packaged foods; update by itself. */
+export interface UsdaLocalSettings {
+  use: boolean;
+  packaged: boolean;
+  autoUpdate: boolean;
+}
+
+/** GET /api/admin/usda-local: USDA's food list kept on this server (the server's UsdaLocalStatus). Sizes in bytes, times in ms. */
+export interface UsdaLocalStatus {
+  ready: boolean;
+  working?: boolean;
+  phase?: string | null;
+  progress?: number | null;
+  release?: string | null;
+  packaged?: boolean;
+  foods?: number;
+  bytes?: number;
+  lastUpdated?: number | null;
+  lastChecked?: number | null;
+  nextCheck?: number | null;
+  newer?: string | null;
+  error?: string | null;
+  errorAt?: number | null;
+  everydayDownload: number;
+  everydayDisk: number;
+  allDownload: number;
+  allDisk: number;
 }
 
 export interface AdminSettings {

@@ -81,7 +81,11 @@ the weekly email, shares, Home Assistant, signing in): who's at the other end, w
 with a switch to pause each one for yourself. Everything else stays put, and the apps load nothing
 from anywhere else (no fonts, trackers or adverts).
 
-**Food**: search your own foods and [Open Food Facts](https://openfoodfacts.org), scan barcodes,
+**Food**: search your own foods and [USDA FoodData Central](https://fdc.nal.usda.gov) (everyday
+foods and US packaged foods: kept on your server, so searches and scans never leave it, or asked
+online with a free key from [api.data.gov](https://api.data.gov/signup/); both set in Admin › Food
+search; [Open Food Facts](https://openfoodfacts.org) can fill in where USDA has nothing, if the
+admin turns it on), scan barcodes,
 quick-add calories, make your own foods, copy yesterday's breakfast, bring in your
 [Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections & privacy
 with an API token; each recipe's nutrition comes along, per serving), and track water and
@@ -89,7 +93,7 @@ with an API token; each recipe's nutrition comes along, per serving), and track 
 went with your sleep and HRV. Calorie
 targets come from your resting energy (Mifflin–St Jeor, with the female or male formula, or the
 average of both, as fits your body), your devices' active calories, and the weight change you're
-aiming for. **Vitamins and minerals** come along with foods that carry them (Open Food Facts, or
+aiming for. **Vitamins and minerals** come along with foods that carry them (USDA, Open Food Facts, or
 your own foods' "More nutrients"), and go to Health Connect with your food. Food shows fibre,
 sodium, iron, calcium, vitamin D, potassium and 22 more against adult reference intakes (the US
 Dietary Reference Intakes, with the same female, male or average values as your calorie formula,
@@ -266,6 +270,10 @@ install directly. Every release updates the repository (`.github/workflows/fdroi
 ## Running it
 
 The image is `ghcr.io/603madison/superawesomemagicalhealth`. Everything it keeps is in `/data`.
+Keeping USDA's food list on the server (Admin › Food search) adds `usda-foods.db` there: about 4 MB
+for everyday foods, or about 105 MB with packaged foods (about 214 MB is downloaded for that, to a
+temporary file in `/data` that's removed after). It's a copy anyone can download again, so backups
+can leave it out.
 
 ### Podman (Quadlet, the systemd way, shows in Cockpit)
 
@@ -357,7 +365,9 @@ Behind a reverse proxy, set `SAMH_PUBLIC_URL` and `SAMH_TRUST_PROXY=true`.
 | `SAMH_OIDC_ISSUER`, `SAMH_OIDC_CLIENT_ID`, `SAMH_OIDC_CLIENT_SECRET` | Single sign-on (turns it on) |
 | `SAMH_OIDC_BUTTON_LABEL`, `SAMH_OIDC_SCOPES`, `SAMH_OIDC_USER_GROUP`, `SAMH_OIDC_ADMIN_GROUP` | Its details |
 | `SAMH_LOCAL_LOGIN` | `false`: only the break-glass admin uses a password |
-| `SAMH_FOOD_DATABASE` | `false`: don't ask Open Food Facts (searches and barcodes stay on the server) |
+| `SAMH_USDA_API_KEY` | USDA FoodData Central's key (free, from api.data.gov/signup): food search and barcodes |
+| `SAMH_USDA_FOODS` | `false`: don't ask USDA FoodData Central |
+| `SAMH_FOOD_DATABASE` | `true`: also ask Open Food Facts when USDA doesn't know a food (off for new servers) |
 
 Settings given here win at every start; the rest are on the Admin page.
 
@@ -465,5 +475,6 @@ podman build -t superawesomemagicalhealth .
 ## Licence
 
 GPL-3.0-only. Lexend is under the SIL Open Font License (`licenses/Lexend-OFL.txt`). Food data
-from Open Food Facts is under the Open Database License. The "Get it on F-Droid" badge is F-Droid's
+from USDA FoodData Central is in the public domain (CC0); from Open Food Facts, under the Open
+Database License. The "Get it on F-Droid" badge is F-Droid's
 artwork, under CC BY-SA 3.0.
