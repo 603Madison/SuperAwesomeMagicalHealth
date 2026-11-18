@@ -62,7 +62,8 @@ class PrivacyService(private val services: Services) {
         val emails = profile.digest.emailEnabled && !profile.digest.email.isNullOrBlank()
         val mail = server.smtp
         val usdaKey = services.settings.usdaApiKey().isNotEmpty()
-        val records = services.medicalRecords.connections(user.id)
+        // Only those that can still reach their portal (one disconnected but kept sends nothing).
+        val records = services.medicalRecords.linked(user.id)
         val destinations = listOfNotNull(
             DataDestination(
                 DataPath.FOOD_DATABASE, "Open Food Facts", "A non-profit food database anyone can use",

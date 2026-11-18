@@ -702,24 +702,31 @@ the standard patient API (SMART on FHIR, R4) of **Epic** (MyChart) and **athenah
 each system once (Admin › Medical records: client ID, optional client secret for lasting access,
 and the redirect URI below); people then connect their own portals. Access tokens are sealed on the
 server and never sent to the apps. Never shared (no `X-SAMH-View`), not offered to the assistant or
-connector links, and gated by `DataPath.HEALTH_RECORDS`.
+connector links, and gated by `DataPath.HEALTH_RECORDS`: while it's paused, `connect`, `sync` and
+`organizations` answer 409 with "Medical records is paused in Settings › Where your data goes", and
+nothing is fetched.
 
 | | |
 |---|---|
 | `GET /api/records` | `HealthRecords`: the systems set up on this server, whether it's paused, and each `RecordConnection` with counts by `RecordKind` |
-| `GET /api/records/organizations?q=` | `RecordOrganization[]`: Epic organizations matching `q` from Epic's public endpoint list (`https://open.epic.com/Endpoints/R4`, kept a week), and athenahealth's single entry ("A practice on athenahealth", `https://api.platform.athenahealth.com/fhir/r4`), for the systems set up |
-| `POST /api/records/connect` | `RecordConnect` → `RecordAuthorize`: the portal's sign-in address (SMART discovery at `{fhirBaseUrl}/.well-known/smart-configuration`; PKCE S256; `state` bound to the person, ten minutes; scopes `launch/patient openid fhirUser offline_access patient/*.read`) |
-| `GET /api/records/callback?code=&state=` | Where the portal sends the browser back (the redirect URI to register: `{public URL}/api/records/callback`). Exchanges the code (with the client secret when one is set), saves the connection, brings the record in, then redirects to `/records?connected={id}` on the web, or `samhealth://records?connected={id}` for the phone app (`?error=` with a plain sentence when something went wrong) |
-| `POST /api/records/{id}/sync` | Brings that record up to date now (refreshing access where it lasts) → `RecordConnection` |
-| `DELETE /api/records/{id}?keep=false` | Disconnects: forgets its access, and with `keep=false` (the default) removes everything it brought in, labs too; `keep=true` keeps what's here |
-| `GET /api/records/items?kind=&connection=` | `RecordItem[]`, newest first |
+| `GET /api/records/organizations?q=` | `RecordOrganization[]`: up to 25 Epic organizations whose names have every word of `q` (each the start of a word in the name, any case) from Epic's public endpoint list (`https://open.epic.com/Endpoints/R4`, kept a week), then athenahealth's single entry ("A practice on athenahealth", `https://api.platform.athenahealth.com/fhir/r4`), for the systems set up. An empty `q` gives athenahealth's entry alone |
+| `POST /api/records/connect` | `RecordConnect` → `RecordAuthorize`: the portal's sign-in address. `fhirBaseUrl` must be exactly an address on Epic's list (a slash at the end doesn't matter) or athenahealth's, over https, for that `provider`; anything else is 400 and never asked. SMART discovery at `{fhirBaseUrl}/.well-known/smart-configuration` (else the CapabilityStatement's oauth-uris at `{fhirBaseUrl}/metadata`); PKCE S256; `state` (32 random bytes) bound to the person, single use, ten minutes; `aud` = `fhirBaseUrl`. Scopes: Epic `launch/patient openid fhirUser offline_access patient/*.read`; athenahealth `launch/patient openid fhirUser offline_access patient/Patient.r` and `patient/{type}.rs` for each type read |
+| `GET /api/records/callback?code=&state=` | Where the portal sends the browser back (the redirect URI to register: `{public URL}/api/records/callback`). No session needed: the `state` says whose it is (when a session cookie does come, it must be the same person's). Exchanges the code (the client secret as HTTP Basic when one is set, else `client_id` with PKCE alone), saves the connection (the same portal and patient again reuses its connection), brings the record in (waiting a few seconds, then carrying on in the background), then redirects to `/records?connected={id}` on the web, or `samhealth://records?connected={id}` for the phone app. Otherwise `?error=` with a plain sentence (never the portal's own words): "You didn't allow it, so nothing was connected", "That sign-in expired or was already used. Try connecting again"… |
+| `POST /api/records/{id}/sync` | Brings that record up to date now (refreshing access a minute before it runs out, keeping a new refresh token if the portal rotates it) → `RecordConnection`, whose `problem` says what went wrong ("Sign in again to bring it up to date" when the portal no longer accepts its access). 409 when it's paused or the system is no longer set up |
+| `DELETE /api/records/{id}?keep=false` | Disconnects: forgets its access (asking the portal to end it, where it offers revoking), and with `keep=false` (the default) removes the connection and everything it brought in, labs too. `keep=true` keeps what's here: the connection stays listed without access (`problem` says it's disconnected, `keepsUpdating` false) until it's removed or connected again, and its labs stay in Labs with their `source` |
+| `GET /api/records/items?kind=&connection=` | `RecordItem[]`, newest first (400 for an unknown `kind`) |
 
-What's read, per connection: `Patient` (only to check it's the person's own), lab `Observation`s
-(also saved as `LabResult`s with `source` = the organization and `ref` = `record:{connection}:{id}`,
-so they chart in Labs and are never added twice), vital-sign `Observation`s, `MedicationRequest`s,
-`Condition`s, `AllergyIntolerance`s, `Immunization`s and `Procedure`s. A kind the portal doesn't
-offer is skipped quietly. With lasting access (a refresh token), each connection is brought up to
-date once a day; without, each sign-in brings it up to date once.
+What's read, per connection: `Patient` (only to check it's the person's own; on athenahealth, also
+the practice's name), lab `Observation`s (`category=laboratory`; those with a plain number are also
+saved as `LabResult`s with `source` = the organization and `ref` = `record:{connection}:{id}`, so
+they chart in Labs, are never added twice and change when the record does; `ref` is never taken from
+`POST /api/labs`), vital-sign `Observation`s, `MedicationRequest`s (with `medication` ready for "Add
+to my medications"), problem-list `Condition`s, `AllergyIntolerance`s, `Immunization`s and
+`Procedure`s, each searched with `patient=` and following `next` pages on the same server. Anything
+about another patient, or entered in error, is left out. A kind the portal doesn't offer or allow
+(400, 403, 404) is skipped quietly; after a kind is read in full, what's no longer in the record is
+removed (its labs too). With lasting access (a refresh token), each connection is brought up to date
+once a day; without, each sign-in brings it up to date once.
 
 ## Sharing
 

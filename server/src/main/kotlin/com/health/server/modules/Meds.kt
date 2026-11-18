@@ -236,7 +236,11 @@ class MedsService(
 
     suspend fun saveLab(userId: String, lab: LabResult): LabResult {
         if (lab.name.isBlank() || !lab.value.isFinite()) throw ApiError.badRequest("A lab result needs a name and a value")
-        val clean = lab.copy(name = lab.name.trim().take(80), unit = lab.unit.trim().take(30), note = lab.note?.trim()?.take(1000)?.ifBlank { null }, id = null, date = null)
+        // `ref` is the server's own mark for a lab from a medical record (records/), never set from outside.
+        val clean = lab.copy(
+            name = lab.name.trim().take(80), unit = lab.unit.trim().take(30), note = lab.note?.trim()?.take(1000)?.ifBlank { null }, id = null, date = null,
+            source = lab.source?.trim()?.take(120)?.ifBlank { null }, ref = null,
+        )
         val date = profiles.days(userId).dateOf(clean.at)
         val id = entries.put(userId, EntryKind.LAB, null, date, clean.at, clean, LabResult.serializer())
         return clean.copy(id = id, date = date.toString())
