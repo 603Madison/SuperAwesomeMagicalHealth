@@ -481,6 +481,8 @@ export const api = {
   records: () => get<HealthRecords>("/api/records"),
   recordOrganizations: (query: string) => get<RecordOrganization[]>(`/api/records/organizations?q=${q(query)}`),
   connectRecords: (connect: RecordConnect) => post<RecordAuthorize>("/api/records/connect", connect),
+  /** Finishes connecting once the portal has sent the browser back with ?confirm=: only then is it connected. */
+  confirmRecords: (token: string) => post<RecordConnection>("/api/records/confirm", { token }),
   syncRecords: (id: string) => post<RecordConnection>(`/api/records/${q(id)}/sync`),
   /** Forgets a portal; with [keep], what it brought in stays. */
   disconnectRecords: (id: string, keep: boolean) => del<unknown>(`/api/records/${q(id)}?keep=${keep}`),

@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowDown, ArrowUp, CirclePause, ClipboardList, FlaskConical, HeartPulse, Hospital, Lock, LogIn, Pill, RefreshCw, Search, ShieldAlert,
-  Stethoscope, Syringe, TriangleAlert, Unplug, X,
+  Stethoscope, Syringe, Trash2, TriangleAlert, Unplug, X,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { NAMES } from "../lib/nav";
 import {
-  CONNECTIONS_SECTION, KIND_ORDER, KIND_SECTION, countLine, draftMedication, flagWord, groupByKind, itemLine, keepsText, reconnect,
+  CONNECTIONS_SECTION, KIND_ORDER, KIND_SECTION, countLine, draftMedication, flagWord, groupByKind, isDisconnected, itemLine, keepsText, reconnect,
   returnFrom, updatedText,
 } from "../lib/records";
 import { useSession } from "../lib/session";
@@ -44,23 +44,30 @@ export function Records() {
   const [now, setNow] = useState(() => Date.now());
   const reload = () => { records.reload(); items.reload(); setNow(Date.now()); };
 
-  // Back from the portal: say how it went, bring the page up to date, and tidy the address.
+  // Back from the portal: tidy the address (so a reload doesn't do it twice), confirm the sign-in
+  // with the server where it asks, then say how it went and bring the page up to date.
   const handled = useRef(false);
   useEffect(() => {
     if (handled.current) return;
     const back = returnFrom(location.search);
-    if (!back.connected && !back.error) return;
+    if (!back.connected && !back.error && !back.confirm) return;
     handled.current = true;
-    if (back.connected) toast("Connected");
-    if (back.error) setPortalError(back.error);
     navigate(`${location.pathname}${back.rest}${location.hash}`, { replace: true });
+    if (back.error) setPortalError(back.error);
+    else if (back.connected) { toast("Connected"); reload(); }
+    else if (back.confirm) {
+      api.confirmRecords(back.confirm).then(
+        () => { toast("Connected"); reload(); },
+        (e) => setPortalError(e instanceof Error ? e.message : "Couldn't finish connecting. Try again."),
+      );
+    }
   }, [location, navigate]);
 
   const data = records.data;
   const connected = (data?.connections.length ?? 0) > 0;
   const grouped = groupByKind(items.data ?? []);
   const sections: Section[] = [
-    { id: CONNECTIONS_SECTION, label: "Your portals", node: data && <Connections connections={data.connections} paused={data.paused} now={now} onChanged={reload} /> },
+    { id: CONNECTIONS_SECTION, label: "Your portals", node: data && <Connections connections={data.connections} paused={data.paused} athena={data.providers.includes("ATHENA")} now={now} onChanged={reload} /> },
     ...KIND_ORDER.map((kind): Section => ({
       id: KIND_SECTION[kind], label: RECORD_KINDS[kind], when: connected,
       node: (grouped[kind]?.length ?? 0) > 0 && <KindCard kind={kind} items={grouped[kind]!} />,
@@ -111,23 +118,25 @@ function NotSetUp({ admin }: { admin: boolean }) {
 }
 
 /** Searching for a hospital, clinic or practice, and connecting to its portal. */
-function ConnectCard({ first }: { first: boolean }) {
+function ConnectCard({ first, athena }: { first: boolean; athena: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RecordOrganization[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [going, setGoing] = useState<string | null>(null);
   useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) { setResults(null); setBusy(false); return; }
+    // Epic's organizations need a word or two; athenahealth's one entry comes without (when it's set up).
+    const q = query.trim().length < 2 ? "" : query.trim();
+    if (!q && !athena) { setResults(null); setBusy(false); return; }
     let cancelled = false;
     setBusy(true);
     const timer = setTimeout(() => {
       api.recordOrganizations(q)
         .then((r) => { if (!cancelled) setResults(r); }, (e) => { if (!cancelled) errorToast(e); })
         .finally(() => { if (!cancelled) setBusy(false); });
-    }, 300);
+    }, q ? 300 : 0);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query]);
+  }, [query, athena]);
+  const searched = query.trim().length >= 2;
 
   const connect = async (o: RecordOrganization) => {
     setGoing(o.fhirBaseUrl);
@@ -141,12 +150,13 @@ function ConnectCard({ first }: { first: boolean }) {
     <Card title={first ? "Connect your patient portal" : "Connect another"} icon={<Hospital size={18} />} className={`records-connect ${first ? "span-2" : ""}`}>
       <div className="search-box">
         <Search size={20} aria-hidden="true" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search for your hospital or clinic" aria-label="Search for your hospital or clinic" autoComplete="off" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Your hospital or health system" aria-label="Search for your hospital or health system" autoComplete="off" />
         {busy && <Spinner size={18} />}
       </div>
+      {!searched && <p className="muted small records-hint">Search by its name, like Mass General Brigham.</p>}
       <p className="records-promise"><Lock size={14} aria-hidden="true" /><span>You'll sign in on your portal's own page. Your record comes straight to this server; nothing else sees it.</span></p>
       {results && (
-        results.length === 0 ? <p className="muted small">Nothing by that name. Try the health system's name, like the one on your bills.</p> : (
+        results.length === 0 ? (searched && <p className="muted small">Nothing by that name. Try the health system's name, like the one on your bills.</p>) : (
           <ul className="rows records-results">
             {results.map((o) => (
               <li key={`${o.provider}-${o.fhirBaseUrl}`}>
@@ -168,13 +178,13 @@ function ConnectCard({ first }: { first: boolean }) {
 }
 
 /** Each connected portal, as a card, and the way to connect one (another). */
-function Connections({ connections, paused, now, onChanged }: { connections: RecordConnection[]; paused: boolean; now: number; onChanged: () => void }) {
+function Connections({ connections, paused, athena, now, onChanged }: { connections: RecordConnection[]; paused: boolean; athena: boolean; now: number; onChanged: () => void }) {
   if (connections.length === 0 && paused) return null;
   return (
     <section className="block span-2 records-connections" aria-label="Your portals">
       <div className="grid grid-2">
         {connections.map((c) => <ConnectionCard key={c.id} c={c} paused={paused} now={now} onChanged={onChanged} />)}
-        {!paused && <ConnectCard first={connections.length === 0} />}
+        {!paused && <ConnectCard first={connections.length === 0} athena={athena} />}
       </div>
     </section>
   );
@@ -184,7 +194,10 @@ function ConnectionCard({ c, paused, now, onChanged }: { c: RecordConnection; pa
   const [syncing, setSyncing] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const counts = countLine(c.counts);
+  // Disconnected but kept: it can be connected again (the same one comes back), or removed with all it brought.
+  const gone = isDisconnected(c);
   const update = async () => {
     setSyncing(true);
     try { await api.syncRecords(c.id); toast(`${c.organization}: up to date`); onChanged(); } catch (e) { errorToast(e); }
@@ -203,9 +216,19 @@ function ConnectionCard({ c, paused, now, onChanged }: { c: RecordConnection; pa
           <div className="row-sub">{RECORD_PROVIDERS[c.provider]}</div>
         </div>
       </div>
-      <p className="records-when">{updatedText(c, now)} · {keepsText(c)}</p>
-      {c.problem && <div className="notice notice-warn records-problem"><TriangleAlert size={16} aria-hidden="true" /><span>{c.problem}</span></div>}
+      <p className="records-when">{gone ? updatedText(c, now) : `${updatedText(c, now)} · ${keepsText(c)}`}</p>
+      {c.problem && (
+        <div className={`notice records-problem ${gone ? "is-gone" : "notice-warn"}`}>
+          {gone ? <Unplug size={16} aria-hidden="true" /> : <TriangleAlert size={16} aria-hidden="true" />}<span>{c.problem}</span>
+        </div>
+      )}
       {counts && <p className="muted small">{counts}</p>}
+      {gone ? (
+        <div className="button-row">
+          <Button variant="primary" busy={signingIn} disabled={paused} onClick={() => void signIn(reconnect(c))}><LogIn size={16} /> Connect again</Button>
+          <Button variant="ghost" onClick={() => setRemoving(true)}><Trash2 size={16} /> Remove</Button>
+        </div>
+      ) : (
       <div className="button-row">
         {c.keepsUpdating && <Button busy={syncing} disabled={paused} onClick={() => void update()}><RefreshCw size={16} /> Update now</Button>}
         {(!c.keepsUpdating || c.problem) && (
@@ -213,6 +236,8 @@ function ConnectionCard({ c, paused, now, onChanged }: { c: RecordConnection; pa
         )}
         <Button variant="ghost" onClick={() => setDisconnecting(true)}><Unplug size={16} /> Disconnect</Button>
       </div>
+      )}
+      {removing && <RemoveDialog c={c} counts={counts} onClose={() => setRemoving(false)} onDone={onChanged} />}
       {disconnecting && <DisconnectDialog c={c} counts={counts} onClose={() => setDisconnecting(false)} onDone={onChanged} />}
     </article>
   );
@@ -245,6 +270,26 @@ function DisconnectDialog({ c, counts, onClose, onDone }: { c: RecordConnection;
           <span><strong>Keep it here</strong><span className="muted small">It stays, as it was when you disconnected</span></span>
         </label>
       </div>
+    </Modal>
+  );
+}
+
+/** Removing a disconnected portal, and everything it brought in. */
+function RemoveDialog({ c, counts, onClose, onDone }: { c: RecordConnection; counts: string | null; onClose: () => void; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.disconnectRecords(c.id, false);
+      toast(`Removed ${c.organization}`);
+      onDone();
+      onClose();
+    } catch (e) { errorToast(e); setBusy(false); }
+  };
+  return (
+    <Modal title={`Remove ${c.organization}?`} onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="danger" busy={busy} onClick={() => void go()}>Remove</Button></>}>
+      <p>{counts ? `What it brought in goes too: ${counts}, and its lab results in Medications.` : "What it brought in goes too, lab results in Medications included."}</p>
     </Modal>
   );
 }

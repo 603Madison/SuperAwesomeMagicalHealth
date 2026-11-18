@@ -2232,6 +2232,8 @@ button.day-row-btn:hover .day-title, a.day-row-btn:hover .day-now { color: var(-
 .records-connection p.small { margin: 0; }
 .records-problem { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
 .records-problem svg { flex: none; margin-top: 2px; color: var(--warn); }
+.records-problem.is-gone svg { color: var(--muted); }
+.records-hint { margin: 0 0 6px; }
 .records-connection .button-row { margin-top: 4px; }
 .records-row { align-items: flex-start; }
 .records-row .row-title, .records-row .row-sub { white-space: normal; overflow-wrap: anywhere; }

@@ -123,25 +123,40 @@ export function reconnect(c: Pick<RecordConnection, "organization" | "fhirBaseUr
  */
 export function youLine(records: HealthRecords | null | undefined, now: number): string {
   if (!records) return "Your hospital or clinic's record";
-  const list = records.connections;
-  if (list.length === 0) return records.providers.length === 0 ? "Not set up on this server yet" : "Connect your patient portal";
+  const all = records.connections;
+  if (all.length === 0) return records.providers.length === 0 ? "Not set up on this server yet" : "Connect your patient portal";
+  // Disconnected ones (kept, without access) only count when nothing else is connected.
+  const live = all.filter((c) => !isDisconnected(c));
+  const list = live.length > 0 ? live : all;
   const first = list[0].organization;
   const who = list.length === 1 ? first : `${first} and ${list.length - 1} more`;
+  if (live.length === 0) return `${who} · disconnected`;
   if (records.paused) return `${who} · paused`;
   if (list.some((c) => c.problem)) return `${who} · needs you to sign in again`;
   const latest = Math.max(...list.map((c) => c.lastSyncAt ?? 0));
   return latest > 0 ? `${who} · updated ${ago(latest, now)}` : `${who} · not updated yet`;
 }
 
-/** What the portal said on its way back (?connected=… or ?error=…), and the address without it. */
-export function returnFrom(search: string): { connected: string | null; error: string | null; rest: string } {
+/**
+ * What the portal said on its way back (?connected=…, ?error=…, or ?confirm=… for the page to
+ * confirm the sign-in with the server), and the address without it.
+ */
+export function returnFrom(search: string): { connected: string | null; error: string | null; confirm: string | null; rest: string } {
   const params = new URLSearchParams(search);
   const connected = params.get("connected");
   const error = params.get("error");
-  params.delete("connected");
-  params.delete("error");
+  const confirm = params.get("confirm");
+  for (const key of ["connected", "error", "confirm"]) params.delete(key);
   const rest = params.toString();
-  return { connected, error, rest: rest ? `?${rest}` : "" };
+  return { connected, error, confirm, rest: rest ? `?${rest}` : "" };
+}
+
+/**
+ * Disconnected but kept: its access is gone and what it brought in stays (the server says so in
+ * its problem, "Disconnected: …"). It can be connected again, or removed with all it brought.
+ */
+export function isDisconnected(c: Pick<RecordConnection, "problem">): boolean {
+  return !!c.problem?.startsWith("Disconnected");
 }
 
 /** A lab result from a connected record: the server brings it back, so it can't be deleted here. */

@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  RECORD_SECTIONS, ago, countLine, dayText, draftMedication, flagWord, fromRecord, groupByKind, itemLine, keepsText, labSource, reconnect,
+  RECORD_SECTIONS, ago, countLine, dayText, draftMedication, flagWord, fromRecord, groupByKind, isDisconnected, itemLine, keepsText, labSource, reconnect,
   returnFrom, updatedText, youLine,
 } from "../src/lib/records.ts";
 import type { HealthRecords, RecordConnection, RecordItem } from "../src/lib/types.ts";
@@ -87,12 +87,17 @@ test("You's line says where it stands now", () => {
   assert.equal(youLine(records({ connections: [mgb, { ...mgb, id: "c2", organization: "Wentworth-Douglass", lastSyncAt: hours(1) }] }), now), "Mass General Brigham and 1 more · updated 1 h ago");
   assert.equal(youLine(records({ connections: [{ ...mgb, problem: "Sign in again to bring it up to date" }] }), now), "Mass General Brigham · needs you to sign in again");
   assert.equal(youLine(records({ connections: [mgb], paused: true }), now), "Mass General Brigham · paused");
+  // One disconnected (kept) doesn't count while another is connected; on its own, it says so.
+  const gone = { ...mgb, id: "c3", organization: "Wentworth-Douglass", problem: "Disconnected: what it brought in is kept", keepsUpdating: false };
+  assert.equal(youLine(records({ connections: [gone, mgb] }), now), "Mass General Brigham · updated 2 h ago");
+  assert.equal(youLine(records({ connections: [gone] }), now), "Wentworth-Douglass · disconnected");
 });
 
 test("back from the portal: what it said, and the address without it", () => {
-  assert.deepEqual(returnFrom("?connected=c1"), { connected: "c1", error: null, rest: "" });
-  assert.deepEqual(returnFrom("?error=The+portal+said+no&x=1"), { connected: null, error: "The portal said no", rest: "?x=1" });
-  assert.deepEqual(returnFrom(""), { connected: null, error: null, rest: "" });
+  assert.deepEqual(returnFrom("?connected=c1"), { connected: "c1", error: null, confirm: null, rest: "" });
+  assert.deepEqual(returnFrom("?error=The+portal+said+no&x=1"), { connected: null, error: "The portal said no", confirm: null, rest: "?x=1" });
+  assert.deepEqual(returnFrom("?confirm=tok123"), { connected: null, error: null, confirm: "tok123", rest: "" });
+  assert.deepEqual(returnFrom(""), { connected: null, error: null, confirm: null, rest: "" });
 });
 
 test("signing in again goes to the same portal", () => {
@@ -116,4 +121,10 @@ test("a record's medication becomes a new one to add, never an edit", () => {
   assert.deepEqual(draft.schedule.times, ["09:00"]);
   assert.equal(draft.active, true);
   assert.deepEqual(draftMedication({ name: "Ibuprofen", schedule: { kind: "AS_NEEDED", times: [], everyDays: 1, weekdays: [] } }).schedule.times, []);
+});
+
+test("disconnected but kept, as the server says it", () => {
+  assert.equal(isDisconnected({ problem: "Disconnected: what it brought in is kept" }), true);
+  assert.equal(isDisconnected({ problem: "Sign in again to bring it up to date" }), false);
+  assert.equal(isDisconnected({}), false);
 });
