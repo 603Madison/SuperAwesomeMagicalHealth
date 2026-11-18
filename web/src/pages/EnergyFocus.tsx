@@ -413,7 +413,7 @@ function SettingsCard({ ef, onSaved }: { ef: EnergyFocus; onSaved: () => void })
       <div className="ef-settings">
         {medsOn && (
           <Field label="Your ADHD medication" help={meds.loading && !meds.data ? undefined : help}>
-            <select value={choice.id} disabled={!meds.data} onChange={(e) => void save({ ...settings, medicationId: e.target.value || undefined }, "Saved")}>
+            <select value={choice.id} disabled={!meds.data} onChange={(e) => void save({ ...settings, medicationId: e.target.value || undefined, noMedication: !e.target.value }, "Saved")}>
               {options.map((m) => <option key={m.id} value={m.id}>{m.name}{m.dose ? ` (${m.dose})` : ""}</option>)}
               <option value="">None of these</option>
             </select>

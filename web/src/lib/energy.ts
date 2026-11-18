@@ -154,6 +154,7 @@ export function medicationChoice(
 ): { id: string; how: "chosen" | "found" | "none" } {
   const chosen = ef.settings.medicationId;
   if (chosen && meds.some((m) => m.id === chosen)) return { id: chosen, how: "chosen" };
+  if (ef.settings.noMedication) return { id: "", how: "none" };
   if (ef.medication) {
     const found = meds.find((m) => m.active && m.name === ef.medication) ?? meds.find((m) => m.name === ef.medication);
     if (found?.id) return { id: found.id, how: "found" };

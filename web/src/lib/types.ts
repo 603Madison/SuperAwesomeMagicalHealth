@@ -2076,8 +2076,10 @@ export interface EnergyCheck {
 }
 
 export interface EnergyFocusSettings {
-  /** The ADHD medication, for focus since a dose; unset: worked out from the medications' names. */
+  /** The ADHD medication, for focus since a dose; unset: worked out from the medications' names (unless noMedication). */
   medicationId?: string;
+  /** "None of these": no medication counts as the ADHD one, whatever the names say. */
+  noMedication?: boolean;
   /** Gentle reminders to check in, at these local times ("10:00"); none by default. */
   reminders: string[];
 }

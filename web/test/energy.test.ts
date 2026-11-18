@@ -101,6 +101,8 @@ test("settings show the medication chosen, else the one found by its name, else 
   ];
   assert.deepEqual(medicationChoice({ settings: { medicationId: "m3", reminders: [] }, medication: "Elvanse" }, meds), { id: "m3", how: "chosen" });
   assert.deepEqual(medicationChoice({ settings: { reminders: [] }, medication: "Ritalin" }, meds), { id: "m2", how: "found" });
+  // "None of these" sticks, even with a medication the names would find.
+  assert.deepEqual(medicationChoice({ settings: { noMedication: true, reminders: [] }, medication: null }, meds), { id: "", how: "none" });
   assert.deepEqual(medicationChoice({ settings: { reminders: [] } }, meds), { id: "", how: "none" });
   // A choice that's since been deleted is no choice.
   assert.deepEqual(medicationChoice({ settings: { medicationId: "gone", reminders: [] } }, meds), { id: "", how: "none" });
