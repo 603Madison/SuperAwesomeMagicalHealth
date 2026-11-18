@@ -357,6 +357,47 @@ object Schema {
         );
         CREATE INDEX health_alerts_user ON health_alerts(user_id, created_at);
         """,
+        // Medical records from patient portals (records/): each connection's access, what it brought
+        // in, and sign-ins on their way to a portal and back. All sealed but what finding them needs.
+        """
+        CREATE TABLE record_connections (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL,
+            lasting INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            last_sync_at INTEGER,
+            last_attempt_at INTEGER,
+            data TEXT NOT NULL
+        );
+        CREATE INDEX record_connections_user ON record_connections(user_id);
+        CREATE TABLE record_items (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            connection_id TEXT NOT NULL REFERENCES record_connections(id) ON DELETE CASCADE,
+            source_key TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            date TEXT,
+            at INTEGER,
+            data TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE (user_id, connection_id, source_key)
+        );
+        CREATE INDEX record_items_kind ON record_items(user_id, kind, date);
+        CREATE TABLE record_pending (
+            state_hash TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            data TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        );
+        CREATE INDEX record_pending_user ON record_pending(user_id, created_at);
+        CREATE TABLE record_directory (
+            provider TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            fetched_at INTEGER NOT NULL
+        );
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

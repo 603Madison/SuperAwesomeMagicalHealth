@@ -76,6 +76,14 @@ class Scheduler(private val services: Services) {
             }
         }
         services.db.tx { update("DELETE FROM reminders_sent WHERE at < ?", now - 14 * 86_400_000L) }
+        // Medical records with lasting access, brought up to date once a day (in the background).
+        try {
+            services.medicalRecords.startDailyRound(now)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn("The medical records round didn't start: {}", e.message)
+        }
         lastTick = now
         lastSent = sent
         return sent

@@ -55,6 +55,8 @@ class Services(
     val clock: () -> Long = System::currentTimeMillis,
     /** Where Open Food Facts is (a test server in tests). */
     foodDatabaseUrls: OpenFoodFacts.Urls = OpenFoodFacts.Urls(),
+    /** Where Epic's list of organizations and athenahealth are (a test server in tests). */
+    recordsUrls: com.health.server.records.RecordsService.Urls = com.health.server.records.RecordsService.Urls(),
 ) : AutoCloseable {
     val users = UserStore(db, passwords, clock)
     val sessions = SessionStore(db, clock)
@@ -183,7 +185,8 @@ class Services(
     val alerts: com.health.server.insights.AlertService by lazy { com.health.server.insights.AlertService(this) }
     /** Settings › Where your data goes. */
     val privacyMap: com.health.server.platform.PrivacyService by lazy { com.health.server.platform.PrivacyService(this) }
-    val medicalRecords: com.health.server.records.RecordsService by lazy { com.health.server.records.RecordsService() }
+    /** Medical records from patient portals (records/). */
+    val medicalRecords: com.health.server.records.RecordsService by lazy { com.health.server.records.RecordsService(this, recordsUrls) }
 
     override fun close() {
         db.close()

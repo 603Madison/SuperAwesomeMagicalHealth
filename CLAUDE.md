@@ -23,7 +23,10 @@
   `platform/FeatureHooks`, listed in `Services.hooks`. `IntegrationTest` covers the features
   working together. Food's outside sources are in `food/`: Open Food Facts, and each person's
   Mealie (`Mealie.kt`: its token sealed in `UserSettingsStore` under `food.mealie`, never sent
-  back; `/api/mealie` is never shared; nothing is written to Mealie). A person's own settings go
+  back; `/api/mealie` is never shared; nothing is written to Mealie). `records/`: medical records
+  from Epic and athenahealth portals by SMART on FHIR (sealed, read-only, never shared or offered to
+  AI; labs go into Labs with `source`/`ref`; outbound only to directory-listed https bases and the
+  sign-in addresses they give). A person's own settings go
   in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature). Anything the
   server calls on someone's behalf (webhooks, Mealie, push) uses an OkHttp client with
   `util/OutboundDns` (checked addresses only) and no redirects; `ServerConfig.outboundLoopback` is
