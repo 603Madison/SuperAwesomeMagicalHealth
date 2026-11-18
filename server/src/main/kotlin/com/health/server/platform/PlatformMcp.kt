@@ -4,9 +4,18 @@ import com.health.api.User
 import com.health.server.Services
 import com.health.server.util.Days
 
-/** What the AI connector can say about notifications and webhooks, for troubleshooting. */
+/**
+ * What the AI connector can say about notifications and webhooks, for troubleshooting. Events of a
+ * private feature the link wasn't given ([scope]) are left out, and webhooks show their host only
+ * (a Home Assistant address carries its own secret).
+ */
 object PlatformMcp {
-    suspend fun deliveries(services: Services, user: User, limit: Int): String {
+    private fun shown(event: com.health.api.WebhookEvent, scope: Set<com.health.api.Module>) =
+        event.module?.let { !it.sensitive || it in scope } ?: true
+
+    private fun host(url: String) = runCatching { java.net.URI(url).host }.getOrNull() ?: "an address"
+
+    suspend fun deliveries(services: Services, user: User, limit: Int, scope: Set<com.health.api.Module> = emptySet()): String {
         val platform = services.platform
         val hooks = platform.webhooks.list(user.id)
         if (hooks.isEmpty()) return "No webhooks yet. They're added in Settings › Integrations."
@@ -15,9 +24,11 @@ object PlatformMcp {
         return buildString {
             appendLine("Webhooks:")
             hooks.forEach { h ->
-                appendLine("- ${h.name} → ${h.url} (${if (h.enabled) "on" else "off"}; ${if (h.includeDetails) "with names" else "times and counts only"}): ${h.events.joinToString(", ") { it.key }}")
+                val events = h.events.filter { shown(it, scope) }
+                val more = h.events.size - events.size
+                appendLine("- ${h.name} → ${host(h.url)} (${if (h.enabled) "on" else "off"}; ${if (h.includeDetails) "with names" else "times and counts only"}): ${events.joinToString(", ") { it.key }}${if (more > 0) " and $more for features this link wasn't given" else ""}")
             }
-            val calls = platform.webhooks.deliveries(user.id, limit)
+            val calls = platform.webhooks.deliveries(user.id, limit).filter { shown(it.event, scope) }
             appendLine()
             if (calls.isEmpty()) appendLine("No calls yet.") else {
                 appendLine("Latest calls (newest first):")
@@ -28,7 +39,7 @@ object PlatformMcp {
         }.trimEnd()
     }
 
-    suspend fun status(services: Services, user: User): String {
+    suspend fun status(services: Services, user: User, scope: Set<com.health.api.Module> = emptySet()): String {
         val platform = services.platform
         val profile = services.profiles.get(user.id)
         val zone = Days.zoneOf(profile.timezone)
@@ -37,6 +48,7 @@ object PlatformMcp {
         val hooks = platform.webhooks.list(user.id)
         val now = services.clock()
         val upcoming = platform.scheduler.collect(user.id, profile, now, now + 24 * 3_600_000L).distinctBy { it.key }.sortedBy { it.at }
+            .filter { shown(it.event, scope) }
         val digest = platform.digests.latest(user.id)
         val prefs = profile.reminders
         return buildString {

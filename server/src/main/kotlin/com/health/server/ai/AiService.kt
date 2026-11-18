@@ -236,6 +236,10 @@ class AiService(private val services: Services) {
         val tools = available.map(AiTools::definition)
         val system = systemBlocks(user, modules, caller.canLog)
         val looked = mutableListOf<AiLook>()
+        // Once a turn has read words from outside the person's own data (food names from Open Food
+        // Facts or their Mealie), it logs nothing but food: words hidden in a recipe's name can't
+        // get a dose marked taken or a check-in written.
+        var readOutside = false
         var input = 0L
         var output = 0L
         var model = ready.settings.model
@@ -272,7 +276,13 @@ class AiService(private val services: Services) {
                     val results = uses.map { use ->
                         val args = runCatching { AiTools.json(use._input().convert(Map::class.java)) as? JsonObject }.getOrNull() ?: JsonObject(emptyMap())
                         val tool = available.firstOrNull { it.name == use.name() }
-                        val (result, failed) = if (tool == null) "That tool isn't available." to true else runTool(user, caller, modules, use.name(), args)
+                        val (result, failed) = when {
+                            tool == null -> "That tool isn't available." to true
+                            tool.writes && readOutside && use.name() != "log_food" ->
+                                "Not logged: this turn read food names from outside databases, so it only logs food. Ask the person to log this themselves, or to ask again in a new message." to true
+                            else -> runTool(user, caller, modules, use.name(), args)
+                        }
+                        if (use.name() in OUTSIDE_WORDS) readOutside = true
                         if (tool != null && !failed) {
                             looked += AiLook(use.name(), AiTools.moduleOf(use.name()) ?: moduleForSpecial(use.name(), args), AiTools.summary(use.name(), args, tool.writes))
                         }
@@ -536,6 +546,9 @@ class AiService(private val services: Services) {
     }
 
     companion object {
+        /** Tools whose answers carry words from outside the person's own data (food names from other databases). */
+        private val OUTSIDE_WORDS = setOf("search_foods", "food_log")
+
         /** How many of a person's requests may be answered at once. */
         const val AT_ONCE = 2
         const val PROVIDER = "Anthropic"

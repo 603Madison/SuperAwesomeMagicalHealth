@@ -432,13 +432,13 @@ class McpServer(private val services: Services) {
             "The account's webhooks (where each points, what it sends) and their latest calls, newest first: when, which " +
                 "event, whether it worked, and the HTTP status or error. For when Home Assistant or another hook isn't firing.",
             schema("limit" to intProperty("How many calls (default 30, at most 200)")),
-        ) { caller, args -> com.health.server.platform.PlatformMcp.deliveries(services, caller.user, args.int("limit")?.coerceIn(1, 200) ?: 30) },
+        ) { caller, args -> com.health.server.platform.PlatformMcp.deliveries(services, caller.user, args.int("limit")?.coerceIn(1, 200) ?: 30, caller.scope) },
         Tool(
             "notifications_status", "Notifications status",
             "Reminders for the account: browsers signed up for notifications (and when each last took one), webhooks, when " +
                 "the reminder round last ran, reminders due in the next day, whether email is set up, and the latest weekly digest.",
             schema(),
-        ) { caller, _ -> com.health.server.platform.PlatformMcp.status(services, caller.user) },
+        ) { caller, _ -> com.health.server.platform.PlatformMcp.status(services, caller.user, caller.scope) },
 
         // ---- Health modules (links given them) ----
         Tool(
@@ -509,7 +509,7 @@ class McpServer(private val services: Services) {
                 "with symptom days in the person's own data (short nights, stress, alcohol, caffeine, the cycle, falling air pressure).",
             schema(daysProperty(30, 365)),
             module = Module.SYMPTOMS,
-        ) { caller, args -> symptomsText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 30) },
+        ) { caller, args -> symptomsText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 30, Module.CYCLE in caller.scope) },
 
         // ---- Logging (links made with logging allowed) ----
         Tool(
@@ -866,7 +866,7 @@ class McpServer(private val services: Services) {
                 "Speak about it in neurodiversity-affirming terms.",
             schema(daysProperty(30, 365)),
             module = Module.NEURO,
-        ) { caller, args -> com.health.server.neuro.NeuroText.neuro(services, caller.user.id, args.int("days")?.coerceIn(7, 365) ?: 30) },
+        ) { caller, args -> com.health.server.neuro.NeuroText.neuro(services, caller.user.id, args.int("days")?.coerceIn(7, 365) ?: 30, Module.CYCLE in caller.scope) },
         Tool(
             "transition", "Transition",
             "The person's transition, whatever it means to them: pronouns, how long since they began and on hormones, milestones (social, legal, " +
@@ -1670,8 +1670,8 @@ class McpServer(private val services: Services) {
         }
     }
 
-    private suspend fun symptomsText(user: User, count: Int): String = buildString {
-        val s = services.tracking.symptoms.summary(user.id, count)
+    private suspend fun symptomsText(user: User, count: Int, cycle: Boolean): String = buildString {
+        val s = services.tracking.symptoms.summary(user.id, count, cycle)
         val days = services.profiles.days(user.id)
         val logged = s.days.filter { it.entries.isNotEmpty() || it.migraines.isNotEmpty() }
         if (logged.isEmpty()) return "No symptoms or migraines logged in the last $count days."

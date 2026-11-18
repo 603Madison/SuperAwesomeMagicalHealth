@@ -427,6 +427,7 @@ object SharedView {
         timezone = p.timezone,
         goals = limit(p.goals, modules),
         modules = p.modules intersect modules,
-        vitalsTargets = p.vitalsTargets,
+        // Blood pressure and glucose targets say what the person watches for: only with Vitals shared.
+        vitalsTargets = if (Module.VITALS in modules) p.vitalsTargets else Profile().vitalsTargets,
     )
 }

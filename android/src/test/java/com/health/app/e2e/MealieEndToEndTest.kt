@@ -99,7 +99,11 @@ class MealieEndToEndTest {
         val db = Database.inMemory()
         Schema.migrate(db)
         val services = Services(config, db, SecretBox(ByteArray(32) { it.toByte() }), passwords = Passwords(iterations = 1_000))
-        runBlocking { services.bootstrap() }
+        runBlocking {
+            services.bootstrap()
+            // The test's Mealie is on this machine: home networks allowed, as a server that turned it on.
+            services.settings.update { it.copy(webhooksPrivateNetworks = true) }
+        }
         server = embeddedServer(Netty, port = 0, host = "127.0.0.1") { module(services) }.start()
         val port = runBlocking { server.engine.resolvedConnectors().first().port }
         base = "http://127.0.0.1:$port"

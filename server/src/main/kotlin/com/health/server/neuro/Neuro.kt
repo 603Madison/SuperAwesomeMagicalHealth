@@ -359,7 +359,8 @@ class NeuroService(
 
     // ---------------------------------------------------------------- Patterns
 
-    suspend fun summary(userId: String, days: Int): NeuroSummary {
+    /** [cycle]: whoever's asking may see the cycle (a share or link without it never learns of periods here). */
+    suspend fun summary(userId: String, days: Int, cycle: Boolean = true): NeuroSummary {
         val span = days.coerceIn(7, 365)
         val zone = profiles.days(userId)
         val today = zone.today(clock())
@@ -387,7 +388,7 @@ class NeuroService(
             averageEnergyUsed = used?.round1(),
             focusMinutes = focusMinutes,
             estimateRatio = estimateRatio,
-            patterns = patterns(userId, profile, zone, from, today, events, checks, energy, wording),
+            patterns = patterns(userId, profile, zone, from, today, events, checks, energy, wording, cycle),
             burnoutRisk = burnoutRisk(today, events, checks, energy),
         )
     }
@@ -395,7 +396,7 @@ class NeuroService(
     /** Things that went together in the person's own days, said plainly, never as causes. */
     private suspend fun patterns(
         userId: String, profile: Profile, zone: Days, from: LocalDate, to: LocalDate,
-        events: List<OverloadEvent>, checks: List<NeuroCheckIn>, energy: List<EnergyDay>, wording: Wording,
+        events: List<OverloadEvent>, checks: List<NeuroCheckIn>, energy: List<EnergyDay>, wording: Wording, cycleShown: Boolean = true,
     ): List<com.health.api.Insight> {
         if (events.size < 3) return emptyList()
         val dates = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList()
@@ -431,7 +432,7 @@ class NeuroService(
         if (changes.size >= 2 && changes.size * 3 >= events.size) {
             out += com.health.api.Insight("info", "Changes of plan", "${changes.size} of ${events.size} hard times came with a change of plans. A heads-up, or a plan B written down, can help.", "sparkles", Module.NEURO)
         }
-        if (Module.CYCLE in profile.modules) {
+        if (cycleShown && Module.CYCLE in profile.modules) {
             val periods = runCatching { cycle.logged(userId, from.minusDays(5), to.plusDays(5)) }.getOrDefault(emptyList())
                 .filter { it.flow != null && it.flow != Flow.SPOTTING }.map { LocalDate.parse(it.date) }
             val around = dates.filter { d -> periods.any { p -> !d.isBefore(p.minusDays(3)) && !d.isAfter(p.plusDays(2)) } }.toSet()

@@ -137,4 +137,21 @@ class SecurityTest {
         assertEquals(HttpStatusCode.OK, home.status)
         assertTrue(home.headers.getAll(HttpHeaders.SetCookie).orEmpty().none { it.contains("Secure") })
     }
+
+    @Test
+    fun `password guesses sent all at once are each counted before they're checked`() {
+        val throttle = LoginThrottle()
+        val passed = java.util.concurrent.atomic.AtomicInteger()
+        val threads = (1..60).map {
+            Thread { if (runCatching { throttle.check("ip:5.5.5.5", "user:sam") }.isSuccess) passed.incrementAndGet() }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+        // Ten for one account from one address, however many arrive together.
+        assertEquals(10, passed.get())
+        // The right password takes back its own try: signing in doesn't use up the allowance.
+        val other = LoginThrottle()
+        repeat(20) { other.succeeded("ip:6.6.6.6", "user:kim", other.check("ip:6.6.6.6", "user:kim")) }
+        other.check("ip:6.6.6.6", "user:kim")
+    }
 }

@@ -51,7 +51,10 @@ class SessionStore(private val db: Database, private val clock: () -> Long = Sys
                 )
             } ?: return@tx null
             val (user, session) = found
-            if (session.expiresAt < now || user.disabled) {
+            // A browser signed in through single sign-on signs in there again within a month, so a person
+            // the identity provider has since removed (or moved out of the group) doesn't stay signed in here.
+            val ssoLapsed = session.kind == SessionKind.WEB && user.oidc && now - session.createdAt > SSO_WEB_MAX_MS
+            if (session.expiresAt < now || user.disabled || ssoLapsed) {
                 update("DELETE FROM sessions WHERE id = ?", id)
                 return@tx null
             }
@@ -88,6 +91,9 @@ class SessionStore(private val db: Database, private val clock: () -> Long = Sys
     suspend fun purgeExpired() = db.tx { update("DELETE FROM sessions WHERE expires_at < ?", clock()) }
 
     companion object {
+        /** The longest a browser signed in through single sign-on stays signed in, however often it's used. */
+        const val SSO_WEB_MAX_MS = 30L * 24 * 3600 * 1000
+
         const val WEB_LIFETIME_MS = 30L * 24 * 3600 * 1000
         const val APP_LIFETIME_MS = 365L * 24 * 3600 * 1000
         private const val TOUCH_INTERVAL_MS = 5L * 60 * 1000

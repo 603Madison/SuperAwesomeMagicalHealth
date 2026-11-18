@@ -10,11 +10,11 @@ import java.util.Locale
 
 /** Autism & ADHD and transition, as plain text for the AI connector. */
 object NeuroText {
-    suspend fun neuro(services: Services, userId: String, days: Int): String = buildString {
+    suspend fun neuro(services: Services, userId: String, days: Int, cycle: Boolean = false): String = buildString {
         val n = services.neuro
         val zone = services.profiles.days(userId).zone
         val about = n.profile(userId)
-        val s = n.summary(userId, days)
+        val s = n.summary(userId, days, cycle)
         NeuroService.describe(about)?.let { appendLine(it) }
         if (about.whatHelps.isNotEmpty()) appendLine("What helps: ${about.whatHelps.joinToString(", ")}.")
         if (about.communication.isNotEmpty()) appendLine("Communication: ${about.communication.joinToString(", ")}.")

@@ -60,16 +60,18 @@ fun Route.authRoutes(services: Services) {
         }
 
         post("/login") {
+            // Behind a reverse proxy that isn't trusted, everyone is one address: one person's wrong
+            // passwords would then slow down everyone's sign-in. Said once, in the server's log.
+            if (!services.config.trustProxy && call.request.headers["X-Forwarded-For"] != null && proxyWarned.compareAndSet(false, true)) {
+                org.slf4j.LoggerFactory.getLogger("samh.auth").warn("Requests come through a reverse proxy, but SAMH_TRUST_PROXY isn't set: everyone looks like one address, so sign-in limits are shared. Set SAMH_TRUST_PROXY=true (and publish the port on 127.0.0.1 only).")
+            }
             val request = call.receive<LoginRequest>()
             val address = "ip:${clientAddress(call.request.local.remoteAddress, call.request.headers, services.config)}"
             val account = "user:${request.username.trim().lowercase()}"
-            services.throttle.check(address, account)
+            val attempt = services.throttle.check(address, account)
             val user = services.users.checkPassword(request.username, request.password)
-            if (user == null) {
-                services.throttle.failed(address, account)
-                throw ApiError.unauthorized("Wrong username or password")
-            }
-            services.throttle.succeeded(address, account)
+                ?: throw ApiError.unauthorized("Wrong username or password")
+            services.throttle.succeeded(address, account, attempt)
             if (user.disabled) throw ApiError.forbidden("This account is turned off")
             val settings = services.settings.get()
             if (!settings.localLogin && settings.oidc.enabled && !user.breakGlass) {
@@ -79,7 +81,8 @@ fun Route.authRoutes(services: Services) {
         }
 
         post("/logout") {
-            val token = call.request.header(HttpHeaders.Authorization)?.removePrefix("Bearer ")?.trim()
+            // "Bearer" in any case, as signing in reads it: otherwise "bearer …" would sign out nothing.
+            val token = call.request.header(HttpHeaders.Authorization)?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }?.substring(7)?.trim()
                 ?: call.request.cookies[SESSION_COOKIE]
             call.principal(services) // checks the CSRF header for cookie sign-ins
             token?.let { services.sessions.revokeToken(it) }
@@ -167,12 +170,12 @@ fun Route.authRoutes(services: Services) {
             val change = call.receive<PasswordChange>()
             val address = "ip:${clientAddress(call.request.local.remoteAddress, call.request.headers, services.config)}"
             val account = "user:${principal.user.username.lowercase()}"
-            services.throttle.check(address, account)
             if (!principal.user.hasPassword) throw ApiError.badRequest("This account signs in through single sign-on")
+            val attempt = services.throttle.check(address, account)
             if (services.users.checkPassword(principal.user.username, change.current) == null) {
-                services.throttle.failed(address, account)
                 throw ApiError.badRequest("The current password is wrong")
             }
+            services.throttle.succeeded(address, account, attempt)
             services.users.setPassword(principal.user.id, change.new)
             // Signs out everywhere else.
             services.sessions.list(principal.user.id).filter { it.id != principal.session.id }.forEach { services.sessions.revoke(principal.user.id, it.id) }
@@ -292,3 +295,5 @@ fun deviceName(call: ApplicationCall): String {
     return if (system != null) "$browser on $system" else browser
 }
 
+/** Whether the untrusted-proxy warning has been logged yet. */
+private val proxyWarned = java.util.concurrent.atomic.AtomicBoolean(false)

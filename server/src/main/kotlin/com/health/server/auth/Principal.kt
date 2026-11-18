@@ -71,8 +71,15 @@ suspend fun ApplicationCall.requireUser(services: Services): User {
     return principal.user
 }
 
-suspend fun ApplicationCall.requireAdmin(services: Services): User =
-    requireUser(services).also { if (!it.isAdmin) throw ApiError.forbidden() }
+/**
+ * The signed-in admin themself: never an account being viewed through a share (whoever owns it),
+ * so admin routes can't be reached by viewing an admin's data.
+ */
+suspend fun ApplicationCall.requireAdmin(services: Services): User {
+    val principal = principal(services) ?: throw ApiError.unauthorized()
+    if (request.header(com.health.server.care.SharedView.HEADER) != null) throw ApiError.forbidden("You're viewing someone else's data")
+    return principal.user.also { if (!it.isAdmin) throw ApiError.forbidden() }
+}
 
 private val SAFE_METHODS = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Options)
 
@@ -145,22 +152,35 @@ class LoginThrottle(
 
     private fun keys(address: String, account: String) = listOf(address to maxFailuresPerAddress, "pair:$address|$account" to maxFailures, account to maxFailuresPerAccount)
 
-    fun check(address: String, account: String) {
+    /**
+     * Before a password is checked: refused past the limits, otherwise counted at once as if it were
+     * wrong ([succeeded] takes it back). Counting it before the slow check, under one lock, means
+     * many tries sent at the same moment can't all slip in before any of them is counted.
+     */
+    @Synchronized
+    fun check(address: String, account: String): Long {
         val now = clock()
         if (keys(address, account).any { (key, max) -> recent(key, now) >= max }) {
             throw ApiError.tooMany("Too many wrong passwords. Try again in a few minutes.")
         }
+        add(address, account, now)
+        return now
     }
 
-    fun failed(address: String, account: String) {
-        val now = clock()
+    /** A wrong password counted on its own (one not started with [check]). */
+    @Synchronized
+    fun failed(address: String, account: String) = add(address, account, clock())
+
+    /** The right password: the try [check] counted ([at]) is taken back, and this address's count for the account starts again. */
+    @Synchronized
+    fun succeeded(address: String, account: String, at: Long? = null) {
+        if (at != null) keys(address, account).forEach { (key, _) -> failures.computeIfPresent(key) { _, list -> (list - at).ifEmpty { null } } }
+        failures.remove("pair:$address|$account")
+    }
+
+    private fun add(address: String, account: String, now: Long) {
         keys(address, account).forEach { (key, _) -> failures.compute(key) { _, list -> list.orEmpty().filter { now - it <= windowMs } + now } }
         if (failures.size > 30_000) failures.entries.removeIf { (_, list) -> list.all { now - it > windowMs } }
-    }
-
-    /** The right password: this address's count for the account starts again. */
-    fun succeeded(address: String, account: String) {
-        failures.remove("pair:$address|$account")
     }
 
     private fun recent(key: String, now: Long): Int = failures[key]?.count { now - it <= windowMs } ?: 0

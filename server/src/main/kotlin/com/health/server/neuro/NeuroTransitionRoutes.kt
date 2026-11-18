@@ -115,7 +115,10 @@ fun Route.neuroTransitionRoutes(services: Services) {
         }
         get("/cards") { call.respond(neuro.cards(call.requireUser(services).id)) }
         put("/cards") { call.respond(neuro.saveCards(call.requireUser(services).id, call.receive<List<CommunicationCard>>())) }
-        get("/summary") { call.respond(neuro.summary(call.requireUser(services).id, call.days(30))) }
+        get("/summary") {
+            val cycle = call.viewScope?.let { com.health.api.Module.CYCLE in it.modules } ?: true
+            call.respond(neuro.summary(call.requireUser(services).id, call.days(30), cycle))
+        }
     }
 
     route("/api/transition") {

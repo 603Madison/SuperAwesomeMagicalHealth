@@ -1,5 +1,6 @@
 package com.health.server.tracking
 
+import com.health.server.care.viewScope
 import com.health.api.BloodPressure
 import com.health.api.Drink
 import com.health.api.GlucoseReading
@@ -66,7 +67,10 @@ fun Route.trackingRoutes(services: Services) {
             put("/{id}") { call.respond(t.symptoms.saveMigraine(call.requireUser(services).id, call.receive<Migraine>(), call.id())) }
             delete("/{id}") { t.symptoms.delete(call.requireUser(services).id, EntryKind.MIGRAINE, call.id()); call.respond(ok) }
         }
-        get("/summary") { call.respond(t.symptoms.summary(call.requireUser(services).id, call.days(90))) }
+        get("/summary") {
+            val cycle = call.viewScope?.let { com.health.api.Module.CYCLE in it.modules } ?: true
+            call.respond(t.symptoms.summary(call.requireUser(services).id, call.days(90), cycle))
+        }
     }
 
     route("/api/habits") {

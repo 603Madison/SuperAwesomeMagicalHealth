@@ -87,7 +87,8 @@ class SymptomsService(
         }
     }
 
-    suspend fun summary(userId: String, count: Int): SymptomsSummary {
+    /** [cycle]: whoever's asking may see the cycle (a share or link without it never learns of periods here). */
+    suspend fun summary(userId: String, count: Int, cycle: Boolean = true): SymptomsSummary {
         val profile = profiles.get(userId)
         val zone = Days(Days.zoneOf(profile.timezone))
         val to = zone.today(clock())
@@ -100,7 +101,7 @@ class SymptomsService(
             .map { (name, n) -> Count(name, n) }.sortedByDescending { it.count }
         val triggers = (all.flatMap { it.triggers } + migraines.flatMap { it.triggers }).groupingBy { it }.eachCount()
             .map { (name, n) -> Count(name, n) }.sortedByDescending { it.count }.take(12)
-        val factors = factors(userId, profile, zone, from, to)
+        val factors = factors(userId, profile, zone, from, to, cycle)
         return SymptomsSummary(
             days = list,
             counts = counts,
@@ -131,7 +132,7 @@ class SymptomsService(
     /** Each factor's days: day to whether it applied (missing where unknown). */
     class Factors(val days: Map<String, Map<LocalDate, Boolean>>, val weather: Boolean)
 
-    private suspend fun factors(userId: String, profile: Profile, zone: Days, from: LocalDate, to: LocalDate): Factors {
+    private suspend fun factors(userId: String, profile: Profile, zone: Days, from: LocalDate, to: LocalDate, cycleShown: Boolean = true): Factors {
         val out = linkedMapOf<String, Map<LocalDate, Boolean>>()
         val range = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList()
         val stats = days.stats(userId, from.minusDays(30), to, zone)
@@ -152,8 +153,8 @@ class SymptomsService(
                 out["less_caffeine"] = range.associateWith { d -> (drinkDays[d]?.caffeineMg ?: 0.0) <= usual * 0.5 }
             }
         }
-        // The days around a period, where the cycle is tracked.
-        if (Module.CYCLE in profile.modules) {
+        // The days around a period, where the cycle is tracked (and whoever's asking may see it).
+        if (cycleShown && Module.CYCLE in profile.modules) {
             val starts = CycleMath.analyze(cycle.logged(userId, from.minusDays(60), to), emptyList(), to).cycles.map { LocalDate.parse(it.start) }
             if (starts.isNotEmpty()) out["period"] = range.associateWith { d -> starts.any { s -> !d.isBefore(s.minusDays(2)) && !d.isAfter(s.plusDays(2)) } }
         }
