@@ -360,7 +360,11 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
         val c = store.connection(userId, id) ?: throw ApiError.notFound("No such connection")
         requireAllowed(userId)
         requireSetUp(c.provider)
-        syncNow(userId, id)
+        // Asked again and again (or while one's under way): what's there now, so nobody can get this
+        // server's app turned away by the portal for asking too often.
+        val lock = locks.computeIfAbsent(id) { Mutex() }
+        val recent = c.lastAttemptAt?.let { clock() - it < SYNC_GAP_MS } == true
+        if (!lock.isLocked && !recent) syncNow(userId, id)
         return connections(userId).firstOrNull { it.id == id } ?: throw ApiError.notFound("No such connection")
     }
 
@@ -613,6 +617,8 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
         )
 
         const val PENDING_MS = 10 * 60_000L
+        /** A manual "Update now" brings the record in at most this often. */
+        const val SYNC_GAP_MS = 2 * 60_000L
         /** How long a sign-in waits for the app to confirm it: portals' codes don't last much longer. */
         const val CONFIRM_MS = 5 * 60_000L
         private const val WEEK_MS = 7 * 86_400_000L

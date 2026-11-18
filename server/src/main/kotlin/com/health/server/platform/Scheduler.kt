@@ -125,9 +125,13 @@ class Scheduler(private val services: Services) {
         val prefs = profile.reminders
         val zone = Days(Days.zoneOf(profile.timezone))
         if (push && reminder.push && (reminder.event in ALWAYS || !quiet(prefs, zone.minuteOfDay(now)))) {
-            runCatching {
-                services.platform.push.send(user.id, message(reminder, prefs), urgent = reminder.event == WebhookEvent.DOSE_DUE, ttlSeconds = if (reminder.event == WebhookEvent.DOSE_DUE) 2 * 3600 else 12 * 3600)
-            }.onFailure { log.warn("Sending a notification failed: {}", it.message) }
+            // Off the tick, as webhooks are: one person's slow push services never hold up anyone else's reminders.
+            val notify: suspend () -> Unit = {
+                runCatching {
+                    services.platform.push.send(user.id, message(reminder, prefs), urgent = reminder.event == WebhookEvent.DOSE_DUE, ttlSeconds = if (reminder.event == WebhookEvent.DOSE_DUE) 2 * 3600 else 12 * 3600)
+                }.onFailure { log.warn("Sending a notification failed: {}", it.message) }
+            }
+            if (webhooksInBackground) scope.launch { notify() } else notify()
         }
         val targets = hooks.filter { reminder.event in it.events }
         if (targets.isEmpty()) return

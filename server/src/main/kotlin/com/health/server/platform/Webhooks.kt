@@ -166,7 +166,8 @@ class WebhookService(
             record(userId, hook.id!!, event, status in 200..299, status, if (status in 200..299) null else "HTTP $status")
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            log.warn("Webhook {} failed: {}", hook.name, e.message ?: e.javaClass.simpleName)
+            // The hook's id, never its name: logs never carry what someone wrote.
+            log.warn("Webhook {} failed: {}", hook.id, e.javaClass.simpleName)
             // What kind of failure, never the network's own words (they'd make the test button a port scanner).
             val said = when (e) {
                 is com.health.server.util.OutboundDns.Refused -> "Refused: ${e.message}"

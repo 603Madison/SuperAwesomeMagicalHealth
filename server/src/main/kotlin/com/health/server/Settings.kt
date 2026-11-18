@@ -44,8 +44,12 @@ data class ServerSettings(
     val oidc: OidcSettings = OidcSettings(),
     /** Mail for weekly digests (the password is set apart, at /api/admin/smtp). */
     val smtp: com.health.server.platform.SmtpSettings = com.health.server.platform.SmtpSettings(),
-    /** Let webhooks and Mealie reach addresses on private networks (Home Assistant and Mealie usually live on one). */
-    val webhooksPrivateNetworks: Boolean = true,
+    /**
+     * Let webhooks and Mealie reach addresses on private networks (Home Assistant and Mealie usually
+     * live on one). Off on a new server: anyone with an account could otherwise use them to look
+     * around the server's home network. Servers that saved it on keep it on.
+     */
+    val webhooksPrivateNetworks: Boolean = false,
     /** Search USDA FoodData Central for foods once an API key is set (the search terms go to api.nal.usda.gov). */
     val usdaFoods: Boolean = true,
     /** USDA's food list kept on this server instead of asking its online service (food/UsdaLocal.kt). */

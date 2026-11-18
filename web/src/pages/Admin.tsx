@@ -185,7 +185,7 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
           </Field>
           <Toggle label="People can sign in with a password" help="Off: everyone but the break-glass admin signs in through single sign-on." checked={settings.localLogin} onChange={(localLogin) => setSettings({ ...settings, localLogin })} />
           {settings.weather !== undefined && <Toggle label="Weather for symptom patterns" help="Air pressure from open-meteo.com for the town people choose, and the place search. Only a rough place is sent, nothing about who asked." checked={settings.weather} onChange={(weather) => setSettings({ ...settings, weather })} />}
-          {settings.webhooksPrivateNetworks !== undefined && <Toggle label="Webhooks may call home networks" help="Lets people's webhooks reach addresses on private networks, where Home Assistant usually lives. Off: public addresses only." checked={settings.webhooksPrivateNetworks} onChange={(webhooksPrivateNetworks) => setSettings({ ...settings, webhooksPrivateNetworks })} />}
+          {settings.webhooksPrivateNetworks !== undefined && <Toggle label="Webhooks and Mealie may reach home networks" help="Lets people's webhooks and Mealie reach addresses on private networks, where Home Assistant and Mealie usually live. Anyone with an account here could then reach those addresses through the server, so turn it on only if you trust everyone on it. Off: public addresses only." checked={settings.webhooksPrivateNetworks} onChange={(webhooksPrivateNetworks) => setSettings({ ...settings, webhooksPrivateNetworks })} />}
         </div>
       </section>
 

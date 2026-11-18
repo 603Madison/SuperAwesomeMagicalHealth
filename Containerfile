@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon -Dorg.gradle.j
 FROM docker.io/library/eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache tini \
     && addgroup -S -g 1000 samh && adduser -S -D -H -u 1000 -G samh samh \
-    && mkdir -p /data && chown samh:samh /data
+    && mkdir -p /data && chown samh:samh /data && chmod 700 /data
 COPY --from=server /src/server/build/install/samh-server /opt/samh
 ENV SAMH_DATA_DIR=/data \
     SAMH_PORT=8080 \

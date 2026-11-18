@@ -32,6 +32,8 @@ class UsdaFoods(
     clock: () -> Long = System::currentTimeMillis,
     private val url: String = SEARCH_URL,
 ) {
+    private val noRedirects = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
+
     /** The two kinds asked for in a search: everyday foods first, then packaged ones. */
     enum class Kind(val dataTypes: String, val pageSize: Int) {
         EVERYDAY("Foundation,SR Legacy,Survey (FNDDS)", 8),
@@ -77,7 +79,8 @@ class UsdaFoods(
             // api.data.gov takes the key in this header as well as in the address: kept out of addresses (and so out of any log of them).
             .header("X-Api-Key", key)
             .build()
-        val json = ApiJson.parseToJsonElement(http.fetchString(request)).jsonObject
+        // Never redirected: the key would go along to wherever it pointed.
+        val json = ApiJson.parseToJsonElement(noRedirects.fetchString(request)).jsonObject
         return (json["foods"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::toFood) }
     }
 

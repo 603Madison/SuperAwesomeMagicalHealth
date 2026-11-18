@@ -217,10 +217,17 @@ class Services(
             }.getOrNull()?.takeIf { it.isNotBlank() && !it.startsWith("\$") } ?: "dev"
         }
 
+        private fun ownerOnly(path: java.nio.file.Path, permissions: String) {
+            runCatching { java.nio.file.Files.setPosixFilePermissions(path, java.nio.file.attribute.PosixFilePermissions.fromString(permissions)) }
+        }
+
         /** Opens the data folder and database. */
         fun open(config: ServerConfig): Services {
             config.dataDir.mkdirs()
+            // Only this server's own user may read the data folder (on systems that have such permissions).
+            ownerOnly(config.dataDir.toPath(), "rwx------")
             val db = Database.file(config.databaseFile.path)
+            ownerOnly(config.databaseFile.toPath(), "rw-------")
             Schema.migrate(db)
             return Services(config, db, SecretBox.fromFile(config.secretKeyFile))
         }

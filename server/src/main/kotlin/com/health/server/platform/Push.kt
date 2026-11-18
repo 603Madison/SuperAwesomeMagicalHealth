@@ -156,6 +156,9 @@ object WebPushCrypto {
 }
 
 /** Browsers that asked for notifications, and sending to them. */
+/** Browsers that can have notifications, per person. */
+const val MAX_PUSH_PER_PERSON = 10
+
 class PushService(
     private val db: Database,
     private val box: SecretBox,
@@ -170,9 +173,13 @@ class PushService(
     private val log = LoggerFactory.getLogger("samh.push")
 
     // Browsers' push services are on the internet: never a private address, never a redirect.
+    // Short limits: a push service answers at once, and one that doesn't mustn't hold up anyone's reminders.
     private val client = http.newBuilder()
         .dns(com.health.server.util.OutboundDns(loopback, loopback))
         .followRedirects(false).followSslRedirects(false)
+        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
     @Volatile
@@ -212,6 +219,11 @@ class PushService(
         val id = db.tx {
             // The same browser subscribing again (or for another account) replaces its old subscription.
             update("DELETE FROM push_subscriptions WHERE endpoint = ?", url.toString())
+            // A few browsers each, no more: past that, the one set up longest ago makes way.
+            update(
+                "DELETE FROM push_subscriptions WHERE user_id = ? AND id NOT IN (SELECT id FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?)",
+                userId, userId, MAX_PUSH_PER_PERSON - 1,
+            )
             Random.id().also {
                 update(
                     "INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",

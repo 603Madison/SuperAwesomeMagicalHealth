@@ -11,6 +11,17 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/** The most of another service's answer read by default: 4 MB of text. */
+const val MAX_ANSWER = 4 * 1024 * 1024
+
+/** The body as text, at most [max] bytes: past that, an [IOException]. */
+fun Response.boundedString(max: Int = MAX_ANSWER): String {
+    val body = body ?: return ""
+    val bytes = body.byteStream().use { it.readNBytes(max + 1) }
+    if (bytes.size > max) throw IOException("The answer was too big")
+    return String(bytes, body.contentType()?.charset() ?: Charsets.UTF_8)
+}
+
 /** A failed request to another service, with its HTTP status. */
 class HttpException(val code: Int, message: String) : IOException(message)
 
@@ -39,8 +50,12 @@ suspend fun <T> OkHttpClient.call(request: Request, read: (Response) -> T): T = 
     )
 }
 
-suspend fun OkHttpClient.fetchString(request: Request): String = call(request) { response ->
-    val body = response.body?.string().orEmpty()
+/**
+ * Another service's answer as text, at most [max] bytes once unzipped (OkHttp unzips gzip itself, so
+ * the size on the wire says nothing): a bigger one is refused rather than filling the memory.
+ */
+suspend fun OkHttpClient.fetchString(request: Request, max: Int = MAX_ANSWER): String = call(request) { response ->
+    val body = response.boundedString(max)
     if (!response.isSuccessful) {
         throw HttpException(response.code, "${request.method} ${request.url.encodedPath} failed: HTTP ${response.code} ${body.take(200)}")
     }

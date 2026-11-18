@@ -47,6 +47,7 @@ data class Sent(val sent: Int)
 
 /** Notifications, reminders, the digest, webhooks, Home Assistant, reports, exports and the watch. */
 fun Route.platformRoutes(services: Services) {
+    val emailTests = com.health.server.util.WindowLimit(3, 60 * 60_000L, services.clock)
     val platform by lazy { services.platform }
 
     route("/api/push") {
@@ -104,6 +105,8 @@ fun Route.platformRoutes(services: Services) {
         }
         post("/email-test") {
             val user = call.requireUser(services)
+            // A few a day, no more: the address isn't checked, and this is the server's mail.
+            if (!emailTests.allow(user.id)) throw ApiError.tooMany("That's enough test emails for now. Try again later")
             val profile = services.profiles.get(user.id)
             val to = profile.digest.email?.takeIf { SmtpMailer.validAddress(it) } ?: throw ApiError.badRequest("Add your email address in Settings › Weekly digest first")
             if (!services.settings.get().smtp.ready) throw ApiError.badRequest("Email isn't set up on this server yet: an admin can add a mail server in Admin › Email")
@@ -113,7 +116,8 @@ fun Route.platformRoutes(services: Services) {
             } catch (e: ApiError) {
                 throw e
             } catch (e: Exception) {
-                throw ApiError.upstream("The mail server didn't take it: ${e.message ?: e.javaClass.simpleName}")
+                // The mail server's own words (its host, its replies) are for the admin's test, not here.
+                throw ApiError.upstream("The mail server didn't take it. If it keeps happening, ask your server's admin to check Admin › Email")
             }
             call.respond(mapOf("ok" to true))
         }
@@ -257,7 +261,8 @@ fun Route.platformRoutes(services: Services) {
             } catch (e: ApiError) {
                 throw e
             } catch (e: Exception) {
-                throw ApiError.upstream("The mail server didn't take it: ${e.message ?: e.javaClass.simpleName}")
+                // The mail server's own words (its host, its replies) are for the admin's test, not here.
+                throw ApiError.upstream("The mail server didn't take it. If it keeps happening, ask your server's admin to check Admin › Email")
             }
             call.respond(mapOf("ok" to true))
         }

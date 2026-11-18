@@ -1,5 +1,6 @@
 package com.health.server.tracking
 
+import com.health.server.util.boundedString
 import com.health.api.Place
 import com.health.server.ApiError
 import com.health.server.SettingsStore
@@ -125,7 +126,7 @@ class Weather(
                     log.warn("Open-Meteo answered {} for {}", response.code, url.substringBefore('?'))
                     null
                 } else {
-                    json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
+                    json.parseToJsonElement(response.boundedString()).jsonObject
                 }
             }
         } catch (e: Exception) {

@@ -405,7 +405,7 @@ class ScreenshotTest {
     )
     private val profile = Profile(birthYear = 1994, heightCm = 170.0, timezone = "America/New_York", goals = goals)
 
-    private val noSignIn = SignInActions({ error("unused") }, { "123 456" }, { _, _, _ -> })
+    private val noSignIn = SignInActions(checkServer = { error("unused") }, browserSignIn = { "123 456" }, passwordSignIn = { _, _, _ -> })
 
     @Test
     fun signIn() {

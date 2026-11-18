@@ -16,6 +16,7 @@ import com.health.server.ApiError
 import com.health.server.modules.UserSettingsStore
 import com.health.server.util.HttpException
 import com.health.server.util.fetchString
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -122,7 +123,7 @@ class MealieService(
         return try {
             val page = get(saved, "api/recipes", listOf("search" to query, "page" to "1", "perPage" to "$LIMIT")) as? JsonObject ?: throw Problem(NOT_MEALIE)
             val slugs = (page["items"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.str("slug") }.distinct().take(LIMIT)
-            MealieRecipes(coroutineScope { slugs.map { async { recipeOrNull(userId, saved, it) } }.awaitAll() }.filterNotNull())
+            MealieRecipes(coroutineScope { slugs.map { async { fetching.withPermit { recipeOrNull(userId, saved, it) } } }.awaitAll() }.filterNotNull())
         } catch (e: Problem) {
             MealieRecipes(problem = e.message)
         }
@@ -157,7 +158,7 @@ class MealieService(
                 if (e.code == 404) get(saved, "api/groups/mealplans", query) else throw e
             }
             val items = ((json as? JsonObject)?.get("items") as? JsonArray ?: json as? JsonArray).orEmpty()
-                .mapNotNull { it as? JsonObject }.filter { it.str("date") == day }
+                .mapNotNull { it as? JsonObject }.filter { it.str("date") == day }.take(MAX_PLANNED)
             val (diary, _) = foods.day(userId, date)
             val refs = foods.refs(userId, diary.mapNotNull { it.foodId }).values.toSet()
             val names = diary.map { it.name.trim().lowercase() }.toSet()
@@ -165,7 +166,7 @@ class MealieService(
                 items.map { e ->
                     async {
                         val slug = (e["recipe"] as? JsonObject)?.str("slug")
-                        val recipe = slug?.let { recipeOrNull(userId, saved, it) }
+                        val recipe = slug?.let { fetching.withPermit { recipeOrNull(userId, saved, it) } }
                         val title = e.str("title")?.trim()?.ifBlank { null } ?: recipe?.name ?: (e["recipe"] as? JsonObject)?.str("name")
                         val note = e.str("text")?.trim()?.ifBlank { null }?.take(500)
                         if (title == null && note == null) return@async null
@@ -201,6 +202,9 @@ class MealieService(
         return recipe
     }
 
+    /** Recipes fetched at once, across everyone: a Mealie answering slowly can't tie the server up. */
+    private val fetching = kotlinx.coroutines.sync.Semaphore(4)
+
     private fun forget(userId: String) = recent.keys.removeIf { it.startsWith("$userId|") }
 
     private suspend fun get(saved: Saved, path: String, query: List<Pair<String, String>> = emptyList()): JsonElement {
@@ -209,7 +213,7 @@ class MealieService(
         val url = base.newBuilder().addEncodedPathSegments(path).apply { query.forEach { (k, v) -> addQueryParameter(k, v) } }.build()
         val request = Request.Builder().url(url).header("Authorization", "Bearer ${saved.token}").header("Accept", "application/json").get().build()
         val text = try {
-            client.fetchString(request)
+            client.fetchString(request, MAX_ANSWER)
         } catch (e: HttpException) {
             throw Problem(
                 when (e.code) {
@@ -237,6 +241,11 @@ class MealieService(
     private suspend fun <T> optional(block: suspend () -> T?): T? = try { block() } catch (e: Problem) { null }
 
     companion object {
+        /** The most of a Mealie answer read (a recipe is a few KB): a bigger one is refused. */
+        const val MAX_ANSWER = 2 * 1024 * 1024
+        /** The most of a day's plan looked at. */
+        const val MAX_PLANNED = 50
+
         const val KEY = "food.mealie"
         const val LIMIT = 10
         private const val KEEP_MS = 10 * 60_000L

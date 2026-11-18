@@ -1,5 +1,6 @@
 package com.health.server.food
 
+import com.health.server.util.boundedString
 import com.health.api.ApiJson
 import com.health.api.Food
 import com.health.server.Services
@@ -330,7 +331,7 @@ class UsdaLocal(
      */
     suspend fun release(): Release = withContext(Dispatchers.IO) {
         val page = pageUrl.toHttpUrl()
-        val html = open(page, "GET").use { it.body?.string().orEmpty() }
+        val html = open(page, "GET").use { it.boundedString() }
         val found = LINK.findAll(html).mapNotNull { m ->
             val url = page.resolve(m.groupValues[1]) ?: return@mapNotNull null
             Triple(m.groupValues[3], m.groupValues[2], url)
