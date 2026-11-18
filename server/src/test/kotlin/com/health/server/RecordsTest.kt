@@ -291,10 +291,24 @@ class RecordsTest {
         return r.obj().str("url").toHttpUrl().also { fake.expectedChallenge = it.queryParameter("code_challenge") }
     }
 
-    private suspend fun HttpClient.callback(query: String): String {
+    /** The portal's redirect back, as the browser follows it: the address it goes on to. */
+    private suspend fun HttpClient.returned(query: String): String {
         val r = get("/api/records/callback?$query").seen()
         assertEquals(HttpStatusCode.Found, r.status)
         return r.headers[HttpHeaders.Location]!!
+    }
+
+    /**
+     * Back from the portal, then confirmed by the signed-in app as it does: the address it shows,
+     * with `connected=` once confirmed or `error=` with what it says.
+     */
+    private suspend fun HttpClient.callback(query: String): String {
+        val location = returned(query)
+        val confirm = param(location, "confirm") ?: return location
+        val r = postJson("/api/records/confirm", """{"token":"$confirm"}""").seen()
+        val back = location.substringBefore('?')
+        return if (r.status == HttpStatusCode.OK) "$back?connected=${r.obj().str("id")}"
+        else "$back?error=${java.net.URLEncoder.encode(r.obj().str("error"), Charsets.UTF_8)}"
     }
 
     private fun param(location: String, name: String): String? =
@@ -584,6 +598,28 @@ class RecordsTest {
         // Someone else signed in on this browser can't take my sign-in.
         val mine = me.connect(fake.mgb).queryParameter("state")
         assertEquals(RecordsService.SOMEONE_ELSE, param(sam.callback("code=good-code&state=$mine"), "error"))
+        // Started by me, allowed by someone else at their portal (a browser signed in as no one here):
+        // nothing is connected until the app confirms it, and only I can.
+        val lured = me.connect(fake.mgb).queryParameter("state")
+        val stranger = noRedirects()
+        val held = stranger.returned("code=good-code&state=$lured")
+        val token = param(held, "confirm")!!
+        assertTrue(me.get("/api/records").obj()["connections"]!!.jsonArray.isEmpty())
+        val taken = sam.postJson("/api/records/confirm", """{"token":"$token"}""")
+        assertEquals(HttpStatusCode.Forbidden, taken.status)
+        assertEquals(RecordsService.SOMEONE_ELSE, taken.obj().str("error"))
+        // Used up by that try: not even I can confirm it now; and a made-up or unsigned one goes nowhere.
+        assertEquals(HttpStatusCode.BadRequest, me.postJson("/api/records/confirm", """{"token":"$token"}""").status)
+        assertEquals(HttpStatusCode.BadRequest, me.postJson("/api/records/confirm", """{"token":"made-up-token-made-up-token"}""").status)
+        assertEquals(HttpStatusCode.Unauthorized, stranger.postJson("/api/records/confirm", """{"token":"$token"}""").status)
+        // A state isn't a confirmation, nor a confirmation a state.
+        val unconfirmed = param(me.returned("code=good-code&state=${me.connect(fake.mgb).queryParameter("state")}"), "confirm")!!
+        assertEquals(RecordsService.EXPIRED, param(me.returned("code=good-code&state=$unconfirmed"), "error"))
+        // The portal's code waits five minutes for the app, no more.
+        val slow = param(me.returned("code=good-code&state=${me.connect(fake.mgb).queryParameter("state")}"), "confirm")!!
+        now += 6 * 60_000L
+        assertEquals(HttpStatusCode.BadRequest, me.postJson("/api/records/confirm", """{"token":"$slow"}""").status)
+        assertTrue(me.get("/api/records").obj()["connections"]!!.jsonArray.isEmpty())
         // Not allowed at the portal: said kindly, nothing upstream passed on.
         val denied = me.connect(fake.mgb).queryParameter("state")
         assertEquals("You didn't allow it, so nothing was connected", param(me.callback("error=access_denied&error_description=%3Cscript%3E&state=$denied"), "error"))

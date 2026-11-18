@@ -49,6 +49,11 @@ fun Route.recordsRoutes(services: Services) {
             call.response.header("Cache-Control", "no-store")
             call.respondRedirect(target)
         }
+        post("/confirm") {
+            val user = call.requireUser(services)
+            val token = call.receive<Map<String, String>>()["token"].orEmpty()
+            call.respond(records.confirm(user.id, token))
+        }
         get("/items") {
             val user = call.requireUser(services)
             val kind = call.request.queryParameters["kind"]?.takeIf { it.isNotBlank() }?.let { k ->

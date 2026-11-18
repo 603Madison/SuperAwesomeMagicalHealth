@@ -52,6 +52,11 @@ class RecordStore(private val db: Database, private val box: SecretBox, private 
         val verifier: String,
         val redirectUri: String,
         val app: Boolean = false,
+        /**
+         * Once the portal has sent the person back: its code, kept (sealed, under a new single-use
+         * token) until the person who started it confirms it from their signed-in app.
+         */
+        val code: String? = null,
     )
 
     private fun connectionContext(userId: String, id: String) = "record-connection:$userId:$id"

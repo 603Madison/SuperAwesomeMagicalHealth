@@ -251,24 +251,41 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
      * where to send it next. The person is known by the sign-in's single-use `state` alone (the
      * session cookie doesn't come on a redirect from another site); when one does come, it must be theirs.
      */
+    /**
+     * Where the portal sends the browser back. Nothing is connected yet: the portal's code is kept,
+     * sealed under a new single-use token, and the browser goes on to the app, which confirms it as
+     * the signed-in person who started it ([confirm]). So someone else on this server can't start a
+     * sign-in, get another person to allow it at their portal, and have that record land with them.
+     */
     suspend fun callback(params: Map<String, String?>, sessionUserId: String?): String {
         val state = params["state"]?.takeIf { it.length in 16..256 }
-        val found = state?.let { store.finishPending(it) } ?: return back(false, error = EXPIRED)
+        val found = state?.let { store.finishPending(it) }?.takeIf { it.second.code == null } ?: return back(false, error = EXPIRED)
         val (userId, p) = found
         if (sessionUserId != null && sessionUserId != userId) return back(p.app, error = SOMEONE_ELSE)
         params["error"]?.let { return back(p.app, error = if (it == "access_denied") DENIED else PORTAL_REFUSED) }
         val code = params["code"]?.takeIf { it.isNotBlank() && it.length <= 4096 } ?: return back(p.app, error = PORTAL_REFUSED)
-        if (!allowed(userId)) return back(p.app, error = PAUSED)
-        if (!setUp(p.provider)) return back(p.app, error = notSetUp(p.provider))
+        val confirm = Random.token(32)
+        store.startPending(userId, confirm, p.copy(code = code), CONFIRM_MS)
+        return back(p.app, confirm = confirm)
+    }
+
+    /** Connects the portal the person just allowed: only the one who started it, signed in, within a few minutes. */
+    suspend fun confirm(userId: String, token: String): RecordConnection {
+        val found = token.takeIf { it.length in 16..256 }?.let { store.finishPending(it) }?.takeIf { it.second.code != null }
+            ?: throw ApiError.badRequest(EXPIRED)
+        val (startedBy, p) = found
+        if (startedBy != userId) throw ApiError.forbidden(SOMEONE_ELSE)
+        requireAllowed(userId)
+        if (!setUp(p.provider)) throw ApiError.badRequest(notSetUp(p.provider))
         val tokens = try {
-            token(p.provider, p.tokenEndpoint, FormBody.Builder().add("grant_type", "authorization_code").add("code", code).add("redirect_uri", p.redirectUri).add("code_verifier", p.verifier))
+            token(p.provider, p.tokenEndpoint, FormBody.Builder().add("grant_type", "authorization_code").add("code", p.code!!).add("redirect_uri", p.redirectUri).add("code_verifier", p.verifier))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             log.warn("A portal didn't give access for a sign-in: {}", (e as? Refused)?.let { "HTTP ${it.status}" } ?: e.javaClass.simpleName)
-            return back(p.app, error = EXCHANGE_FAILED)
+            throw ApiError.badRequest(EXCHANGE_FAILED)
         }
-        val patient = tokens.patient ?: return back(p.app, error = "The portal didn't say whose record it is, so nothing was connected")
+        val patient = tokens.patient ?: throw ApiError.badRequest("The portal didn't say whose record it is, so nothing was connected")
         val access = RecordStore.Access(
             organization = p.organization, fhirBaseUrl = p.fhirBaseUrl, tokenEndpoint = p.tokenEndpoint, revokeEndpoint = p.revokeEndpoint,
             accessToken = tokens.access, refreshToken = tokens.refresh, expiresAt = tokens.expiresAt, patient = patient, scope = tokens.scope,
@@ -284,11 +301,11 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
         log.info("Medical records: a portal was connected ({})", id)
         val first = scope.launch { runCatching { syncNow(userId, id) }.onFailure { log.warn("A first import failed: {}", it.javaClass.simpleName) } }
         withTimeoutOrNull(firstImportWaitMs) { first.join() }
-        return back(p.app, connected = id)
+        return connections(userId).first { it.id == id }
     }
 
-    private fun back(app: Boolean, connected: String? = null, error: String? = null): String {
-        val query = connected?.let { "connected=${encode(it)}" } ?: "error=${encode(error.orEmpty())}"
+    private fun back(app: Boolean, confirm: String? = null, error: String? = null): String {
+        val query = confirm?.let { "confirm=${encode(it)}" } ?: "error=${encode(error.orEmpty())}"
         return if (app) "$APP_RETURN?$query" else "$WEB_RETURN?$query"
     }
 
@@ -592,6 +609,8 @@ class RecordsService(private val services: Services, private val urls: Urls = Ur
         )
 
         const val PENDING_MS = 10 * 60_000L
+        /** How long a sign-in waits for the app to confirm it: portals' codes don't last much longer. */
+        const val CONFIRM_MS = 5 * 60_000L
         private const val WEEK_MS = 7 * 86_400_000L
         private const val HOUR_MS = 3_600_000L
         private const val DAY_MS = 23 * 3_600_000L
