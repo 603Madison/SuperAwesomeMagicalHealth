@@ -182,7 +182,7 @@ object ConditionCatalog {
             setOf(Module.NEURO, Module.MIND),
             setOf(
                 Fields.NEURO_ABOUT_ME, Fields.NEURO_SENSORY, Fields.NEURO_OVERLOAD, Fields.NEURO_BURNOUT, Fields.NEURO_MASKING, Fields.NEURO_SOCIAL,
-                Fields.NEURO_INTERESTS, Fields.NEURO_STIMS, Fields.NEURO_ROUTINES, Fields.NEURO_CARDS, Fields.NEURO_CALM, Fields.MIND_ENERGY_BUDGET,
+                Fields.NEURO_INTERESTS, Fields.NEURO_STIMS, Fields.NEURO_ROUTINES, Fields.NEURO_CARDS, Fields.NEURO_CALM,
             ),
             triggers = listOf("change of plans", "noise", "bright light", "crowds", "too many demands", "social", "hunger", "tired"),
             aliases = listOf("autistic", "ASD", "Asperger's"),
@@ -193,7 +193,7 @@ object ConditionCatalog {
             setOf(Module.NEURO, Module.MIND),
             setOf(
                 Fields.NEURO_ABOUT_ME, Fields.NEURO_FOCUS, Fields.NEURO_EXECUTIVE, Fields.NEURO_TIME, Fields.NEURO_ROUTINES, Fields.NEURO_MED_EFFECT,
-                Fields.NEURO_INTERESTS, Fields.NEURO_SOCIAL, Fields.MIND_ENERGY_BUDGET,
+                Fields.NEURO_INTERESTS, Fields.NEURO_SOCIAL,
             ),
             aliases = listOf("ADD", "attention deficit"),
         ),
@@ -204,7 +204,7 @@ object ConditionCatalog {
             setOf(
                 Fields.NEURO_ABOUT_ME, Fields.NEURO_SENSORY, Fields.NEURO_OVERLOAD, Fields.NEURO_BURNOUT, Fields.NEURO_MASKING, Fields.NEURO_SOCIAL,
                 Fields.NEURO_INTERESTS, Fields.NEURO_STIMS, Fields.NEURO_ROUTINES, Fields.NEURO_CARDS, Fields.NEURO_CALM, Fields.NEURO_FOCUS,
-                Fields.NEURO_EXECUTIVE, Fields.NEURO_TIME, Fields.NEURO_MED_EFFECT, Fields.MIND_ENERGY_BUDGET,
+                Fields.NEURO_EXECUTIVE, Fields.NEURO_TIME, Fields.NEURO_MED_EFFECT,
             ),
         ),
         c(

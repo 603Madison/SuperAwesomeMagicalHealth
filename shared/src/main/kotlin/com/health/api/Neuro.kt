@@ -213,8 +213,10 @@ data class EnergyCheck(
 
 @Serializable
 data class EnergyFocusSettings(
-    /** The ADHD medication, for focus since a dose; null: worked out from the medications' names. */
+    /** The ADHD medication, for focus since a dose; null: worked out from the medications' names (unless [noMedication]). */
     val medicationId: String? = null,
+    /** "None of these": no medication is treated as the ADHD one, whatever the names say. */
+    val noMedication: Boolean = false,
     /** Gentle reminders to check in, at these local times ("10:00"); none by default. */
     val reminders: List<String> = emptyList(),
 )

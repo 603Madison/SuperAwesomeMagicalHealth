@@ -134,6 +134,13 @@ class EnergyFocusTest {
             val saved = admin.putJson("/api/neuro/energy-focus/settings", """{"reminders":["14:00","10:00","25:00","10:00"]}""").obj()
             assertEquals(listOf("10:00", "14:00"), saved["reminders"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals(HttpStatusCode.BadRequest, admin.putJson("/api/neuro/energy-focus/settings", """{"medicationId":"nope"}""").status)
+            // "None of these": no medication counts, whatever the names say; and back again.
+            admin.putJson("/api/neuro/energy-focus/settings", """{"noMedication":true,"reminders":["10:00","14:00"]}""")
+            val none = admin.get("/api/neuro/energy-focus").obj()
+            assertTrue(none["medication"] == null || none["medication"].toString() == "null")
+            assertTrue(none["dosesToday"]!!.jsonArray.isEmpty())
+            admin.putJson("/api/neuro/energy-focus/settings", """{"reminders":["10:00","14:00"]}""")
+            assertEquals("Vyvanse", admin.get("/api/neuro/energy-focus").obj()["medication"]!!.jsonPrimitive.content)
 
             runBlocking {
                 // The check-in is in the day; Today has it, and the old energy budget is gone.

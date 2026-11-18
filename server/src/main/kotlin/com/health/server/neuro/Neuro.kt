@@ -148,7 +148,8 @@ class NeuroService(
         if (input.medicationId != null && meds != null && meds.list(userId, all = true).none { it.id == input.medicationId }) {
             throw ApiError.badRequest("That medication isn't in your list")
         }
-        return personal.put(userId, focusSettingsKey, EnergyFocusSettings(input.medicationId, times), EnergyFocusSettings.serializer())
+        val none = input.noMedication && input.medicationId == null
+        return personal.put(userId, focusSettingsKey, EnergyFocusSettings(input.medicationId, none, times), EnergyFocusSettings.serializer())
     }
 
     suspend fun checks(userId: String, days: Int): List<EnergyCheck> {
@@ -169,7 +170,9 @@ class NeuroService(
     /** The ADHD medication: the one chosen, or one whose name or purpose says so. */
     suspend fun adhdMedication(userId: String): com.health.api.Medication? {
         val all = meds?.list(userId, all = true) ?: return null
-        energyFocusSettings(userId).medicationId?.let { id -> return all.firstOrNull { it.id == id } }
+        val settings = energyFocusSettings(userId)
+        if (settings.noMedication) return null
+        settings.medicationId?.let { id -> return all.firstOrNull { it.id == id } }
         return all.filter { it.active }.firstOrNull { m ->
             val text = "${m.name} ${m.purpose.orEmpty()}".lowercase(Locale.ROOT)
             ADHD_WORDS.any { it in text }
@@ -619,7 +622,7 @@ class NeuroService(
                         key = "energy-check:$day:$t", at = at, event = WebhookEvent.HABIT_DUE,
                         title = "How are your energy and focus?", body = "Two taps, for your patterns.",
                         privateTitle = "A check-in reminder", privateBody = "Two taps when you're ready.",
-                        url = "/neuro#energy", actions = listOf(ReminderAction("open", "Check in")),
+                        url = "/neuro#energyfocus", actions = listOf(ReminderAction("open", "Check in")),
                     )
                 }
                 day = day.plusDays(1)
