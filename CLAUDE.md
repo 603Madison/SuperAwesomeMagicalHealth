@@ -21,8 +21,10 @@
   `transition/`, `photos/` (sealed files under the data folder), `ai/` (the optional assistant).
   Each feature plugs into digests, reports, exports, reminders and appointment questions through
   `platform/FeatureHooks`, listed in `Services.hooks`. `IntegrationTest` covers the features
-  working together. Food's outside sources are in `food/`: USDA FoodData Central (the food database, `UsdaFoods.kt`,
-  with the admin's key; `FoodFinder.kt` merges), Open Food Facts (an opt-in fallback, English only), and each person's
+  working together. Food's outside sources are in `food/`: USDA FoodData Central, the food
+  database (`UsdaFoods.kt` online with the admin's key, or `UsdaLocal.kt`: its public-domain list
+  kept on the server in `usda-foods.db`, so searches never leave it), Open Food Facts (an opt-in
+  fallback, English only), with `FoodFinder.kt` merging them, and each person's
   Mealie (`Mealie.kt`: its token sealed in `UserSettingsStore` under `food.mealie`, never sent
   back; `/api/mealie` is never shared; nothing is written to Mealie). A person's own settings go
   in `UserSettingsStore` (sealed, one row per key; keys are prefixed by feature). Anything the

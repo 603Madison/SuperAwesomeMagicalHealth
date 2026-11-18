@@ -33,9 +33,12 @@ private fun serve(config: ServerConfig) {
     val server = embeddedServer(Netty, port = config.port, host = config.host) { module(services) }
     // Reminders, webhooks and the weekly digest, each minute.
     services.platform.scheduler.start()
+    // The monthly look for a newer USDA food list, where it's kept on this server.
+    services.usdaLocal.start()
     Runtime.getRuntime().addShutdownHook(
         Thread {
             services.platform.scheduler.stop()
+            services.usdaLocal.stop()
             server.stop(1_000, 5_000)
             services.close()
         },

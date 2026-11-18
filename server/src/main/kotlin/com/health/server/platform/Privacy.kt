@@ -62,6 +62,8 @@ class PrivacyService(private val services: Services) {
         val emails = profile.digest.emailEnabled && !profile.digest.email.isNullOrBlank()
         val mail = server.smtp
         val usdaKey = services.settings.usdaApiKey().isNotEmpty()
+        // USDA's food list kept on this server (and ready): nothing goes out for a search or a scan.
+        val usdaHere = server.usdaLocal.use && services.usdaLocal.ready
         val records = services.medicalRecords.connections(user.id)
         val destinations = listOfNotNull(
             DataDestination(
@@ -71,13 +73,23 @@ class PrivacyService(private val services: Services) {
                 whenSent = "Only when USDA FoodData Central doesn't know a food you search for or scan, where this server has it switched on",
                 state = state(DataPath.FOOD_DATABASE, true, server.foodDatabase), setUp = null,
             ),
-            DataDestination(
-                DataPath.USDA_FOODS, "USDA FoodData Central", "The US Department of Agriculture's food database",
-                hosts = listOf("api.nal.usda.gov"),
-                what = "The words you search for and the barcodes you scan, with this server's key. Never who you are or what you ate.",
-                whenSent = "When you search for a food or scan a barcode",
-                state = state(DataPath.USDA_FOODS, usdaKey, server.usdaFoods), setUp = null,
-            ),
+            if (usdaHere) {
+                DataDestination(
+                    DataPath.USDA_FOODS, "USDA FoodData Central", "The US Department of Agriculture's food database, kept on this server",
+                    hosts = emptyList(),
+                    what = "Nothing. Kept on this server: searches and scans never leave it. The server downloads USDA's food list itself (from fdc.nal.usda.gov), which carries nothing about anyone.",
+                    whenSent = "Never",
+                    state = state(DataPath.USDA_FOODS, true, server.usdaFoods), setUp = null,
+                )
+            } else {
+                DataDestination(
+                    DataPath.USDA_FOODS, "USDA FoodData Central", "The US Department of Agriculture's food database",
+                    hosts = listOf("api.nal.usda.gov"),
+                    what = "The words you search for and the barcodes you scan, with this server's key. Never who you are or what you ate.",
+                    whenSent = "When you search for a food or scan a barcode",
+                    state = state(DataPath.USDA_FOODS, usdaKey, server.usdaFoods), setUp = null,
+                )
+            },
             DataDestination(
                 DataPath.HEALTH_RECORDS, "Medical records", "Your hospital, clinic or practice's patient portal (Epic or athenahealth)",
                 hosts = (services.medicalRecords.hosts(user.id) + listOfNotNull("open.epic.com".takeIf { com.health.api.RecordProvider.EPIC in server.records.providers })).distinct(),

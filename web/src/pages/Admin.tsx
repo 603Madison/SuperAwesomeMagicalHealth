@@ -162,7 +162,7 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
       const smtp = settings.smtp !== undefined ? (await api.adminSmtp().catch(() => null))?.settings ?? settings.smtp : undefined;
       // Food search is saved on its own too (FoodSearchPanel).
       const food = (await api.adminSettings().catch(() => null))?.settings;
-      const foodNow = food ? { foodDatabase: food.foodDatabase, usdaFoods: food.usdaFoods } : {};
+      const foodNow = food ? { foodDatabase: food.foodDatabase, usdaFoods: food.usdaFoods, usdaLocal: food.usdaLocal } : {};
       onSaved(await api.saveSettings({ ...(smtp ? { ...settings, smtp } : settings), ...foodNow }, secret ? { oidcClientSecret: secret } : {}));
       setSecret("");
       toast("Saved");

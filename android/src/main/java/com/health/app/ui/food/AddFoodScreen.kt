@@ -212,6 +212,9 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
                 if (results.online.isEmpty()) {
                     item { SectionTitle(FoodSources.NONE_TITLE) }
                     item { Hint(results.onlineError ?: "Nothing found. Try fewer words, or make it a new food.", Modifier.padding(horizontal = 20.dp)) }
+                } else {
+                    // A note beside what was found (USDA's list on its way to the server).
+                    results.onlineError?.let { note -> item { Hint(note, Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) } }
                 }
             }
         }

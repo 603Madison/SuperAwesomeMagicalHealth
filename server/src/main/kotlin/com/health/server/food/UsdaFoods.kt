@@ -159,13 +159,48 @@ class UsdaFoods(
             )
         }
 
+        /**
+         * A food from USDA's downloadable files (one entry of FoundationFoods, SRLegacyFoods,
+         * SurveyFoods or BrandedFoods), mapped as a search's answer is: its nutrients are given the
+         * search's shape (`nutrient.number`, `nutrient.unitName` and `amount` become `nutrientNumber`,
+         * `unitName` and `value`), and a survey food's `foodPortions` its `foodMeasures`.
+         */
+        fun fromBulk(item: JsonObject): Food? {
+            val nutrients = (item["foodNutrients"] as? JsonArray).orEmpty().mapNotNull { n ->
+                val o = n as? JsonObject ?: return@mapNotNull null
+                val nutrient = o["nutrient"] as? JsonObject ?: return@mapNotNull null
+                JsonObject(
+                    mapOf(
+                        "nutrientNumber" to (nutrient["number"] ?: return@mapNotNull null),
+                        "unitName" to (nutrient["unitName"] ?: JsonPrimitive("")),
+                        "value" to (o["amount"] ?: return@mapNotNull null),
+                    ),
+                )
+            }
+            val survey = item.text("dataType") == "Survey (FNDDS)"
+            val measures = if (!survey) emptyList() else (item["foodPortions"] as? JsonArray).orEmpty().mapNotNull { p ->
+                val o = p as? JsonObject ?: return@mapNotNull null
+                JsonObject(
+                    mapOf(
+                        "disseminationText" to (o["portionDescription"] ?: return@mapNotNull null),
+                        "gramWeight" to (o["gramWeight"] ?: return@mapNotNull null),
+                        "rank" to (o["sequenceNumber"] ?: JsonPrimitive(Int.MAX_VALUE)),
+                    ),
+                )
+            }
+            return toFood(JsonObject(item + mapOf("foodNutrients" to JsonArray(nutrients), "foodMeasures" to JsonArray(measures))))
+        }
+
+        /** A unit as FoodData Central writes it, the same however it's written ("µg", "UG", "mcg" are all UG). */
+        private fun unitOf(raw: String?): String? = raw?.trim()?.replace('µ', 'u')?.replace('μ', 'u')?.uppercase(java.util.Locale.ROOT)?.let { if (it == "MCG") "UG" else it }
+
         /** Each nutrient's amount per 100 g, by number, in FoodData Central's own unit (only the first of a number counts). */
         private fun nutrientValues(item: JsonObject): Map<String, Double> {
             val out = LinkedHashMap<String, Double>()
             for (n in (item["foodNutrients"] as? JsonArray).orEmpty()) {
                 val o = n as? JsonObject ?: continue
                 val number = o.text("nutrientNumber") ?: continue
-                val unit = o.text("unitName")?.uppercase()
+                val unit = unitOf(o.text("unitName"))
                 // Energy only in kilocalories (kilojoules have a number of their own, 268).
                 if (number in ENERGY && unit != "KCAL") continue
                 val value = o.number("value")?.takeIf { it >= 0 } ?: continue
@@ -185,7 +220,7 @@ class UsdaFoods(
                 val o = n as? JsonObject ?: continue
                 val number = o.text("nutrientNumber") ?: continue
                 val value = o.number("value")?.takeIf { it >= 0 } ?: continue
-                val unit = o.text("unitName")?.uppercase()
+                val unit = unitOf(o.text("unitName"))
                 if (number == "324" && unit == "IU") {
                     if (vitaminDIu == null) vitaminDIu = value
                     continue
@@ -194,7 +229,7 @@ class UsdaFoods(
                 val grams = value * when (unit) {
                     "G" -> 1.0
                     "MG" -> 0.001
-                    "UG", "MCG" -> 0.000_001
+                    "UG" -> 0.000_001
                     else -> continue
                 }
                 // More than the whole 100 g can't be right.
@@ -217,7 +252,12 @@ class UsdaFoods(
             val amount = "${amount(size)} $unit"
             val words = item.text("householdServingFullText")?.trim()?.takeIf { it.isNotEmpty() && it.any(Char::isLetterOrDigit) }
                 ?.let { if (it.none(Char::isLowerCase)) it.lowercase() else it }
-            val label = if (words == null || words.length > 40 || words.equals(amount, ignoreCase = true)) amount else "$words ($amount)"
+            val label = when {
+                words == null || words.length > 40 || words.equals(amount, ignoreCase = true) -> amount
+                // Its weight already in its words: "2 Tbsp (30g)".
+                HAS_WEIGHT.containsMatchIn(words) -> words
+                else -> "$words ($amount)"
+            }
             return label to size
         }
 
@@ -262,6 +302,7 @@ class UsdaFoods(
 
         private val SMALL_WORDS = setOf("a", "an", "and", "or", "of", "with", "in", "on", "the", "for", "to", "by", "from")
         private val ENERGY = setOf("208", "957", "958")
+        private val HAS_WEIGHT = Regex("""\(\s*[\d.]+\s*(g|ml|grams?)\s*\)""", RegexOption.IGNORE_CASE)
 
         private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 

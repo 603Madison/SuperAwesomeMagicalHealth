@@ -53,6 +53,9 @@ class UsdaFoodsTest {
 
         // Household words as they are; vitamin D from international units (40 IU is 1 µg).
         assertEquals("2 Tbsp (30 g)", UsdaFoods.toFood(branded.getValue("031200037206"))!!.serving)
+        // Its weight already in its words: not said twice.
+        val withWeight = Json.parseToJsonElement(branded.getValue("031200037206").toString().replace("\"2 Tbsp\"", "\"2 Tbsp (30g)\"")).jsonObject
+        assertEquals("2 Tbsp (30g)", UsdaFoods.toFood(withWeight)!!.serving)
         val olympiana = UsdaFoods.toFood(branded.getValue("680569649836"))!!
         assertEquals(150 / 40.0 * 1.7, olympiana.nutrients.micros.getValue(Micronutrient.VITAMIN_D), 0.01)
     }

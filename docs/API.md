@@ -821,3 +821,27 @@ log to); every-account links never see them. `tools/list` describes each tool.
 `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/{id}`,
 `POST /api/admin/users/{id}/password`, `DELETE /api/admin/users/{id}/sessions`,
 `GET/PUT /api/admin/settings`, `POST /api/admin/oidc/test`.
+
+**USDA's food list on this server** (Admin › Food search; `ServerSettings.usdaLocal`: `use`,
+`packaged`, `autoUpdate`). With `use` and a copy here, food searches and barcodes are answered from
+`usda-foods.db` in the data folder and nothing leaves the server; until a copy is here, the online
+service answers where a key is set (and `onlineError` says the copy isn't here yet), else Open Food
+Facts where it's on.
+
+| | |
+|---|---|
+| `GET /api/admin/usda-local` | `UsdaLocalStatus`: `ready`; `working`, `phase` and `progress` (0–1) while a download is under way; the copy's `release` (date), `packaged`, `foods` and `bytes` on disk; `lastUpdated`, `lastChecked`, `nextCheck`; `newer` (a newer release's date, from the last check); `error` and `errorAt` (the last failure, in plain words); and roughly what each choice takes (`everydayDownload`, `everydayDisk`, `allDownload`, `allDisk`, in bytes) |
+| `POST /api/admin/usda-local/download` | Downloads the latest release (everyday foods, and packaged ones with `usdaLocal.packaged`) in the background → `UsdaLocalStatus`; 409 if one is under way |
+| `POST /api/admin/usda-local/check` | Looks for a newer release now → `UsdaLocalStatus` |
+| `DELETE /api/admin/usda-local` | Stops a download under way and removes the copy → `UsdaLocalStatus` |
+
+The files are found on USDA's download page (`https://fdc.nal.usda.gov/download-datasets/`, public
+domain) by their names, `FoodData_Central_{foundation_food,sr_legacy_food,survey_food,branded_food}_json_{date}.zip`,
+the newest of each kind. Free space is checked first (the largest file, the new copy and a margin);
+each file goes to a temporary file in the data folder, is read as it streams into a new copy beside
+the one in use (never whole into memory), and is deleted; the new copy is swapped in at once when
+complete, so search keeps working from the old one meanwhile, and a failure keeps it. Redirects are
+followed only to the same host over https. Each month (while `use` is on) the server looks for a
+newer release; with `autoUpdate` it downloads it too, the same way, and a failure waits for the
+next check. The copy keeps each food's name, brand, barcode, data type, serving and nutrients per
+serving, with an FTS5 index (a LIKE search where SQLite has no FTS5).

@@ -48,8 +48,23 @@ data class ServerSettings(
     val webhooksPrivateNetworks: Boolean = true,
     /** Search USDA FoodData Central for foods once an API key is set (the search terms go to api.nal.usda.gov). */
     val usdaFoods: Boolean = true,
+    /** USDA's food list kept on this server instead of asking its online service (food/UsdaLocal.kt). */
+    val usdaLocal: UsdaLocalSettings = UsdaLocalSettings(),
     /** Medical records from patient portals: the app registered with each system (secrets are set apart). */
     val records: RecordsSettings = RecordsSettings(),
+)
+
+/**
+ * USDA FoodData Central kept on this server: with [use], searches and scans are answered from the
+ * copy in the data folder (`usda-foods.db`) and never leave the server. [packaged] brings US
+ * packaged foods too (large; barcodes need them). With [autoUpdate], a newer release is
+ * downloaded and swapped in by itself when the monthly check finds one.
+ */
+@Serializable
+data class UsdaLocalSettings(
+    val use: Boolean = false,
+    val packaged: Boolean = false,
+    val autoUpdate: Boolean = false,
 )
 
 /**

@@ -1053,7 +1053,7 @@ class McpServer(private val services: Services) {
         appendLine("SuperAwesomeMagicalHealth ${Services.version}, up ${span(uptime)}.")
         val settings = services.settings.get()
         if (caller.user.isAdmin) {
-            appendLine("Public address: ${settings.publicUrl.ifBlank { "(not set)" }}. Single sign-on: ${if (settings.oidc.enabled) "on (${settings.oidc.issuer})" else "off"}. Food database: USDA FoodData Central ${if (!settings.usdaFoods) "off" else if (services.settings.usdaApiKey().isNotEmpty()) "on" else "(no key)"}, Open Food Facts fallback ${if (settings.foodDatabase) "on" else "off"}.")
+            appendLine("Public address: ${settings.publicUrl.ifBlank { "(not set)" }}. Single sign-on: ${if (settings.oidc.enabled) "on (${settings.oidc.issuer})" else "off"}. Food database: USDA FoodData Central ${if (!settings.usdaFoods) "off" else if (settings.usdaLocal.use) (if (services.usdaLocal.ready) "kept on this server" else "kept on this server (not downloaded yet)") else if (services.settings.usdaApiKey().isNotEmpty()) "online" else "online (no key)"}, Open Food Facts fallback ${if (settings.foodDatabase) "on" else "off"}.")
             val fixed = services.config.overrides.keys.filter { it in ServerConfig.OVERRIDES }.sorted()
             if (fixed.isNotEmpty()) appendLine("Set by environment: ${fixed.joinToString()}.")
         }

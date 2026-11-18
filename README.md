@@ -82,9 +82,10 @@ with a switch to pause each one for yourself. Everything else stays put, and the
 from anywhere else (no fonts, trackers or adverts).
 
 **Food**: search your own foods and [USDA FoodData Central](https://fdc.nal.usda.gov) (everyday
-foods and US packaged foods, with a free key from [api.data.gov](https://api.data.gov/signup/), set in
-Admin › Food search; [Open Food Facts](https://openfoodfacts.org) can fill in where USDA has nothing,
-if the admin turns it on), scan barcodes,
+foods and US packaged foods: kept on your server, so searches and scans never leave it, or asked
+online with a free key from [api.data.gov](https://api.data.gov/signup/); both set in Admin › Food
+search; [Open Food Facts](https://openfoodfacts.org) can fill in where USDA has nothing, if the
+admin turns it on), scan barcodes,
 quick-add calories, make your own foods, copy yesterday's breakfast, bring in your
 [Mealie](https://mealie.io) recipes and the day's meal plan (connect it in Settings › Connections & privacy
 with an API token; each recipe's nutrition comes along, per serving), and track water and
@@ -269,6 +270,10 @@ install directly. Every release updates the repository (`.github/workflows/fdroi
 ## Running it
 
 The image is `ghcr.io/603madison/superawesomemagicalhealth`. Everything it keeps is in `/data`.
+Keeping USDA's food list on the server (Admin › Food search) adds `usda-foods.db` there: about 4 MB
+for everyday foods, or about 105 MB with packaged foods (about 214 MB is downloaded for that, to a
+temporary file in `/data` that's removed after). It's a copy anyone can download again, so backups
+can leave it out.
 
 ### Podman (Quadlet, the systemd way, shows in Cockpit)
 
