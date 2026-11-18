@@ -2210,3 +2210,46 @@ button.day-row-btn:hover .day-title, a.day-row-btn:hover .day-now { color: var(-
 .log-tile span { overflow-wrap: anywhere; }
 .log-hint { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; margin-top: 4px; color: var(--muted); font-size: 0.8rem; }
 .log-hint .link-btn { padding: 8px 4px; font-size: 0.82rem; }
+
+/* ---------- Medical records (pages/Records.tsx, You › Medical records; Admin › Medical records) ---------- */
+
+.records-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.records-calm .empty a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.records-paused { margin-bottom: 16px; }
+.records-connect .search-box { margin-bottom: 10px; }
+.records-promise { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 4px; font-size: 0.85rem; color: var(--muted); }
+.records-promise svg { flex: none; margin-top: 3px; color: var(--primary); }
+.records-results { margin-top: 6px; }
+.records-results button.row { width: 100%; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.records-results button.row:hover:not(:disabled) { background: var(--surface-2); }
+.records-results button.row:disabled { cursor: progress; }
+.records-results li + li { border-top: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); }
+.records-go { color: var(--primary); font-weight: var(--w-medium); font-size: 0.88rem; flex: none; }
+.records-connection { display: flex; flex-direction: column; gap: 8px; }
+.records-connection-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.records-org { font-size: 1.02rem; margin: 0; overflow-wrap: anywhere; }
+.records-when { margin: 0; font-size: 0.9rem; }
+.records-connection p.small { margin: 0; }
+.records-problem { display: flex; align-items: flex-start; gap: 8px; margin: 0; }
+.records-problem svg { flex: none; margin-top: 2px; color: var(--warn); }
+.records-problem.is-gone svg { color: var(--muted); }
+.records-hint { margin: 0 0 6px; }
+.records-connection .button-row { margin-top: 4px; }
+.records-row { align-items: flex-start; }
+.records-row .row-title, .records-row .row-sub { white-space: normal; overflow-wrap: anywhere; }
+.records-row .row-link { padding: 4px 0; }
+.records-flag { display: inline-flex; align-items: center; gap: 4px; flex: none; margin-top: 2px; font-weight: var(--w-semibold); }
+.records-more { margin-top: 6px; padding: 8px 6px; }
+.records-choices { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.records-choice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer; }
+.records-choice input[type="radio"] { flex: none; width: 20px; height: 20px; min-height: 0; padding: 0; margin: 2px 0 0; border: 0; background: none; box-shadow: none; accent-color: var(--primary); }
+.records-choice > span { display: flex; flex-direction: column; gap: 2px; }
+.records-admin-list { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.records-admin-row { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.secret-state { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-height: 44px; }
+.records-howto summary { cursor: pointer; color: var(--primary); font-weight: var(--w-medium); font-size: 0.9rem; }
+.records-howto ol { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--muted); }
+.records-howto strong { color: var(--text); }
+@media (max-width: 760px) {
+  .records-sections { grid-template-columns: minmax(0, 1fr); }
+}

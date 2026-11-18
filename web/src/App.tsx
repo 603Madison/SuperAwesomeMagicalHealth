@@ -44,6 +44,7 @@ import { Reports } from "./pages/Reports";
 import { DigestPage } from "./pages/Digest";
 import { Compare } from "./pages/Compare";
 import { Alerts } from "./pages/Alerts";
+import { Records } from "./pages/Records";
 import { LogHost } from "./components/LogSheet";
 import { MOVED, movedTo } from "./lib/nav";
 
@@ -140,6 +141,7 @@ function Shell() {
           {!viewing && <Route path="/reports" element={<Reports />} />}
           {!viewing && <Route path="/digest" element={<DigestPage />} />}
           {!viewing && <Route path="/devices" element={<Devices />} />}
+          {!viewing && <Route path="/records" element={<Records />} />}
           {/* Health alerts: only ever the person's own (the server never gives them to a share). */}
           {!viewing && <Route path="/alerts" element={<Alerts />} />}
           {/* Two devices side by side: never someone's share either (the server says no to one). */}

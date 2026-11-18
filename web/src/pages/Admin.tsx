@@ -6,6 +6,7 @@ import { useSession } from "../lib/session";
 import type { AdminSettings, ServerSettings, SmtpSettings, User } from "../lib/types";
 import { Button, errorToast, Field, Menu, Modal, PageHeader, Spinner, toast, Toggle, useLoad } from "../components/ui";
 import { AiAdminCard } from "./Assistant";
+import { RecordsAdmin, type RecordSecrets } from "./AdminRecords";
 
 export function Admin() {
   return (
@@ -144,6 +145,8 @@ function ServerPanels() {
 function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s: AdminSettings) => void }) {
   const [settings, setSettings] = useState<ServerSettings>(initial.settings);
   const [secret, setSecret] = useState("");
+  // Medical records apps' secrets to change on save (AdminRecords.tsx).
+  const [recordSecrets, setRecordSecrets] = useState<RecordSecrets>({});
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -158,8 +161,9 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
     try {
       // Mail is saved on its own (below): keep whatever it is now, not what this page loaded with.
       const smtp = settings.smtp !== undefined ? (await api.adminSmtp().catch(() => null))?.settings ?? settings.smtp : undefined;
-      onSaved(await api.saveSettings(smtp ? { ...settings, smtp } : settings, secret ? { oidcClientSecret: secret } : {}));
+      onSaved(await api.saveSettings(smtp ? { ...settings, smtp } : settings, { ...(secret ? { oidcClientSecret: secret } : {}), recordSecrets }));
       setSecret("");
+      setRecordSecrets({});
       toast("Saved");
     } catch (e) { errorToast(e); }
     setBusy(false);
@@ -245,6 +249,9 @@ function ServerForm({ initial, onSaved }: { initial: AdminSettings; onSaved: (s:
           </div>
         </div>
       </section>
+
+      <RecordsAdmin initial={initial} records={settings.records} onChange={(records) => setSettings({ ...settings, records })}
+        secrets={recordSecrets} onSecrets={setRecordSecrets} />
 
       <div className="save-bar">
         <span className="muted">Server {initial.version}</span>

@@ -44,6 +44,7 @@ object WhereDataGoes {
             DataPath.BROWSER_PUSH -> "browser" to "browsers"
             DataPath.SHARES -> "share" to "shares"
             DataPath.HOME_ASSISTANT -> "key" to "keys"
+            DataPath.HEALTH_RECORDS -> "portal" to "portals"
             else -> return "$n set up"
         }
         return "$n ${if (n == 1) one else many}"
@@ -72,8 +73,18 @@ object WhereDataGoes {
         "settings.sharing" -> Link("settings/sharing", "Set up sharing")
         // The weather follows the place chosen in Symptoms.
         "settings.profile" -> Link("symptoms", "Choose a place in Symptoms")
+        "records" -> Link(RECORDS_ROUTE, "Connect in Medical records")
         else -> null
     }
+
+    /** A way out with a page of its own, linked there once it's set up (on or paused): Medical records. */
+    fun openLink(setUp: String?): Link? = when (setUp) {
+        "records" -> Link(RECORDS_ROUTE, "Open Medical records")
+        else -> null
+    }
+
+    /** You › Medical records (ui/records). */
+    const val RECORDS_ROUTE = "records"
 
     /** The map with [path] paused (or resumed) at once, before the server's answer comes. */
     fun pausing(map: DataMap, path: DataPath, paused: Boolean): DataMap = map.copy(

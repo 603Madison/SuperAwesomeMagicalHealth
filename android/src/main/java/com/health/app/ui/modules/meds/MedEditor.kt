@@ -93,7 +93,7 @@ private val KIND_LABELS = mapOf(
 )
 
 @Composable
-fun MedEditorRoute(id: String?, onDone: () -> Unit) {
+fun MedEditorRoute(id: String?, onDone: () -> Unit, draft: Medication? = null) {
     val c = appContainer()
     val vm = viewModel { MedsViewModel(c) }
     val state by vm.state.collectAsState()
@@ -105,6 +105,7 @@ fun MedEditorRoute(id: String?, onDone: () -> Unit) {
     }
     MedEditorScreen(
         existing = id?.let { i -> state.meds.firstOrNull { it.id == i } },
+        draft = draft,
         onBack = onDone,
         onSave = { med ->
             val first = med.reminders && med.active && med.schedule.kind != ScheduleKind.AS_NEEDED && state.meds.none { it.reminders && it.active }
@@ -128,8 +129,10 @@ fun MedEditorScreen(
     onSave: (Medication) -> Unit,
     onDelete: (String) -> Unit,
     hormones: Boolean = false,
+    /** A new one with these filled in (a medication from a medical record); null starts empty. */
+    draft: Medication? = null,
 ) {
-    val start = existing ?: Medication("")
+    val start = existing ?: draft?.copy(id = null) ?: Medication("")
     // Hormone therapy: whether it's part of it, and since when.
     var hormone by remember { mutableStateOf(start.hormone) }
     var startedOn by remember { mutableStateOf(start.startedOn) }

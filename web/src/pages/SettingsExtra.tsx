@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Bell, Clock, Copy, Eye, Home, Lock, LogOut, Mail, Pencil, Plus, Send, ShieldCheck, Trash2, UserPlus, Webhook as WebhookIcon } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
-import { countText, pausedToast, setUpSection, stateText, switchable, withPaused } from "../lib/privacy";
+import { countText, pausedToast, setUpPage, setUpSection, stateText, switchable, withPaused } from "../lib/privacy";
 import { disablePush, enablePush, pushEnabledHere, pushPermission, pushSupported, thisBrowserPushId } from "../lib/push";
 import { session, useSession } from "../lib/session";
 import { startViewing } from "../lib/viewing";
@@ -553,6 +553,8 @@ function Destination({ d, saving, where, onToggle }: {
   const count = countText(d);
   const section = setUpSection(d);
   const place = d.state === "NOT_SET_UP" && section ? where(section) : null;
+  // A way out with a page of its own (Medical records) links there whenever it can be used.
+  const page = d.state !== "OFF_ON_SERVER" ? setUpPage(d) : null;
   return (
     <li className={`privacy-row is-${d.state.toLowerCase().replace(/_/g, "-")}`}>
       <div className="privacy-head">
@@ -579,6 +581,7 @@ function Destination({ d, saving, where, onToggle }: {
       <p className="privacy-when"><Clock size={14} aria-hidden="true" /><span>{d.whenSent}{count ? ` · ${count}` : ""}</span></p>
       {d.pausable === false && <p className="privacy-when">It's how you get in, so it can't be paused.</p>}
       {place && <p className="privacy-when"><Link className="row-link" to={{ hash: place.id }}>Set up in {place.label}</Link></p>}
+      {page && <p className="privacy-when"><Link className="row-link" to={page.to}>{d.state === "NOT_SET_UP" ? `Set up in ${page.label}` : `Open ${page.label}`}</Link></p>}
     </li>
   );
 }

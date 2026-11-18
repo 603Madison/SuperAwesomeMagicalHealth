@@ -33,6 +33,7 @@ export const NAMES = {
   assistant: "Assistant",
   settings: "Settings",
   privacy: "Where your data goes",
+  records: "Medical records",
   weight: "Weight",
 } as const;
 
@@ -100,7 +101,7 @@ const PARENTS: Record<string, { to: string; label: string }> = {
 const BODY_PAGES = ["/body", "/alerts", "/devices/compare"];
 
 /** Pages that belong to You. */
-const YOU_PAGES = ["/you", "/settings", "/devices", "/digest", "/reports", "/assistant", "/conditions", "/admin"];
+const YOU_PAGES = ["/you", "/settings", "/devices", "/digest", "/reports", "/assistant", "/conditions", "/admin", "/records"];
 
 const clean = (pathname: string) => (pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname) || "/";
 const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);

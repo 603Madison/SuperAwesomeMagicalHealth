@@ -430,6 +430,8 @@ private fun LabsTab(labs: List<LabResult>, zone: ZoneId, actions: MedsActions) {
                 listOfNotNull(
                     Format.shortDay(Instant.ofEpochMilli(latest.at).atZone(zone).toLocalDate()),
                     rangeText(latest.low, latest.high),
+                    // One from a connected medical record says where; it's kept by the record, so it has no delete here.
+                    com.health.app.ui.records.RecordsLogic.labSource(latest),
                 ).joinToString(" · "),
             )
             if (sorted.size >= 2) {
@@ -439,7 +441,7 @@ private fun LabsTab(labs: List<LabResult>, zone: ZoneId, actions: MedsActions) {
             if (sorted.size > 1) {
                 Spacer(Modifier.height(6.dp))
                 sorted.reversed().drop(1).take(3).forEach { r ->
-                    Hint("${Format.shortDay(Instant.ofEpochMilli(r.at).atZone(zone).toLocalDate())}: ${Format.upTo2(r.value)} ${r.unit}")
+                    Hint("${Format.shortDay(Instant.ofEpochMilli(r.at).atZone(zone).toLocalDate())}: ${Format.upTo2(r.value)} ${r.unit}" + (com.health.app.ui.records.RecordsLogic.labSource(r)?.let { " · $it" } ?: ""))
                 }
             }
         }

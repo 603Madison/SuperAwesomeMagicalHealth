@@ -2,6 +2,7 @@ import type {
   AdminSettings, AuthConfig, CheckIn, DayFeed, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
   ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider,
+  HealthRecords, RecordAuthorize, RecordConnect, RecordConnection, RecordItem, RecordKind, RecordOrganization,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
@@ -476,6 +477,22 @@ export const api = {
   /** Where the person's data can go, and pausing each way out (Settings › Where your data goes). Never shared. */
   privacy: () => get<DataMap>("/api/privacy"),
   pausePrivacy: (path: DataPath, paused: boolean) => put<DataMap>(`/api/privacy/${q(path)}`, { paused }),
+  /** Medical records from patient portals (You › Medical records). Always the person's own: never shared. */
+  records: () => get<HealthRecords>("/api/records"),
+  recordOrganizations: (query: string) => get<RecordOrganization[]>(`/api/records/organizations?q=${q(query)}`),
+  connectRecords: (connect: RecordConnect) => post<RecordAuthorize>("/api/records/connect", connect),
+  /** Finishes connecting once the portal has sent the browser back with ?confirm=: only then is it connected. */
+  confirmRecords: (token: string) => post<RecordConnection>("/api/records/confirm", { token }),
+  syncRecords: (id: string) => post<RecordConnection>(`/api/records/${q(id)}/sync`),
+  /** Forgets a portal; with [keep], what it brought in stays. */
+  disconnectRecords: (id: string, keep: boolean) => del<unknown>(`/api/records/${q(id)}?keep=${keep}`),
+  recordItems: (kind?: RecordKind, connection?: string) => {
+    const params = new URLSearchParams();
+    if (kind) params.set("kind", kind);
+    if (connection) params.set("connection", connection);
+    const query = params.toString();
+    return get<RecordItem[]>(`/api/records/items${query ? `?${query}` : ""}`);
+  },
   saveAiConsent: (c: AiConsent) => put<AiConsent>("/api/ai/consent", c),
   withdrawAiConsent: () => del<unknown>("/api/ai/consent"),
   aiChat: (messages: AiMessage[]) => post<AiChatReply>("/api/ai/chat", { messages }),
