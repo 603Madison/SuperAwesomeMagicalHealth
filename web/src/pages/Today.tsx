@@ -27,6 +27,7 @@ import { Button, CountBadge, Modal, Spinner, ErrorNotice, errorToast, toast, use
 import { ArrangeButton, ArrangePanel, type Section } from "../components/Arrange";
 import { InsightRow, pagePath, usePageOpens } from "../components/Insights";
 import { WorkoutDialog } from "../components/LogDialogs";
+import { QuickCheckDialog } from "./EnergyFocus";
 import { useLogged } from "../components/LogSheet";
 
 /*
@@ -77,6 +78,7 @@ export function Today() {
   const [arranging, setArranging] = useState(false);
   const [changing, setChanging] = useState(false);
   const [workout, setWorkout] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
   // Until something's picked in What you track: a gentle prompt, dismissed per browser.
@@ -116,7 +118,11 @@ export function Today() {
     switch (action.action) {
       case "continence.change": setChanging(true); return;
       case "food.add": navigate(`/food?add=${ids.meal ?? "SNACK"}${ids.date && ids.date !== todayDate() ? `&date=${ids.date}` : ""}`); return;
-      case "energy.add": navigate("/neuro#energy"); return;
+      // Autism & ADHD's check-in reminder: the check-in, right here. Mind's own budget: its card, on Mind.
+      case "energy.add":
+        if (on.includes("NEURO") && has(F.NEURO_ENERGY)) setChecking(true);
+        else navigate("/mind#energy");
+        return;
       case "voice.start": navigate("/transition/voice"); return;
       case "appointment.open": navigate("/appointments"); return;
       case "alert.open": navigate("/alerts"); return;
@@ -214,6 +220,7 @@ export function Today() {
         intro="Move what matters most to the top, and hide what you don't use. A health alert always comes first." />}
       {score && <ScoreDialog title={score.title} score={score.score} onClose={() => setScore(null)} />}
       {changing && <QuickChange onClose={() => setChanging(false)} onSaved={changed} />}
+      {checking && <QuickCheckDialog onClose={() => setChecking(false)} onSaved={changed} />}
       {editing && <WorkoutDialog workout={editing} onClose={() => setWorkout(null)} onSaved={changed} />}
     </div>
   );

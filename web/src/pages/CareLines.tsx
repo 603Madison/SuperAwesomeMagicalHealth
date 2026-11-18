@@ -5,6 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { clock, hm, num, parseDate, today } from "../lib/format";
 import { useSession } from "../lib/session";
 import { mealsLogged } from "../lib/today";
+import { mindBudgetText, neuroCareLine } from "../lib/energy";
 import { BP_TEXT, glucoseText } from "../lib/vitals";
 import type {
   CycleToday, DaySummary, Digest, FoodEntry, GlucoseUnit, HabitStatus, HormonesToday, LifeStageToday, MindDay, NeuroToday, SymptomsDay, TransitionToday,
@@ -66,17 +67,16 @@ export function cycleLine(cycle?: CycleToday): Headline | null {
   return { value: `Day ${cycle.cycleDay}`, support: join([PHASE[cycle.phase], next]) };
 }
 
+/**
+ * Autism & ADHD: the latest energy and focus check-in and when focus is usually best ("Energy 4 ·
+ * focus 2 at 9:45 AM · focus usually best 9 AM – noon"), the social battery and focus sessions.
+ */
 export function neuroLine(n?: NeuroToday): Headline | null {
-  if (!n) return null;
-  const all: Headline[] = [];
-  if (n.energyLeft != null) all.push({ value: num(n.energyLeft), unit: "energy left" });
-  if (n.socialBattery != null) all.push({ value: `${n.socialBattery * 10}%`, unit: "social battery" });
-  if (n.focusMinutes > 0) all.push({ value: hm(n.focusMinutes), unit: "focus" });
-  const hard = n.overloadsToday > 0 ? "A hard moment today. Go gently" : null;
-  if (all.length === 0) return hard ? { value: "A hard moment today", text: true, support: "Go gently. Calm mode is here if it helps" } : null;
-  const [first, ...rest] = all;
-  return { ...first, support: join([hard, ...rest.map((r) => `${r.unit} ${r.value}`.replace(/^./, (c) => c.toUpperCase()))]) || undefined };
+  return neuroCareLine(n, { time: clock, hm });
 }
+
+/** Mind's own energy budget (Mind without Autism & ADHD): "6 energy left", for Mind's card. */
+export const mindBudgetLine = (n?: NeuroToday): string | null => mindBudgetText(n);
 
 export function transitionLine(t?: TransitionToday): Headline | null {
   if (!t || (!t.headline && t.milestonesDue.length === 0 && t.euphoriaThisWeek === 0)) return null;

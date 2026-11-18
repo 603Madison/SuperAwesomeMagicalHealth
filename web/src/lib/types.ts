@@ -2041,10 +2041,95 @@ export interface NeuroSummary {
 
 export interface NeuroToday {
   overloadsToday: number;
+  /** Mind's own energy budget only (Mind on, Autism & ADHD off): Autism & ADHD's budget is gone. */
   energyLeft?: number;
   socialBattery?: number;
   routinesDue: string[];
   focusMinutes: number;
+  /** Today's latest energy and focus check-in. */
+  lastCheck?: EnergyCheck;
+  /** When focus is usually best, once there's enough to say: "9 AM – noon". */
+  bestFocus?: string;
+}
+
+/*
+ * Energy and focus (GET /api/neuro/energy-focus): quick check-ins through the day (ecological
+ * momentary assessment), and the person's own patterns from them. Patterns are associations in
+ * their own data, never causes, and only shown with enough of it.
+ */
+
+/** What else was going on at a check-in. */
+export type CheckTag = "STRESSED" | "UNWELL" | "OVERSTIMULATED" | "HYPERFOCUS";
+export const CHECK_TAGS: { id: CheckTag; label: string }[] = [
+  { id: "STRESSED", label: "Stressed" }, { id: "UNWELL", label: "Unwell" }, { id: "OVERSTIMULATED", label: "Overstimulated" },
+  { id: "HYPERFOCUS", label: "In a hyperfocus" },
+];
+
+/** A check-in: energy 1 (running on empty) … 5 (plenty), focus 1 (all over the place) … 5 (locked in), each where given. */
+export interface EnergyCheck {
+  at: number;
+  energy?: number;
+  focus?: number;
+  tags: CheckTag[];
+  note?: string;
+  id?: string;
+}
+
+export interface EnergyFocusSettings {
+  /** The ADHD medication, for focus since a dose; unset: worked out from the medications' names. */
+  medicationId?: string;
+  /** Gentle reminders to check in, at these local times ("10:00"); none by default. */
+  reminders: string[];
+}
+
+/** A stretch of hours (of the day, or since a dose) with its average energy and focus, from [count] check-ins. */
+export interface TimeBlock {
+  from: number;
+  to: number;
+  energy?: number;
+  focus?: number;
+  count: number;
+}
+
+export type FactorKind = "SLEEP" | "MEDICATION" | "MOVEMENT" | "MEAL" | "STRESS";
+
+/** One thing that goes with better or worse energy or focus in the person's own check-ins. */
+export interface EnergyFactor {
+  kind: FactorKind;
+  title: string;
+  sentence: string;
+  /** "energy" or "focus": which one moved. */
+  measure: string;
+  with: number;
+  without: number;
+  withCount: number;
+  withoutCount: number;
+}
+
+export interface EnergyFocus {
+  settings: EnergyFocusSettings;
+  /** The ADHD medication's name, as found or chosen. */
+  medication?: string;
+  today: EnergyCheck[];
+  /** When today's doses of the ADHD medication were taken. */
+  dosesToday: number[];
+  checks: number;
+  days: number;
+  /** Enough check-ins to show patterns. */
+  enough: boolean;
+  /** "6 more check-ins over 2 more days and your patterns start to show." */
+  needed?: string;
+  /** Three-hour blocks of the day. */
+  byHour: TimeBlock[];
+  /** Hours since the day's first dose of the ADHD medication. */
+  sinceDose: TimeBlock[];
+  bestFocus?: TimeBlock;
+  factors: EnergyFactor[];
+  /** The patterns in plain sentences, most useful first (the factors' sentences among them). */
+  summary: string[];
+  /** How it works and what it can't tell, with the research behind it. */
+  about: string;
+  sources: string[];
 }
 
 // ---------------------------------------------------------------- Transition (Transition.kt)

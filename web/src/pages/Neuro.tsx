@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useModules } from "../App";
 import {
-  BatteryMedium, Brain, Check, CircleUserRound, Gauge, ListChecks, MessageSquareText, Pause, Pencil, Play, Plus, Printer, Sparkles, Square,
+  Brain, Check, CircleUserRound, Gauge, ListChecks, MessageSquareText, Pause, Pencil, Play, Plus, Printer, Sparkles, Square,
   Timer, Trash2, Waves, Wand2, X,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { num, today, when } from "../lib/format";
 import type {
-  CommunicationCard, EnergyDay, FocusKind, FocusSession, NeuroCheckIn, NeuroProfile, OverloadEvent, OverloadKind, Routine, RoutineRun,
+  CommunicationCard, FocusKind, FocusSession, NeuroCheckIn, NeuroProfile, OverloadEvent, OverloadKind, Routine, RoutineRun,
   RoutineStep, Sense, Wording,
 } from "../lib/types";
 import { FOCUS_KINDS, OVERLOAD_KINDS, SENSES, senseLabel } from "../lib/types";
@@ -20,6 +20,8 @@ import { layoutKey } from "../lib/types";
 import { ChipPicker, OneOf, ScaleRow, WordList } from "../components/FieldKit";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
 import { useAiAvailable } from "./Assistant";
+import { EnergyFocusSection, SocialBatteryCard } from "./EnergyFocus";
+import { useLogged } from "../components/LogSheet";
 
 /*
  * Autism and ADHD, for anyone autistic or ADHD, diagnosed or not. Experiences, not symptoms:
@@ -42,7 +44,18 @@ const DEFAULT_CARDS: CommunicationCard[] = [
   { text: "I need to leave.", detail: "It's not about you. I'll be in touch." },
 ];
 
-type Tab = "about" | "overwhelm" | "energy" | "checkins" | "focus" | "routines" | "cards" | "patterns";
+/*
+ * The tabs' ids are saved (Arrange): never reuse one. "energy" was the old energy budget's, gone with
+ * it; Energy & focus is "energyfocus", and the social battery has its own, "social".
+ */
+type Tab = "about" | "overwhelm" | "energyfocus" | "social" | "checkins" | "focus" | "routines" | "cards" | "patterns";
+
+/** A link's #tab: the old #energy (in reminders sent before) opens Energy & focus. */
+const tabFromHash = (hash: string): Tab | null => {
+  if (!hash) return null;
+  const id = decodeURIComponent(hash.slice(1));
+  return (id === "energy" ? "energyfocus" : id) as Tab;
+};
 
 export function Neuro() {
   const { has } = useFields();
@@ -52,7 +65,8 @@ export function Neuro() {
   const all = ([
     { id: "about", label: "About me", on: has(F.NEURO_ABOUT_ME) || has(F.NEURO_SENSORY) },
     { id: "overwhelm", label: "Overwhelm", on: has(F.NEURO_OVERLOAD) || has(F.NEURO_SENSORY) },
-    { id: "energy", label: "Energy", on: has(F.NEURO_ENERGY) || has(F.NEURO_SOCIAL) },
+    { id: "energyfocus", label: "Energy & focus", on: has(F.NEURO_ENERGY) },
+    { id: "social", label: "Social battery", on: has(F.NEURO_SOCIAL) },
     { id: "checkins", label: "Check-ins", on: has(F.NEURO_MASKING) || has(F.NEURO_EXECUTIVE) || has(F.NEURO_BURNOUT) || has(F.NEURO_MED_EFFECT) },
     { id: "focus", label: "Focus", on: has(F.NEURO_FOCUS) || has(F.NEURO_TIME) || has(F.NEURO_INTERESTS) },
     { id: "routines", label: "Routines", on: has(F.NEURO_ROUTINES) },
@@ -62,11 +76,23 @@ export function Neuro() {
   // The tabs are this page's sections: the person puts them in their order, and hides the ones they don't use.
   const arranged = useArrange(layoutKey("neuro"), "Autism & ADHD", all.map((t) => ({ id: t.id, label: t.label, when: t.on, node: null })));
   const tabs = arranged.shown as { id: Tab; label: string }[];
-  // A link can open a tab: /neuro#routines (Today's "Start" on a routine that's due).
+  // A link can open a tab: /neuro#routines (Today's "Start" on a routine that's due), /neuro#energyfocus (a check-in reminder).
   const { hash } = useLocation();
-  const [chosen, setTab] = useState<Tab | null>(() => (hash ? (decodeURIComponent(hash.slice(1)) as Tab) : null));
+  const [chosen, setTab] = useState<Tab | null>(() => tabFromHash(hash));
+  useEffect(() => { const t = tabFromHash(hash); if (t) setTab(t); }, [hash]);
+  const logged = useLogged();
+  // On a phone the tabs scroll sideways: the chosen one (from a link too) comes into view.
+  const tabRow = useRef<HTMLDivElement>(null);
   // The chosen tab, or the first in the person's order (also when the chosen one has since been hidden).
   const tab: Tab | undefined = chosen && tabs.some((t) => t.id === chosen) ? chosen : tabs[0]?.id;
+  useEffect(() => {
+    const row = tabRow.current;
+    const active = row?.querySelector<HTMLElement>(".is-active");
+    if (!row || !active || row.scrollWidth <= row.clientWidth) return;
+    const r = row.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    row.scrollLeft += a.left - r.left - (r.width - a.width) / 2;
+  }, [tab]);
   return (
     <div className="page">
       <PageHeader title="Autism & ADHD" subtitle="Your sensory life, energy, focus and what helps, in your words"
@@ -81,13 +107,14 @@ export function Neuro() {
         </nav>
       )}
       {tabs.length > 0 ? (
-        <div className="tabs tabs-sub" role="tablist" aria-label="Sections">
+        <div ref={tabRow} className="tabs tabs-sub" role="tablist" aria-label="Sections">
           {tabs.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? "is-active" : ""} onClick={() => setTab(t.id)}>{t.label}</button>)}
         </div>
       ) : arranged.render()}
       {tab === "about" && <AboutMe readOnly={readOnly} />}
       {tab === "overwhelm" && <Overwhelm readOnly={readOnly} />}
-      {tab === "energy" && <div className="grid grid-2"><EnergyBudgetCard readOnly={readOnly} budget={has(F.NEURO_ENERGY)} /></div>}
+      {tab === "energyfocus" && <EnergyFocusSection readOnly={readOnly} logged={logged} />}
+      {tab === "social" && <div className="grid grid-2"><SocialBatteryCard readOnly={readOnly} logged={logged} /></div>}
       {tab === "checkins" && <CheckIns readOnly={readOnly} />}
       {tab === "focus" && <Focus readOnly={readOnly} />}
       {tab === "routines" && <Routines readOnly={readOnly} />}
@@ -237,63 +264,6 @@ function OverloadDialog({ event, onClose, onSaved }: { event: OverloadEvent; onC
       </div>
       <Field label="Note"><textarea rows={2} value={e.note ?? ""} onChange={(ev) => setE({ ...e, note: ev.target.value || undefined })} /></Field>
     </Modal>
-  );
-}
-
-/** Today's energy: the budget (what the day started with, what used some, what gave some back), unless turned off, and the social battery. */
-export function EnergyBudgetCard({ readOnly, compact, budget = true }: { readOnly: boolean; compact?: boolean; budget?: boolean }) {
-  const { has } = useFields();
-  const list = useLoad(() => api.energy(14).catch(() => [] as EnergyDay[]), []);
-  const todayDay = list.data?.find((d) => d.date === today()) ?? { date: today(), spends: [] };
-  const [what, setWhat] = useState("");
-  const [amount, setAmount] = useState(1);
-  const save = async (d: EnergyDay) => {
-    try { await api.saveEnergy(d); list.reload(); } catch (e) { errorToast(e); }
-  };
-  const used = todayDay.spends.reduce((t, s) => t + s.amount, 0);
-  const left = todayDay.startWith != null ? todayDay.startWith - used : undefined;
-  if (!budget) {
-    if (!has(F.NEURO_SOCIAL)) return null;
-    return (
-      <Card title="Social battery" icon={<BatteryMedium size={18} />} className={compact ? "" : "span-2"}>
-        {readOnly
-          ? <p>{todayDay.socialBattery != null ? `${todayDay.socialBattery * 10}%` : "Not set today."}</p>
-          : <ScaleRow label="Social battery" min={0} max={10} low="Empty" high="Full" value={todayDay.socialBattery} onChange={(socialBattery) => save({ ...todayDay, socialBattery })} />}
-      </Card>
-    );
-  }
-  return (
-    <Card title="Energy today" icon={<BatteryMedium size={18} />} className={compact ? "" : "span-2"}>
-      {todayDay.startWith == null ? (
-        !readOnly ? (
-          <div className="form-stack">
-            <p className="muted">How much energy do you have today? 10 is a usual day.</p>
-            <div className="tag-list">{[6, 8, 10, 12, 15].map((n) => <button key={n} type="button" className="chip" onClick={() => save({ ...todayDay, startWith: n })}>{n}</button>)}</div>
-          </div>
-        ) : <p className="muted">Not set today.</p>
-      ) : (
-        <>
-          <div className="energy-dots" aria-label={`${left} of ${todayDay.startWith} left`}>
-            {Array.from({ length: todayDay.startWith }, (_, i) => <span key={i} className={`energy-dot ${i < (left ?? 0) ? "is-left" : ""}`} aria-hidden="true" />)}
-          </div>
-          <div className="stats">
-            <Stat label="Left" value={left ?? "–"} sub={`of ${todayDay.startWith}`} />
-            {has(F.NEURO_SOCIAL) && <Stat label="Social battery" value={todayDay.socialBattery != null ? `${todayDay.socialBattery * 10}%` : "–"} />}
-          </div>
-          {todayDay.spends.length > 0 && <div className="tag-list">{todayDay.spends.map((s, i) => <span key={i} className="chip is-static">{s.what} <span className="muted">{s.amount}</span></span>)}</div>}
-          {!readOnly && (
-            <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (what.trim()) { void save({ ...todayDay, spends: [...todayDay.spends, { what: what.trim(), amount, at: Date.now() }] }); setWhat(""); } }}>
-              <Field label="What used some"><input value={what} onChange={(e) => setWhat(e.target.value)} placeholder="e.g. a phone call" /></Field>
-              <Field label="How many"><select value={amount} onChange={(e) => setAmount(Number(e.target.value))}>{[1, 2, 3, 4, 5, -1, -2].map((n) => <option key={n} value={n}>{n > 0 ? n : `${n} (gave some back)`}</option>)}</select></Field>
-              <Button type="submit">Add</Button>
-            </form>
-          )}
-          {has(F.NEURO_SOCIAL) && !readOnly && (
-            <ScaleRow label="Social battery" min={0} max={10} low="Empty" high="Full" value={todayDay.socialBattery} onChange={(socialBattery) => save({ ...todayDay, socialBattery })} />
-          )}
-        </>
-      )}
-    </Card>
   );
 }
 
