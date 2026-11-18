@@ -110,7 +110,7 @@ class NeuroActions(
 
 /** The parts of Autism & ADHD a person can turn on, with what each is. */
 val NEURO_TOOLS: List<Pair<String, String>> = listOf(
-    Fields.NEURO_ENERGY to "An energy budget for the day",
+    Fields.NEURO_ENERGY to "Energy and focus check-ins, and your patterns",
     Fields.NEURO_OVERLOAD to "Times things got too much: meltdowns, shutdowns and overwhelm",
     Fields.NEURO_SENSORY to "Your senses, and sensory overload",
     Fields.NEURO_BURNOUT to "Burnout, gently watched for",

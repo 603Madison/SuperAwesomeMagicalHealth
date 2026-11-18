@@ -4,7 +4,10 @@ import com.health.api.AppPage
 import com.health.api.CommunicationCard
 import com.health.api.Count
 import com.health.api.DigestSection
+import com.health.api.EnergyCheck
 import com.health.api.EnergyDay
+import com.health.api.EnergyFocus
+import com.health.api.EnergyFocusSettings
 import com.health.api.EnergySpend
 import com.health.api.Flow
 import com.health.api.FocusSession
@@ -59,8 +62,12 @@ class NeuroService(
     private val days: DayService,
     private val cycle: CycleService,
     private val clock: () -> Long = System::currentTimeMillis,
-    /** Whether the person keeps the energy budget on ([com.health.api.Fields.NEURO_ENERGY]). */
+    /** Whether the person keeps energy and focus check-ins on ([com.health.api.Fields.NEURO_ENERGY]). */
     private val energyShown: suspend (String) -> Boolean = { true },
+    /** For energy and focus patterns: doses, meals, sleep and movement (absent in some tests). */
+    private val meds: com.health.server.modules.MedsService? = null,
+    private val foods: com.health.server.food.FoodStore? = null,
+    private val records: com.health.server.health.Records? = null,
 ) : FeatureHooks {
     override val module = Module.NEURO
 
@@ -125,9 +132,100 @@ class NeuroService(
     suspend fun energyOn(userId: String, date: LocalDate): EnergyDay? =
         entries.list(userId, EntryKind.NEURO_ENERGY, date, date, EnergyDay.serializer()).lastOrNull()?.value
 
-    /** The day's energy as the person sees it: with the energy budget off, no budget (the social battery stays). */
+    /** The day's social battery: all that's still shown of a day's energy (the old energy budget isn't). */
     private suspend fun shownEnergy(userId: String, date: LocalDate): EnergyDay? =
-        energyOn(userId, date)?.let { if (energyShown(userId)) it else it.copy(startWith = null, spends = emptyList()) }
+        energyOn(userId, date)?.copy(startWith = null, spends = emptyList())?.takeIf { it.socialBattery != null }
+
+    // ---------------------------------------------------------------- Energy and focus
+
+    private val focusSettingsKey = "neuro.energyFocus"
+
+    suspend fun energyFocusSettings(userId: String): EnergyFocusSettings =
+        personal.get(userId, focusSettingsKey, EnergyFocusSettings.serializer()) ?: EnergyFocusSettings()
+
+    suspend fun saveEnergyFocusSettings(userId: String, input: EnergyFocusSettings): EnergyFocusSettings {
+        val times = input.reminders.map { it.trim() }.filter { t -> runCatching { LocalTime.parse(t) }.isSuccess }.distinct().sorted().take(6)
+        if (input.medicationId != null && meds != null && meds.list(userId, all = true).none { it.id == input.medicationId }) {
+            throw ApiError.badRequest("That medication isn't in your list")
+        }
+        return personal.put(userId, focusSettingsKey, EnergyFocusSettings(input.medicationId, times), EnergyFocusSettings.serializer())
+    }
+
+    suspend fun checks(userId: String, days: Int): List<EnergyCheck> {
+        val today = profiles.days(userId).today(clock())
+        return entries.list(userId, EntryKind.NEURO_ENERGY_CHECK, today.minusDays(days.coerceIn(1, 3650) - 1L), today.plusDays(1), EnergyCheck.serializer())
+            .map { it.value.copy(id = it.id) }.sortedByDescending { it.at }
+    }
+
+    suspend fun saveCheck(userId: String, c: EnergyCheck): EnergyCheck {
+        if (c.at > clock() + FUTURE_MS) throw ApiError.badRequest("That's in the future")
+        if (c.energy == null && c.focus == null) throw ApiError.badRequest("Rate your energy or your focus")
+        val clean = EnergyCheck(c.at, c.energy?.coerceIn(1, 5), c.focus?.coerceIn(1, 5), c.tags, c.note.text(1000))
+        val date = profiles.days(userId).dateOf(clean.at)
+        val id = entries.put(userId, EntryKind.NEURO_ENERGY_CHECK, null, date, clean.at, clean, EnergyCheck.serializer())
+        return clean.copy(id = id)
+    }
+
+    /** The ADHD medication: the one chosen, or one whose name or purpose says so. */
+    suspend fun adhdMedication(userId: String): com.health.api.Medication? {
+        val all = meds?.list(userId, all = true) ?: return null
+        energyFocusSettings(userId).medicationId?.let { id -> return all.firstOrNull { it.id == id } }
+        return all.filter { it.active }.firstOrNull { m ->
+            val text = "${m.name} ${m.purpose.orEmpty()}".lowercase(Locale.ROOT)
+            ADHD_WORDS.any { it in text }
+        }
+    }
+
+    /** Check-ins and the person's own patterns over the last [days]. */
+    suspend fun energyFocus(userId: String, span: Int = PATTERN_DAYS): EnergyFocus {
+        val zone = profiles.days(userId)
+        val today = zone.today(clock())
+        val from = today.minusDays(span.coerceIn(7, 365) - 1L)
+        val checks = entries.list(userId, EntryKind.NEURO_ENERGY_CHECK, from, today.plusDays(1), EnergyCheck.serializer()).map { it.value.copy(id = it.id) }
+        val settings = energyFocusSettings(userId)
+        val med = adhdMedication(userId)
+        val doses = if (med != null && meds != null) {
+            meds.doses(userId, from, today).filter { it.medicationId == med.id && it.status == com.health.api.DoseStatus.TAKEN }.map { it.at }
+        } else emptyList()
+        val sleep = try {
+            days.stats(userId, from, today, zone)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+            .mapNotNull { d -> d.sleep?.asleepMinutes?.let { LocalDate.parse(d.date) to it } }.toMap()
+        val meals = foods?.entries(userId, from, today)?.mapNotNull { it.loggedAt }.orEmpty()
+        val start = zone.start(from)
+        val end = zone.end(today)
+        val workouts = records?.workouts(userId, start, end)?.map { it.start..it.end }.orEmpty()
+        val steps = records?.samples(userId, start, end, listOf(com.health.api.Metric.STEPS))?.map { (it.start..(it.end ?: it.start)) to it.value }.orEmpty()
+        val result = EnergyPatterns.analyse(EnergyPatterns.Input(checks, zone, doses, med?.name, sleep, meals, workouts, steps))
+        return EnergyFocus(
+            settings = settings,
+            medication = med?.name,
+            today = checks.filter { zone.dateOf(it.at) == today }.sortedBy { it.at },
+            dosesToday = doses.filter { zone.dateOf(it) == today }.sorted(),
+            checks = checks.count { it.energy != null || it.focus != null },
+            days = result.days,
+            enough = result.enough,
+            needed = result.needed,
+            byHour = result.byHour,
+            sinceDose = result.sinceDose,
+            bestFocus = result.bestFocus,
+            factors = result.factors,
+            summary = result.summary,
+            about = EnergyPatterns.ABOUT,
+            sources = EnergyPatterns.SOURCES,
+        )
+    }
+
+    /** When focus is usually best, from check-ins alone (cheap enough for Today): null until it's clear. */
+    private suspend fun bestFocus(userId: String, zone: Days): com.health.api.TimeBlock? {
+        val today = zone.today(clock())
+        val checks = entries.list(userId, EntryKind.NEURO_ENERGY_CHECK, today.minusDays(PATTERN_DAYS - 1L), today, EnergyCheck.serializer()).map { it.value }
+        return EnergyPatterns.analyse(EnergyPatterns.Input(checks, zone)).bestFocus
+    }
 
     suspend fun saveEnergy(userId: String, dateText: String, day: EnergyDay): EnergyDay {
         val date = runCatching { LocalDate.parse(dateText) }.getOrNull() ?: throw ApiError.badRequest("Days look like 2026-03-20")
@@ -374,13 +472,21 @@ class NeuroService(
         val routines = routines(userId, all = false)
         val dow = date.dayOfWeek.value
         val due = routines.filter { r -> (r.days.isEmpty() || dow in r.days) && runs.none { it.routineId == r.id && it.done.size >= r.steps.size } }
-        val left = energy?.startWith?.let { s -> s - energy.spends.sumOf { it.amount } }
+        val checking = energyShown(userId)
+        val lastCheck = if (checking) {
+            entries.list(userId, EntryKind.NEURO_ENERGY_CHECK, date, date, EnergyCheck.serializer()).map { it.value.copy(id = it.id) }.maxByOrNull { it.at }
+        } else null
+        val best = if (checking) bestFocus(userId, zone) else null
+        // Mind's own energy budget (for people with Mind but not Autism & ADHD) still counts down.
+        val budgetLeft = if (Module.NEURO !in profile.modules) energyOn(userId, date)?.let { e -> e.startWith?.let { s -> s - e.spends.sumOf { it.amount } } } else null
         val today = NeuroToday(
             overloadsToday = events.size,
-            energyLeft = left,
+            energyLeft = budgetLeft,
             socialBattery = energy?.socialBattery,
             routinesDue = due.map { it.name },
             focusMinutes = focus.sumOf { f -> f.end?.let { ((it - f.start) / 60_000).toInt() } ?: 0 },
+            lastCheck = lastCheck,
+            bestFocus = best?.let { EnergyPatterns.range(it.from, it.to) },
         )
         val insights = mutableListOf<Pair<Int, Insight>>()
         if (events.isNotEmpty()) {
@@ -391,8 +497,12 @@ class NeuroService(
                 "heart", Module.NEURO,
             )
         }
-        if (left != null && energy.startWith != null && left <= maxOf(1, energy.startWith!! / 6)) {
-            insights += 64 to Insight("info", "Running low on energy", "Only ${plural(left.coerceAtLeast(0), "point")} of energy left today. It's OK to leave things for tomorrow.", "battery-low", Module.NEURO)
+        // When focus is usually best, said in the morning before then: a time to put the thing that needs it most.
+        if (best != null && date == zone.today(clock()) && zone.hourOf(clock()) < best.from) {
+            insights += 45 to Insight(
+                "info", "Your focus is usually best ${EnergyPatterns.range(best.from, best.to)}",
+                "A good time for whatever needs it most today.", "zap", Module.NEURO,
+            )
         }
         if (date == zone.today(clock())) {
             burnoutRisk(date, events(userId, 42), checkIns(userId, 42), energy(userId, 42))?.let {
@@ -419,8 +529,22 @@ class NeuroService(
                 module = Module.NEURO, page = AppPage.NEURO, ref = s.id,
             )
         }
+        // The social battery, where set; and each energy and focus check-in.
         val energy = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList().mapNotNull { d ->
-            shownEnergy(userId, d)?.let { Feed.energy(it, d, zone, Module.NEURO, AppPage.NEURO) }
+            shownEnergy(userId, d)?.socialBattery?.let { b ->
+                TimelineItem(
+                    Feed.id(TimelineKind.ENERGY, "social:$d"), TimelineKind.ENERGY, zone.start(d), allDay = true,
+                    title = "Social battery", detail = "$b of 10", module = Module.NEURO, page = AppPage.NEURO, ref = d.toString(),
+                )
+            }
+        } + (if (energyShown(userId)) entries.list(userId, EntryKind.NEURO_ENERGY_CHECK, from, to, EnergyCheck.serializer()) else emptyList()).map { s ->
+            val c = s.value
+            TimelineItem(
+                Feed.id(TimelineKind.ENERGY, s.id), TimelineKind.ENERGY, c.at,
+                title = listOfNotNull(c.energy?.let { "Energy $it" }, c.focus?.let { "focus $it" }).joinToString(" · ").replaceFirstChar { it.uppercase() },
+                detail = Feed.line(c.tags.joinToString(", ") { it.label.lowercase(Locale.ROOT) }.ifBlank { null }, c.note)?.let(Feed::capitalised),
+                module = Module.NEURO, page = AppPage.NEURO, ref = s.id,
+            )
         }
         val checks = entries.list(userId, EntryKind.NEURO_CHECKIN, from, to, NeuroCheckIn.serializer()).map { s ->
             val c = s.value
@@ -456,10 +580,25 @@ class NeuroService(
     }
 
     /** Today's energy: what's left, or a gentle nudge to set it. */
+    /** A check-in, only when the person asked to be reminded and a reminder time has passed without one. */
     override suspend fun now(userId: String, profile: Profile, at: Long): List<NowItem> {
         if (!energyShown(userId)) return emptyList()
-        val today = Days(Days.zoneOf(profile.timezone)).dateOf(at)
-        return listOf(Feed.energyNow(energyOn(userId, today), today, Module.NEURO, AppPage.NEURO))
+        val times = energyFocusSettings(userId).reminders
+        if (times.isEmpty()) return emptyList()
+        val zone = Days(Days.zoneOf(profile.timezone))
+        val today = zone.dateOf(at)
+        val due = times.map { zone.at(today, LocalTime.parse(it)) }.filter { it <= at && at - it <= 3 * 60 * 60_000L }.maxOrNull() ?: return emptyList()
+        val since = entries.list(userId, EntryKind.NEURO_ENERGY_CHECK, today, today, EnergyCheck.serializer()).any { it.value.at >= due }
+        if (since) return emptyList()
+        return listOf(
+            NowItem(
+                id = "energy-check:$today:$due", kind = com.health.api.NowKind.ENERGY_TODAY,
+                title = "How are your energy and focus?", detail = "Two taps, for your patterns",
+                module = Module.NEURO, page = AppPage.NEURO,
+                action = com.health.api.NowAction("Check in", com.health.api.NowAction.ENERGY_ADD, mapOf("date" to today.toString())),
+                priority = 20, at = due,
+            ),
+        )
     }
 
     // ---------------------------------------------------------------- Hooks
@@ -467,8 +606,26 @@ class NeuroService(
     override suspend fun reminders(userId: String, profile: Profile, from: Long, to: Long): List<Reminder> {
         val zone = Days(Days.zoneOf(profile.timezone))
         val routines = routines(userId, all = false).filter { it.reminder != null }
-        if (routines.isEmpty()) return emptyList()
         val out = mutableListOf<Reminder>()
+        // Energy and focus check-ins, at the times the person chose (none unless they did).
+        if (energyShown(userId)) {
+            val times = energyFocusSettings(userId).reminders
+            var day = zone.dateOf(from)
+            while (times.isNotEmpty() && !day.isAfter(zone.dateOf(to))) {
+                for (t in times) {
+                    val at = zone.at(day, LocalTime.parse(t))
+                    if (at < from || at >= to) continue
+                    out += Reminder(
+                        key = "energy-check:$day:$t", at = at, event = WebhookEvent.HABIT_DUE,
+                        title = "How are your energy and focus?", body = "Two taps, for your patterns.",
+                        privateTitle = "A check-in reminder", privateBody = "Two taps when you're ready.",
+                        url = "/neuro#energy", actions = listOf(ReminderAction("open", "Check in")),
+                    )
+                }
+                day = day.plusDays(1)
+            }
+        }
+        if (routines.isEmpty()) return out
         var date = zone.dateOf(from)
         while (!date.isAfter(zone.dateOf(to))) {
             val runs = entries.list(userId, EntryKind.NEURO_ROUTINE_RUN, date, date, RoutineRun.serializer()).map { it.value }
@@ -575,6 +732,14 @@ class NeuroService(
     }
 
     companion object {
+        /** Patterns look back this many days. */
+        const val PATTERN_DAYS = 42
+        /** Names and purposes that mark a medication as the ADHD one. */
+        val ADHD_WORDS = listOf(
+            "adhd", "methylphenidate", "ritalin", "concerta", "medikinet", "equasym", "focalin", "jornay", "aptensio", "quillichew",
+            "amphetamine", "adderall", "mydayis", "evekeo", "dexamfetamine", "dexamphetamine", "dexedrine", "zenzedi",
+            "lisdexamfetamine", "vyvanse", "elvanse", "tyvense", "atomoxetine", "strattera", "guanfacine", "intuniv", "viloxazine", "qelbree",
+        )
         private const val PROFILE = "neuro.profile"
         private const val ROUTINES = "neuro.routines"
         private const val CARDS = "neuro.cards"

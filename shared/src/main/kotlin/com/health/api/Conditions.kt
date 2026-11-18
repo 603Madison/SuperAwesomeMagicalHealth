@@ -145,7 +145,7 @@ object Fields {
     const val MIND_ENERGY_BUDGET = "mind.energyBudget"
 
     // Autism and ADHD
-    /** The energy budget: on unless the person turns it off. */
+    /** Energy and focus check-ins, and patterns from them: on unless the person turns it off. */
     const val NEURO_ENERGY = "neuro.energy"
     const val NEURO_ABOUT_ME = "neuro.aboutMe"
     const val NEURO_SENSORY = "neuro.sensory"
@@ -234,7 +234,7 @@ object Fields {
         CYCLE_FERTILITY to (Module.CYCLE to "Fertile window and ovulation"),
         CYCLE_DISCHARGE to (Module.CYCLE to "Discharge"),
         MIND_ENERGY_BUDGET to (Module.MIND to "Energy budget"),
-        NEURO_ENERGY to (Module.NEURO to "Energy budget"),
+        NEURO_ENERGY to (Module.NEURO to "Energy and focus check-ins"),
         NEURO_ABOUT_ME to (Module.NEURO to "About me"),
         NEURO_SENSORY to (Module.NEURO to "Sensory profile and overload"),
         NEURO_OVERLOAD to (Module.NEURO to "Meltdowns and shutdowns"),

@@ -69,6 +69,29 @@ fun Route.neuroTransitionRoutes(services: Services) {
         }
         get("/energy") { call.respond(neuro.energy(call.requireUser(services).id, call.days(30))) }
         put("/energy/{date}") { call.respond(neuro.saveEnergy(call.requireUser(services).id, call.parameters["date"].orEmpty(), call.receive<EnergyDay>())) }
+        // Energy and focus: quick check-ins, and the person's own patterns from them.
+        route("/checks") {
+            get { call.respond(neuro.checks(call.requireUser(services).id, call.days(30))) }
+            post { call.respond(neuro.saveCheck(call.requireUser(services).id, call.receive<com.health.api.EnergyCheck>())) }
+            delete("/{id}") { services.entries.delete(call.requireUser(services).id, EntryKind.NEURO_ENERGY_CHECK, call.id()); call.respond(ok) }
+        }
+        route("/energy-focus") {
+            get {
+                val user = call.requireUser(services)
+                val patterns = neuro.energyFocus(user.id, call.request.queryParameters["days"]?.toIntOrNull() ?: com.health.server.neuro.NeuroService.PATTERN_DAYS)
+                // Someone viewing a share who isn't shown medications sees nothing about them.
+                val scope = call.viewScope
+                call.respond(
+                    if (scope == null || com.health.api.Module.MEDICATIONS in scope.modules) patterns
+                    else patterns.copy(
+                        settings = com.health.api.EnergyFocusSettings(), medication = null, dosesToday = emptyList(), sinceDose = emptyList(),
+                        factors = patterns.factors.filter { it.kind != com.health.api.FactorKind.MEDICATION },
+                        summary = patterns.summary.filterNot { line -> patterns.medication?.let { it in line } == true || "ADHD medication" in line },
+                    ),
+                )
+            }
+            put("/settings") { call.respond(neuro.saveEnergyFocusSettings(call.requireUser(services).id, call.receive<com.health.api.EnergyFocusSettings>())) }
+        }
         route("/check-ins") {
             get { call.respond(neuro.checkIns(call.requireUser(services).id, call.days(30))) }
             post { call.respond(neuro.saveCheckIn(call.requireUser(services).id, call.receive<NeuroCheckIn>())) }

@@ -173,8 +173,97 @@ data class NeuroSummary(
 @Serializable
 data class NeuroToday(
     val overloadsToday: Int = 0,
+    /** No longer worked out (the energy budget is gone); kept so older apps still read the day. */
     val energyLeft: Int? = null,
     val socialBattery: Int? = null,
     val routinesDue: List<String> = emptyList(),
     val focusMinutes: Int = 0,
+    /** Today's latest energy and focus check-in. */
+    val lastCheck: EnergyCheck? = null,
+    /** When focus is usually best, once there's enough to say: "9 AM – noon". */
+    val bestFocus: String? = null,
+)
+
+/*
+ * Energy and focus (GET /api/neuro/energy-focus): quick check-ins through the day, the way research
+ * measures how ADHD symptoms really move (ecological momentary assessment), and the person's own
+ * patterns from them, against their sleep, doses, meals and movement. Patterns are associations in
+ * their own data, never claims of cause, and only shown with enough of it.
+ */
+
+/** What else was going on at a check-in. */
+@Serializable
+enum class CheckTag(val label: String) {
+    STRESSED("Stressed"),
+    UNWELL("Unwell"),
+    OVERSTIMULATED("Overstimulated"),
+    HYPERFOCUS("In a hyperfocus"),
+}
+
+/** A check-in, as often as wanted: energy 1 (running on empty) … 5 (plenty), focus 1 (all over the place) … 5 (locked in). */
+@Serializable
+data class EnergyCheck(
+    val at: Long,
+    val energy: Int? = null,
+    val focus: Int? = null,
+    val tags: Set<CheckTag> = emptySet(),
+    val note: String? = null,
+    val id: String? = null,
+)
+
+@Serializable
+data class EnergyFocusSettings(
+    /** The ADHD medication, for focus since a dose; null: worked out from the medications' names. */
+    val medicationId: String? = null,
+    /** Gentle reminders to check in, at these local times ("10:00"); none by default. */
+    val reminders: List<String> = emptyList(),
+)
+
+/** A stretch of hours (of the day, or since a dose) with its average energy and focus, from [count] check-ins. */
+@Serializable
+data class TimeBlock(val from: Int, val to: Int, val energy: Double? = null, val focus: Double? = null, val count: Int = 0)
+
+@Serializable
+enum class FactorKind { SLEEP, MEDICATION, MOVEMENT, MEAL, STRESS }
+
+/** One thing that goes with better or worse energy or focus in the person's own check-ins. */
+@Serializable
+data class EnergyFactor(
+    val kind: FactorKind,
+    val title: String,
+    /** "After 7 hours' sleep or more, your energy averaged 3.6, against 2.4 after less than 6 (9 and 5 days)." */
+    val sentence: String,
+    /** "energy" or "focus": which one moved. */
+    val measure: String,
+    val with: Double,
+    val without: Double,
+    val withCount: Int,
+    val withoutCount: Int,
+)
+
+@Serializable
+data class EnergyFocus(
+    val settings: EnergyFocusSettings = EnergyFocusSettings(),
+    /** The ADHD medication's name, as found or chosen. */
+    val medication: String? = null,
+    val today: List<EnergyCheck> = emptyList(),
+    /** When today's doses of the ADHD medication were taken. */
+    val dosesToday: List<Long> = emptyList(),
+    val checks: Int = 0,
+    val days: Int = 0,
+    /** Enough check-ins to show patterns. */
+    val enough: Boolean = false,
+    /** "6 more check-ins over 2 more days and your patterns start to show." */
+    val needed: String? = null,
+    /** Three-hour blocks of the day. */
+    val byHour: List<TimeBlock> = emptyList(),
+    /** Hours since the day's first dose of the ADHD medication. */
+    val sinceDose: List<TimeBlock> = emptyList(),
+    val bestFocus: TimeBlock? = null,
+    val factors: List<EnergyFactor> = emptyList(),
+    /** The patterns in plain sentences, most useful first. */
+    val summary: List<String> = emptyList(),
+    /** How it works and what it can't tell, with the research behind it. */
+    val about: String = "",
+    val sources: List<String> = emptyList(),
 )

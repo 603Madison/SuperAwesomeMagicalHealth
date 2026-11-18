@@ -148,7 +148,8 @@ class FeedTest {
 
         // Autism & ADHD, transition (with yesterday's voice practice), the cycle, a photo.
         s.neuro.saveEvent(me, OverloadEvent(at(13, 30), at(14), OverloadKind.SENSORY_OVERLOAD, intensity = 3))
-        s.neuro.saveEnergy(me, today.toString(), EnergyDay(today.toString(), startWith = 12, spends = listOf(EnergySpend("Shopping", 4, at(11)))))
+        s.neuro.saveEnergy(me, today.toString(), EnergyDay(today.toString(), startWith = 12, spends = listOf(EnergySpend("Shopping", 4, at(11))), socialBattery = 6))
+        s.neuro.saveCheck(me, com.health.api.EnergyCheck(at(11), energy = 3, focus = 2, tags = setOf(com.health.api.CheckTag.STRESSED)))
         s.transition.trainer.savePlan(me, VoicePlan(dailyMinutes = 10))
         s.transition.saveVoice(me, VoiceSession(at(today.minusDays(1), 18), 12, pitchAvgHz = 180.0))
         s.transition.saveMoment(me, GenderMoment(at(12), MomentKind.EUPHORIA, intensity = 4, context = listOf("clothes")))
@@ -226,7 +227,8 @@ class FeedTest {
         check(TimelineKind.HABIT, "Stretch", "Done", Module.HABITS, AppPage.HABITS)
         check(TimelineKind.APPOINTMENT, "GP", "With Dr Patel", Module.APPOINTMENTS, AppPage.APPOINTMENTS)
         check(TimelineKind.OVERLOAD, "Sensory overload", "Intensity 3 of 5 · 30 min", Module.NEURO, AppPage.NEURO)
-        check(TimelineKind.ENERGY, "Energy", "Started with 12 · 8 left · 1 thing logged", Module.NEURO, AppPage.NEURO)
+        check(TimelineKind.ENERGY, "Social battery", "6 of 10", Module.NEURO, AppPage.NEURO)
+        check(TimelineKind.ENERGY, "Energy 3 · focus 2", "Stressed", Module.NEURO, AppPage.NEURO)
         check(TimelineKind.TRANSITION_MOMENT, "Euphoria", "Intensity 4 of 5 · clothes", Module.TRANSITION, AppPage.TRANSITION)
         check(TimelineKind.PHOTO, "Photo added", "Progress · Front", Module.PHOTOS, AppPage.PHOTOS)
         val sleep = items.one(TimelineKind.SLEEP)
@@ -262,7 +264,7 @@ class FeedTest {
         assertEquals(
             listOf(
                 NowKind.HEALTH_ALERT, NowKind.DOSE_OVERDUE, NowKind.DOSE_DUE, NowKind.APPOINTMENT_SOON, NowKind.APPOINTMENT_SOON,
-                NowKind.WEARING, NowKind.VOICE_PRACTICE_DUE, NowKind.FOOD_TODAY, NowKind.ENERGY_TODAY,
+                NowKind.WEARING, NowKind.VOICE_PRACTICE_DUE, NowKind.FOOD_TODAY,
             ),
             now.map { it.kind },
         )
@@ -312,11 +314,8 @@ class FeedTest {
         assertEquals("Add", food.action!!.label)
         assertEquals(mapOf("meal" to "SNACK", "date" to today.toString()), food.action!!.ids)
 
-        val energy = of(NowKind.ENERGY_TODAY)
-        assertEquals("8 of 12 left", energy.detail)
-        assertEquals(8 / 12.0, energy.progress!!, 0.001)
-        assertEquals(NowAction.ENERGY_ADD, energy.action!!.action)
-        assertEquals(mapOf("date" to today.toString()), energy.action!!.ids)
+        // No energy budget in "Right now": check-ins only come up when the person asked to be reminded.
+        assertTrue(now.none { it.kind == NowKind.ENERGY_TODAY })
 
         // Marking the dose takes it out of "Right now" and puts it in the day.
         s.modules.meds.logDose(s.admin(), DoseLog(seeded.vitaminD, at(15), scheduledFor = at(14)))

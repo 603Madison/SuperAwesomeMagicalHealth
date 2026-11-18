@@ -140,7 +140,7 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
   { key: F.CYCLE_FERTILITY, module: "CYCLE", label: "Fertile window and ovulation" },
   { key: F.CYCLE_DISCHARGE, module: "CYCLE", label: "Discharge" },
   { key: F.MIND_ENERGY_BUDGET, module: "MIND", label: "Energy budget" },
-  { key: F.NEURO_ENERGY, module: "NEURO", label: "Energy budget" },
+  { key: F.NEURO_ENERGY, module: "NEURO", label: "Energy and focus check-ins" },
   { key: F.NEURO_ABOUT_ME, module: "NEURO", label: "About me" },
   { key: F.NEURO_SENSORY, module: "NEURO", label: "Sensory profile and overload" },
   { key: F.NEURO_OVERLOAD, module: "NEURO", label: "Meltdowns and shutdowns" },

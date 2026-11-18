@@ -21,6 +21,8 @@ enum class EntryKind {
     TRANSITION_MILESTONE, TRANSITION_CHANGE, TRANSITION_VOICE, TRANSITION_HAIR, TRANSITION_MOMENT,
     // Bladder and bowel check-ins, and changes to supplies (modules/Continence.kt, modules/Supplies.kt).
     CONTINENCE_CHECKIN, SUPPLY_LOG,
+    // Energy and focus check-ins (neuro/EnergyFocus.kt).
+    NEURO_ENERGY_CHECK,
 }
 
 /** An entry as stored: its row's id, day and time, and what it holds. */

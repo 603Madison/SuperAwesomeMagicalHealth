@@ -115,7 +115,8 @@ class NeuroTransitionPhotosTest {
         val day = s.days.summary(s.admin(), "2026-03-20")
         val neuro = day.modules.neuro!!
         assertEquals(1, neuro.overloadsToday)
-        assertEquals(5, neuro.energyLeft)
+        // Autism & ADHD has no energy budget any more (check-ins instead); the social battery stays.
+        assertNull(neuro.energyLeft)
         assertEquals(3, neuro.socialBattery)
         assertEquals(50, neuro.focusMinutes)
         assertEquals(listOf("Morning"), neuro.routinesDue)
