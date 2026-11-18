@@ -97,7 +97,7 @@ fun Application.module(services: Services) {
     // Health data is never kept in a browser's or a proxy's cache (a shared computer's disk, say).
     install(
         io.ktor.server.application.createApplicationPlugin("NoStoreApi") {
-            onCall { call -> if (call.request.path().startsWith("/api/")) call.response.header(HttpHeaders.CacheControl, "private, no-store") }
+            onCall { call -> if (call.request.path().startsWith("/api/")) call.response.header(HttpHeaders.CacheControl, "no-store") }
         },
     )
     install(CallLogging) {

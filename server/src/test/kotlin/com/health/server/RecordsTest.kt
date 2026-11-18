@@ -477,8 +477,13 @@ class RecordsTest {
         assertEquals("Quest", me.get("/api/labs").json().jsonArray.map { it.jsonObject }.first { it.str("name") == "Ferritin" }.str("source"))
         assertEquals(3, recordLabs().size)
 
-        // Brought up to date again: a changed value changes the lab (never added twice); one gone from the record goes.
+        // Asked again straight away: what's there now, not another read of the record.
         fake.labsVersion = 2
+        assertEquals(HttpStatusCode.OK, me.post("/api/records/$id/sync") { csrf() }.status)
+        assertEquals(3, recordLabs().size)
+
+        // Brought up to date again: a changed value changes the lab (never added twice); one gone from the record goes.
+        now += RecordsService.SYNC_GAP_MS
         val synced = me.post("/api/records/$id/sync") { csrf() }.seen()
         assertEquals(HttpStatusCode.OK, synced.status)
         val after = recordLabs()
@@ -488,6 +493,7 @@ class RecordsTest {
         val itemsAfter = me.get("/api/records/items?kind=LAB").seen().json().jsonArray.map { it.jsonObject }
         assertEquals(setOf("Estradiol", "TSH", "SARS-CoV-2 RNA"), itemsAfter.map { it.str("title") }.toSet())
         assertEquals(item("Estradiol").str("id"), itemsAfter.first { it.str("title") == "Estradiol" }.str("id"))
+        now += RecordsService.SYNC_GAP_MS
         me.post("/api/records/$id/sync") { csrf() }
         assertEquals(2, recordLabs().size)
 
