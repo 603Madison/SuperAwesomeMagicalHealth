@@ -26,6 +26,7 @@ import { CheckInDialog, SleepDialog, WeightDialog, WorkoutDialog } from "./LogDi
 import { MeasureDialog } from "./Measurements";
 import { ArrangePanel } from "./Arrange";
 import { Modal, errorToast, toast, useLoad } from "./ui";
+import { markedToast } from "./doseUndo";
 
 /*
  * The + : one way to log anything, from the tabs on a phone and the sidebar on a wide screen.
@@ -149,8 +150,8 @@ function Sheet({ onClose, onDialog, onArrange }: { onClose: () => void; onDialog
     if (!ids.medicationId) return;
     setBusy(item.id);
     try {
-      await api.logDose({ medicationId: ids.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: ids.scheduledFor });
-      toast(`${item.title} taken`);
+      const saved = await api.logDose({ medicationId: ids.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: ids.scheduledFor });
+      markedToast(`${item.title} taken`, saved, loggedSomething);
       loggedSomething();
       onClose();
     } catch (e) { errorToast(e); }

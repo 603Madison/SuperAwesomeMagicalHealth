@@ -10,6 +10,7 @@ import com.health.api.JournalEntry
 import com.health.api.LabResult
 import com.health.api.Medication
 import com.health.api.MedsDay
+import com.health.api.MedsHistory
 import com.health.api.MindSummary
 import com.health.api.MindfulnessSession
 import com.health.api.MoodEntry
@@ -264,6 +265,10 @@ class ServerApi(
     suspend fun deleteMedication(id: String) = delete("/api/meds/${enc(id)}")
 
     suspend fun medsDay(date: String): MedsDay = get("${base()}/api/meds/day/${enc(date)}", MedsDay.serializer())
+
+    /** Each day from [from] to [to] (both "YYYY-MM-DD"): what happened to its doses. */
+    suspend fun medsHistory(from: String, to: String): MedsHistory =
+        get("${base()}/api/meds/history?from=${enc(from)}&to=${enc(to)}", MedsHistory.serializer())
 
     suspend fun doses(days: Int): List<DoseLog> = get("${base()}/api/meds/doses?days=$days", ListSerializer(DoseLog.serializer()))
 

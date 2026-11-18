@@ -20,6 +20,7 @@ import com.health.app.net.routines
 import com.health.app.net.supplyStatus
 import com.health.app.net.transitionOverview
 import com.health.app.net.voiceProgress
+import com.health.app.ui.modules.meds.Doses
 import com.health.app.ui.modules.photos.PhotoUnlock
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -161,16 +162,8 @@ class CareViewModel(private val c: Container) : ViewModel() {
 
     /**
      * Takes a dose, the way the Medications page does: now, for its scheduled time, at the site
-     * chosen. On the app's scope, so leaving the tab can't stop it halfway.
+     * chosen, with Undo (see [Doses]).
      */
-    fun take(due: DueDose, site: String?) {
-        c.scope.launch {
-            attempt { c.ui.logDose(DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site)) }
-                .onSuccess {
-                    c.tell("${due.name} taken")
-                    c.dataChanged()
-                }
-                .onFailure { c.tell(it.message ?: "That didn't save") }
-        }
-    }
+    fun take(due: DueDose, site: String?) =
+        Doses.mark(c, DoseLog(due.medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = due.scheduledFor, site = site), "${due.name} taken")
 }

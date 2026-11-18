@@ -872,6 +872,34 @@ button.row:hover { background: var(--surface-2); }
 
 .calendar-day { justify-self: center; width: 100%; max-width: 64px; }
 .dose-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* The medication history's calendar (Medications › History): each day's mark has its own shape as
+   well as its colour (filled, a ring, a dash, half), so it reads without telling colours apart. */
+.cal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cal-title { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-weekday { text-align: center; font-size: 0.75rem; color: var(--muted); padding-bottom: 2px; }
+.cal-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 48px; padding: 6px 0;
+  border: 1.5px solid transparent; border-radius: 12px; background: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.cal-day:hover:not(:disabled) { background: var(--surface-2); }
+.cal-day:disabled { cursor: default; color: var(--faint); }
+.cal-day.is-today .cal-num { font-weight: var(--w-bold); color: var(--primary); }
+.cal-day.is-picked { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.cal-num { font-size: 0.9rem; line-height: 1; }
+.cal-mark { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; }
+.mark-taken .cal-mark, .cal-mark.mark-taken { background: var(--c2); }
+.mark-missed .cal-mark, .cal-mark.mark-missed { border: 2.5px solid var(--c3); }
+.mark-skipped .cal-mark, .cal-mark.mark-skipped { height: 3px; border-radius: 2px; background: var(--muted); }
+.mark-open .cal-mark, .cal-mark.mark-open { border: 1.5px solid var(--c1); background: linear-gradient(90deg, var(--c1) 50%, transparent 50%); }
+.mark-extra .cal-mark { width: 6px; height: 6px; background: var(--muted); }
+.mark-none .cal-mark, .mark-future .cal-mark { visibility: hidden; }
+.cal-key { margin-top: 12px; justify-content: center; }
+/* A wide card keeps the month a readable size, centred. */
+.cal-head, .cal, .cal-key { max-width: 560px; margin-inline: auto; }
+.cal-detail { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--outline); }
+.cal-detail h4 { margin: 0 0 4px; font-size: 1rem; }
 @media (max-width: 760px) {
   .dose-row { flex-wrap: wrap; }
   .dose-row .row-main { flex: 1 1 calc(100% - 60px); }

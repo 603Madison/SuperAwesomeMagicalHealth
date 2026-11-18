@@ -16,7 +16,8 @@ import { useReadOnly, useViewing } from "../lib/viewing";
 import { FEATURES } from "../components/features";
 import { ArrangeButton, ArrangePanel } from "../components/Arrange";
 import { useLogged } from "../components/LogSheet";
-import { Button, Card, Empty, ErrorNotice, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, Empty, ErrorNotice, Spinner, errorToast, useLoad } from "../components/ui";
+import { markedToast } from "../components/doseUndo";
 import {
   cycleLine, foodLine, habitsLine, hormonesLine, lifeStageLine, lifeStageTitle, lineText, mindBudgetLine, mindLine, neuroLine, symptomsLine, transitionLine, vitalsLine,
 } from "./CareLines";
@@ -74,8 +75,8 @@ export function Care() {
   const take = async (dose: DueDose) => {
     setBusy(true);
     try {
-      await api.logDose({ medicationId: dose.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: dose.scheduledFor, site: dose.nextSite });
-      toast(`${dose.name} taken`);
+      const saved = await api.logDose({ medicationId: dose.medicationId, at: Date.now(), status: "TAKEN", scheduledFor: dose.scheduledFor, site: dose.nextSite });
+      markedToast(`${dose.name} taken`, saved, changed);
       changed();
     } catch (e) { errorToast(e); }
     setBusy(false);

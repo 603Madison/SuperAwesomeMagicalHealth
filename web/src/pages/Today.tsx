@@ -24,6 +24,7 @@ import { useReadOnly, useViewing } from "../lib/viewing";
 import { useScreenLayout } from "../lib/layout";
 import { Meter } from "../components/charts";
 import { Button, CountBadge, Modal, Spinner, ErrorNotice, errorToast, toast, useLoad } from "../components/ui";
+import { markedToast } from "../components/doseUndo";
 import { ArrangeButton, ArrangePanel, type Section } from "../components/Arrange";
 import { InsightRow, pagePath, usePageOpens } from "../components/Insights";
 import { WorkoutDialog } from "../components/LogDialogs";
@@ -130,8 +131,8 @@ export function Today() {
         if (!ids.medicationId) return;
         const due = data?.modules.meds?.due.find((d) => d.medicationId === ids.medicationId && d.scheduledFor === ids.scheduledFor);
         return run(item.id, async () => {
-          await api.logDose({ medicationId: ids.medicationId!, at: Date.now(), status: "TAKEN", scheduledFor: ids.scheduledFor, site: due?.nextSite });
-          toast(`${item.title} taken`);
+          const saved = await api.logDose({ medicationId: ids.medicationId!, at: Date.now(), status: "TAKEN", scheduledFor: ids.scheduledFor, site: due?.nextSite });
+          markedToast(`${item.title} taken`, saved, changed);
         });
       }
     }

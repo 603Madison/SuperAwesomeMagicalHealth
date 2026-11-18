@@ -1097,6 +1097,28 @@ export interface MedsDay {
   lowStock: Medication[];
 }
 
+/** One day of the medication history (GET /api/meds/history), as the server's MedsHistoryDay. */
+export interface MedsHistoryDay {
+  date: string;
+  /** Doses scheduled that day. */
+  scheduled: number;
+  taken: number;
+  skipped: number;
+  /** Scheduled on a day that's over, and never marked. */
+  missed: number;
+  /** Today's, not marked yet (later today included). */
+  open: number;
+  /** Doses taken that weren't scheduled: as-needed ones, or ones from an earlier schedule. */
+  extra: number;
+}
+
+/** The medication history, oldest first, [from] to [to] both included. */
+export interface MedsHistory {
+  from: string;
+  to: string;
+  days: MedsHistoryDay[];
+}
+
 export interface LabResult {
   name: string;
   value: number;

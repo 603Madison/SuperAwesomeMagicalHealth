@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Check, ClipboardList, FlaskConical, MoreHorizontal, Pencil, Pill, Plus, Trash2, X } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardList, FlaskConical, MoreHorizontal, Pencil, Pill, Plus, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, dayLabel, isoDate, num, shortDate, today, useDayPicker } from "../lib/format";
-import type { DueDose, LabResult, MedForm, Medication, ScheduleKind } from "../lib/types";
+import { clock, dayLabel, dayOf, isoDate, num, shortDate, today, useDayPicker } from "../lib/format";
+import { dayMark, dayText, monthGrid, monthLabel, monthOf, monthRange, monthSummary, shiftMonth } from "../lib/medsHistory";
+import { markedToast } from "../components/doseUndo";
+import type { DoseLog, DueDose, LabResult, MedForm, Medication, ScheduleKind } from "../lib/types";
 import { LineChart } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
@@ -32,7 +34,9 @@ export function Meds() {
   const [editing, setEditing] = useState<Medication | "new" | null>(null);
   const [addingLab, setAddingLab] = useState(false);
   const readOnly = useReadOnly();
-  const reload = () => { day.reload(); meds.reload(); };
+  // The history reloads with everything else, so a dose marked or undone anywhere on the page shows there too.
+  const [version, setVersion] = useState(0);
+  const reload = () => { day.reload(); meds.reload(); setVersion((v) => v + 1); };
   const d = day.data;
 
   const sections: Section[] = [
@@ -45,12 +49,15 @@ export function Meds() {
             <li key={m.id} className="row">
               <div className="row-icon"><Pill size={18} /></div>
               <div className="row-main"><div className="row-title">{m.name}{m.dose ? ` · ${m.dose}` : ""}</div><div className="row-sub">As needed{d.extra.filter((e) => e.medicationId === m.id).map((e) => ` · took one at ${clock(e.at)}`).join("")}</div></div>
-              <Button className="write-only" onClick={async () => { try { await api.logDose({ medicationId: m.id!, at: Date.now(), status: "TAKEN" }); toast(`${m.name} logged`); reload(); } catch (e) { errorToast(e); } }}>Took one</Button>
+              <Button className="write-only" onClick={async () => { try { const saved = await api.logDose({ medicationId: m.id!, at: Date.now(), status: "TAKEN" }); markedToast(`${m.name} logged`, saved, reload); reload(); } catch (e) { errorToast(e); } }}>Took one</Button>
             </li>
           ))}
         </ul>
         {d.lowStock.map((m) => <div key={m.id} className="notice">{m.stock === 0 ? `Out of ${m.name}: time to order more.` : `Running low on ${m.name}: ${m.stock} left.`}</div>)}
       </Card>
+    ) },
+    { id: "history", label: "History", node: meds.data && meds.data.length > 0 && (
+      <HistoryCard meds={meds.data} version={version} onChanged={reload} />
     ) },
     { id: "medications", label: "Your medications", node: meds.data && meds.data.length > 0 && (
       <Card title="Your medications" icon={<ClipboardList size={18} />} className="span-2">
@@ -131,9 +138,14 @@ function DoseRow({ dose, onChanged }: { dose: DueDose; onChanged: () => void }) 
   const [site, setSite] = useState(dose.nextSite);
   const meds = useLoad(() => (dose.nextSite ? api.meds() : Promise.resolve([] as Medication[])), [dose.nextSite]);
   const sites = meds.data?.find((m) => m.id === dose.medicationId)?.sites ?? [];
+  // A day that's over is marked for the time it was due (when it was really taken isn't known); a day to come can't be.
+  const when = dayOf(dose.scheduledFor);
+  const past = when < today();
+  const ahead = when > today();
   const mark = async (status: "TAKEN" | "SKIPPED") => {
     try {
-      await api.logDose({ medicationId: dose.medicationId, at: Date.now(), status, scheduledFor: dose.scheduledFor, site: status === "TAKEN" ? site : undefined });
+      const saved = await api.logDose({ medicationId: dose.medicationId, at: past ? dose.scheduledFor : Date.now(), status, scheduledFor: dose.scheduledFor, site: status === "TAKEN" ? site : undefined });
+      markedToast(`${dose.name} ${status === "TAKEN" ? "taken" : "skipped"}`, saved, onChanged);
       onChanged();
     } catch (e) { errorToast(e); }
   };
@@ -145,25 +157,108 @@ function DoseRow({ dose, onChanged }: { dose: DueDose; onChanged: () => void }) 
         <div className="row-title">{dose.name}{dose.dose ? ` · ${dose.dose}` : ""}</div>
         <div className="row-sub">
           {clock(dose.scheduledFor)}
-          {log ? ` · ${log.status === "TAKEN" ? "taken" : "skipped"} at ${clock(log.at)}${log.site ? ` · ${log.site}` : ""}` : dose.scheduledFor < Date.now() ? " · not marked yet" : ""}
+          {log ? ` · ${log.status === "TAKEN" ? "taken" : "skipped"}${past && log.at === dose.scheduledFor ? "" : ` at ${clock(log.at)}`}${log.site ? ` · ${log.site}` : ""}` : past ? " · missed" : dose.scheduledFor < Date.now() ? " · not marked yet" : ""}
         </div>
       </div>
       <div className="dose-actions">
-        {!log && sites.length > 0 && (
+        {!log && !ahead && sites.length > 0 && (
           <select value={site} onChange={(e) => setSite(e.target.value)} aria-label="Site" style={{ width: "auto", minHeight: 36 }}>
             {sites.map((s) => <option key={s} value={s}>{s}{s === dose.nextSite ? " (next)" : ""}</option>)}
           </select>
         )}
         {log ? (
           <Button variant="ghost" onClick={async () => { try { await api.deleteDose(log.id!); onChanged(); } catch (e) { errorToast(e); } }}>Undo</Button>
-        ) : (
+        ) : !ahead && (
           <>
-            <Button variant="primary" onClick={() => mark("TAKEN")}><Check size={16} /> Take</Button>
-            <Button variant="ghost" onClick={() => mark("SKIPPED")}>Skip</Button>
+            <Button variant="primary" onClick={() => mark("TAKEN")}><Check size={16} /> {past ? "Took it" : "Take"}</Button>
+            <Button variant="ghost" onClick={() => mark("SKIPPED")}>{past ? "Skipped" : "Skip"}</Button>
           </>
         )}
       </div>
     </li>
+  );
+}
+
+/** What each mark in the calendar means, in the key under it. */
+const MARKS: { mark: "taken" | "missed" | "skipped" | "open"; label: string }[] = [
+  { mark: "taken", label: "All taken" }, { mark: "missed", label: "Missed one" }, { mark: "skipped", label: "Skipped" }, { mark: "open", label: "Still to take" },
+];
+
+/**
+ * The history: a month at a time, each day marked by what happened to its doses; a day picked
+ * shows them, each with Undo, or for one missed, Took it and Skipped (marked for the time it was
+ * due). Doses taken as needed can be removed.
+ */
+function HistoryCard({ meds, version, onChanged }: { meds: Medication[]; version: number; onChanged: () => void }) {
+  const now = today();
+  const [month, setMonth] = useState(monthOf(now));
+  const [picked, setPicked] = useState<string | null>(null);
+  const range = monthRange(month);
+  const history = useLoad(() => api.medsHistory(range.from, range.to), [month, version]);
+  const day = useLoad(() => (picked ? api.medsDay(picked) : Promise.resolve(null)), [picked, version]);
+  const byDate = new Map((history.data?.days ?? []).map((d) => [d.date, d]));
+  const summary = history.data ? monthSummary(history.data.days, now) : null;
+  const names = new Map(meds.map((m) => [m.id, m.name]));
+  const remove = async (log: DoseLog) => {
+    try { await api.deleteDose(log.id!); toast("Removed"); onChanged(); } catch (e) { errorToast(e); }
+  };
+  return (
+    <Card title="History" icon={<CalendarDays size={18} />} className="span-2" id="history">
+      <div className="cal-head">
+        <button type="button" className="icon-btn" aria-label="The month before" onClick={() => { setMonth(shiftMonth(month, -1)); setPicked(null); }}><ChevronLeft size={20} /></button>
+        <div className="cal-title">
+          <strong>{monthLabel(month)}</strong>
+          {summary && <span className="muted small">{summary}</span>}
+        </div>
+        <button type="button" className="icon-btn" aria-label="The month after" disabled={month >= monthOf(now)} onClick={() => { setMonth(shiftMonth(month, 1)); setPicked(null); }}><ChevronRight size={20} /></button>
+      </div>
+      {history.error && <ErrorNotice message={history.error} onRetry={history.reload} />}
+      <div className="cal" aria-label={`Doses in ${monthLabel(month)}`}>
+        {WEEKDAYS.map((w) => <div key={w} className="cal-weekday" aria-hidden="true">{w}</div>)}
+        {monthGrid(month).flat().map((date, i) => {
+          if (!date) return <div key={`blank-${i}`} />;
+          const d = byDate.get(date);
+          const mark = dayMark(d, now);
+          return (
+            <button
+              key={date} type="button"
+              className={`cal-day mark-${mark}${picked === date ? " is-picked" : ""}${date === now ? " is-today" : ""}`}
+              aria-pressed={picked === date} aria-label={`${dayLabel(date)}: ${dayText(d, now)}`} title={dayText(d, now)}
+              disabled={mark === "none" || (mark === "future" && !d?.scheduled)}
+              onClick={() => setPicked(picked === date ? null : date)}
+            >
+              <span className="cal-num">{Number(date.slice(8))}</span>
+              <span className="cal-mark" aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+      <ul className="legend cal-key" aria-label="What the marks mean">
+        {MARKS.map((m) => <li key={m.mark}><span className={`cal-mark mark-${m.mark}`} aria-hidden="true" />{m.label}</li>)}
+      </ul>
+      {picked && (
+        <div className="cal-detail">
+          <h4>{dayLabel(picked)}</h4>
+          {day.error && <ErrorNotice message={day.error} onRetry={day.reload} />}
+          {day.data && day.data.due.length === 0 && day.data.extra.length === 0 && <p className="muted">Nothing that day.</p>}
+          {day.data && (
+            <ul className="rows">
+              {day.data.due.map((dose) => <DoseRow key={`${dose.medicationId}-${dose.scheduledFor}`} dose={dose} onChanged={onChanged} />)}
+              {day.data.extra.map((log) => (
+                <li key={log.id} className="row dose-row">
+                  <div className={`row-icon ${log.status === "TAKEN" ? "is-done" : ""}`}>{log.status === "TAKEN" ? <Check size={18} /> : <Pill size={18} />}</div>
+                  <div className="row-main">
+                    <div className="row-title">{names.get(log.medicationId) ?? "A medication you've removed"}</div>
+                    <div className="row-sub">{log.status === "TAKEN" ? "Taken" : "Skipped"} at {clock(log.at)}{log.site ? ` · ${log.site}` : ""}</div>
+                  </div>
+                  <div className="dose-actions"><Button variant="ghost" onClick={() => remove(log)}>Remove</Button></div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

@@ -17,6 +17,7 @@ import com.health.app.attempt
 import com.health.app.net.feed
 import com.health.app.net.mealiePlan
 import com.health.app.net.mealieStatus
+import com.health.app.ui.modules.meds.Doses
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -154,9 +155,9 @@ class TodayViewModel(private val c: Container) : ViewModel() {
      * Takes the dose of [medicationId] due at [scheduledFor] (Right now's Take); an injection or
      * patch goes to the site next in rotation, as the day's doses say it.
      */
-    fun takeDose(medicationId: String, scheduledFor: Long?, name: String) = act("$name taken") {
+    fun takeDose(medicationId: String, scheduledFor: Long?, name: String) {
         val due = _state.value.summary?.modules?.meds?.due?.firstOrNull { it.medicationId == medicationId && (scheduledFor == null || it.scheduledFor == scheduledFor) }
         val rotates = due?.form == MedForm.INJECTION || due?.form == MedForm.PATCH
-        c.ui.logDose(DoseLog(medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = scheduledFor ?: due?.scheduledFor, site = due?.nextSite.takeIf { rotates }))
+        Doses.mark(c, DoseLog(medicationId, System.currentTimeMillis(), DoseStatus.TAKEN, scheduledFor = scheduledFor ?: due?.scheduledFor, site = due?.nextSite.takeIf { rotates }), "$name taken")
     }
 }

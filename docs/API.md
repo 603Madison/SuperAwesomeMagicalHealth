@@ -372,6 +372,7 @@ from `at`, in the person's time zone.
 |---|---|
 | `GET /api/meds` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Medication` (`?all=true` includes ones turned off) |
 | `GET /api/meds/day/{date}` | `MedsDay`: each scheduled dose with its log and the next injection or patch site |
+| `GET /api/meds/history?from=&to=` | `MedsHistory`: each day from `from` to `to` (up to a year; by default the last 35 days): its scheduled doses taken, skipped, missed (a day that's over, never marked) or still open (today's), and doses taken off the schedule (`extra`) |
 | `GET /api/meds/doses?days=30` · `POST` · `DELETE /{id}` | `DoseLog` (marking a scheduled dose: send its `scheduledFor`) |
 | `GET /api/labs?days=3650` · `POST` · `DELETE /{id}` | `LabResult` |
 

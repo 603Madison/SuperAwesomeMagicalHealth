@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import com.health.api.AuthConfig
 import com.health.api.CheckIn
 import com.health.api.Contributor
@@ -65,6 +67,8 @@ import com.health.api.MedForm
 import com.health.api.MedSchedule
 import com.health.api.Medication
 import com.health.api.MedsDay
+import com.health.api.MedsHistory
+import com.health.api.MedsHistoryDay
 import com.health.api.MindDay
 import com.health.api.MindSummary
 import com.health.api.Module
@@ -670,6 +674,47 @@ class ScreenshotTest {
     fun medsDark() {
         render(dark = true) { Frame("health") { MedsScreen(medsState, zone, MedsActions(), canBeExact = false) } }
         save("meds_today_dark")
+    }
+
+    /** November so far: estradiol twice a day; one evening missed, one morning skipped, an ibuprofen; today one still to take. */
+    private val medsHistory: MedsHistory get() {
+        val days = (1..30).map { d ->
+            val date = today.withDayOfMonth(d).toString()
+            when {
+                d > today.dayOfMonth -> MedsHistoryDay(date, scheduled = 2)
+                d == today.dayOfMonth -> MedsHistoryDay(date, 2, taken = 1, open = 1)
+                d == 5 || d == 11 -> MedsHistoryDay(date, 2, taken = 1, missed = 1, extra = if (d == 11) 1 else 0)
+                d == 9 -> MedsHistoryDay(date, 2, taken = 1, skipped = 1)
+                else -> MedsHistoryDay(date, 2, taken = 2)
+            }
+        }
+        return MedsHistory(days.first().date, days.last().date, days)
+    }
+
+    private val yesterdaysDoses get() = today.minusDays(1).let { y ->
+        MedsDay(
+            y.toString(),
+            due = listOf(
+                DueDose("e", "Estradiol", "2 mg", MedForm.PILL, at(y, 8), DoseLog("e", at(y, 8, 4), scheduledFor = at(y, 8), id = "d1")),
+                DueDose("e", "Estradiol", "2 mg", MedForm.PILL, at(y, 20)),
+            ),
+            extra = listOf(DoseLog("i", at(y, 13, 30), id = "d2")),
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2600dp-xxhdpi")
+    fun medsHistory() {
+        val state = medsState.copy(history = medsHistory, picked = today.minusDays(1), pickedDay = yesterdaysDoses)
+        render { Frame("health") { MedsScreen(state, zone, MedsActions()) } }
+        compose.onNodeWithText("History").assertExists()
+        compose.onNodeWithText("November 2026").assertExists()
+        compose.onNodeWithText("20 of 23 taken · 1 skipped · 2 missed").assertExists()
+        compose.onNodeWithText("Yesterday").assertExists()
+        compose.onNodeWithText("Took it").assertExists()
+        compose.onNodeWithText("Remove").assertExists()
+        compose.onNode(hasContentDescription("Yesterday: 1 of 2 taken · 1 missed · 1 as needed")).assertExists()
+        save("meds_history")
     }
 
     @Test

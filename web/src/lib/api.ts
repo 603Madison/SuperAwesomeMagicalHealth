@@ -1,7 +1,7 @@
 import type {
   AdminSettings, AuthConfig, CheckIn, DayFeed, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
-  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay,
+  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
@@ -255,6 +255,7 @@ export const api = {
   saveMed: (m: Medication) => (m.id ? put<Medication>(`/api/meds/${q(m.id)}`, m) : post<Medication>("/api/meds", m)),
   deleteMed: (id: string) => del<unknown>(`/api/meds/${q(id)}`),
   medsDay: (date: string) => get<MedsDay>(`/api/meds/day/${q(date)}`),
+  medsHistory: (from: string, to: string) => get<MedsHistory>(`/api/meds/history?from=${q(from)}&to=${q(to)}`),
   logDose: (d: DoseLog) => post<DoseLog>("/api/meds/doses", d),
   deleteDose: (id: string) => del<unknown>(`/api/meds/doses/${q(id)}`),
   labs: () => get<LabResult[]>("/api/labs"),

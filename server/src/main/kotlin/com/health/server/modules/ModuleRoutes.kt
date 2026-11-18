@@ -101,6 +101,15 @@ fun Route.moduleRoutes(services: Services) {
             val user = call.requireUser(services)
             call.respond(m.meds.day(user.id, services.profiles.days(user.id).parse(call.parameters["date"].orEmpty(), services.clock())))
         }
+        get("/history") {
+            val user = call.requireUser(services)
+            val zone = services.profiles.days(user.id)
+            val now = services.clock()
+            val to = call.request.queryParameters["to"]?.let { zone.parse(it, now) } ?: zone.today(now)
+            val from = call.request.queryParameters["from"]?.let { zone.parse(it, now) } ?: to.minusDays(34)
+            if (from.isAfter(to) || java.time.temporal.ChronoUnit.DAYS.between(from, to) > 366) throw ApiError.badRequest("Choose up to a year, the earlier date first")
+            call.respond(m.meds.history(user.id, from, to))
+        }
         route("/doses") {
             get {
                 val user = call.requireUser(services)

@@ -7,6 +7,7 @@ import com.health.api.CycleDay
 import com.health.api.CyclePhase
 import com.health.api.DatedValue
 import com.health.api.DoseLog
+import com.health.api.DoseStatus
 import com.health.api.Flow
 import com.health.api.JournalEntry
 import com.health.api.MedForm
@@ -287,6 +288,54 @@ class ModulesTest {
         // Nor before the day it's started, when that's still to come.
         val later = s.modules.meds.save(id, Medication("Iron", schedule = MedSchedule(times = listOf("09:00")), startedOn = today.plusDays(2).toString()))
         assertEquals(listOf(0, 0, 1), (0L..2L).map { ahead -> s.modules.meds.day(id, today.plusDays(ahead)).due.count { it.medicationId == later.id } })
+    }
+
+    @Test
+    fun `the history says, day by day, what was taken, skipped, missed and still to come`() {
+        var clock = at(today.minusDays(3), 7)
+        val s = testServices(clock = { clock }).also { s ->
+            runBlocking {
+                s.bootstrap()
+                s.profiles.put(s.users.byUsername("admin")!!.id, Profile(timezone = zone.id, modules = Module.entries.toSet()))
+            }
+        }
+        serverTest(s) { _ ->
+            val id = s.admin()
+            val (pill, pain) = runBlocking {
+                s.modules.meds.save(id, Medication("Estradiol", "2 mg", schedule = MedSchedule(times = listOf("09:00", "21:00")))) to
+                    s.modules.meds.save(id, Medication("Ibuprofen", schedule = MedSchedule(ScheduleKind.AS_NEEDED, emptyList())))
+            }
+            clock = at(today, 15)
+            fun dose(date: LocalDate, h: Int, status: DoseStatus = DoseStatus.TAKEN) =
+                runBlocking { s.modules.meds.logDose(id, DoseLog(pill.id!!, at(date, h, 10), status, scheduledFor = at(date, h))) }
+            dose(today.minusDays(3), 9); dose(today.minusDays(3), 21)
+            dose(today.minusDays(2), 9)
+            dose(today.minusDays(1), 9, DoseStatus.SKIPPED)
+            runBlocking { s.modules.meds.logDose(id, DoseLog(pain.id!!, at(today.minusDays(1), 13))) }
+            val taken = dose(today, 9)
+
+            val history = runBlocking { s.modules.meds.history(id, today.minusDays(4), today.plusDays(1)) }
+            assertEquals((-4L..1L).map { today.plusDays(it).toString() }, history.days.map { it.date })
+            // Before it was added: nothing. Then: both; one taken and one missed; one skipped, one missed and an ibuprofen;
+            // today one taken and one still to do; tomorrow, just what's scheduled.
+            assertEquals(
+                listOf(
+                    listOf(0, 0, 0, 0, 0, 0), listOf(2, 2, 0, 0, 0, 0), listOf(2, 1, 0, 1, 0, 0), listOf(2, 0, 1, 1, 0, 1),
+                    listOf(2, 1, 0, 0, 1, 0), listOf(2, 0, 0, 0, 0, 0),
+                ),
+                history.days.map { listOf(it.scheduled, it.taken, it.skipped, it.missed, it.open, it.extra) },
+            )
+            // Undone, today's dose is open again.
+            runBlocking { s.modules.meds.deleteDose(id, taken.id!!) }
+            assertEquals(2, runBlocking { s.modules.meds.history(id, today, today) }.days.single().open)
+
+            val admin = adminBrowser()
+            val api = admin.get("/api/meds/history?from=${today.minusDays(2)}&to=$today").obj()
+            assertEquals(3, api["days"]!!.jsonArray.size)
+            assertEquals(35, admin.get("/api/meds/history").obj()["days"]!!.jsonArray.size)
+            assertEquals(HttpStatusCode.BadRequest, admin.get("/api/meds/history?from=$today&to=${today.minusDays(1)}").status)
+            assertEquals(HttpStatusCode.BadRequest, admin.get("/api/meds/history?from=${today.minusYears(2)}&to=$today").status)
+        }
     }
 
     @Test

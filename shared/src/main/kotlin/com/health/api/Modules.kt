@@ -824,6 +824,29 @@ data class MedsDay(
     val lowStock: List<Medication> = emptyList(),
 )
 
+/**
+ * One day of the medication history (GET /api/meds/history): what happened to its scheduled doses,
+ * counted the way the day's own doses are ([MedsDay]).
+ */
+@Serializable
+data class MedsHistoryDay(
+    val date: String,
+    /** Doses scheduled that day. */
+    val scheduled: Int = 0,
+    val taken: Int = 0,
+    val skipped: Int = 0,
+    /** Scheduled on a day that's over, and never marked. */
+    val missed: Int = 0,
+    /** Today's, not marked yet (later today included). */
+    val open: Int = 0,
+    /** Doses taken that weren't scheduled: as-needed ones, or ones from an earlier schedule. */
+    val extra: Int = 0,
+)
+
+/** The medication history, a day at a time, oldest first ([from] to [to], both included). */
+@Serializable
+data class MedsHistory(val from: String, val to: String, val days: List<MedsHistoryDay> = emptyList())
+
 /** A lab result (estradiol, ferritin, TSH, HbA1c…), with its reference range where known. */
 @Serializable
 data class LabResult(

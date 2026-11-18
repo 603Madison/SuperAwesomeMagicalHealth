@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.health.api.DoseLog
 import com.health.api.DoseStatus
 import com.health.api.DueDose
 import com.health.api.LabResult
@@ -115,6 +116,12 @@ class MedsActions(
     val tab: (MedsTab) -> Unit = {},
     val take: (DueDose, String?) -> Unit = { _, _ -> },
     val skip: (DueDose) -> Unit = {},
+    /** Takes a dose's mark back off (Undo), or removes one taken as needed from the history. */
+    val undo: (DoseLog) -> Unit = {},
+    val remove: (DoseLog) -> Unit = {},
+    /** The history: another month, and a day's doses shown (or hidden, picked again). */
+    val month: (Int) -> Unit = {},
+    val pick: (LocalDate) -> Unit = {},
     val tookOne: (Medication) -> Unit = {},
     val edit: (Medication?) -> Unit = {},
     val addLab: (LabResult) -> Unit = {},
@@ -143,6 +150,10 @@ fun MedsRoute(onEdit: (String?) -> Unit, onOpen: ((String) -> Unit)? = null) {
             tab = vm::tab,
             take = { d, s -> vm.take(d, s) },
             skip = { vm.skip(it) },
+            undo = { vm.undo(it) },
+            remove = { vm.remove(it) },
+            month = vm::month,
+            pick = vm::pick,
             tookOne = { vm.tookOne(it) },
             edit = { onEdit(it?.id) },
             addLab = { vm.addLab(it) },
@@ -169,6 +180,7 @@ val MEDS_TODAY_SECTIONS = listOf(
     ArrangeItem("scheduled", "Scheduled"),
     ArrangeItem("summary", "Taken this week, and running low"),
     ArrangeItem("asneeded", "As needed"),
+    ArrangeItem("history", "History"),
 )
 
 /** The Labs tab's sections: one for each test, newest first (the sections of [FeatureScreens.MEDS_LABS]). */
@@ -237,7 +249,7 @@ private fun TodayTab(state: MedsState, zone: ZoneId, actions: MedsActions, canNo
     }
     Sections(arrangedIn(FeatureScreens.MEDS_TODAY, MEDS_TODAY_SECTIONS)) { id ->
         when (id) {
-            "scheduled" -> DoseList(day, zone, actions, sitesFor = { medId -> state.meds.firstOrNull { it.id == medId }?.sites.orEmpty() })
+            "scheduled" -> DoseList(day, zone, actions, sitesFor = { medId -> state.meds.firstOrNull { it.id == medId }?.sites.orEmpty() }, today = state.date)
             "summary" -> if (day.adherence7d != null || day.lowStock.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     day.adherence7d?.let { Pill("$it% taken this week", if (it >= 80) AppTheme.status.good else AppTheme.status.warn) }
@@ -245,6 +257,7 @@ private fun TodayTab(state: MedsState, zone: ZoneId, actions: MedsActions, canNo
                 }
             }
             "asneeded" -> AsNeeded(day, zone, actions)
+            "history" -> History(state, zone, actions, sitesFor = { medId -> state.meds.firstOrNull { it.id == medId }?.sites.orEmpty() })
         }
     }
 }
@@ -273,28 +286,47 @@ private fun AsNeeded(day: MedsDay, zone: ZoneId, actions: MedsActions) {
     }
 }
 
-/** Today's doses by time: each with Take and Skip, or what happened to it. */
+/**
+ * A day's doses by time: each with Take and Skip, or what happened to it with Undo. A day that's
+ * over offers Took it and Skipped for one never marked (marked for the time it was due); a day to
+ * come, nothing. [framed] puts them in their own card.
+ */
 @Composable
-fun DoseList(day: MedsDay, zone: ZoneId, actions: MedsActions, compact: Boolean = false, sitesFor: (String) -> List<String> = { emptyList() }) {
+fun DoseList(
+    day: MedsDay, zone: ZoneId, actions: MedsActions, compact: Boolean = false, sitesFor: (String) -> List<String> = { emptyList() },
+    framed: Boolean = !compact,
+    today: LocalDate = LocalDate.now(zone),
+) {
     var picking by remember { mutableStateOf<DueDose?>(null) }
     val now = System.currentTimeMillis()
+    val readOnly = com.health.app.ui.care.LocalReadOnly.current
     if (day.due.isEmpty()) {
-        if (!compact) AppCard { Hint("Nothing scheduled today.") }
+        if (framed) AppCard { Hint("Nothing scheduled today.") }
         return
     }
     val content: @Composable () -> Unit = {
         day.due.sortedBy { it.scheduledFor }.forEachIndexed { i, due ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            val log = due.log
+            val on = Instant.ofEpochMilli(due.scheduledFor).atZone(zone).toLocalDate()
+            val past = on.isBefore(today)
+            val ahead = on.isAfter(today)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconTile(formIcon(due.form), size = 38.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(due.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val log = due.log
                     val status = when (log?.status) {
                         DoseStatus.TAKEN -> "Taken ${Format.timeOfDay(log.at, zone)}" + (log.site?.let { " · $it" } ?: "")
                         DoseStatus.SKIPPED -> "Skipped"
-                        null -> listOfNotNull(due.dose, if (due.scheduledFor < now) "due ${Format.timeOfDay(due.scheduledFor, zone)}" else Format.timeOfDay(due.scheduledFor, zone)).joinToString(" · ")
+                        null -> listOfNotNull(
+                            due.dose,
+                            when {
+                                past -> "missed, due ${Format.timeOfDay(due.scheduledFor, zone)}"
+                                due.scheduledFor < now -> "due ${Format.timeOfDay(due.scheduledFor, zone)}"
+                                else -> Format.timeOfDay(due.scheduledFor, zone)
+                            },
+                        ).joinToString(" · ")
                     }
                     Text(
                         status, style = MaterialTheme.typography.bodySmall,
@@ -304,16 +336,20 @@ fun DoseList(day: MedsDay, zone: ZoneId, actions: MedsActions, compact: Boolean 
                             null -> if (due.scheduledFor < now - 30 * 60_000) AppTheme.status.warn else MaterialTheme.colorScheme.onSurfaceVariant
                         },
                     )
-                    if (log == null && due.nextSite != null) Hint("Next site: ${due.nextSite}")
+                    if (log == null && !ahead && due.nextSite != null) Hint("Next site: ${due.nextSite}")
                 }
-                if (due.log == null && !com.health.app.ui.care.LocalReadOnly.current) {
-                    if (!compact) TextButton(onClick = { actions.skip(due) }) { Text("Skip") }
-                    FilledTonalButton(onClick = { if (needsSite(due)) picking = due else actions.take(due, null) }) { Text("Take") }
+                if (!readOnly) {
+                    if (log != null) {
+                        TextButton(onClick = { actions.undo(log) }) { Text("Undo") }
+                    } else if (!ahead) {
+                        if (!compact) TextButton(onClick = { actions.skip(due) }) { Text(if (past) "Skipped" else "Skip") }
+                        FilledTonalButton(onClick = { if (needsSite(due)) picking = due else actions.take(due, null) }) { Text(if (past) "Took it" else "Take") }
+                    }
                 }
             }
         }
     }
-    if (compact) Column { content() } else InfoCard("Scheduled") { content() }
+    if (framed) InfoCard("Scheduled") { content() } else Column { content() }
     picking?.let { due ->
         SitePicker(due, sitesFor(due.medicationId), onDismiss = { picking = null }) { site -> actions.take(due, site); picking = null }
     }

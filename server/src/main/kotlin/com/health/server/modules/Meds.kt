@@ -9,6 +9,8 @@ import com.health.api.MedForm
 import com.health.api.MedSchedule
 import com.health.api.Medication
 import com.health.api.MedsDay
+import com.health.api.MedsHistory
+import com.health.api.MedsHistoryDay
 import com.health.api.ScheduleKind
 import com.health.server.ApiError
 import com.health.server.db.Database
@@ -168,6 +170,43 @@ class MedsService(
             adherence7d = adherence(scheduled, logs, date, zone),
             lowStock = meds.filter { m -> m.stock != null && m.stock!! <= maxOf(5, Schedules.perWeek(m.schedule)) },
         )
+    }
+
+    /**
+     * Each day from [from] to [to]: its scheduled doses taken, skipped, missed (a day that's over,
+     * never marked) or still open (today's), and the doses taken off the schedule.
+     */
+    suspend fun history(userId: String, from: LocalDate, to: LocalDate): MedsHistory {
+        val zone = profiles.days(userId)
+        val today = zone.today(clock())
+        val scheduled = scheduled(userId)
+        val logs = doses(userId, from, to)
+        // A mark belongs to the scheduled time it names; marked twice, the later one counts (as logDose keeps it).
+        val bySlot = logs.filter { it.scheduledFor != null }.associateBy { it.medicationId to it.scheduledFor!! }
+        val days = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.map { date ->
+            var count = 0
+            var taken = 0
+            var skipped = 0
+            var missed = 0
+            var open = 0
+            val matched = HashSet<String>()
+            scheduled.forEach { s ->
+                s.times(date, zone).forEach { slot ->
+                    count++
+                    val log = bySlot[s.med.id to slot]
+                    log?.id?.let(matched::add)
+                    when {
+                        log?.status == DoseStatus.TAKEN -> taken++
+                        log?.status == DoseStatus.SKIPPED -> skipped++
+                        date.isBefore(today) -> missed++
+                        date == today -> open++
+                    }
+                }
+            }
+            val extra = logs.count { it.date == date.toString() && it.id !in matched && it.status == DoseStatus.TAKEN }
+            MedsHistoryDay(date.toString(), count, taken, skipped, missed, open, extra)
+        }.toList()
+        return MedsHistory(from.toString(), to.toString(), days)
     }
 
     private fun adherence(meds: List<ScheduledMed>, logs: List<DoseLog>, date: LocalDate, zone: Days): Int? {
