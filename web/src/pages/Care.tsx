@@ -17,7 +17,9 @@ import { FEATURES } from "../components/features";
 import { ArrangeButton, ArrangePanel } from "../components/Arrange";
 import { useLogged } from "../components/LogSheet";
 import { Button, Card, Empty, ErrorNotice, Spinner, errorToast, toast, useLoad } from "../components/ui";
-import { cycleLine, foodLine, habitsLine, hormonesLine, lifeStageLine, lifeStageTitle, lineText, mindLine, neuroLine, symptomsLine, transitionLine, vitalsLine } from "./CareLines";
+import {
+  cycleLine, foodLine, habitsLine, hormonesLine, lifeStageLine, lifeStageTitle, lineText, mindBudgetLine, mindLine, neuroLine, symptomsLine, transitionLine, vitalsLine,
+} from "./CareLines";
 import { useMealie } from "./Mealie";
 import { QuickChange } from "./Wearing";
 
@@ -172,7 +174,8 @@ export function Care() {
         const routines = n?.routinesDue ?? [];
         return <AreaCard {...props} sub={[lineText(neuroLine(n)), routines.length > 0 && `still to do: ${routines.slice(0, 2).join(", ")}`].filter(Boolean).join(" · ") || "Nothing logged today"} />;
       }
-      case "MIND": return <AreaCard {...props} sub={lineText(mindLine(m.mind)) ?? "Nothing logged today"} />;
+      // Mind's own energy budget (only without Autism & ADHD) says what's left with Mind's line.
+      case "MIND": return <AreaCard {...props} sub={[lineText(mindLine(m.mind)), !is("NEURO") && mindBudgetLine(m.neuro)].filter(Boolean).join(" · ") || "Nothing logged today"} />;
       case "CYCLE": {
         const stage = m.lifeStage && m.lifeStage.stage !== "CYCLING" && m.lifeStage.stage !== "TRYING" ? m.lifeStage : null;
         const low = (supplies.data ?? []).filter((s) => !WORN_KINDS.includes(s.supply.kind) && s.low);

@@ -1185,6 +1185,75 @@ input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 28p
 .comm-card span { color: var(--muted); font-size: 0.88rem; }
 .card-edit { grid-template-columns: 1fr 1fr auto; align-items: end; }
 
+/* Energy & focus (pages/EnergyFocus.tsx): energy is a circle in --c1, focus a diamond in --c2, a dose
+   a triangle in --c3, so they're told apart by shape as well as colour; text stays in text colours. */
+.ef.grid { align-items: start; }
+.ef-scale .scale button { font-size: 1rem; font-weight: var(--w-semibold); min-width: 0; }
+.ef-scale .field-label { display: flex; align-items: baseline; gap: 8px; }
+.ef-scale-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.ef-optional { font-weight: var(--w-regular); color: var(--faint); font-size: 0.8rem; margin-left: 4px; }
+.ef-mark { display: inline-block; flex: none; width: 10px; height: 10px; box-sizing: content-box; }
+.ef-mark.is-energy { background: var(--c1); border-radius: 50%; }
+.ef-mark.is-focus { background: var(--c2); width: 9px; height: 9px; border-radius: 1.5px; transform: rotate(45deg); }
+.ef-mark.is-dose { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid var(--c3); }
+.ef-legend { gap: 6px 16px; }
+.ef-strip .ef-later { fill: color-mix(in srgb, var(--outline) 16%, transparent); }
+.ef-strip .ef-dose line { stroke: var(--c3); stroke-width: 2; stroke-linecap: round; }
+.ef-strip .ef-dose path { fill: var(--c3); stroke: var(--chart-surface); stroke-width: 2; stroke-linejoin: round; }
+.ef-strip .ef-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; }
+.ef-strip .ef-line.is-energy { stroke: var(--c1); }
+.ef-strip .ef-line.is-focus { stroke: var(--c2); }
+.ef-strip .ef-dot { stroke: var(--chart-surface); stroke-width: 2; stroke-linejoin: round; }
+.ef-strip .ef-dot.is-energy { fill: var(--c1); }
+.ef-strip .ef-dot.is-focus { fill: var(--c2); }
+.ef-tip { transform: translate(-50%, calc(-100% - 6px)); }
+.ef-today .row { padding: 8px 2px; }
+.ef-progress { display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
+.ef-summary { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.ef-summary li::marker { color: var(--primary); }
+.ef-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 32px; }
+.ef-charts section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ef-blocks { display: flex; flex-direction: column; gap: 4px; }
+.ef-block-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ef-block { display: grid; grid-template-columns: 8.75rem minmax(0, 1fr) 6.5rem; grid-template-areas: "name track values"; align-items: center; gap: 4px 12px; padding: 6px 8px; border-radius: 10px; font-size: 0.86rem; }
+.ef-block-name { grid-area: name; color: var(--text); display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.ef-block-values { grid-area: values; display: flex; justify-content: flex-end; gap: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ef-block-values > span { display: inline-flex; align-items: center; gap: 5px; }
+.ef-block-values .ef-mark { width: 8px; height: 8px; }
+.ef-block-values .ef-mark.is-focus { width: 7px; height: 7px; }
+.ef-track {
+  grid-area: track; position: relative; height: 24px; margin: 0 7px;
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--outline) 55%, transparent) 1px, transparent 1px);
+  background-size: 25% 100%; border-right: 1px solid color-mix(in srgb, var(--outline) 55%, transparent);
+}
+.ef-track .ef-mark { position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--card); }
+.ef-track .ef-mark.is-energy { top: 30%; }
+.ef-track .ef-mark.is-focus { top: 70%; transform: translate(-50%, -50%) rotate(45deg); }
+.ef-block-scale { padding-top: 0; padding-bottom: 0; }
+.ef-block-ticks { grid-area: track; position: relative; height: 1.2em; margin: 0 7px; color: var(--faint); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.ef-block-ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+.ef-block.is-thin .ef-track, .ef-block.is-thin .ef-block-values, .ef-block.is-thin .ef-block-name { opacity: 0.5; }
+.ef-block.is-best { background: color-mix(in srgb, var(--c2) 9%, transparent); }
+.ef-best { font-size: 0.75rem; color: var(--muted); font-weight: var(--w-semibold); }
+.ef-factors { margin: 0; }
+.ef-factors .insight { background: var(--surface-2); border-color: transparent; }
+.ef-caption { color: var(--faint); }
+.ef-about-card { padding-top: 12px; padding-bottom: 12px; }
+.ef-about summary { cursor: pointer; font-weight: var(--w-semibold); padding: 6px 0; }
+.ef-about[open] summary { margin-bottom: 6px; }
+.ef-about p { color: var(--muted); max-width: 72ch; }
+.ef-sources { margin: 6px 0 4px; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 0.84rem; max-width: 80ch; }
+.ef-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 32px; align-items: start; }
+.ef-settings select { max-width: 420px; }
+.ef-add-time { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ef-add-time input[type="time"] { width: auto; flex: 0 1 190px; min-width: 0; }
+.ef-social input[type="range"].is-unset { opacity: 0.55; }
+@media (max-width: 600px) {
+  .ef-block { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name values" "track track"; gap: 2px 10px; }
+  .ef-block-scale .ef-block-name, .ef-block-scale .ef-block-values { display: none; }
+  .ef-charts { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Full-screen layers: the focus timer, a card to show, comparing photos. */
 .fullscreen { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
 .fullscreen-close { position: absolute; top: 16px; right: 16px; }

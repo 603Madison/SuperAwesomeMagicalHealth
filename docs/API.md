@@ -576,7 +576,10 @@ words.
 |---|---|
 | `GET /api/neuro/profile` · `PUT` | `NeuroProfile` (about me) |
 | `GET /api/neuro/events?days=90` · `POST` · `PUT /{id}` · `DELETE /{id}` | `OverloadEvent` |
-| `GET /api/neuro/energy?days=30` · `PUT /api/neuro/energy/{date}` | `EnergyDay` |
+| `GET /api/neuro/energy?days=30` · `PUT /api/neuro/energy/{date}` | `EnergyDay`: the social battery (`{date, socialBattery}`), and Mind's own energy budget for people without Autism & ADHD |
+| `GET /api/neuro/checks?days=30` · `POST` · `DELETE /{id}` | `EnergyCheck`: energy and focus check-ins (each 1–5, with optional tags and a note), newest first |
+| `GET /api/neuro/energy-focus?days=42` | `EnergyFocus`: today's check-ins and ADHD medication doses, and the person's own patterns (by time of day, since a dose, and with sleep, medication, movement, meals and stress) once there are enough check-ins, with how it works and its sources. Through a share without Medications, nothing about the medication |
+| `PUT /api/neuro/energy-focus/settings` | `EnergyFocusSettings`: the ADHD medication (unset: found from the medications' names) and reminder times (`"HH:mm"`, up to 6, none by default) |
 | `GET /api/neuro/check-ins?days=30` · `POST` · `DELETE /{id}` | `NeuroCheckIn` |
 | `GET /api/neuro/focus?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `FocusSession` |
 | `GET /api/neuro/routines` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Routine` |

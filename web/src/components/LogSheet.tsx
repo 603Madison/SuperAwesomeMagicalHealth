@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { create } from "zustand";
 import {
   ArrowUpDown, CalendarClock, CalendarHeart, Camera, Coffee, CupSoda, Droplet, Droplets, Dumbbell, GlassWater, Heart, HeartPulse, Layers, ListChecks,
-  Moon, Pill, Ruler, Salad, Smile, Sparkles, Stethoscope, Waves, Weight, Wind, type LucideIcon,
+  Moon, Pill, Ruler, Salad, Smile, Sparkles, Stethoscope, Waves, Weight, Wind, Zap, type LucideIcon,
 } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
@@ -20,6 +20,7 @@ import { BloodPressureDialog, GlucoseDialog } from "../pages/Vitals";
 import { SymptomDialog } from "../pages/Symptoms";
 import { DrinkDialog, quickDrink } from "../pages/Drinks";
 import { MomentDialog } from "../pages/Transition";
+import { QuickCheckDialog } from "../pages/EnergyFocus";
 import { QuickChange } from "../pages/Wearing";
 import { CheckInDialog, SleepDialog, WeightDialog, WorkoutDialog } from "./LogDialogs";
 import { MeasureDialog } from "./Measurements";
@@ -46,7 +47,7 @@ export const loggedSomething = () => useLogStore.setState((s) => ({ changed: s.c
 /** A number that moves on each time something's logged from the sheet: put it in a page's load. */
 export const useLogged = (): number => useLogStore((s) => s.changed);
 
-type Dialog = "weight" | "workout" | "sleep" | "checkin" | "bp" | "glucose" | "symptom" | "drink" | "moment" | "measure" | "mood" | "change";
+type Dialog = "weight" | "workout" | "sleep" | "checkin" | "bp" | "glucose" | "symptom" | "drink" | "moment" | "measure" | "mood" | "change" | "energy";
 
 /** Something to log: its shared id (QuickAction), its tile's word, its full name, and what it does. */
 interface LogAction {
@@ -103,7 +104,8 @@ function useActions(onDialog: (d: Dialog) => void): LogAction[] {
     { id: "BLOOD_PRESSURE", word: "Blood pressure", name: "Log blood pressure", icon: HeartPulse, run: () => onDialog("bp") },
     { id: "GLUCOSE", word: "Glucose", name: "Log glucose", icon: Droplets, run: () => onDialog("glucose") },
     { id: "HABIT", word: "Habits", name: "Tick off a habit", icon: ListChecks, run: go("/habits") },
-    { id: "ENERGY", word: "Energy", name: "Log energy and focus", icon: Sparkles, when: has(F.NEURO_ENERGY), run: go("/neuro") },
+    // Autism & ADHD's energy and focus check-in, right here (Mind's own budget has no tile).
+    { id: "ENERGY", word: "Energy & focus", name: "Check in: energy and focus", icon: Zap, when: has(F.NEURO_ENERGY), run: () => onDialog("energy") },
     { id: "OVERLOAD", word: "Too much", name: "Too much: calm mode", icon: Waves, when: has(F.NEURO_CALM), run: go("/calm") },
     { id: "CALM", word: "Calm", name: "Calm tools", icon: Wind, run: go("/mind#calm") },
     { id: "MOMENT", word: "Euphoria", name: "Log a moment of euphoria", icon: Sparkles, when: has(F.TRANSITION_MOMENTS), run: () => onDialog("moment") },
@@ -242,6 +244,7 @@ function LogDialog({ which, onClose, onSaved }: { which: Dialog; onClose: () => 
     case "sleep": return <SleepDialog onClose={onClose} onSaved={onSaved} />;
     case "checkin": return checkIn.loading ? null : <CheckInDialog date={date} initial={checkIn.data ?? undefined} onClose={onClose} onSaved={onSaved} />;
     case "moment": return <MomentDialog kind="EUPHORIA" onClose={onClose} onSaved={onSaved} />;
+    case "energy": return <QuickCheckDialog onClose={onClose} onSaved={onSaved} />;
     case "measure": return <MeasureDialog imperial={units === "IMPERIAL"} metrics={BODY_MEASUREMENTS.map((x) => x.id)} onClose={onClose} onSaved={onSaved} />;
   }
 }

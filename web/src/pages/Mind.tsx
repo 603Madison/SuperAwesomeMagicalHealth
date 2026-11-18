@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Brain, ClipboardList, Heart, LifeBuoy, LineChart as LineChartIcon, Phone, Plus, Sparkles, Trash2, Wind } from "lucide-react";
+import { BatteryMedium, BookOpen, Brain, ClipboardList, Heart, LifeBuoy, LineChart as LineChartIcon, Phone, Plus, Sparkles, Trash2, Wind } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, isoDate, num, shortDate, when } from "../lib/format";
-import type { CrisisResource, JournalEntry, JournalKind, MoodEntry, ScreenerDefinition, ScreenerResult } from "../lib/types";
+import { clock, isoDate, num, shortDate, today, when } from "../lib/format";
+import type { CrisisResource, EnergyDay, JournalEntry, JournalKind, MoodEntry, ScreenerDefinition, ScreenerResult } from "../lib/types";
 import { LineChart } from "../components/charts";
-import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, ErrorNotice, Field, Modal, PageHeader, Segmented, Spinner, Stat, errorToast, toast, useLoad } from "../components/ui";
+import { ScaleRow } from "../components/FieldKit";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
 import { layoutKey } from "../lib/types";
 import { INSIGHT_ICONS } from "../components/LogDialogs";
@@ -12,7 +13,6 @@ import { useModules } from "../App";
 import { useReadOnly } from "../lib/viewing";
 import { NavLink } from "react-router-dom";
 import { F, useFields } from "../lib/fields";
-import { EnergyBudgetCard } from "./Neuro";
 
 export const FACES = ["😣", "🙁", "😐", "🙂", "😄"];
 export const FACE_LABELS = ["Very low", "Low", "Okay", "Good", "Great"];
@@ -60,7 +60,8 @@ export function Mind() {
         </div>
       </Card>
     ) },
-    { id: "energy", label: "Energy today", when: has(F.MIND_ENERGY_BUDGET), node: <EnergyBudgetCard readOnly={readOnly} /> },
+    // Mind's own energy budget: only without Autism & ADHD, which has energy and focus check-ins instead.
+    { id: "energy", label: "Energy today", when: has(F.MIND_ENERGY_BUDGET) && !neuroOn, node: <EnergyBudgetCard readOnly={readOnly} /> },
     { id: "calm", label: "Calm tools", when: !readOnly, node: (
       <Card id="calm" title="Calm tools" icon={<Wind size={18} />} className="span-2">
         <div className="tool-grid">
@@ -184,6 +185,57 @@ export function Mind() {
       {screener && <ScreenerDialog definition={screener} onClose={() => setScreener(null)} onDone={(r) => { summary.reload(); if (r.flagged) setSupport(true); }} />}
       {writing && <JournalDialog entry={writing === "new" ? undefined : writing} onClose={() => setWriting(null)} onSaved={journal.reload} />}
     </div>
+  );
+}
+
+/**
+ * Mind's own energy budget, for people with Mind but not Autism & ADHD (Fields.MIND_ENERGY_BUDGET):
+ * what the day started with, what used some and what gave some back. Autism & ADHD has energy and
+ * focus check-ins instead (pages/EnergyFocus.tsx).
+ */
+function EnergyBudgetCard({ readOnly, compact }: { readOnly: boolean; compact?: boolean }) {
+  const { has } = useFields();
+  const list = useLoad(() => api.energy(14).catch(() => [] as EnergyDay[]), []);
+  const todayDay = list.data?.find((d) => d.date === today()) ?? { date: today(), spends: [] };
+  const [what, setWhat] = useState("");
+  const [amount, setAmount] = useState(1);
+  const save = async (d: EnergyDay) => {
+    try { await api.saveEnergy(d); list.reload(); } catch (e) { errorToast(e); }
+  };
+  const used = todayDay.spends.reduce((t, s) => t + s.amount, 0);
+  const left = todayDay.startWith != null ? todayDay.startWith - used : undefined;
+  return (
+    <Card id="energy" title="Energy today" icon={<BatteryMedium size={18} />} className={compact ? "" : "span-2"}>
+      {todayDay.startWith == null ? (
+        !readOnly ? (
+          <div className="form-stack">
+            <p className="muted">How much energy do you have today? 10 is a usual day.</p>
+            <div className="tag-list">{[6, 8, 10, 12, 15].map((n) => <button key={n} type="button" className="chip" onClick={() => save({ ...todayDay, startWith: n })}>{n}</button>)}</div>
+          </div>
+        ) : <p className="muted">Not set today.</p>
+      ) : (
+        <>
+          <div className="energy-dots" aria-label={`${left} of ${todayDay.startWith} left`}>
+            {Array.from({ length: todayDay.startWith }, (_, i) => <span key={i} className={`energy-dot ${i < (left ?? 0) ? "is-left" : ""}`} aria-hidden="true" />)}
+          </div>
+          <div className="stats">
+            <Stat label="Left" value={left ?? "–"} sub={`of ${todayDay.startWith}`} />
+            {has(F.NEURO_SOCIAL) && <Stat label="Social battery" value={todayDay.socialBattery != null ? `${todayDay.socialBattery * 10}%` : "–"} />}
+          </div>
+          {todayDay.spends.length > 0 && <div className="tag-list">{todayDay.spends.map((s, i) => <span key={i} className="chip is-static">{s.what} <span className="muted">{s.amount}</span></span>)}</div>}
+          {!readOnly && (
+            <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (what.trim()) { void save({ ...todayDay, spends: [...todayDay.spends, { what: what.trim(), amount, at: Date.now() }] }); setWhat(""); } }}>
+              <Field label="What used some"><input value={what} onChange={(e) => setWhat(e.target.value)} placeholder="e.g. a phone call" /></Field>
+              <Field label="How many"><select value={amount} onChange={(e) => setAmount(Number(e.target.value))}>{[1, 2, 3, 4, 5, -1, -2].map((n) => <option key={n} value={n}>{n > 0 ? n : `${n} (gave some back)`}</option>)}</select></Field>
+              <Button type="submit">Add</Button>
+            </form>
+          )}
+          {has(F.NEURO_SOCIAL) && !readOnly && (
+            <ScaleRow label="Social battery" min={0} max={10} low="Empty" high="Full" value={todayDay.socialBattery} onChange={(socialBattery) => save({ ...todayDay, socialBattery })} />
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 
