@@ -277,10 +277,13 @@ private fun DestinationCard(d: DataDestination, busy: Boolean, actions: WhereAct
             Spacer(Modifier.width(8.dp))
             Text(WhereDataGoes.stateLine(d), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
         }
-        if (d.state == DataPathState.NOT_SET_UP) {
-            WhereDataGoes.link(d.setUp)?.let { link ->
-                TextButton(onClick = { actions.open(link.route) }, modifier = Modifier.padding(top = 2.dp).offset(x = (-12).dp)) { Text(link.label) }
-            }
+        val link = when (d.state) {
+            DataPathState.NOT_SET_UP -> WhereDataGoes.link(d.setUp)
+            DataPathState.ON, DataPathState.PAUSED -> WhereDataGoes.openLink(d.setUp)
+            DataPathState.OFF_ON_SERVER -> null
+        }
+        if (link != null) {
+            TextButton(onClick = { actions.open(link.route) }, modifier = Modifier.padding(top = 2.dp).offset(x = (-12).dp)) { Text(link.label) }
         }
     }
 }

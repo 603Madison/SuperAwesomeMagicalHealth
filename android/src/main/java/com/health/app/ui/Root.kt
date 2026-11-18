@@ -62,8 +62,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.health.api.ApiJson
 import com.health.api.JournalKind
 import com.health.api.Meal
+import com.health.api.Medication
 import com.health.api.Screener
 import com.health.app.attempt
 import com.health.app.ui.ai.AiAuditRoute
@@ -103,6 +105,8 @@ import com.health.app.ui.modules.mind.JournalEditorRoute
 import com.health.app.ui.modules.mind.JournalRoute
 import com.health.app.ui.modules.mind.MindRoute
 import com.health.app.ui.modules.mind.ScreenerRoute
+import com.health.app.ui.records.RecordsLogic
+import com.health.app.ui.records.RecordsRoute
 import com.health.app.ui.settings.DIGEST_SETTINGS
 import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.SettingsRoute
@@ -140,7 +144,7 @@ val TABS: List<Tab> = listOf(
 private fun rootOf(route: String): String = route.substringBefore('?').substringBefore('/')
 
 /** The pages under You: devices, your records, the assistant and Settings. */
-private val UNDER_YOU = setOf("you", "devices", "digest", "reports", "assistant", "settings")
+private val UNDER_YOU = setOf("you", "devices", "digest", "reports", "assistant", "settings", "records")
 
 /** The pages under Body: Health alerts, and comparing two devices. */
 private val UNDER_BODY = setOf("body", "alerts")
@@ -185,6 +189,10 @@ fun spanOf(route: String): BodySpan? = when (rootOf(route)) {
     "trends" -> BodySpan.WEEK
     else -> null
 }
+
+/** The med editor with [draft] filled in, to add as a new medication (from a medical record). */
+fun medDraftRoute(draft: Medication): String =
+    "meds/edit?draft=" + android.net.Uri.encode(ApiJson.encodeToString(Medication.serializer(), draft.copy(id = null)))
 
 /** The meal it probably is now, for logging food. */
 fun mealNow(time: LocalTime = LocalTime.now()): Meal = when (time.hour) {
@@ -407,6 +415,9 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
         page("reports", nav) { ReportsRoute(onBack = ::back) }
         page("assistant", nav) { AiRoute(onBack = ::back, onAudit = { open("assistant/audit") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
         page("assistant/audit", nav) { AiAuditRoute(onBack = ::back) }
+        page(RecordsLogic.ROUTE, nav) {
+            RecordsRoute(onBack = ::back, onOpen = ::open, onAddMedication = { draft -> nav.navigate(medDraftRoute(draft)) })
+        }
 
         // ---- Settings (under You), a page each, and the pages within them.
         SettingsPage.entries.forEach { p -> page(p.route, nav) { SettingsRoute(p, onBack = ::back, onOpen = ::open) } }
@@ -468,7 +479,10 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
         }
 
         page("meds", nav) { MedsRoute(onEdit = { id -> nav.navigate("meds/edit" + (id?.let { "?id=$it" } ?: "")) }, onOpen = ::open) }
-        page("meds/edit?id={id}", nav, listOf(arg("id"))) { back -> MedEditorRoute(back.arguments?.getString("id"), onDone = ::back) }
+        page("meds/edit?id={id}&draft={draft}", nav, listOf(arg("id"), arg("draft"))) { back ->
+            val draft = back.arguments?.getString("draft")?.let { attempt { ApiJson.decodeFromString(Medication.serializer(), it) }.getOrNull() }
+            MedEditorRoute(back.arguments?.getString("id"), onDone = ::back, draft = draft)
+        }
 
         page("vitals", nav) { VitalsRoute() }
         page("symptoms", nav) { SymptomsRoute() }

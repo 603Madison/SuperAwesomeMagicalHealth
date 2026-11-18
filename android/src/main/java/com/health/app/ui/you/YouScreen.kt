@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.health.api.AiStatus
 import com.health.api.DataMap
+import com.health.api.HealthRecords
 import com.health.api.Device
 import com.health.api.DeviceKind
 import com.health.app.BuildConfig
@@ -39,6 +40,7 @@ import com.health.app.devices.strap.StrapService
 import com.health.app.net.aiStatus
 import com.health.app.net.dataMap
 import com.health.app.net.latestDigest
+import com.health.app.net.records
 import com.health.app.ui.Format
 import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.AppCard
@@ -53,12 +55,14 @@ import com.health.app.ui.components.Tile
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.devices.DeviceKinds
 import com.health.app.ui.recent.Recent
+import com.health.app.ui.records.RecordsLogic
 import com.health.app.ui.settings.SettingsPage
 import com.health.app.ui.settings.WhereDataGoes
 
 /*
  * You, the fourth tab: setting things up. Your devices (each with how it's doing, and the strap's
- * Record tonight), your records (Your week, a report for your doctor), the assistant where there is
+ * Record tonight), your records (Your week, a report for your doctor, your medical records from
+ * patient portals), the assistant where there is
  * one, Where your data goes on a highlighted row, and Settings in five plain groups.
  */
 
@@ -73,6 +77,8 @@ data class YouState(
     val assistant: Boolean = false,
     /** Where your data goes, in a line ("2 ways out on · 1 paused"); null until known. */
     val privacy: String? = null,
+    /** Medical records in a line ("Mass General Brigham · updated 2 h ago"); null until known. */
+    val records: String? = null,
     /** This week's digest headline; null until known. */
     val week: String? = null,
     val serverNotice: ServerNoticeState? = null,
@@ -96,12 +102,14 @@ fun YouRoute(open: (String) -> Unit) {
     var ai by remember { mutableStateOf<AiStatus?>(null) }
     var privacy by remember { mutableStateOf<DataMap?>(null) }
     var week by remember { mutableStateOf<String?>(null) }
+    var records by remember { mutableStateOf<HealthRecords?>(null) }
     // Each time You shows: devices may have synced, the assistant been turned on, a way out paused.
     LaunchedEffect(viewing, revision) {
         if (viewing == null) {
             devices = attempt { c.api.devices() }.getOrDefault(devices)
             ai = attempt { c.api.aiStatus() }.getOrNull()
             privacy = attempt { c.api.dataMap() }.getOrNull() ?: privacy
+            records = attempt { c.api.records() }.getOrNull() ?: records
         }
         week = attempt { c.ui.latestDigest().headline }.getOrNull()?.takeIf { it.isNotBlank() }
     }
@@ -114,6 +122,7 @@ fun YouRoute(open: (String) -> Unit) {
             assistant = own && ai?.available == true,
             privacy = privacy?.let(WhereDataGoes::youLine),
             week = week,
+            records = if (own) RecordsLogic.youLine(records, System.currentTimeMillis(), c.zone()) else null,
             serverNotice = com.health.app.ui.components.serverNotice(),
             serverVersion = c.serverVersion.collectAsState().value,
         ),
@@ -152,6 +161,10 @@ fun YouScreen(state: YouState, actions: YouActions, now: Long = System.currentTi
             LinkRow("Your week", state.week ?: "This week against the one before", onClick = { actions.open("digest") })
             RowDivider()
             LinkRow("A report for your doctor", "PDF, CSV or FHIR, for the dates you choose", onClick = { actions.open("reports") })
+            if (!readOnly) {
+                RowDivider()
+                LinkRow(RecordsLogic.TITLE, state.records ?: RecordsLogic.youLine(null, now), onClick = { actions.open(RecordsLogic.ROUTE) })
+            }
             if (state.assistant) {
                 RowDivider()
                 LinkRow("Assistant", "Ask the assistant about your own data", onClick = { actions.open("assistant") })

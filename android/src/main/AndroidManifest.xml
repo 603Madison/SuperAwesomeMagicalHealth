@@ -93,12 +93,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- The server's sign-in page hands the app its one-time code here. -->
+            <!--
+                The server's sign-in page hands the app its one-time code here (signed-in), and a
+                patient portal's sign-in comes back here once a medical record is connected (records).
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="samhealth" android:host="signed-in" />
+                <data android:scheme="samhealth" />
+                <data android:host="signed-in" />
+                <data android:host="records" />
             </intent-filter>
         </activity>
 

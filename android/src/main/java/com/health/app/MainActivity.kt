@@ -14,6 +14,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import com.health.app.ui.MainScaffold
+import com.health.app.ui.records.RecordsLogic
+import com.health.app.ui.records.RecordsReturn
 import com.health.app.ui.signin.SignInRoute
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.theme.isAppInDarkTheme
@@ -75,6 +77,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     private fun handle(intent: Intent?) {
         intent?.getStringExtra(EXTRA_OPEN)?.takeIf { it.matches(Regex("[a-z/?=&-]{1,40}")) }?.let { openRoute.value = it }
         val link = intent?.data ?: return
+        if (link.scheme == "samhealth" && link.host == "records") return backFromPortal(intent, link)
         if (link.scheme != "samhealth" || link.host != "signed-in") return
         // Used once: the activity keeps the intent without it, and reopening from Recents (which
         // replays the intent that started the app) doesn't finish it again.
@@ -83,6 +86,18 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         // In the app's scope, so turning the phone or leaving the screen can't cut the exchange short.
         val c = container
         c.signIn.finishInBackground(link, c.scope)
+    }
+
+    /**
+     * A patient portal's sign-in sent the phone back (samhealth://records?connected={id},
+     * ?confirm={token} or ?error=…): Medical records opens, confirms where asked, loads again, and
+     * says "Connected" or what went wrong.
+     */
+    private fun backFromPortal(intent: Intent, link: android.net.Uri) {
+        setIntent(Intent(intent).setData(null))
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        RecordsReturn.pending.value = RecordsLogic.Return(link.getQueryParameter("connected"), link.getQueryParameter("error"), link.getQueryParameter("confirm"))
+        openRoute.value = RecordsLogic.ROUTE
     }
 
     companion object {
