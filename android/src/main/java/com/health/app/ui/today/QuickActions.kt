@@ -71,7 +71,7 @@ object QuickActions {
         QuickAction.SYMPTOM -> "Symptom"
         QuickAction.BLOOD_PRESSURE -> "Blood pressure"
         QuickAction.HABIT -> "Habits"
-        QuickAction.ENERGY -> "Energy"
+        QuickAction.ENERGY -> "Energy & focus"
         QuickAction.OVERLOAD -> "Too much"
         QuickAction.MEASUREMENTS -> "Measure"
         QuickAction.APPOINTMENT -> "Visit"

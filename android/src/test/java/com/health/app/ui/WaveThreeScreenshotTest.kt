@@ -195,6 +195,17 @@ class WaveThreeScreenshotTest {
             CommunicationCard("I can't talk right now. Please text me.", null, "ocean", "default-text"),
             CommunicationCard("Too loud for me. Can we go somewhere quieter?", null, "ocean", "default-loud"),
         ),
+        energyFocus = com.health.api.EnergyFocus(
+            medication = "Ritalin",
+            today = listOf(
+                com.health.api.EnergyCheck(at(today, 9, 40), energy = 4, focus = 4, id = "ec1"),
+                com.health.api.EnergyCheck(at(today, 13, 30), energy = 2, focus = 3, tags = setOf(com.health.api.CheckTag.OVERSTIMULATED), id = "ec2"),
+            ),
+            dosesToday = listOf(at(today, 8, 15)),
+            checks = 9, days = 4,
+            needed = "3 more check-ins over 1 more day and your patterns start to show.",
+        ),
+        medications = listOf(com.health.api.Medication("Ritalin", "10 mg", id = "r")),
         loading = false,
     )
 

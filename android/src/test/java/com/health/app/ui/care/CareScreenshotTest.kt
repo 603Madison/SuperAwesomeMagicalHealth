@@ -132,7 +132,11 @@ class CareScreenshotTest {
             continence = ContinenceDay(today.toString(), voids = 5, wearing = wearing),
             hormones = HormonesToday(2, "2027-01-12"),
             appointments = emptyList(),
-            neuro = NeuroToday(energyLeft = 6, routinesDue = listOf("Evening routine")),
+            neuro = NeuroToday(
+                routinesDue = listOf("Evening routine"),
+                lastCheck = com.health.api.EnergyCheck(at(today, 9, 45), energy = 4, focus = 2, id = "e1"),
+                bestFocus = "9 AM – noon",
+            ),
             transition = TransitionToday("1 year, 3 months since you began", milestonesDue = listOf("Name change")),
         ),
     )

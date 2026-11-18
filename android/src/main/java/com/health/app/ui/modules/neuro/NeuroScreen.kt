@@ -66,7 +66,11 @@ import com.health.app.HealthApp
 import com.health.app.MainActivity
 import com.health.app.attempt
 import com.health.app.data.DeviceChoices
+import com.health.app.net.addEnergyCheck
+import com.health.app.net.deleteEnergyCheck
 import com.health.app.net.energyDays
+import com.health.app.net.saveEnergyDay
+import com.health.app.net.saveEnergyFocusSettings
 import com.health.app.net.saveFieldChoices
 import com.health.app.net.saveOverload
 import com.health.app.ui.care.CareFormat
@@ -106,6 +110,10 @@ class NeuroActions(
     /** Shows a field that's hidden (a tool not yet on). */
     val showField: (String) -> Unit = {},
     val retry: () -> Unit = {},
+    /** Energy and focus: checking in, removing a check-in, its settings. */
+    val energy: EnergyFocusActions = EnergyFocusActions(),
+    /** Today's social battery, 0–10. */
+    val saveSocial: (Int) -> Unit = {},
 )
 
 /** The parts of Autism & ADHD a person can turn on, with what each is. */
@@ -148,9 +156,11 @@ fun NeuroRoute(open: (String) -> Unit) {
     LaunchedEffect(state.routines, state.runs) {
         if (c.viewing.value == null && !state.loading) c.routineReminders.update(state.routines, state.runs, c.zone())
     }
+    val today = LocalDate.now(c.zone())
     NeuroHome(
-        state, fields, LocalDate.now(c.zone()), c.zone(), calm,
-        NeuroActions(
+        state, fields, today, c.zone(), calm,
+        meds = Module.MEDICATIONS in com.health.app.ui.care.shownModules(),
+        actions = NeuroActions(
             open = open,
             quickOverload = { kind, intensity ->
                 vm.act("Logged. Go gently.") { it.saveOverload(OverloadEvent(start = System.currentTimeMillis(), kind = kind, intensity = intensity)) }
@@ -166,6 +176,17 @@ fun NeuroRoute(open: (String) -> Unit) {
                 }
             },
             retry = { vm.load() },
+            energy = EnergyFocusActions(
+                checkIn = { check -> vm.act("Thanks for checking in") { it.addEnergyCheck(check) } },
+                delete = { id -> vm.act("Check-in removed") { it.deleteEnergyCheck(id) } },
+                saveSettings = { settings -> vm.act("Saved") { it.saveEnergyFocusSettings(settings) } },
+                retry = { vm.load() },
+            ),
+            saveSocial = { battery ->
+                // Only the social battery changes: anything else kept for the day stays as it is.
+                val day = (state.energyOn(today) ?: EnergyDay(today.toString())).copy(socialBattery = battery)
+                vm.act("Social battery saved") { it.saveEnergyDay(day) }
+            },
         ),
     )
 }
@@ -176,13 +197,16 @@ fun quickShown(fields: Set<String>, readOnly: Boolean): Boolean =
 
 /**
  * Autism & ADHD's sections in the default order (the sections of [FeatureScreens.NEURO]), for the
- * tools the person has on: the things wanted fastest first.
+ * tools the person has on: the things wanted fastest first. The ids are saved with the person's
+ * arrangement, so one never changes or comes back with another meaning: the old energy budget's
+ * "energy" is gone for good, and energy and focus is "energyfocus".
  */
 fun neuroSections(fields: Set<String>, readOnly: Boolean = false): List<ArrangeItem> = buildList {
     fun on(key: String) = key in fields
     if (quickShown(fields, readOnly)) add(ArrangeItem("quick", "Quick buttons"))
     if (on(Fields.NEURO_BURNOUT) || on(Fields.NEURO_MASKING) || on(Fields.NEURO_OVERLOAD)) add(ArrangeItem("lookafter", "Look after yourself"))
-    if (on(Fields.NEURO_ENERGY)) add(ArrangeItem("energy", "Energy today"))
+    if (on(Fields.NEURO_ENERGY)) add(ArrangeItem("energyfocus", "Energy and focus"))
+    if (on(Fields.NEURO_SOCIAL)) add(ArrangeItem("social", "Social battery"))
     if (on(Fields.NEURO_OVERLOAD) || on(Fields.NEURO_SENSORY)) add(ArrangeItem("overload", "Times things got too much"))
     add(ArrangeItem("insights", "What we've noticed"))
     if (checkInShown(fields)) add(ArrangeItem("checkins", "Check-ins"))
@@ -194,8 +218,9 @@ fun neuroSections(fields: Set<String>, readOnly: Boolean = false): List<ArrangeI
     if (!readOnly && NEURO_TOOLS.any { it.first !in fields }) add(ArrangeItem("more", "More you can turn on"))
 }
 
+/** The Autism & ADHD page. [meds]: whether Medications is on (energy and focus can then use the ADHD medication). */
 @Composable
-fun NeuroHome(state: NeuroState, fields: Set<String>, today: LocalDate, zone: ZoneId, calm: Boolean, actions: NeuroActions) {
+fun NeuroHome(state: NeuroState, fields: Set<String>, today: LocalDate, zone: ZoneId, calm: Boolean, actions: NeuroActions, meds: Boolean = true) {
     val readOnly = LocalReadOnly.current
     var quick by remember { mutableStateOf(false) }
     fun shows(key: String) = key in fields
@@ -224,7 +249,10 @@ fun NeuroHome(state: NeuroState, fields: Set<String>, today: LocalDate, zone: Zo
                                 Text(risk, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
-                        "energy" -> EnergyCard(state.energyOn(today), shows(Fields.NEURO_SOCIAL), readOnly) { actions.open("neuro/energy") }
+                        "energyfocus" -> EnergyFocusSection(
+                            state.energyFocus, state.energyFocusError, state.medications, today, zone, readOnly, meds, actions.energy,
+                        )
+                        "social" -> SocialBatteryCard(state.energyOn(today)?.socialBattery, readOnly, actions.saveSocial)
                         "overload" -> OverloadCard(state, zone, readOnly, actions)
                         "insights" -> state.summary?.patterns?.forEach { InsightCard(it) }
                         "checkins" -> CheckInCard(state, zone, readOnly) { actions.open("neuro/checkin") }
@@ -297,9 +325,12 @@ fun QuickOverload(onLog: (OverloadKind, Int) -> Unit, onDetail: () -> Unit) {
     }
 }
 
-/** Today's energy budget: what's left, and the social battery. */
+/**
+ * Mind's own energy budget today (Fields.MIND_ENERGY_BUDGET, for people with Mind but not Autism &
+ * ADHD, which has energy and focus instead): what's left, and the social battery.
+ */
 @Composable
-fun EnergyCard(day: EnergyDay?, social: Boolean, readOnly: Boolean, onOpen: () -> Unit) {
+fun EnergyBudgetCard(day: EnergyDay?, social: Boolean, readOnly: Boolean, onOpen: () -> Unit) {
     InfoCard(
         "Energy today", icon = Icons.Rounded.BatteryChargingFull, onClick = onOpen.takeIf { !readOnly },
         trailing = if (readOnly) null else ({ OpenChevron(if (day?.startWith == null) "Plan today" else "Update today's energy", onOpen) }),
@@ -459,8 +490,8 @@ fun openInApp(context: Context, route: String) {
 
 /**
  * What Mind shows of Autism & ADHD, by [part] (each a section of Mind): "neuro", the way in, when
- * it's on, and "energy", the energy budget when Mind's energy budget field is on (the same days as
- * Autism & ADHD's). Loads its own; draws nothing where the app isn't running (as in screenshots).
+ * it's on, and "energy", Mind's own energy budget when its field is on and Autism & ADHD isn't
+ * ([mindBudget]). Loads its own; draws nothing where the app isn't running (as in screenshots).
  */
 @Composable
 fun MindNeuroSection(part: String) {
@@ -470,7 +501,7 @@ fun MindNeuroSection(part: String) {
     val modules = com.health.app.ui.care.shownModules()
     val revision by c.revision.collectAsState()
     val context = LocalContext.current
-    val energy = part == "energy" && Fields.MIND_ENERGY_BUDGET in fields
+    val energy = part == "energy" && mindBudget(modules, fields)
     var day by remember { mutableStateOf<EnergyDay?>(null) }
     LaunchedEffect(revision, energy) {
         if (energy) day = attempt { c.ui.energyDays(1).firstOrNull { it.date == LocalDate.now(c.zone()).toString() } }.getOrNull()
@@ -478,10 +509,23 @@ fun MindNeuroSection(part: String) {
     MindNeuroCards(part == "neuro" && Module.NEURO in modules, energy, day, LocalReadOnly.current, Fields.NEURO_SOCIAL in fields) { openInApp(context, it) }
 }
 
-/** The cards Mind shows for Autism & ADHD and the energy budget. */
+/**
+ * Whether Mind's own energy budget shows: Mind on with the budget's field, and Autism & ADHD off
+ * (that has energy and focus check-ins instead), as the server and the web work it out. The field
+ * can linger from before (ADHD and autism used to bring it), so Autism & ADHD being on decides.
+ */
+fun mindBudget(modules: Set<Module>, fields: Set<String>): Boolean = Module.MIND in modules && Module.NEURO !in modules && Fields.MIND_ENERGY_BUDGET in fields
+
+/**
+ * Whether logging energy opens the quick energy and focus check-in (Autism & ADHD on, with its
+ * check-ins): otherwise it's Mind's budget page, "neuro/energy".
+ */
+fun quickCheckIn(modules: Set<Module>, fields: Set<String>): Boolean = Module.NEURO in modules && Fields.NEURO_ENERGY in fields
+
+/** The cards Mind shows for Autism & ADHD and Mind's own energy budget. */
 @Composable
 fun MindNeuroCards(neuro: Boolean, energy: Boolean, day: EnergyDay?, readOnly: Boolean, social: Boolean, open: (String) -> Unit) {
-    if (energy) EnergyCard(day, social, readOnly) { open("neuro/energy") }
+    if (energy) EnergyBudgetCard(day, social, readOnly) { open("neuro/energy") }
     if (neuro) {
         InfoCard(null) {
             NavRow(Icons.Rounded.SelfImprovement, "Autism & ADHD", "Your senses, energy, focus, routines and communication cards", onClick = { open("neuro") })

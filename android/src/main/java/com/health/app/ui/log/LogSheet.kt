@@ -52,6 +52,7 @@ import com.health.api.ContinenceEntry
 import com.health.api.ContinenceKind
 import com.health.api.ContinenceWearing
 import com.health.api.DrinkKind
+import com.health.api.EnergyCheck
 import com.health.api.Fields
 import com.health.api.GlucoseUnit
 import com.health.api.Layouts
@@ -68,15 +69,19 @@ import com.health.api.WaterEntry
 import com.health.api.Workout
 import com.health.app.Container
 import com.health.app.attempt
+import com.health.app.net.addEnergyCheck
 import com.health.app.ui.components.ArrangeItem
 import com.health.app.ui.components.ArrangeSheet
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.components.screenLayout
+import com.health.app.ui.components.shownFields
 import com.health.app.ui.components.showsField
 import com.health.app.ui.mealNow
 import com.health.app.ui.modules.FaceScale
 import com.health.app.ui.modules.continence.QuickButtons
 import com.health.app.ui.modules.continence.WearText
+import com.health.app.ui.modules.neuro.EnergyCheckSheet
+import com.health.app.ui.modules.neuro.quickCheckIn
 import com.health.app.ui.today.QUICK_WATER_ML
 import com.health.app.ui.today.QuickActions
 import com.health.app.ui.today.TodayLayout
@@ -121,6 +126,9 @@ class LogActions(private val c: Container) {
     fun saveCheckIn(checkIn: CheckIn) = act("Thanks for checking in") { c.ui.saveCheckIn(checkIn) }
 
     fun quickMood(mood: Int) = act("Mood saved") { c.ui.addMood(MoodEntry(System.currentTimeMillis(), mood)) }
+
+    /** An energy and focus check-in (Autism & ADHD). */
+    fun saveEnergyCheck(check: EnergyCheck) = act("Thanks for checking in") { c.ui.addEnergyCheck(check) }
 
     /** A one-tap bladder or bowel log: an accident is in what's on now ([wearing]). */
     fun logContinence(kind: ContinenceKind, wearing: ContinenceWearing?) = act("${kind.label} noted") {
@@ -251,7 +259,7 @@ private fun GridTile(icon: ImageVector, word: String, spoken: String, modifier: 
 
 private enum class Dialog { WEIGHT, WORKOUT, SLEEP, CHECK_IN, DRINK, BLOOD_PRESSURE, GLUCOSE }
 
-private enum class Sheet { MOOD, BLADDER, CHANGE, SYMPTOM, ARRANGE }
+private enum class Sheet { MOOD, BLADDER, CHANGE, SYMPTOM, ENERGY, ARRANGE }
 
 /**
  * The + sheet while [showing], and the log flows it opens (which stay after it closes). [now] is
@@ -283,6 +291,8 @@ fun LogHost(
     val today = LocalDate.now(zone)
     val modules = com.health.app.ui.care.shownModules()
     val available = TodayLayout.quickActions(modules, showsField(Fields.NUTRITION_WATER), com.health.app.ui.modules.body.measurementsShown(), energy = showsField(Fields.NEURO_ENERGY))
+    // Energy is the quick energy and focus check-in with Autism & ADHD; Mind's own budget is its page.
+    val checkIns = quickCheckIn(modules, shownFields())
 
     fun quick(action: QuickAction) {
         onClose()
@@ -303,7 +313,7 @@ fun LogHost(
             QuickAction.BLOOD_PRESSURE -> dialog = Dialog.BLOOD_PRESSURE
             QuickAction.GLUCOSE -> dialog = Dialog.GLUCOSE
             QuickAction.HABIT -> open("habits")
-            QuickAction.ENERGY -> open("neuro/energy")
+            QuickAction.ENERGY -> if (checkIns) sheet = Sheet.ENERGY else open("neuro/energy")
             QuickAction.OVERLOAD -> open("neuro/overload")
             QuickAction.CALM -> open("mind/tool/box-breathing")
             QuickAction.MOMENT -> open("transition/moment")
@@ -327,9 +337,10 @@ fun LogHost(
                     now = { item ->
                         onClose()
                         val a = item.action
-                        when (a?.action) {
-                            NowAction.CONTINENCE_CHANGE -> sheet = Sheet.CHANGE
-                            NowAction.DOSE_TAKE -> TodayRows.id(a, "medicationId")?.let { takeDose(it, TodayRows.id(a, "scheduledFor")?.toLongOrNull(), item.title) }
+                        when {
+                            TodayRows.checksIn(item, modules, checkIns) -> sheet = Sheet.ENERGY
+                            a?.action == NowAction.CONTINENCE_CHANGE -> sheet = Sheet.CHANGE
+                            a?.action == NowAction.DOSE_TAKE -> TodayRows.id(a, "medicationId")?.let { takeDose(it, TodayRows.id(a, "scheduledFor")?.toLongOrNull(), item.title) }
                             else -> TodayRows.route(item, modules, today.toString())?.let(open)
                         }
                     },
@@ -373,6 +384,7 @@ fun LogHost(
         Sheet.SYMPTOM -> ModalBottomSheet(onDismissRequest = closeSheet) {
             SymptomForm(SymptomEntry(System.currentTimeMillis(), "", 4), onSave = { tracking.logSymptom(it); closeSheet() }, onDelete = null)
         }
+        Sheet.ENERGY -> EnergyCheckSheet(onDismiss = closeSheet) { check -> log.saveEnergyCheck(check); closeSheet() }
         Sheet.ARRANGE -> ArrangeSheet(Layouts.QUICK, "the + sheet", available.map { ArrangeItem(it.name, it.label) }, closeSheet, orderOnly = true)
         null -> Unit
     }

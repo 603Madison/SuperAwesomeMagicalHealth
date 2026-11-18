@@ -73,14 +73,33 @@ private val DarkData = DataColors(
     protein = Color(0xFFFF8FAE), carbs = Color(0xFFFFC266), fat = Color(0xFF6CC8EE), water = Color(0xFF79B8FF), heart = Color(0xFFFF7A8C),
 )
 
+/**
+ * The chart colours, the web's --c1/--c2/--c3 (web/src/styles.css, the same values per theme, light
+ * and dark): checked there for colour-blind separation, so a series has the same colour in both
+ * apps. Marks are told apart by shape too, never by colour alone.
+ */
+@Immutable
+data class ChartColors(val c1: Color, val c2: Color, val c3: Color)
+
+/** [palette]'s chart colours, light or [dark]. */
+fun chartColors(palette: Palette, dark: Boolean): ChartColors = when (palette) {
+    Palette.AURORA -> if (dark) ChartColors(Color(0xFF8B6AF5), Color(0xFF1FA57C), Color(0xFFE2702F)) else ChartColors(Color(0xFF6A3FD6), Color(0xFF00805E), Color(0xFFC2410C))
+    Palette.VIOLET -> if (dark) ChartColors(Color(0xFF8B6AF5), Color(0xFFD0587F), Color(0xFF2A9FD0)) else ChartColors(Color(0xFF5B3FD1), Color(0xFFA3416A), Color(0xFF0079A8))
+    Palette.OCEAN -> if (dark) ChartColors(Color(0xFF4F86E8), Color(0xFF1FA57C), Color(0xFFE2702F)) else ChartColors(Color(0xFF1D5FC9), Color(0xFF00805E), Color(0xFFC2410C))
+    Palette.EMBER -> if (dark) ChartColors(Color(0xFFE2702F), Color(0xFF4F86E8), Color(0xFF1FA57C)) else ChartColors(Color(0xFFB4471A), Color(0xFF1D5FC9), Color(0xFF00805E))
+}
+
 val LocalStatusColors = staticCompositionLocalOf { LightStatus }
 val LocalDataColors = staticCompositionLocalOf { LightData }
+val LocalChartColors = staticCompositionLocalOf { chartColors(Palette.AURORA, false) }
 
 object AppTheme {
     val status: StatusColors
         @Composable @ReadOnlyComposable get() = LocalStatusColors.current
     val data: DataColors
         @Composable @ReadOnlyComposable get() = LocalDataColors.current
+    val chart: ChartColors
+        @Composable @ReadOnlyComposable get() = LocalChartColors.current
 }
 
 /** A theme's colours over the slate neutrals: its main colour, a quieter one, and its accent. */
@@ -234,6 +253,8 @@ fun HealthTheme(
         LocalBackdrop provides backdrop,
         LocalStatusColors provides if (dark) DarkStatus else LightStatus,
         LocalDataColors provides if (dark) DarkData else LightData,
+        // The theme's checked chart colours, kept with the wallpaper's colours too.
+        LocalChartColors provides chartColors(palette, dark),
     ) {
         // Calm mode (Autism & ADHD, ui/theme/Calm.kt) softens what's inside when it's on.
         MaterialTheme(colorScheme = colors, shapes = AppShapes, typography = if (bold) BoldTypography else AppTypography) { CalmMode(content) }

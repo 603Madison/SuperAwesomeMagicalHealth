@@ -172,14 +172,19 @@ class ArrangingTest {
     @Test
     fun autismAndAdhdOffersOnlyTheToolsThatAreOn() {
         val few = setOf(Fields.NEURO_ENERGY, Fields.NEURO_CARDS, Fields.NEURO_ABOUT_ME, Fields.NEURO_CALM)
-        assertEquals(listOf("quick", "energy", "insights", "cards", "about", "calm", "more"), ids(neuroSections(few)))
-        // The energy budget turned off: no energy section, and it's among the tools to turn back on.
+        assertEquals(listOf("quick", "energyfocus", "insights", "cards", "about", "calm", "more"), ids(neuroSections(few)))
+        // Energy and focus turned off: no section, and it's among the tools to turn back on.
         assertEquals(listOf("quick", "insights", "cards", "about", "calm", "more"), ids(neuroSections(few - Fields.NEURO_ENERGY)))
+        // The social battery has a card of its own, right after energy and focus.
+        assertEquals(listOf("quick", "energyfocus", "social", "insights", "checkins", "cards", "about", "calm", "more"), ids(neuroSections(few + Fields.NEURO_SOCIAL)))
+        assertEquals(listOf("quick", "social", "insights", "checkins", "cards", "about", "calm", "more"), ids(neuroSections(few - Fields.NEURO_ENERGY + Fields.NEURO_SOCIAL)))
         val every = NEURO_TOOLS.map { it.first }.toSet()
         assertFalse("more" in ids(neuroSections(every)))
         assertTrue("overload" in ids(neuroSections(every)))
+        // The old energy budget's id is gone for good: saved arrangements never bring it back as something else.
+        assertFalse("energy" in ids(neuroSections(every)))
         // Read-only: no calm mode or more tools to turn on, and no big buttons without cards.
-        assertEquals(listOf("lookafter", "energy", "overload", "insights"), ids(neuroSections(setOf(Fields.NEURO_ENERGY, Fields.NEURO_OVERLOAD), readOnly = true)))
+        assertEquals(listOf("lookafter", "energyfocus", "overload", "insights"), ids(neuroSections(setOf(Fields.NEURO_ENERGY, Fields.NEURO_OVERLOAD), readOnly = true)))
     }
 
     @Test

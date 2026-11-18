@@ -5,7 +5,10 @@ import com.health.api.AiBreakdownRequest
 import com.health.api.AiStatus
 import com.health.api.ApiJson
 import com.health.api.CommunicationCard
+import com.health.api.EnergyCheck
 import com.health.api.EnergyDay
+import com.health.api.EnergyFocus
+import com.health.api.EnergyFocusSettings
 import com.health.api.FocusSession
 import com.health.api.NeuroCheckIn
 import com.health.api.NeuroProfile
@@ -46,6 +49,20 @@ suspend fun ServerApi.deleteOverload(id: String) = delete("/api/neuro/events/${e
 suspend fun ServerApi.energyDays(days: Int = 30): List<EnergyDay> = get("${base()}/api/neuro/energy?days=$days", ListSerializer(EnergyDay.serializer()))
 
 suspend fun ServerApi.saveEnergyDay(day: EnergyDay): EnergyDay = put("/api/neuro/energy/${enc(day.date)}", day, EnergyDay.serializer())
+
+// ---- Energy and focus: quick check-ins, and the person's own patterns from them ----
+
+suspend fun ServerApi.energyChecks(days: Int = 30): List<EnergyCheck> =
+    get("${base()}/api/neuro/checks?days=$days", ListSerializer(EnergyCheck.serializer()))
+
+suspend fun ServerApi.addEnergyCheck(check: EnergyCheck): EnergyCheck = post("/api/neuro/checks", check, EnergyCheck.serializer())
+
+suspend fun ServerApi.deleteEnergyCheck(id: String) = delete("/api/neuro/checks/${enc(id)}")
+
+suspend fun ServerApi.energyFocus(days: Int = 42): EnergyFocus = get("${base()}/api/neuro/energy-focus?days=$days", EnergyFocus.serializer())
+
+suspend fun ServerApi.saveEnergyFocusSettings(settings: EnergyFocusSettings): EnergyFocusSettings =
+    put("/api/neuro/energy-focus/settings", settings, EnergyFocusSettings.serializer())
 
 // ---- Check-ins ----
 

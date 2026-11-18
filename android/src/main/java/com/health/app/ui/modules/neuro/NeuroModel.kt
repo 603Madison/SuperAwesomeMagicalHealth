@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.health.api.CommunicationCard
 import com.health.api.EnergyDay
+import com.health.api.EnergyFocus
 import com.health.api.EnergySpend
 import com.health.api.FocusSession
+import com.health.api.Medication
 import com.health.api.NeuroCheckIn
 import com.health.api.NeuroProfile
 import com.health.api.NeuroSummary
@@ -18,6 +20,7 @@ import com.health.app.attempt
 import com.health.app.net.breakdownStatus
 import com.health.app.net.communicationCards
 import com.health.app.net.energyDays
+import com.health.app.net.energyFocus
 import com.health.app.net.focusSessions
 import com.health.app.net.neuroCheckIns
 import com.health.app.net.neuroProfile
@@ -40,8 +43,9 @@ import kotlin.math.roundToInt
 
 /*
  * Autism & ADHD (Module.NEURO, shown in Mind): what the screens show, and the plain maths behind
- * the energy budget and time estimates. Neurodiversity-affirming throughout: experiences, not
- * symptoms; overwhelm, not behaviour; stims and special interests are things that help.
+ * time estimates and Mind's own energy budget (energy and focus is in EnergyFocusMath).
+ * Neurodiversity-affirming throughout: experiences, not symptoms; overwhelm, not behaviour; stims
+ * and special interests are things that help.
  */
 
 data class NeuroState(
@@ -54,6 +58,12 @@ data class NeuroState(
     val routines: List<Routine> = emptyList(),
     val runs: List<RoutineRun> = emptyList(),
     val cards: List<CommunicationCard> = emptyList(),
+    /** Energy and focus: today's check-ins and doses, and the person's patterns (null until loaded, or when it couldn't be). */
+    val energyFocus: EnergyFocus? = null,
+    /** Why energy and focus couldn't load, when it couldn't (the rest of the page still shows). */
+    val energyFocusError: String? = null,
+    /** The person's medications, to choose their ADHD one from (never asked while viewing a share). */
+    val medications: List<Medication> = emptyList(),
     /** Whether "break it into steps" can be offered: the assistant is on and the person said yes. */
     val canBreakDown: Boolean = false,
     val loading: Boolean = true,
@@ -91,16 +101,23 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
                 val routines = async { api.routines() }
                 val runs = async { api.routineRuns(7) }
                 val cards = async { api.communicationCards() }
-                // Only the person's own: someone viewing a share never gets the assistant.
+                // Energy and focus on its own: if it can't load, the rest of the page still does.
+                val energyFocus = async { attempt { api.energyFocus(EnergyFocusMath.PATTERN_DAYS) } }
+                // Only the person's own: someone viewing a share never gets the assistant, or their medication list.
                 val ai = async {
                     if (c.viewing.value != null) false
                     else attempt { api.breakdownStatus().let { s -> s.available && s.consent?.acknowledged == true && !s.paused } }.getOrDefault(false)
                 }
+                val meds = async { if (c.viewing.value != null) emptyList() else attempt { api.medications(all = true) }.getOrDefault(emptyList()) }
+                val ef = energyFocus.await()
                 _state.update {
                     it.copy(
                         profile = profile.await(), summary = summary.await(), events = events.await(), energy = energy.await(),
                         checkIns = checkIns.await(), focus = focus.await(), routines = routines.await(), runs = runs.await(),
                         cards = cards.await(), canBreakDown = ai.await(), loading = false,
+                        energyFocus = ef.getOrNull() ?: it.energyFocus,
+                        energyFocusError = ef.exceptionOrNull()?.let { e -> e.message ?: "Couldn't load your energy and focus" },
+                        medications = meds.await(),
                     )
                 }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
@@ -126,7 +143,7 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
     }
 }
 
-/** The energy budget: points of energy to start with, what used some, and what gave some back. */
+/** Mind's own energy budget (without Autism & ADHD): points of energy to start with, what used some, and what gave some back. */
 object EnergyMath {
     /** Spent on things that used energy. */
     fun used(day: EnergyDay): Int = day.spends.filter { it.amount > 0 }.sumOf { it.amount }

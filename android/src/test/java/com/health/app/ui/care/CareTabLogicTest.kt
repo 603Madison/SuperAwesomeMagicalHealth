@@ -10,6 +10,7 @@ import com.health.api.DaySummary
 import com.health.api.DoseLog
 import com.health.api.DoseStatus
 import com.health.api.DueDose
+import com.health.api.EnergyCheck
 import com.health.api.Fields
 import com.health.api.HormoneOverview
 import com.health.api.HormoneSettings
@@ -104,7 +105,11 @@ class CareTabLogicTest {
             meds = MedsDay(today.toString(), listOf(dose(9, taken = true), dose(21, taken = false))),
             continence = contDay(today, 5).copy(wearing = wearing),
             hormones = HormonesToday(1, "2027-01-12"),
-            neuro = NeuroToday(energyLeft = 6, routinesDue = listOf("Evening routine")),
+            neuro = NeuroToday(
+                routinesDue = listOf("Evening routine"),
+                lastCheck = EnergyCheck(at(today, 9, 45), energy = 4, focus = 2, id = "e1"),
+                bestFocus = "9 AM – noon",
+            ),
             transition = TransitionToday("1 year, 3 months since you began", milestonesDue = listOf("Name change")),
         ),
     )
@@ -332,12 +337,31 @@ class CareTabLogicTest {
     }
 
     @Test
-    fun `autism and ADHD says energy and the next routine, gently`() {
+    fun `autism and ADHD says energy and focus and the next routine, gently`() {
         val c = card(CareArea.NEURO, c = ctx(at = at(today, 19, 30)))
-        assertEquals(listOf("Energy: 6 left · Evening routine at 21:00"), c.lines)
+        assertEquals(listOf("Energy 4 · focus 2 at 9:45 · focus usually best 9 AM – noon", "Evening routine at 21:00"), c.lines)
         assertEquals(at(today, 21), c.dueAt)
-        val alot = card(CareArea.NEURO, data.copy(day = day.copy(modules = day.modules.copy(neuro = NeuroToday(overloadsToday = 2)))))
-        assertEquals(listOf("Today's been a lot 2 times. Go gently."), alot.lines)
+        // Only one of them rated, or no check-in yet: what there is.
+        fun neuro(n: NeuroToday) = card(CareArea.NEURO, data.copy(day = day.copy(modules = day.modules.copy(neuro = n)))).lines
+        assertEquals(listOf("Focus 3 at 9:45"), neuro(NeuroToday(lastCheck = EnergyCheck(at(today, 9, 45), focus = 3))))
+        assertEquals(listOf("Focus usually best 3 – 6 PM", "Evening routine at 21:00"), neuro(NeuroToday(bestFocus = "3 – 6 PM", routinesDue = listOf("Evening routine"))))
+        // Without energy and focus, the social battery or focus time, as before.
+        assertEquals(listOf("Social battery 4 of 10"), neuro(NeuroToday(socialBattery = 4)))
+        // The old energy budget's points never show for Autism & ADHD (an older server may still send them).
+        assertEquals(listOf("Nothing logged today"), neuro(NeuroToday(energyLeft = 6)))
+        assertEquals(listOf("Today's been a lot 2 times. Go gently."), neuro(NeuroToday(overloadsToday = 2)))
+        // Nothing in it is ever a cause, or a spoon.
+        assertFalse(c.lines.any { "spoon" in it.lowercase() || "because" in it.lowercase() })
+    }
+
+    @Test
+    fun `mind's own energy budget keeps its words, only without autism and ADHD`() {
+        val budget = data.copy(day = day.copy(modules = day.modules.copy(neuro = NeuroToday(energyLeft = 6))))
+        val mindOnly = ctx(modules = setOf(Module.MIND), fields = fields + Fields.MIND_ENERGY_BUDGET)
+        assertEquals("Energy: 6 left", card(CareArea.MIND, budget, mindOnly).lines.last())
+        // With Autism & ADHD on, or the budget's field off: no budget.
+        assertFalse(card(CareArea.MIND, budget, ctx(fields = fields + Fields.MIND_ENERGY_BUDGET)).lines.any { "left" in it })
+        assertFalse(card(CareArea.MIND, budget, ctx(modules = setOf(Module.MIND))).lines.any { "left" in it })
     }
 
     // ---- Waiting, failing, and nothing yet

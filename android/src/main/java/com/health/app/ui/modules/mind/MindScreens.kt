@@ -83,14 +83,12 @@ import com.health.app.ui.components.ScreenTitle
 import com.health.app.ui.components.SectionTitle
 import com.health.app.ui.components.appContainer
 import com.health.app.ui.components.ArrangeItem
-import com.health.app.ui.components.showsField
 import com.health.app.ui.modules.ArrangeAction
 import com.health.app.ui.modules.TitleAction
 import com.health.app.ui.modules.FeatureScreens
 import com.health.app.ui.modules.OpenChevron
 import com.health.app.ui.modules.arrangedIn
 import com.health.app.ui.modules.Sections
-import com.health.api.Fields
 import com.health.api.Module
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
@@ -146,16 +144,18 @@ fun MindRoute(onJournal: () -> Unit, onNewJournal: (JournalKind) -> Unit, onChec
     val c = appContainer()
     val vm = viewModel { MindViewModel(c) }
     val state by vm.state.collectAsState()
+    val modules = com.health.app.ui.care.shownModules()
     MindHome(
         state, c.zone(), MindActions(vm::logMood, onJournal, onNewJournal, onCheck, onTool) { vm.load() },
-        energy = showsField(Fields.MIND_ENERGY_BUDGET),
-        neuro = Module.NEURO in com.health.app.ui.care.shownModules(),
+        // Mind's own energy budget, only without Autism & ADHD (which has energy and focus instead).
+        energy = com.health.app.ui.modules.neuro.mindBudget(modules, com.health.app.ui.components.shownFields()),
+        neuro = Module.NEURO in modules,
     )
 }
 
 /**
- * Mind's sections in the default order (the sections of [FeatureScreens.MIND]): the energy budget
- * when its field is on, the way into Autism & ADHD when that's on, and no mood faces while viewing a share.
+ * Mind's sections in the default order (the sections of [FeatureScreens.MIND]): Mind's own energy budget
+ * (its field on, Autism & ADHD off), the way into Autism & ADHD when that's on, and no mood faces while viewing a share.
  */
 fun mindSections(readOnly: Boolean = false, energy: Boolean = false, neuro: Boolean = false): List<ArrangeItem> = buildList {
     if (!readOnly) add(ArrangeItem("feeling", "How are you feeling?"))

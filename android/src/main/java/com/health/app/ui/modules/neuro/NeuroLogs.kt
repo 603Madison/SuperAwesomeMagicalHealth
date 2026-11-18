@@ -151,7 +151,7 @@ fun OverloadForm(
     }
 }
 
-/** A day's energy budget: start with, what used energy, what gave some back, what's left, the social battery. */
+/** A day's energy budget (Mind's own, without Autism & ADHD): start with, what used energy, what gave some back, what's left, the social battery. */
 @Composable
 fun EnergyEditor(initial: EnergyDay, social: Boolean, now: Long, onBack: () -> Unit, onSave: (EnergyDay) -> Unit) {
     var day by remember(initial) { mutableStateOf(initial) }

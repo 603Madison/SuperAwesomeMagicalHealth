@@ -19,6 +19,7 @@ import com.health.api.MealiePlan
 import com.health.api.Medication
 import com.health.api.Module
 import com.health.api.NavPage
+import com.health.api.NeuroToday
 import com.health.api.Routine
 import com.health.api.SupplyCategory
 import com.health.api.SupplyStatus
@@ -252,7 +253,7 @@ object CareCards {
             CareArea.TRANSITION -> transition(data, ctx)
             CareArea.PHOTOS -> photos(data, ctx)
             CareArea.NEURO -> neuro(data, ctx)
-            CareArea.MIND -> mind(data)
+            CareArea.MIND -> mind(data, ctx)
             CareArea.CYCLE -> cycle(data, ctx)
             CareArea.VITALS -> vitals(data, ctx)
             CareArea.SYMPTOMS -> symptoms(data)
@@ -393,14 +394,15 @@ object CareCards {
         val routineName = n.routinesDue.firstOrNull()
         val routine = routineName?.let { name -> data.routines?.firstOrNull { it.active && it.name == name } }
         val routineAt = routine?.reminder?.let(ReminderPlanner::parseTime)?.let { ctx.today.atTime(it).atZone(ctx.zone).toInstant().toEpochMilli() }
-        val first = listOfNotNull(
-            n.energyLeft?.let { "Energy: $it left" }
-                ?: n.socialBattery?.let { "social battery $it of 10" }
-                ?: n.focusMinutes.takeIf { it > 0 }?.let { "${Format.minutes(it)} of focus" },
+        // Energy and focus: today's latest check-in, and when focus is usually best.
+        val focus = CareWords.energyFocus(n, ctx)
+        val rest = listOfNotNull(
+            if (focus == null) n.socialBattery?.let { "social battery $it of 10" } ?: n.focusMinutes.takeIf { it > 0 }?.let { "${Format.minutes(it)} of focus" } else null,
             routineName?.let { name -> routineAt?.let { "$name at ${ctx.clock(it)}" } ?: "$name still to do" },
         ).joinToString(" · ").replaceFirstChar(Char::uppercase)
         val lines = listOfNotNull(
-            first.ifEmpty { null },
+            focus,
+            rest.ifEmpty { null },
             when (n.overloadsToday) {
                 0 -> null
                 1 -> "Today's been a lot once already. Go gently."
@@ -412,7 +414,7 @@ object CareCards {
 
     // ---- Mind, Cycle, Blood pressure & glucose, Symptoms & pain, Habits: a line each
 
-    private fun mind(data: CareData): CareCard {
+    private fun mind(data: CareData, ctx: CareContext): CareCard {
         val d = data.day ?: return CareCard(CareArea.MIND)
         val m = d.modules.mind
         val parts = listOfNotNull(
@@ -421,7 +423,11 @@ object CareCards {
             m?.mindfulMinutes?.takeIf { it > 0 }?.let { "${Format.minutes(it.toInt().coerceAtLeast(1))} of calm" },
             m?.journal?.takeIf { it > 0 }?.let { CareWords.count(it, "journal entry", "journal entries") },
         )
-        return CareCard(CareArea.MIND, lines = listOf(parts.joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { "No check-in yet today" }))
+        val lines = listOfNotNull(
+            parts.joinToString(" · ").replaceFirstChar(Char::uppercase).ifEmpty { "No check-in yet today" },
+            CareWords.budgetLeft(d.modules.neuro, ctx),
+        )
+        return CareCard(CareArea.MIND, lines = lines)
     }
 
     private fun cycle(data: CareData, ctx: CareContext): CareCard {
@@ -481,6 +487,22 @@ object CareWords {
 
     /** "1 of 2 taken today". */
     fun taken(taken: Int, of: Int): String? = if (of == 0) null else "$taken of $of taken today"
+
+    /**
+     * Autism & ADHD's energy and focus: "Energy 4 · focus 2 at 9:45 AM · focus usually best 9 AM –
+     * noon", from today's latest check-in and when focus is usually best; null with neither.
+     */
+    fun energyFocus(n: NeuroToday, ctx: CareContext): String? = listOfNotNull(
+        n.lastCheck?.let { com.health.app.ui.modules.neuro.EnergyFocusMath.checkLine(it, ctx.clock) },
+        n.bestFocus?.let { "focus usually best $it" },
+    ).joinToString(" · ").ifEmpty { null }?.replaceFirstChar(Char::uppercase)
+
+    /**
+     * Mind's own energy budget, "Energy: 6 left": only without Autism & ADHD (which has energy and
+     * focus instead) and with the budget's field on.
+     */
+    fun budgetLeft(n: NeuroToday?, ctx: CareContext): String? =
+        n?.energyLeft?.takeIf { com.health.app.ui.modules.neuro.mindBudget(ctx.modules, ctx.fields) }?.let { "Energy: $it left" }
 
     /** Every scheduled dose is marked: how it went. */
     fun dosesDone(taken: Int, of: Int): String = when {

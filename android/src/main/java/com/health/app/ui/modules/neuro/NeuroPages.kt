@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.health.api.EnergyDay
 import com.health.api.Fields
 import com.health.api.FocusSession
+import com.health.api.Module
 import com.health.api.RoutineRun
 import com.health.app.net.addNeuroCheckIn
 import com.health.app.net.breakIntoSteps
@@ -45,8 +46,8 @@ import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 /**
- * The pages under Autism & ADHD, by [page]: "about", "about/show", "overload", "energy",
- * "checkin", "focus", "routines", "routine/edit", "routine/run", "cards".
+ * The pages under Autism & ADHD, by [page]: "about", "about/show", "overload", "energy" (Mind's
+ * own energy budget), "checkin", "focus", "routines", "routine/edit", "routine/run", "cards".
  */
 @Composable
 fun NeuroPage(page: String, id: String?, show: String?, onBack: () -> Unit, open: (String) -> Unit) {
@@ -73,7 +74,8 @@ fun NeuroPage(page: String, id: String?, show: String?, onBack: () -> Unit, open
             onSave = { e -> vm.act("Saved. Go gently.") { it.saveOverload(e) }; onBack() },
             onDelete = { eventId -> vm.act("Deleted") { it.deleteOverload(eventId) }; onBack() },
         )
-        "energy" -> EnergyEditor(
+        // Mind's own energy budget (Autism & ADHD off). With Autism & ADHD on, an old link here opens its page: energy and focus is there.
+        "energy" -> if (Module.NEURO in com.health.app.ui.care.shownModules()) NeuroRoute(open) else EnergyEditor(
             state.energyOn(today) ?: EnergyDay(today.toString()), Fields.NEURO_SOCIAL in fields || Fields.MIND_ENERGY_BUDGET in fields,
             System.currentTimeMillis(), onBack,
         ) { day -> vm.act("Saved") { it.saveEnergyDay(day) }; onBack() }

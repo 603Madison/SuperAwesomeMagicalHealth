@@ -55,7 +55,7 @@ object TodayRows {
         val action = item.action ?: return item.title
         return when (action.action) {
             NowAction.FOOD_ADD -> "Log food"
-            NowAction.ENERGY_ADD -> "Log your energy"
+            NowAction.ENERGY_ADD -> if (item.module == Module.NEURO) "Check in on your energy and focus" else "Log your energy"
             NowAction.VOICE_START -> "Start voice practice"
             NowAction.CONTINENCE_CHANGE -> "Log a change"
             else -> "${action.label} ${item.title}"
@@ -66,16 +66,24 @@ object TodayRows {
     fun id(action: NowAction, vararg names: String): String? = names.firstNotNullOfOrNull { action.ids[it]?.takeIf { v -> v.isNotBlank() } }
 
     /**
-     * Where an action that opens a page goes: food for its meal, the energy budget, the next voice
+     * Whether [item]'s action is the quick energy and focus check-in, done in its sheet: energy with
+     * Autism & ADHD on and its check-ins on ([checkIns]). Mind's own energy budget opens its page.
+     */
+    fun checksIn(item: NowItem, modules: Set<Module>, checkIns: Boolean): Boolean =
+        item.action?.action == NowAction.ENERGY_ADD && checkIns && Module.NEURO in modules
+
+    /**
+     * Where an action that opens a page goes: food for its meal, Mind's energy budget, the next voice
      * lesson, an appointment, the alerts; for one this app doesn't know, the item's page. Null for
-     * the actions done in place (a change, a dose).
+     * the actions done in place (a change, a dose; energy and focus is its sheet, [checksIn]).
      */
     fun route(item: NowItem, modules: Set<Module>, today: String): String? {
         val action = item.action
         return when (action?.action) {
             NowAction.CONTINENCE_CHANGE, NowAction.DOSE_TAKE -> null
             NowAction.FOOD_ADD -> "food/add/${id(action, "date") ?: today}/${id(action, "meal") ?: com.health.api.Meal.SNACK.name}"
-            NowAction.ENERGY_ADD -> if (Module.NEURO in modules) "neuro/energy" else "mind"
+            // Autism & ADHD has energy and focus (its page, where the check-ins are off); without it, Mind's budget.
+            NowAction.ENERGY_ADD -> if (Module.NEURO in modules) "neuro" else "neuro/energy"
             NowAction.VOICE_START -> id(action, "lessonId")?.let { "transition/voice-lesson?id=$it" } ?: "transition/voice-training"
             NowAction.APPOINTMENT_OPEN -> id(action, "appointmentId", "id")?.let { "appointments/edit?id=$it" } ?: "appointments"
             NowAction.ALERT_OPEN -> "alerts"

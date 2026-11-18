@@ -697,7 +697,10 @@ class ScreenshotTest {
         cycle = CycleToday(11, CyclePhase.FERTILE, 18, CycleDay(today.toString(), mucus = Mucus.WATERY)),
         continence = ContinenceDay(today.toString(), voids = 4, nightVoids = 1, leaks = 1, bowel = 1, pelvicFloor = 1),
         meds = medsDay,
-        neuro = com.health.api.NeuroToday(overloadsToday = 1, energyLeft = 5, socialBattery = 4, routinesDue = listOf("Evening"), focusMinutes = 50),
+        neuro = com.health.api.NeuroToday(
+            overloadsToday = 1, socialBattery = 4, routinesDue = listOf("Evening"), focusMinutes = 50,
+            lastCheck = com.health.api.EnergyCheck(today.atTime(9, 45).atZone(zone).toInstant().toEpochMilli(), energy = 4, focus = 2), bestFocus = "9 AM – noon",
+        ),
         transition = com.health.api.TransitionToday(headline = "1 year, 3 months since you began", milestonesDue = listOf("Update my passport"), euphoriaThisWeek = 3),
     )
 

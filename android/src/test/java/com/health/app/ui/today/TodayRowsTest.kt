@@ -19,6 +19,7 @@ import com.health.api.TimelineItem
 import com.health.api.TimelineKind
 import com.health.api.TodaySection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,8 +83,9 @@ class TodayRowsTest {
             TodayRows.route(now(NowKind.OTHER, action, ids, page = page), m, today)
         assertEquals("food/add/2026-11-17/DINNER", route(NowAction.FOOD_ADD, mapOf("meal" to "DINNER", "date" to today)))
         assertEquals("food/add/2026-11-17/SNACK", route(NowAction.FOOD_ADD))
-        assertEquals("neuro/energy", route(NowAction.ENERGY_ADD))
-        assertEquals("mind", route(NowAction.ENERGY_ADD, m = setOf(Module.MIND)))
+        // Energy: Autism & ADHD's page (its quick check-in is a sheet, below); without it, Mind's own budget page.
+        assertEquals("neuro", route(NowAction.ENERGY_ADD))
+        assertEquals("neuro/energy", route(NowAction.ENERGY_ADD, m = setOf(Module.MIND)))
         assertEquals("transition/voice-lesson?id=resonance-1", route(NowAction.VOICE_START, mapOf("lessonId" to "resonance-1")))
         assertEquals("transition/voice-training", route(NowAction.VOICE_START))
         assertEquals("appointments/edit?id=ap1", route(NowAction.APPOINTMENT_OPEN, mapOf("appointmentId" to "ap1")))
@@ -96,6 +98,24 @@ class TodayRowsTest {
         assertEquals("meds", route("something.new", page = AppPage.MEDS))
         assertEquals("Log food", TodayRows.spoken(now(NowKind.FOOD_TODAY, NowAction.FOOD_ADD)))
         assertEquals("Go Estradiol", TodayRows.spoken(now(NowKind.DOSE_DUE, NowAction.DOSE_TAKE, title = "Estradiol")))
+    }
+
+    @Test
+    fun `energy is the quick check-in with autism and ADHD, and mind's budget page without`() {
+        val check = NowItem("energy-check:x", NowKind.ENERGY_TODAY, "How are your energy and focus?", module = Module.NEURO, action = NowAction("Check in", NowAction.ENERGY_ADD))
+        assertTrue(TodayRows.checksIn(check, modules, checkIns = true))
+        // Check-ins off, or Autism & ADHD off (Mind's budget): a page instead.
+        assertFalse(TodayRows.checksIn(check, modules, checkIns = false))
+        val budget = NowItem("energy:x", NowKind.ENERGY_TODAY, "Energy today", module = Module.MIND, action = NowAction("Add", NowAction.ENERGY_ADD))
+        assertFalse(TodayRows.checksIn(budget, setOf(Module.MIND), checkIns = false))
+        assertEquals("neuro/energy", TodayRows.route(budget, setOf(Module.MIND), "2026-11-17"))
+        // Nothing else is a check-in.
+        assertFalse(TodayRows.checksIn(now(NowKind.FOOD_TODAY, NowAction.FOOD_ADD), modules, checkIns = true))
+        // Said as what it does.
+        assertEquals("Check in on your energy and focus", TodayRows.spoken(check))
+        assertEquals("Log your energy", TodayRows.spoken(budget))
+        // The + sheet offers it there and then.
+        assertEquals(listOf(NowKind.ENERGY_TODAY), TodayRows.logNow(listOf(check, now(NowKind.FOOD_TODAY, NowAction.FOOD_ADD))).map { it.kind })
     }
 
     @Test
