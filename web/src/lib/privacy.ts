@@ -11,6 +11,17 @@ export function switchable(d: Pick<DataDestination, "pausable" | "state">): bool
   return d.pausable !== false && (d.state === "ON" || d.state === "PAUSED");
 }
 
+/**
+ * The page of its own where a way out is set up and kept, by the server's setUp key ("records" is
+ * You › Medical records), with its name; null where it's a section of Settings ([setUpSection]) or nowhere.
+ */
+export function setUpPage(d: Pick<DataDestination, "setUp">): { to: string; label: string } | null {
+  switch (d.setUp) {
+    case "records": return { to: "/records", label: "Medical records" };
+    default: return null;
+  }
+}
+
 /** Settings' section (an id on the page) where a way out is set up, by the server's setUp key; null for none. */
 export function setUpSection(d: Pick<DataDestination, "path" | "setUp">): string | null {
   switch (d.setUp) {
@@ -31,6 +42,7 @@ const NOUNS: Partial<Record<DataPath, [string, string]>> = {
   WEBHOOKS: ["webhook", "webhooks"],
   BROWSER_PUSH: ["browser", "browsers"],
   HOME_ASSISTANT: ["key", "keys"],
+  HEALTH_RECORDS: ["portal", "portals"],
 };
 
 /** How many are set up, in words: "2 links", "1 browser", "Shared with 3 people"; null with none or no count. */

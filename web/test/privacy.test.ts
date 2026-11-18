@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countText, pausedToast, privacyLine, setUpSection, stateText, switchable, withPaused } from "../src/lib/privacy.ts";
+import { countText, pausedToast, privacyLine, setUpPage, setUpSection, stateText, switchable, withPaused } from "../src/lib/privacy.ts";
 import type { DataDestination, DataMap, DataPath, DataPathState } from "../src/lib/types.ts";
 
 function way(path: DataPath, state: DataPathState, change: Partial<DataDestination> = {}): DataDestination {
@@ -55,6 +55,8 @@ test("how many are set up, in words", () => {
   assert.equal(countText({ path: "SHARES", count: 3 }), "Shared with 3 people");
   assert.equal(countText({ path: "SHARES", count: 0 }), null);
   assert.equal(countText({ path: "MEALIE" }), null);
+  assert.equal(countText({ path: "HEALTH_RECORDS", count: 1 }), "1 portal");
+  assert.equal(countText({ path: "HEALTH_RECORDS", count: 2 }), "2 portals");
 });
 
 test("a pause shows at once: only that one, and only where it can be paused", () => {
@@ -80,4 +82,11 @@ test("You's line: how many ways out are on and paused; signing in isn't counted"
 test("what the toast says", () => {
   assert.equal(pausedToast({ name: "Mealie" }, true), "Mealie: paused. Nothing goes until you turn it back on.");
   assert.equal(pausedToast({ name: "Mealie" }, false), "Mealie: on again");
+});
+
+test("medical records are set up on a page of their own", () => {
+  assert.deepEqual(setUpPage({ setUp: "records" }), { to: "/records", label: "Medical records" });
+  assert.equal(setUpSection({ path: "HEALTH_RECORDS", setUp: "records" }), null);
+  assert.equal(setUpPage({ setUp: "settings.sharing" }), null);
+  assert.equal(setUpPage({}), null);
 });

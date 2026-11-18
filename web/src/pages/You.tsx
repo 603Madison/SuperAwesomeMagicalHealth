@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { when } from "../lib/format";
 import { NAMES, SETTINGS_PAGES } from "../lib/nav";
 import { privacyLine } from "../lib/privacy";
+import { youLine } from "../lib/records";
 import { useSession } from "../lib/session";
 import type { Device, DeviceKind } from "../lib/types";
 import { startViewing } from "../lib/viewing";
@@ -12,8 +13,9 @@ import { useAiStatus } from "./Assistant";
 
 /*
  * You: the person's devices (how each is doing), their records (Your week, a report for their
- * doctor, the assistant), where their data goes, and the settings in five plain groups, each a page
- * of its own (/settings#features and so on). Only ever the person's own.
+ * doctor, their medical records from patient portals, the assistant), where their data goes, and
+ * the settings in five plain groups, each a page of its own (/settings#features and so on). Only
+ * ever the person's own.
  */
 
 const DEVICE_ICONS: Partial<Record<DeviceKind, LucideIcon>> = {
@@ -33,6 +35,7 @@ export function You() {
   const devices = useLoad(() => api.devices().catch(() => null), []);
   const digest = useLoad(() => api.latestDigest().catch(() => null), []);
   const privacy = useLoad(() => api.privacy().catch(() => null), []);
+  const records = useLoad(() => api.records().catch(() => null), []);
   const shares = useLoad(() => api.shares().catch(() => ({ given: [], received: [] })), [user.id]);
   const received = shares.data?.received ?? [];
   const list = (devices.data ?? []).filter((d) => d.kind !== "MANUAL").sort((a, b) => (b.lastSyncAt ?? 0) - (a.lastSyncAt ?? 0));
@@ -67,6 +70,7 @@ export function You() {
       <MenuGroup>
         <MenuRow to="/digest" title={NAMES.digest} sub={digest.data?.headline ?? "Your week in health, against the week before"} />
         <MenuRow to="/reports" title={NAMES.reports} sub="PDF, CSV or FHIR, for the dates you choose" />
+        <MenuRow to="/records" title={NAMES.records} sub={youLine(records.data, Date.now())} />
         {ai?.available && <MenuRow to="/assistant" title="Ask the assistant" sub="Questions about your own data" />}
       </MenuGroup>
 

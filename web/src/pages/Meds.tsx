@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { clock, dayLabel, dayOf, isoDate, num, shortDate, today, useDayPicker } from "../lib/format";
 import { dayMark, dayText, monthGrid, monthLabel, monthOf, monthRange, monthSummary, shiftMonth } from "../lib/medsHistory";
 import { markedToast } from "../components/doseUndo";
+import { fromRecord, labSource } from "../lib/records";
 import type { DoseLog, DueDose, LabResult, MedForm, Medication, ScheduleKind } from "../lib/types";
 import { LineChart } from "../components/charts";
 import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
@@ -274,7 +275,7 @@ export function MedDialog({ med, onClose, onSaved, hormone }: { med?: Medication
     try { await api.saveMed(m); toast("Saved"); onSaved(); onClose(); } catch (e) { errorToast(e); setBusy(false); }
   };
   return (
-    <Modal wide title={med ? `Edit ${med.name}` : "Add a medication"} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} onClick={save}>Save</Button></>}>
+    <Modal wide title={med?.id ? `Edit ${med.name}` : "Add a medication"} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} onClick={save}>Save</Button></>}>
       <div className="two-col">
         <Field label="Name"><input autoFocus value={m.name} onChange={(e) => setM({ ...m, name: e.target.value })} placeholder="e.g. Vitamin D" /></Field>
         <Field label="Dose" help="As on the label, e.g. 2 mg"><input value={m.dose ?? ""} onChange={(e) => setM({ ...m, dose: e.target.value || undefined })} /></Field>
@@ -348,8 +349,9 @@ function LabCard({ name, results, readOnly, onChanged }: { name: string; results
       <ul className="rows">
         {results.slice(0, 4).map((r) => (
           <li key={r.id} className="row">
-            <div className="row-main"><div className="row-title">{num(r.value, 2)} {r.unit}</div><div className="row-sub">{new Date(r.at).toLocaleDateString()}{r.note ? ` · ${r.note}` : ""}</div></div>
-            {!readOnly && <div className="row-actions"><Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteLab(r.id!); onChanged(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button></div>}
+            <div className="row-main"><div className="row-title">{num(r.value, 2)} {r.unit}</div><div className="row-sub">{[new Date(r.at).toLocaleDateString(), r.note, labSource(r)].filter(Boolean).join(" · ")}</div></div>
+            {/* One from a connected record comes back with it, so it's removed by disconnecting there. */}
+            {!readOnly && !fromRecord(r) && <div className="row-actions"><Button variant="ghost" aria-label="Delete" onClick={async () => { try { await api.deleteLab(r.id!); onChanged(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /></Button></div>}
           </li>
         ))}
       </ul>

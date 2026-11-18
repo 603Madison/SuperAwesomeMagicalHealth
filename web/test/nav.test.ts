@@ -17,7 +17,7 @@ test("each page lights up its tab: features under Care; what devices measured un
   assert.equal(tabOf("/"), "today");
   for (const p of ["/body", "/body/", "/body/weight", "/alerts", "/devices/compare"]) assert.equal(tabOf(p), "body", p);
   for (const p of ["/care", "/food", "/bladder", "/bladder/settings", "/cycle/settings", "/transition/voice", "/supplies", "/vitals/", "/meds", "/photos"]) assert.equal(tabOf(p), "care", p);
-  for (const p of ["/you", "/settings", "/devices", "/digest", "/reports", "/conditions", "/assistant", "/assistant/sent", "/admin"]) assert.equal(tabOf(p), "you", p);
+  for (const p of ["/you", "/settings", "/devices", "/digest", "/reports", "/conditions", "/assistant", "/assistant/sent", "/admin", "/records"]) assert.equal(tabOf(p), "you", p);
   // A path that only starts like a feature's isn't one.
   assert.equal(tabOf("/foodie"), "you");
   assert.equal(tabOf("/bodyguard"), "you");
@@ -33,7 +33,7 @@ test("tab roots have no back arrow; every other page goes back to its parent", (
   assert.deepEqual(backFor("/transition/voice"), { to: "/transition", label: "Transition" });
   for (const p of ["/body/weight", "/alerts", "/devices/compare"]) assert.deepEqual(backFor(p), { to: "/body", label: "Body" }, p);
   assert.deepEqual(backFor("/assistant/sent"), { to: "/assistant", label: "Assistant" });
-  for (const p of ["/digest", "/reports", "/devices", "/settings", "/conditions", "/assistant", "/admin"]) assert.deepEqual(backFor(p), { to: "/you", label: "You" }, p);
+  for (const p of ["/digest", "/reports", "/devices", "/settings", "/conditions", "/assistant", "/admin", "/records"]) assert.deepEqual(backFor(p), { to: "/you", label: "You" }, p);
   assert.equal(backFor("/somewhere-else"), null);
 });
 
