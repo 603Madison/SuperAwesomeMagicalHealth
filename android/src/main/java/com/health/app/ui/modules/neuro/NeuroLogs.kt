@@ -164,9 +164,9 @@ fun EnergyEditor(initial: EnergyDay, social: Boolean, now: Long, onBack: () -> U
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(Format.longDay(date), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 4.dp))
-            Hint("Spoons are a way to count energy: you start with some, and everything uses or gives back a few. Use any number that feels right.", Modifier.padding(horizontal = 4.dp))
+            Hint("Plan the day around the energy you have: pick how much you're starting with (10 is a usual day), then note what takes energy and what gives some back.", Modifier.padding(horizontal = 4.dp))
             InfoCard("You start with") {
-                Stepper(day.startWith ?: 0, { day = day.copy(startWith = it.coerceIn(0, 100)) }, "spoons", "Spoons to start with")
+                Stepper(day.startWith ?: 0, { day = day.copy(startWith = it.coerceIn(0, 100)) }, "points", "Energy to start with")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(6, 8, 10, 12, 15, 20).forEach { n -> FilterChip(selected = day.startWith == n, onClick = { day = day.copy(startWith = n) }, label = { Text("$n") }) }
                 }
@@ -192,7 +192,7 @@ fun EnergyEditor(initial: EnergyDay, social: Boolean, now: Long, onBack: () -> U
             InfoCard("Your own") {
                 OutlinedTextField(what, { what = it.take(120) }, label = { Text("What") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(6.dp))
-                Stepper(amount, { amount = it.coerceIn(-50, 100) }, if (amount >= 0) "used" else "back", "Spoons", allowNegative = true)
+                Stepper(amount, { amount = it.coerceIn(-50, 100) }, if (amount >= 0) "used" else "back", "Energy", allowNegative = true)
                 Hint("Below zero gives energy back.")
                 OutlinedButton(enabled = what.isNotBlank() && amount != 0, onClick = { day = EnergyMath.spend(day, what, amount, now); what = "" }) { Text("Add") }
             }

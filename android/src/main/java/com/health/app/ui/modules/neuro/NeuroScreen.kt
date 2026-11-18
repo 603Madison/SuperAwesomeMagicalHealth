@@ -110,7 +110,7 @@ class NeuroActions(
 
 /** The parts of Autism & ADHD a person can turn on, with what each is. */
 val NEURO_TOOLS: List<Pair<String, String>> = listOf(
-    Fields.NEURO_ENERGY to "An energy budget, counted in spoons",
+    Fields.NEURO_ENERGY to "An energy budget for the day",
     Fields.NEURO_OVERLOAD to "Times things got too much: meltdowns, shutdowns and overwhelm",
     Fields.NEURO_SENSORY to "Your senses, and sensory overload",
     Fields.NEURO_BURNOUT to "Burnout, gently watched for",
@@ -305,7 +305,7 @@ fun EnergyCard(day: EnergyDay?, social: Boolean, readOnly: Boolean, onOpen: () -
         trailing = if (readOnly) null else ({ OpenChevron(if (day?.startWith == null) "Plan today" else "Update today's energy", onOpen) }),
     ) {
         if (day == null || (day.startWith == null && day.spends.isEmpty() && day.socialBattery == null)) {
-            Hint("Start the day with a number of spoons (or any unit you like), then note what uses them and what gives some back.")
+            Hint("Set how much energy you have to start with, then note what takes some and what gives some back.")
             return@InfoCard
         }
         EnergyMath.leftText(day)?.let { text ->

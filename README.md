@@ -182,7 +182,7 @@ database), and shown to an AI connector only if the person says so when making i
 - **Autism & ADHD**, in Mind, in your words: **about me** (senses you avoid or seek, how you
   like to communicate, what helps, accommodations, warning signs, interests and stims) to show
   people who support you; times things got **too much** (overwhelm, meltdowns, shutdowns) with
-  triggers and what helped; an **energy budget** (spoons) and social battery; check-ins on
+  triggers and what helped; an **energy budget** and social battery; check-ins on
   masking and executive function; a **focus timer** and body doubling that learn how long things
   really take; **routines** as checklists; **communication cards** for when talking is hard; a
   calm mode; and patterns, with a gentle note if burnout looks to be building.

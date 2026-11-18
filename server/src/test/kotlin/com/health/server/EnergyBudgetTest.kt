@@ -14,10 +14,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Autism & ADHD's energy budget (spoons) is on until the person turns it off; then no spoons anywhere. */
+/** Autism & ADHD's energy budget is on until the person turns it off; then it's gone from everywhere. */
 class EnergyBudgetTest {
     @Test
-    fun `turning the energy budget off takes the spoons out of Today, the feed and the timeline`() = serverTest { s ->
+    fun `turning the energy budget off takes it out of Today, the feed and the timeline`() = serverTest { s ->
         runBlocking {
             val me = s.users.byUsername("admin")!!.id
             s.profiles.put(me, s.profiles.get(me).let { it.copy(modules = it.modules + Module.NEURO) })
@@ -38,7 +38,7 @@ class EnergyBudgetTest {
             assertNull(neuroToday.energyLeft)
             // The social battery is its own thing, and stays.
             assertEquals(6, neuroToday.socialBattery)
-            assertTrue(insights.none { it.second.body.contains("spoon") })
+            assertTrue(insights.none { it.second.title == "Running low on energy" })
             assertTrue(s.neuro.now(me, profile, s.clock()).isEmpty())
             val energy = s.neuro.timeline(me, profile, today, today).single { it.kind == TimelineKind.ENERGY }
             assertFalse(energy.detail!!, energy.detail!!.contains("left") || energy.detail!!.contains("Started"))

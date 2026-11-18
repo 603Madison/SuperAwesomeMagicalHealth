@@ -126,7 +126,7 @@ class NeuroViewModel(private val c: Container) : ViewModel() {
     }
 }
 
-/** The energy budget: spoons (or any unit) to start with, what used them, and what gave some back. */
+/** The energy budget: points of energy to start with, what used some, and what gave some back. */
 object EnergyMath {
     /** Spent on things that used energy. */
     fun used(day: EnergyDay): Int = day.spends.filter { it.amount > 0 }.sumOf { it.amount }

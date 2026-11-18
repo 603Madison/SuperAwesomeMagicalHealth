@@ -334,7 +334,7 @@ class CareTabLogicTest {
     @Test
     fun `autism and ADHD says energy and the next routine, gently`() {
         val c = card(CareArea.NEURO, c = ctx(at = at(today, 19, 30)))
-        assertEquals(listOf("6 spoons left · Evening routine at 21:00"), c.lines)
+        assertEquals(listOf("Energy: 6 left · Evening routine at 21:00"), c.lines)
         assertEquals(at(today, 21), c.dueAt)
         val alot = card(CareArea.NEURO, data.copy(day = day.copy(modules = day.modules.copy(neuro = NeuroToday(overloadsToday = 2)))))
         assertEquals(listOf("Today's been a lot 2 times. Go gently."), alot.lines)

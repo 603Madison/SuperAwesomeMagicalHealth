@@ -59,7 +59,7 @@ class NeuroService(
     private val days: DayService,
     private val cycle: CycleService,
     private val clock: () -> Long = System::currentTimeMillis,
-    /** Whether the person keeps the energy budget (spoons) on ([com.health.api.Fields.NEURO_ENERGY]). */
+    /** Whether the person keeps the energy budget on ([com.health.api.Fields.NEURO_ENERGY]). */
     private val energyShown: suspend (String) -> Boolean = { true },
 ) : FeatureHooks {
     override val module = Module.NEURO
@@ -125,7 +125,7 @@ class NeuroService(
     suspend fun energyOn(userId: String, date: LocalDate): EnergyDay? =
         entries.list(userId, EntryKind.NEURO_ENERGY, date, date, EnergyDay.serializer()).lastOrNull()?.value
 
-    /** The day's energy as the person sees it: with the energy budget off, no spoons (the social battery stays). */
+    /** The day's energy as the person sees it: with the energy budget off, no budget (the social battery stays). */
     private suspend fun shownEnergy(userId: String, date: LocalDate): EnergyDay? =
         energyOn(userId, date)?.let { if (energyShown(userId)) it else it.copy(startWith = null, spends = emptyList()) }
 
@@ -392,7 +392,7 @@ class NeuroService(
             )
         }
         if (left != null && energy.startWith != null && left <= maxOf(1, energy.startWith!! / 6)) {
-            insights += 64 to Insight("info", "Running low on energy", "${plural(left.coerceAtLeast(0), "spoon")} left today. It's OK to leave things for tomorrow.", "battery-low", Module.NEURO)
+            insights += 64 to Insight("info", "Running low on energy", "Only ${plural(left.coerceAtLeast(0), "point")} of energy left today. It's OK to leave things for tomorrow.", "battery-low", Module.NEURO)
         }
         if (date == zone.today(clock())) {
             burnoutRisk(date, events(userId, 42), checkIns(userId, 42), energy(userId, 42))?.let {

@@ -70,7 +70,7 @@ data class OverloadEvent(
     val date: String? = null,
 )
 
-/** One day's energy, budget style: spoons (or any unit) to start, and what used or gave them. */
+/** One day's energy, budget style: points of energy to start with, and what used some or gave some back. */
 @Serializable
 data class EnergyDay(
     val date: String,

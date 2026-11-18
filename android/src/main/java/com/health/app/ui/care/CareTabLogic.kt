@@ -394,7 +394,7 @@ object CareCards {
         val routine = routineName?.let { name -> data.routines?.firstOrNull { it.active && it.name == name } }
         val routineAt = routine?.reminder?.let(ReminderPlanner::parseTime)?.let { ctx.today.atTime(it).atZone(ctx.zone).toInstant().toEpochMilli() }
         val first = listOfNotNull(
-            n.energyLeft?.let { if (it == 1) "1 spoon left" else "$it spoons left" }
+            n.energyLeft?.let { "Energy: $it left" }
                 ?: n.socialBattery?.let { "social battery $it of 10" }
                 ?: n.focusMinutes.takeIf { it > 0 }?.let { "${Format.minutes(it)} of focus" },
             routineName?.let { name -> routineAt?.let { "$name at ${ctx.clock(it)}" } ?: "$name still to do" },

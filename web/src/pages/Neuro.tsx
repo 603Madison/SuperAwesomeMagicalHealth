@@ -87,7 +87,7 @@ export function Neuro() {
       ) : arranged.render()}
       {tab === "about" && <AboutMe readOnly={readOnly} />}
       {tab === "overwhelm" && <Overwhelm readOnly={readOnly} />}
-      {tab === "energy" && <div className="grid grid-2"><EnergyBudgetCard readOnly={readOnly} spoons={has(F.NEURO_ENERGY)} /></div>}
+      {tab === "energy" && <div className="grid grid-2"><EnergyBudgetCard readOnly={readOnly} budget={has(F.NEURO_ENERGY)} /></div>}
       {tab === "checkins" && <CheckIns readOnly={readOnly} />}
       {tab === "focus" && <Focus readOnly={readOnly} />}
       {tab === "routines" && <Routines readOnly={readOnly} />}
@@ -240,9 +240,8 @@ function OverloadDialog({ event, onClose, onSaved }: { event: OverloadEvent; onC
   );
 }
 
-/** Spoons (or any unit): what the day started with, what used them, and the social battery. */
-/** Today's energy: spoons (unless the person turned the energy budget off) and the social battery. */
-export function EnergyBudgetCard({ readOnly, compact, spoons = true }: { readOnly: boolean; compact?: boolean; spoons?: boolean }) {
+/** Today's energy: the budget (what the day started with, what used some, what gave some back), unless turned off, and the social battery. */
+export function EnergyBudgetCard({ readOnly, compact, budget = true }: { readOnly: boolean; compact?: boolean; budget?: boolean }) {
   const { has } = useFields();
   const list = useLoad(() => api.energy(14).catch(() => [] as EnergyDay[]), []);
   const todayDay = list.data?.find((d) => d.date === today()) ?? { date: today(), spends: [] };
@@ -253,7 +252,7 @@ export function EnergyBudgetCard({ readOnly, compact, spoons = true }: { readOnl
   };
   const used = todayDay.spends.reduce((t, s) => t + s.amount, 0);
   const left = todayDay.startWith != null ? todayDay.startWith - used : undefined;
-  if (!spoons) {
+  if (!budget) {
     if (!has(F.NEURO_SOCIAL)) return null;
     return (
       <Card title="Social battery" icon={<BatteryMedium size={18} />} className={compact ? "" : "span-2"}>
@@ -268,14 +267,14 @@ export function EnergyBudgetCard({ readOnly, compact, spoons = true }: { readOnl
       {todayDay.startWith == null ? (
         !readOnly ? (
           <div className="form-stack">
-            <p className="muted">How many spoons (or units of energy) do you have today?</p>
+            <p className="muted">How much energy do you have today? 10 is a usual day.</p>
             <div className="tag-list">{[6, 8, 10, 12, 15].map((n) => <button key={n} type="button" className="chip" onClick={() => save({ ...todayDay, startWith: n })}>{n}</button>)}</div>
           </div>
         ) : <p className="muted">Not set today.</p>
       ) : (
         <>
-          <div className="spoons" aria-label={`${left} of ${todayDay.startWith} left`}>
-            {Array.from({ length: todayDay.startWith }, (_, i) => <span key={i} className={`spoon ${i < (left ?? 0) ? "is-left" : ""}`} aria-hidden="true" />)}
+          <div className="energy-dots" aria-label={`${left} of ${todayDay.startWith} left`}>
+            {Array.from({ length: todayDay.startWith }, (_, i) => <span key={i} className={`energy-dot ${i < (left ?? 0) ? "is-left" : ""}`} aria-hidden="true" />)}
           </div>
           <div className="stats">
             <Stat label="Left" value={left ?? "–"} sub={`of ${todayDay.startWith}`} />

@@ -31,7 +31,7 @@ export interface Headline {
   support?: string;
 }
 
-/** A headline as one line of text: "6 spoons left · Focus 1h 20m". */
+/** A headline as one line of text: "6 energy left · Focus 1h 20m". */
 export function lineText(h: Headline | null | undefined): string | null {
   if (!h) return null;
   return [[h.value, h.unit].filter((x) => x != null && x !== "").join(" "), h.support].filter(Boolean).join(" · ");
@@ -69,7 +69,7 @@ export function cycleLine(cycle?: CycleToday): Headline | null {
 export function neuroLine(n?: NeuroToday): Headline | null {
   if (!n) return null;
   const all: Headline[] = [];
-  if (n.energyLeft != null) all.push({ value: num(n.energyLeft), unit: n.energyLeft === 1 ? "spoon left" : "spoons left" });
+  if (n.energyLeft != null) all.push({ value: num(n.energyLeft), unit: "energy left" });
   if (n.socialBattery != null) all.push({ value: `${n.socialBattery * 10}%`, unit: "social battery" });
   if (n.focusMinutes > 0) all.push({ value: hm(n.focusMinutes), unit: "focus" });
   const hard = n.overloadsToday > 0 ? "A hard moment today. Go gently" : null;

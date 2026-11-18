@@ -1163,9 +1163,9 @@ input[type="range"] { width: 100%; accent-color: var(--primary); min-height: 28p
 .about-card h4 { margin: 12px 0 2px; font-size: 0.95rem; color: var(--muted); }
 .about-card ul { margin: 0; padding-left: 20px; }
 .about-lead { font-size: 1.3rem; font-weight: var(--w-semibold); margin: 0; }
-.spoons { display: flex; flex-wrap: wrap; gap: 6px; }
-.spoon { width: 18px; height: 30px; border-radius: 9px 9px 4px 4px; background: color-mix(in srgb, var(--outline) 45%, transparent); }
-.spoon.is-left { background: var(--c1); }
+.energy-dots { display: flex; flex-wrap: wrap; gap: 6px; }
+.energy-dot { width: 16px; height: 16px; border-radius: 8px; background: color-mix(in srgb, var(--outline) 45%, transparent); }
+.energy-dot.is-left { background: var(--c1); }
 .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .check-item { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 6px; border: 0; background: none; color: var(--text); cursor: pointer; border-radius: 10px; text-align: left; font: inherit; }
 .check-item:hover { background: var(--surface-2); }

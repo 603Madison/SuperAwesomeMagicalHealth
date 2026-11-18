@@ -899,7 +899,7 @@ class McpServer(private val services: Services) {
         },
         Tool(
             "log_energy", "Log energy",
-            "Sets a day's energy budget (spoons or any unit) and adds what used or gave energy back, and the social battery (0–10).",
+            "Sets a day's energy budget (points of energy to start with) and adds what used or gave energy back, and the social battery (0–10).",
             schema(
                 dateProperty,
                 "start_with" to intProperty("Energy to start the day with"),
