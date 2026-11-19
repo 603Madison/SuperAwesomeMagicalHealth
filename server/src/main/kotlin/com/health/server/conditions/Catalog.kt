@@ -275,6 +275,7 @@ object ConditionCatalog {
             aliases = listOf("postural tachycardia", "dysautonomia"),
         ),
         c("hypertension", "High blood pressure", CHRONIC, "Readings over time against your target.", setOf(Module.VITALS, Module.MEDICATIONS), aliases = listOf("hypertension", "HBP")),
+        c("high-cholesterol", "High cholesterol or heart health", CHRONIC, "Blood pressure, activity and food with your heart in mind.", setOf(Module.VITALS, Module.NUTRITION, Module.ACTIVITY), aliases = listOf("cholesterol", "heart disease", "heart health")),
         c("type-1-diabetes", "Type 1 diabetes", CHRONIC, "Glucose, time in range and food together.", setOf(Module.VITALS, Module.NUTRITION, Module.MEDICATIONS), aliases = listOf("T1D")),
         c("type-2-diabetes", "Type 2 diabetes", CHRONIC, "Glucose, food and activity together.", setOf(Module.VITALS, Module.NUTRITION, Module.MEDICATIONS, Module.ACTIVITY), aliases = listOf("T2D", "prediabetes")),
         c("thyroid", "Thyroid condition", CHRONIC, "Medication, lab results and how you feel.", setOf(Module.MEDICATIONS, Module.HORMONES, Module.SYMPTOMS), aliases = listOf("hypothyroidism", "hyperthyroidism", "Hashimoto's", "Graves'")),

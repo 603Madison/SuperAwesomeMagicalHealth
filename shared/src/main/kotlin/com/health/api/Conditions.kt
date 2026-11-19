@@ -180,6 +180,9 @@ object Fields {
     // Food: vitamins, minerals and the finer fats (the Food page's section, and "More nutrients" on foods).
     const val NUTRITION_MICROS = "nutrition.micros"
 
+    // Food: grades (A to F) on foods, for how well each fits the person's goals. Some find them unhelpful: off turns them off everywhere.
+    const val FOOD_GRADES = "food.grades"
+
     /** On for everyone who has the feature, until hidden. */
     val DEFAULTS: Set<String> = setOf(
         CONTINENCE_URGENCY, CONTINENCE_VOLUME, CONTINENCE_LEAK_SIZE, CONTINENCE_TRIGGERS, CONTINENCE_BRISTOL, CONTINENCE_PELVIC_FLOOR,
@@ -188,6 +191,7 @@ object Fields {
         TRANSITION_MILESTONES, TRANSITION_CHANGES, TRANSITION_MOMENTS,
         NUTRITION_WATER,
         NUTRITION_MICROS,
+        FOOD_GRADES,
     )
 
     /** Every field, for settings pages: key to its feature and label. */
@@ -259,5 +263,6 @@ object Fields {
         BODY_MEASUREMENTS to (Module.BODY to "Body measurements"),
         NUTRITION_WATER to (Module.NUTRITION to "Water"),
         NUTRITION_MICROS to (Module.NUTRITION to "Vitamins & minerals"),
+        FOOD_GRADES to (Module.NUTRITION to "Food grades"),
     )
 }

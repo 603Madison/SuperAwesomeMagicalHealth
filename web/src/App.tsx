@@ -29,6 +29,7 @@ import { ConnectApp } from "./pages/ConnectApp";
 import { WatchSetup } from "./pages/WatchSetup";
 import { Today } from "./pages/Today";
 import { Food } from "./pages/Food";
+import { Shopping } from "./pages/Shopping";
 import { Body } from "./pages/Body";
 import { Weight } from "./pages/Weight";
 import { Care } from "./pages/Care";
@@ -138,6 +139,7 @@ function Shell() {
           {!viewing && <Route path="/cycle/settings" element={<CycleSettingsPage />} />}
           {/* Devices, records, where data goes and the settings: only ever the person's own. */}
           {!viewing && <Route path="/you" element={<You />} />}
+          {!viewing && <Route path="/food/shopping" element={<Shopping />} />}
           {!viewing && <Route path="/conditions" element={<Conditions />} />}
           {!viewing && <Route path="/assistant" element={<Assistant />} />}
           {!viewing && <Route path="/assistant/sent" element={<AssistantSent />} />}

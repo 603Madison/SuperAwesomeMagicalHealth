@@ -7,6 +7,7 @@ import type { Food, MealiePlan, MealieRecipes, MealieStatus } from "../lib/types
 import { onUserChange } from "../lib/session";
 import { useReadOnly } from "../lib/viewing";
 import { Button, Card, Field, PausedNote, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { GradeBadge } from "./FoodGrade";
 
 /*
  * Mealie, the self-hosted recipe manager, in Food: connecting it (You › Connections), its
@@ -212,6 +213,7 @@ export function MealieResults({ query, numbers, onChoose, onFound }: {
             <div className="row-sub">{recipeLine(r, numbers)}</div>
           </div>
           {numbers && <div className="row-end">{Math.round(r.food.nutrients.calories)}<div className="muted">kcal</div></div>}
+          <GradeBadge grade={r.food.grade} />
         </button>
       ) : (
         <div key={r.slug} className="row is-quiet">

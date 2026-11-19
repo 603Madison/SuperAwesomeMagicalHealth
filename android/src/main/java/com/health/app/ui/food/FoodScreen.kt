@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.ShoppingCart
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -105,10 +106,12 @@ class FoodActions(
     val addPlanned: (Int) -> Unit = {},
     /** Opens Settings › Where your data goes (where Mealie is paused). */
     val privacy: () -> Unit = {},
+    /** Opens Shopping (Shopping.kt). */
+    val shopping: () -> Unit = {},
 )
 
 @Composable
-fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit, onPrivacy: () -> Unit = {}) {
+fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit, onPrivacy: () -> Unit = {}, onShopping: () -> Unit = {}) {
     val c = appContainer()
     val vm = viewModel { FoodViewModel(c) }
     val state by vm.state.collectAsState()
@@ -119,7 +122,7 @@ fun FoodRoute(onAdd: (LocalDate, Meal) -> Unit, onPrivacy: () -> Unit = {}) {
             go = vm::go, retry = { vm.load() }, add = onAdd, delete = vm::delete, change = vm::change,
             addWater = vm::addWater, deleteWater = vm::deleteWater, copyYesterday = vm::copyYesterday,
             quickDrink = { vm.quickDrink(it) }, saveDrink = { vm.saveDrink(it) }, deleteDrink = { vm.deleteDrink(it) },
-            addIdea = vm::addIdea, ideasFor = vm::ideasFor, addPlanned = vm::addPlanned, privacy = onPrivacy,
+            addIdea = vm::addIdea, ideasFor = vm::ideasFor, addPlanned = vm::addPlanned, privacy = onPrivacy, shopping = onShopping,
         ),
         zone = c.zone(),
         water = showsField(Fields.NUTRITION_WATER),
@@ -184,6 +187,7 @@ fun FoodScreen(
             IconButton(onClick = { actions.go(state.date.plusDays(1)) }, enabled = state.date < state.today) {
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Day after")
             }
+            if (!com.health.app.ui.care.LocalReadOnly.current) IconButton(onClick = actions.shopping) { Icon(Icons.Rounded.ShoppingCart, "Shopping") }
             ArrangeButton { arranging = true }
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

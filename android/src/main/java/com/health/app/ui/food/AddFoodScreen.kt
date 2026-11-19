@@ -89,6 +89,9 @@ class AddFoodActions(
     val privacy: () -> Unit = {},
     /** "How much did I have?" from a photo, in the servings dialog (PortionPhoto); none: not offered. */
     val portion: PortionAsk? = null,
+    /** Removes one of the person's foods, or all of them (GradeUi.kt); the diary stays as it is. */
+    val removeFood: (Food) -> Unit = {},
+    val clearFoods: () -> Unit = {},
 )
 
 @Composable
@@ -127,6 +130,8 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit, onPrivacy: () 
             openLink = { link -> attempt { uri.openUri(link) } },
             privacy = onPrivacy,
             portion = { photo, pack, food, note -> c.api.portion(photo, pack, food, note) },
+            removeFood = vm::removeFood,
+            clearFoods = vm::clearFoods,
         ),
         numbers = com.health.app.ui.components.foodNumbers(),
         micros = showsMicros(),
@@ -143,6 +148,7 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit, onPrivacy: () 
 fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numbers: Boolean = true, micros: Boolean = false) {
     var quick by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf<String?>(null) }
+    val readOnly = LocalReadOnly.current
 
     Column(Modifier.fillMaxSize()) {
         BackBar(actions.back, "Add to ${meal.label.lowercase()}")
@@ -184,8 +190,12 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
                         )
                     }
                 } else {
-                    item { SectionTitle("Your foods") }
-                    items(state.recent.size) { i -> CardItem(i, state.recent.size) { FoodRow(state.recent[i], numbers, micros) { actions.pick(state.recent[i]) } } }
+                    val own = !readOnly
+                    item { MyFoodsTitle(if (own) actions.clearFoods else null) }
+                    items(state.recent.size) { i ->
+                        val food = state.recent[i]
+                        CardItem(i, state.recent.size) { FoodRow(food, numbers, micros, onRemove = if (own) ({ actions.removeFood(food) }) else null) { actions.pick(food) } }
+                    }
                 }
             } else {
                 val mealie = MealieText.group(state.mealieOn, state.query, state.mealie, state.mealieSearching)
@@ -242,7 +252,7 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
 }
 
 @Composable
-fun FoodRow(food: Food, numbers: Boolean = true, micros: Boolean = false, onClick: () -> Unit) {
+fun FoodRow(food: Food, numbers: Boolean = true, micros: Boolean = false, onRemove: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(food.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -262,6 +272,8 @@ fun FoodRow(food: Food, numbers: Boolean = true, micros: Boolean = false, onClic
                 Text("kcal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        food.grade?.let { Spacer(Modifier.width(12.dp)); GradeBadge(it) }
+        onRemove?.let { RemoveFoodButton(food.name, it) }
     }
 }
 
@@ -286,6 +298,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false,
                 listOfNotNull(food.brand, FoodSources.name(food.source)).takeIf { it.isNotEmpty() }?.let {
                     Hint(it.joinToString(" · "))
                 }
+                GradeReasons(food.grade)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalIconButton(onClick = { set(servings - 0.25) }) { Icon(Icons.Rounded.Remove, "Less") }
                     OutlinedTextField(

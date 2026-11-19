@@ -92,6 +92,7 @@ const PARENTS: Record<string, { to: string; label: string }> = {
   "/transition/voice": { to: "/transition", label: "Transition" },
   "/assistant/sent": { to: "/assistant", label: NAMES.assistant },
   "/supplies": { to: "/care", label: NAMES.care },
+  "/food/shopping": { to: "/food", label: "Food" },
   "/body/weight": { to: "/body", label: NAMES.body },
   "/devices/compare": { to: "/body", label: NAMES.body },
   "/alerts": { to: "/body", label: NAMES.body },

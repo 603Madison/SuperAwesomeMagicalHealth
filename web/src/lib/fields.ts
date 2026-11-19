@@ -84,6 +84,7 @@ export const F = {
   BODY_MEASUREMENTS: "body.measurements",
   NUTRITION_WATER: "nutrition.water",
   NUTRITION_MICROS: "nutrition.micros",
+  FOOD_GRADES: "food.grades",
 } as const;
 
 /** On for everyone who has the feature, until hidden (the server's Fields.DEFAULTS). */
@@ -94,6 +95,7 @@ export const DEFAULT_FIELDS: string[] = [
   F.TRANSITION_MILESTONES, F.TRANSITION_CHANGES, F.TRANSITION_MOMENTS,
   F.NUTRITION_WATER,
   F.NUTRITION_MICROS,
+  F.FOOD_GRADES,
 ];
 
 /** Every field, in the order settings pages list them: its feature and label. */
@@ -165,6 +167,7 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
   { key: F.BODY_MEASUREMENTS, module: "BODY", label: "Body measurements" },
   { key: F.NUTRITION_WATER, module: "NUTRITION", label: "Water" },
   { key: F.NUTRITION_MICROS, module: "NUTRITION", label: "Vitamins & minerals" },
+  { key: F.FOOD_GRADES, module: "NUTRITION", label: "Food grades" },
 ];
 
 export const fieldLabel = (key: string) => ALL_FIELDS.find((f) => f.key === key)?.label ?? key;

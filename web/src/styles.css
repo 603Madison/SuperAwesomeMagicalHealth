@@ -2255,3 +2255,35 @@ button.day-row-btn:hover .day-title, a.day-row-btn:hover .day-now { color: var(-
 /* The app sign-in's pairing code (ConnectApp): big and easy to compare with the app's. */
 .pairing-code { margin: 6px auto 2px; padding: 10px 18px; border-radius: 14px; background: var(--surface-2); font-size: 2rem; font-weight: var(--w-bold); letter-spacing: 0.08em; text-align: center; font-variant-numeric: tabular-nums; }
 .portion-photo { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--outline); }
+
+/* Food grades (A to F, for the person's own goals): a small letter, softly coloured, with its reasons. */
+.grade { display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 8px; font-size: 0.85rem; font-weight: var(--w-bold); background: var(--surface-4); color: var(--text); }
+.grade-a { background: var(--accent-container); }
+.grade-b { background: var(--primary-container); color: var(--on-primary-container); }
+.grade-c { background: var(--surface-4); }
+.grade-d { background: color-mix(in srgb, var(--c3) 26%, var(--card)); }
+.grade-f { background: color-mix(in srgb, var(--c3) 42%, var(--card)); }
+.grade-line { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+.grade-why { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.my-food { display: flex; align-items: center; gap: 4px; }
+.my-food > .row { flex: 1; min-width: 0; }
+
+/* Shopping: a product, two side by side, and the list. */
+.product { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.product-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.nutrient-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px 16px; margin: 0; }
+.nutrient-list div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--outline); padding: 4px 0; }
+.nutrient-list dt { color: var(--muted); font-size: 0.85rem; }
+.nutrient-list dd { margin: 0; font-variant-numeric: tabular-nums; }
+.food-compare { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.food-compare th, .food-compare td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--outline); font-size: 0.9rem; overflow-wrap: anywhere; }
+.food-compare th[scope="row"] { color: var(--muted); font-weight: 400; }
+.food-compare th:first-child { width: 30%; }
+.food-compare thead th { vertical-align: top; }
+.food-compare-name { display: flex; align-items: flex-start; justify-content: space-between; gap: 2px; font-weight: var(--w-bold); min-width: 0; }
+.food-compare-name > span { min-width: 0; }
+.food-compare-name .icon-btn { width: 28px; height: 28px; min-width: 28px; flex: none; margin-top: -4px; }
+.inline-add { display: flex; gap: 8px; margin-bottom: 8px; }
+.inline-add input { flex: 1; min-width: 0; }
+.shopping-item .row-main { cursor: pointer; }
+.shopping-item.is-bought .row-title { text-decoration: line-through; color: var(--muted); }

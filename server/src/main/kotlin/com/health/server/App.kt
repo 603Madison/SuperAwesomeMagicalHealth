@@ -7,6 +7,7 @@ import com.health.server.auth.authRoutes
 import com.health.server.auth.onHttps
 import com.health.server.food.foodRoutes
 import com.health.server.food.usdaLocalRoutes
+import com.health.server.food.shoppingRoutes
 import com.health.server.health.deviceRoutes
 import com.health.server.health.healthRoutes
 import com.health.server.mcp.mcpRoutes
@@ -135,6 +136,7 @@ fun Application.module(services: Services) {
         healthRoutes(services)
         deviceRoutes(services)
         foodRoutes(services)
+        shoppingRoutes(services)
         usdaLocalRoutes(services)
         mcpRoutes(services)
         moduleRoutes(services)

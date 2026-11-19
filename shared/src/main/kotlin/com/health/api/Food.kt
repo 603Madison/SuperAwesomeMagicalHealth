@@ -185,7 +185,49 @@ data class Food(
     val packageGrams: Double? = null,
     /** A Mealie recipe's yield (servings it makes); not kept with the person's foods. */
     val recipeServings: Double? = null,
+    /** How well it fits the person's own goals, worked out for them when it's sent; never kept. Null while grades are off. */
+    val grade: FoodGrade? = null,
 )
+
+/**
+ * A food's grade for one person: [letter] A, B, C, D or F, from a Nutri-Score-style profile
+ * (energy, sugars, saturated fat and sodium against fibre and protein, per 100 g) weighed by their
+ * goals, targets and conditions, with two or three [reasons] in plain, neutral words.
+ */
+@Serializable
+data class FoodGrade(val letter: String, val reasons: List<String> = emptyList())
+
+/** `DELETE /api/foods`: how many of the person's foods went. Their diary keeps every entry as it was. */
+@Serializable
+data class FoodsCleared(val removed: Int)
+
+// ---------------------------------------------------------------- Shopping
+
+/**
+ * One thing on the person's shopping list: by name, or a [food] found by search or barcode
+ * (which carries its grade when it's sent). [checked]: bought.
+ */
+@Serializable
+data class ShoppingItem(
+    val id: String,
+    val name: String,
+    val brand: String? = null,
+    val food: Food? = null,
+    val checked: Boolean = false,
+    val addedAt: Long = 0,
+)
+
+/** The shopping list (`GET /api/shopping`), in the order things were added. */
+@Serializable
+data class ShoppingList(val items: List<ShoppingItem> = emptyList())
+
+/** Adding to the list (`POST /api/shopping`): a [food], or just a [name]. */
+@Serializable
+data class ShoppingAdd(val name: String? = null, val food: Food? = null)
+
+/** Ticking something off, or back on (`PATCH /api/shopping/{id}`). */
+@Serializable
+data class ShoppingChange(val checked: Boolean)
 
 /** One thing eaten: [servings] of a food, with the nutrients that amount holds. */
 @Serializable
