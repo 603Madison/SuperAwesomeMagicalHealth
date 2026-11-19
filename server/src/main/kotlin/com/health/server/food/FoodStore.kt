@@ -64,8 +64,19 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
         }
     }
 
+    /** Removes one of the person's foods. Diary entries of it keep their name and nutrients; they just no longer point to it. */
     suspend fun delete(userId: String, id: String) {
-        if (db.tx { update("DELETE FROM foods WHERE id = ? AND user_id = ?", id, userId) } == 0) throw ApiError.notFound("No such food")
+        db.tx {
+            if (update("DELETE FROM foods WHERE id = ? AND user_id = ?", id, userId) == 0) throw ApiError.notFound("No such food")
+            update("UPDATE food_entries SET food_id = NULL WHERE user_id = ? AND food_id = ?", userId, id)
+        }
+    }
+
+    /** Removes all the person's foods (their own, and ones they've logged from the food database); returns how many. The diary stays as it is. */
+    suspend fun clear(userId: String): Int = db.tx {
+        val removed = update("DELETE FROM foods WHERE user_id = ?", userId)
+        update("UPDATE food_entries SET food_id = NULL WHERE user_id = ? AND food_id IS NOT NULL", userId)
+        removed
     }
 
     // ---- Diary ----
@@ -237,6 +248,7 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
                 serving = food.serving.trim().take(80).ifBlank { "1 serving" },
                 ref = food.ref?.trim()?.take(120)?.ifBlank { null },
                 link = null,
+                grade = null,
                 servingGrams = food.servingGrams?.takeIf { it.isFinite() && it > 0 && it < 10_000 },
                 // What the person typed must make sense; a food database's odd values are left out.
                 nutrients = checked(food.nutrients, strict = food.source == FoodSource.CUSTOM),

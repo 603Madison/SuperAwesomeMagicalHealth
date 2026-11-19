@@ -22,6 +22,7 @@ import com.health.api.Nutrients
 import com.health.api.WaterEntry
 import com.health.app.Container
 import com.health.app.net.addDrink
+import com.health.app.net.clearFoods
 import com.health.app.net.aiStatus
 import com.health.app.net.deleteDrink
 import com.health.app.net.drinksDay
@@ -352,6 +353,33 @@ class AddFoodViewModel(private val c: Container, val date: LocalDate, val meal: 
     }
 
     fun dismissUnknown() = _state.update { it.copy(unknownBarcode = null) }
+
+    /** Removes one of the person's foods from their list; what they've logged of it stays in the diary. */
+    fun removeFood(food: Food) {
+        val id = food.id ?: return
+        viewModelScope.launch {
+            try {
+                c.api.deleteSavedFood(id)
+                _state.update { s -> s.copy(recent = s.recent.filterNot { it.id == id }) }
+                c.tell("Removed ${food.name}")
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "Couldn't remove that") }
+            }
+        }
+    }
+
+    /** Clears all the person's foods (old ones from before search moved to USDA, say); the diary stays as it is. */
+    fun clearFoods() {
+        viewModelScope.launch {
+            try {
+                c.api.clearFoods()
+                _state.update { it.copy(recent = emptyList()) }
+                c.tell("Your foods are cleared")
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "Couldn't clear your foods") }
+            }
+        }
+    }
 
     fun add(food: Food, servings: Double) = save { c.ui.addFood(FoodEntryInput(date.toString(), meal, servings, food = food)) }
 

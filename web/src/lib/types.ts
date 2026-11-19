@@ -370,7 +370,24 @@ export interface Food {
   ref?: string;
   /** Its page there (a Mealie recipe). */
   link?: string;
+  /** How well it fits the person's goals, worked out for them; absent while grades are off. */
+  grade?: FoodGrade;
 }
+
+/** A food's grade for the person (A, B, C, D or F) with two or three reasons in plain words. */
+export interface FoodGrade { letter: string; reasons: string[] }
+
+/** One thing on the shopping list: by name, or a food found by search or barcode. */
+export interface ShoppingItem {
+  id: string;
+  name: string;
+  brand?: string;
+  food?: Food;
+  checked: boolean;
+  addedAt: number;
+}
+
+export interface ShoppingList { items: ShoppingItem[] }
 
 export interface FoodEntry {
   date: string;

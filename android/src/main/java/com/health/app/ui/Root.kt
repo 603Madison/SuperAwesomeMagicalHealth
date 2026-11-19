@@ -386,7 +386,8 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
         composable("you") { YouRoute(::open) }
 
         // ---- Food (under Care).
-        page("food", nav) { FoodRoute(onAdd = { date, meal -> nav.navigate("food/add/$date/${meal.name}") }, onPrivacy = { open(WhereDataGoes.ROUTE) }) }
+        page("food", nav) { FoodRoute(onAdd = { date, meal -> nav.navigate("food/add/$date/${meal.name}") }, onPrivacy = { open(WhereDataGoes.ROUTE) }, onShopping = { nav.navigate("food/shopping") }) }
+        page("food/shopping", nav) { com.health.app.ui.food.ShoppingRoute(onBack = ::back) }
         page("food/add/{date}/{meal}", nav, listOf(required("date"), required("meal"))) { back ->
             val date = attempt { LocalDate.parse(back.arguments?.getString("date")) }.getOrElse { LocalDate.now() }
             val meal = Meal.entries.firstOrNull { it.name == back.arguments?.getString("meal") } ?: Meal.SNACK

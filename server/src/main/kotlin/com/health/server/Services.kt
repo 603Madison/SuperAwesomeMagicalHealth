@@ -170,6 +170,10 @@ class Services(
         days.foodForInsights = { userId, date, isToday, today, target -> s.forInsights(userId, date, isToday, today, target) }
     }
 
+    /** Each person's grades on foods (A to F, for their own goals), and their shopping list. */
+    val grader = com.health.server.food.FoodGrader(conditions, profiles, days, clock)
+    val shopping = com.health.server.food.ShoppingService(userSettings, clock)
+
     /** Each feature's part in digests, reports, exports, reminders, appointment questions and Today's feed. */
     val hooks: List<FeatureHooks> by lazy {
         listOf<FeatureHooks>(

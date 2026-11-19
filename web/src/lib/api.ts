@@ -1,7 +1,7 @@
 import type {
   AdminSettings, AuthConfig, CheckIn, DayFeed, DaySummary, Device, Food, FoodDay, FoodEntry, FoodSearch, FoodSuggestions, Meal, Metric, Nutrients,
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
-  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider, UsdaLocalStatus,
+  ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ShoppingList, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider, UsdaLocalStatus,
   HealthRecords, RecordAuthorize, RecordConnect, RecordConnection, RecordItem, RecordKind, RecordOrganization,
   MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
@@ -193,6 +193,13 @@ export const api = {
   mealiePlan: (date: string) => get<MealiePlan>(`/api/mealie/plan?date=${q(date)}`),
   saveFood: (food: Food) => (food.id ? put<Food>(`/api/foods/${q(food.id)}`, food) : post<Food>("/api/foods", food)),
   deleteFood: (id: string) => del<unknown>(`/api/foods/${q(id)}`),
+  /** Clears the person's foods; their diary stays as it is. */
+  clearFoods: () => del<{ removed: number }>("/api/foods"),
+  shopping: () => get<ShoppingList>("/api/shopping"),
+  addShopping: (item: { name?: string; food?: Food }) => post<ShoppingList>("/api/shopping", item),
+  tickShopping: (id: string, checked: boolean) => patch<ShoppingList>(`/api/shopping/${q(id)}`, { checked }),
+  removeShopping: (id: string) => del<ShoppingList>(`/api/shopping/${q(id)}`),
+  clearBought: () => del<ShoppingList>("/api/shopping/bought"),
   addWater: (date: string, ml: number) => post<WaterEntry>("/api/water", { date, ml }),
   deleteWater: (id: string) => del<unknown>(`/api/water/${q(id)}`),
 

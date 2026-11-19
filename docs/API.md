@@ -125,6 +125,8 @@ can't open; meals lose their calories when the owner's or the viewer's numbers a
 | `GET /api/foods/barcode/{code}` | `Food`: the person's own, else USDA's packaged food with exactly that `gtinUpc` (digits only, leading zeros aside; searched as scanned and as a 12-digit UPC-A, 13-digit EAN and 14-digit GTIN), else Open Food Facts' where it's switched on. 404 when nobody knows it (a miss is kept a day); 409 with a plain sentence when neither can be asked (no USDA key and Open Food Facts off) |
 | `GET /api/foods/recent` | `[Food]`: the person's foods, most used first |
 | `POST /api/foods` · `PUT /api/foods/{id}` · `DELETE /api/foods/{id}` | The person's own foods |
+| `DELETE /api/foods` | `FoodsCleared {removed}`: clears all the person's foods (their own, and ones logged from the food database). Diary entries keep their name and nutrients; their `foodId` is cleared, as when one food is deleted |
+| `GET /api/shopping` · `POST` · `PATCH /api/shopping/{id}` · `DELETE /api/shopping/{id}` · `DELETE /api/shopping/bought` | `ShoppingList`: the person's shopping list (sealed in their settings, `food.shopping`; up to 200 things), each change answered with the whole list. `ShoppingAdd {name?, food?}` adds a name or a food (kept without its grade); `ShoppingChange {checked}` ticks one off; `/bought` clears what's ticked. Never shared |
 | `GET /api/food/targets` · `PUT` | `NutrientTargets` / `NutrientTargetsChange`: each nutrient's reference intake, upper limit and the person's own target |
 | `POST /api/water` · `DELETE /api/water/{id}` | `WaterEntry` |
 | `GET /api/recent?hours=24&device=` | `RecentReadings`: the last hours as recorded (1–72, default 24), from one device or all: the nights and naps in it with their stages, and heart rate, blood oxygen, HRV, stress, breathing, temperature and steps (hourly), each with its points and a summary. Never shared |
@@ -191,6 +193,23 @@ Trends chart and the targets the same way. The CSV export's `food.csv` and `dail
 column for each (`fiber_g`, `sugar_g`, `saturated_fat_g`, `sodium_mg`, `iron_mg`, `vitamin_d_ug`…),
 empty where nothing carried it; the connector's `food_log` and `day` add the totals the foods
 carried.
+
+**Grades.** Foods sent to the person (search, barcode, `recent`, saving one, Mealie's recipes and
+meal plan, the shopping list) carry `grade: FoodGrade {letter, reasons}`: A, B, C, D or F for how
+well the food fits their own goals (`food/Grades.kt`, pure). The base is Nutri-Score's profile
+(2023 thresholds for general foods) per 100 g: points for energy, sugars, saturated fat and salt,
+less fibre and protein (protein only while the first four are under 11, or always with Build
+muscle); without a serving's weight, per 150 kcal and without energy. The person's conditions make
+the matching points count 1.5 times (Type 1 or 2 diabetes: sugars; High blood pressure: salt; High
+cholesterol or heart health: saturated fat), a weight goal makes energy count 1.5 (losing) or 0.5
+(gaining) times, and one serving against the day's targets moves it: 20 % of the protein (−2), 15 %
+of the fibre (−1), 20 % of up to two vitamins or minerals aimed for (−1 each), and 30 % of the
+sodium, 40 % of the sugar, 35 % of the saturated fat, 25 % of the carbs with diabetes or 35 % of the
+calories when losing (+2 each). Letters: A ≤ 0, B ≤ 2, C ≤ 10, D ≤ 18, F above; with sugars,
+saturated fat and sodium all unknown, never better than B. Two or three reasons in neutral words
+("Lower in fibre", "High in sodium for your blood pressure goal", "Good protein for your goal").
+No grade while the field `food.grades` ("Food grades", on by default) is hidden, in eating
+disorder recovery, or through a share (`/api/foods`, `/api/mealie` and `/api/shopping` never are).
 
 ## Body, workouts, sleep, check-ins
 

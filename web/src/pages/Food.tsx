@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { ArrowRightLeft, Barcode, Copy, GlassWater, Lightbulb, MoreHorizontal, Pencil, Plus, Salad, Search, Trash2, Undo2, Zap } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowRightLeft, Barcode, Copy, GlassWater, Lightbulb, MoreHorizontal, Pencil, Plus, Salad, Search, ShoppingCart, Trash2, Undo2, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import { dayLabel, num, shiftDate, useToday } from "../lib/format";
 import type { Food as FoodItem, FoodDay, FoodEntry, Meal } from "../lib/types";
 import { Meter } from "../components/charts";
-import { Button, Card, CardAction, DateNav, ErrorNotice, Field, Menu, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
+import { Button, Card, CardAction, DateNav, ErrorNotice, Field, IconButton, Menu, Modal, PageHeader, Segmented, Spinner, errorToast, toast, useLoad } from "../components/ui";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
 import { MealPlanCard, MealieResults, useMealie } from "./Mealie";
 import { layoutKey } from "../lib/types";
@@ -18,6 +18,7 @@ import { FoodPhotoFlow, SnapPhoto } from "./FoodPhoto";
 import { CarriedLine, CarriedList, MicrosCard, MoreNutrients } from "./FoodMicros";
 import { scaled, typedNutrients, type NutrientKey } from "../lib/micros";
 import { sourceGroups, sourceName } from "../lib/foodSources";
+import { GradeBadge, GradeReasons, MyFoods } from "./FoodGrade";
 
 const MEALS: { id: Meal; label: string }[] = [
   { id: "BREAKFAST", label: "Breakfast" },
@@ -54,6 +55,7 @@ export function Food() {
   };
   const [editing, setEditing] = useState<FoodEntry | null>(null);
   const mealie = useMealie();
+  const navigate = useNavigate();
   useHashScroll(!!data);
 
   const sections: Section[] = [
@@ -81,6 +83,7 @@ export function Food() {
     <div className="page">
       <PageHeader title="Food" subtitle={numbers ? "What you eat, against what you burn" : "What you eat, meal by meal"} actions={<>
         <DateNav date={date} label={dayLabel(date)} onChange={setDate} max={shiftDate(now, 1)} />
+        {!readOnly && <IconButton label="Shopping" title="Shopping" onClick={() => navigate("/food/shopping")}><ShoppingCart size={20} /></IconButton>}
         {arranged.button}
       </>} />
       {error && <ErrorNotice message={error} onRetry={reload} />}
@@ -269,7 +272,7 @@ function AddFood({ date, meal, numbers, micros, onClose, onAdded }: { date: stri
         { value: "search", label: "Search" }, { value: "recent", label: "Recent" }, { value: "quick", label: "Quick add" }, { value: "new", label: "New food" },
       ]} />
       {tab === "search" && <SearchFoods numbers={numbers} micros={micros} onChoose={setChosen} />}
-      {tab === "recent" && <RecentFoods numbers={numbers} micros={micros} onChoose={setChosen} />}
+      {tab === "recent" && <MyFoods row={(f) => <FoodRow food={f} numbers={numbers} micros={micros} onChoose={setChosen} />} />}
       {tab === "quick" && <QuickAdd date={date} meal={meal} numbers={numbers} micros={micros} onDone={() => { onAdded(); onClose(); }} />}
       {tab === "new" && <NewFood numbers={numbers} micros={micros} onSaved={setChosen} />}
     </Modal>
@@ -326,14 +329,6 @@ function SearchFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: 
   );
 }
 
-function RecentFoods({ numbers, micros, onChoose }: { numbers: boolean; micros: boolean; onChoose: (f: FoodItem) => void }) {
-  const { data, loading, error } = useLoad(() => api.recentFoods(), []);
-  if (loading) return <Spinner />;
-  if (error) return <div className="notice notice-error">{error}</div>;
-  if (!data?.length) return <p className="muted">Foods you log show up here, most recent first.</p>;
-  return <div className="search-results">{data.map((f) => <FoodRow key={f.id} food={f} numbers={numbers} micros={micros} onChoose={onChoose} />)}</div>;
-}
-
 function FoodRow({ food, numbers, micros, onChoose }: { food: FoodItem; numbers: boolean; micros: boolean; onChoose: (f: FoodItem) => void }) {
   return (
     <button className="row" onClick={() => onChoose(food)}>
@@ -343,6 +338,7 @@ function FoodRow({ food, numbers, micros, onChoose }: { food: FoodItem; numbers:
         {micros && <CarriedLine nutrients={food.nutrients} />}
       </div>
       {numbers && <div className="row-end">{num(food.nutrients.calories)}<div className="muted">kcal</div></div>}
+      <GradeBadge grade={food.grade} />
     </button>
   );
 }
@@ -368,6 +364,7 @@ function Servings({ food, date, meal, numbers, micros, onBack, onClose, onAdded 
   return (
     <Modal title={food.name} onClose={onClose} footer={<><Button variant="ghost" onClick={onBack}>Back</Button><Button variant="primary" busy={busy} onClick={save}>Add</Button></>}>
       {(food.brand || from) && <p className="muted">{[food.brand, from].filter(Boolean).join(" · ")}</p>}
+      <GradeReasons grade={food.grade} />
       <form className="two-col" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <Field label={`Servings of ${food.serving}`}>
           <input autoFocus inputMode="decimal" value={servings} onChange={(e) => {

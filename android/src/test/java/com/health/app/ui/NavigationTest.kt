@@ -28,7 +28,7 @@ class NavigationTest {
             "assistant", "assistant/audit", "settings/you", "settings/tracking", "settings/conditions", "settings/privacy", "settings/digest",
         ).forEach { assertEquals(it, "you", tabOf(it)) }
         // Care: every feature and its pages.
-        listOf("food", "food/add/{date}/{meal}", "mind", "mind/journal", "cycle?log={log}", "cycle/settings", "continence", "supplies/{area}", "vitals", "measurements", "photos", "hormones")
+        listOf("food", "food/add/{date}/{meal}", "food/shopping", "mind", "mind/journal", "cycle?log={log}", "cycle/settings", "continence", "supplies/{area}", "vitals", "measurements", "photos", "hormones")
             .forEach { assertEquals(it, "care", tabOf(it)) }
         assertNull(tabOf(null))
     }

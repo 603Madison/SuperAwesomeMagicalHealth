@@ -5,6 +5,7 @@ import com.health.api.FoodDay
 import com.health.api.FoodEntryChange
 import com.health.api.FoodEntryInput
 import com.health.api.FoodSearch
+import com.health.api.FoodsCleared
 import com.health.api.Meal
 import com.health.api.MealieConnect
 import com.health.api.NutrientTargetsChange
@@ -102,7 +103,8 @@ fun Route.foodRoutes(services: Services) {
             // Foods the person already has come first (the apps put Mealie's recipes next), then USDA's
             // everyday and packaged foods, then Open Food Facts: each food once.
             val found = services.foodFinder.search(user.id, query, mine)
-            call.respond(FoodSearch(mine, found.online, found.problem))
+            val goals = services.grader.goals(user.id)
+            call.respond(FoodSearch(services.grader.graded(mine, goals), services.grader.graded(found.online, goals), found.problem))
         }
         get("/barcode/{code}") {
             val user = call.requireUser(services)
@@ -110,19 +112,24 @@ fun Route.foodRoutes(services: Services) {
             val food = services.foods.byBarcode(user.id, code)
                 ?: services.foodFinder.barcode(user.id, code)
                 ?: throw ApiError.notFound("That barcode isn't in the food database yet; add the food yourself")
-            call.respond(food)
+            call.respond(services.grader.graded(user.id, food))
         }
         get("/recent") {
             val user = call.requireUser(services)
-            call.respond(services.foods.recent(user.id))
+            call.respond(services.grader.graded(user.id, services.foods.recent(user.id)))
         }
         post {
             val user = call.requireUser(services)
-            call.respond(services.foods.save(user.id, call.receive<Food>()))
+            call.respond(services.grader.graded(user.id, services.foods.save(user.id, call.receive<Food>())))
         }
         put("/{id}") {
             val user = call.requireUser(services)
-            call.respond(services.foods.save(user.id, call.receive<Food>(), call.parameters["id"].orEmpty()))
+            call.respond(services.grader.graded(user.id, services.foods.save(user.id, call.receive<Food>(), call.parameters["id"].orEmpty())))
+        }
+        // Clears the person's foods (old ones from before search moved to USDA, say): what they've logged stays in the diary.
+        delete {
+            val user = call.requireUser(services)
+            call.respond(FoodsCleared(services.foods.clear(user.id)))
         }
         delete("/{id}") {
             val user = call.requireUser(services)
@@ -139,12 +146,22 @@ fun Route.foodRoutes(services: Services) {
             services.mealie.disconnect(call.requireUser(services).id)
             call.respond(mapOf("ok" to true))
         }
-        get("/recipes") { call.respond(services.mealie.recipes(call.requireUser(services).id, call.request.queryParameters["q"].orEmpty())) }
-        get("/recipes/{slug}") { call.respond(services.mealie.recipe(call.requireUser(services).id, call.parameters["slug"].orEmpty())) }
+        get("/recipes") {
+            val user = call.requireUser(services)
+            val found = services.mealie.recipes(user.id, call.request.queryParameters["q"].orEmpty())
+            val goals = services.grader.goals(user.id)
+            call.respond(found.copy(items = found.items.map { services.grader.graded(it, goals) }))
+        }
+        get("/recipes/{slug}") {
+            val user = call.requireUser(services)
+            call.respond(services.grader.graded(services.mealie.recipe(user.id, call.parameters["slug"].orEmpty()), services.grader.goals(user.id)))
+        }
         get("/plan") {
             val user = call.requireUser(services)
             val date = services.profiles.days(user.id).parse(call.request.queryParameters["date"]?.ifBlank { null } ?: "today", services.clock())
-            call.respond(services.mealie.plan(user.id, date))
+            val plan = services.mealie.plan(user.id, date)
+            val goals = services.grader.goals(user.id)
+            call.respond(plan.copy(entries = plan.entries.map { e -> e.copy(recipe = e.recipe?.let { services.grader.graded(it, goals) }) }))
         }
     }
 
