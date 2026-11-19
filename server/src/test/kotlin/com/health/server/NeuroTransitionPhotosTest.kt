@@ -361,7 +361,7 @@ class NeuroTransitionPhotosTest {
                 put("jsonrpc", JsonPrimitive("2.0")); put("id", JsonPrimitive(1)); put("method", JsonPrimitive(method))
                 params?.let { put("params", it) }
             }
-            return mcp.handle(com.health.server.mcp.McpServer.Caller(user, false, canLog, scope), request)!!
+            return mcp.handle(com.health.server.mcp.McpServer.Caller(user, canLog, scope), request)!!
         }
         suspend fun tools(scope: Set<Module>, canLog: Boolean = false) = call("tools/list", scope, canLog)["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject.str("name") }
         assertTrue(tools(emptySet(), true).none { it in setOf("neuro", "transition", "log_overload", "log_energy", "log_moment") })

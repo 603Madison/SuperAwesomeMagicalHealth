@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import com.health.app.ui.MainScaffold
 import com.health.app.ui.records.RecordsLogic
 import com.health.app.ui.records.RecordsReturn
+import com.health.app.ui.signin.ChoosePasswordRoute
 import com.health.app.ui.signin.SignInRoute
 import com.health.app.ui.theme.HealthTheme
 import com.health.app.ui.theme.isAppInDarkTheme
@@ -50,7 +51,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             }
             HealthTheme(settings.themeMode, settings.wallpaperColors, settings.boldText, settings.palette) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    if (settings.signedIn && !finishing) {
+                    if (settings.signedIn && !finishing && settings.user?.mustChangePassword == true) {
+                        // An admin set the password: the person chooses their own before anything else.
+                        ChoosePasswordRoute()
+                    } else if (settings.signedIn && !finishing) {
                         MainScaffold(open = openRoute.value, onOpened = { openRoute.value = null })
                     } else {
                         SignInRoute(finishing, signInError)

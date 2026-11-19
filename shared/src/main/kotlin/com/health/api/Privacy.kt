@@ -57,6 +57,8 @@ data class DataMap(
     val destinations: List<DataDestination>,
     /** What stays put: everything else. */
     val note: String,
+    /** What the server's admins can and can't see, said honestly. */
+    val admins: String = "",
 )
 
 /** Pausing or resuming one way out (PUT /api/privacy/{path}). */

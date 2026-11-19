@@ -7,6 +7,7 @@ import io.ktor.client.request.post
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import io.ktor.client.statement.bodyAsText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -54,13 +55,15 @@ class KeysTest {
     }
 
     @Test
-    fun `only admins make every-account links`() = serverTest { services ->
+    fun `no one makes a link that reads every account, admins included`() = serverTest { services ->
         val admin = adminBrowser()
-        admin.postJson("/api/admin/users", """{"username":"sam","password":"sam-password-1"}""")
+        services.users.create("sam", password = "sam-password-1")
         val sam = browser()
         sam.post("/api/auth/login") { json("""{"username":"sam","password":"sam-password-1"}""") }
-        assertEquals(HttpStatusCode.Forbidden, sam.postJson("/api/me/connectors", """{"allAccounts":true}""").status)
-        assertEquals(HttpStatusCode.OK, admin.postJson("/api/me/connectors", """{"allAccounts":true}""").status)
-        assertEquals(2L, services.users.count())
+        assertEquals(HttpStatusCode.BadRequest, sam.postJson("/api/me/connectors", """{"allAccounts":true}""").status)
+        val refused = admin.postJson("/api/me/connectors", """{"allAccounts":true}""")
+        assertEquals(HttpStatusCode.BadRequest, refused.status)
+        assertTrue(refused.bodyAsText().contains("only ever reads your own account"))
+        assertTrue(services.sessions.list(services.users.byUsername("admin")!!.id).none { it.kind.isConnector })
     }
 }

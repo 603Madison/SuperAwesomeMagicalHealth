@@ -189,11 +189,8 @@ class UsdaLocalTest {
         assertEquals(site, asked.size)
         assertTrue(usdaApi.isEmpty())
 
-        // Where your data goes says so.
-        val usda = admin.get("/api/privacy").obj()["destinations"]!!.jsonArray.map { it.jsonObject }.first { it.str("path") == "USDA_FOODS" }
-        assertEquals("ON", usda.str("state"))
-        assertTrue(usda.str("what").contains("Kept on this server: searches and scans never leave it"))
-        assertEquals(0, usda["hosts"]!!.jsonArray.size)
+        // Where your data goes leaves it out: nothing goes anywhere.
+        assertTrue(admin.get("/api/privacy").obj()["destinations"]!!.jsonArray.none { it.jsonObject.str("path") == "USDA_FOODS" })
 
         // Removed: gone, and the online service answers again.
         assertEquals("false", admin.delete("/api/admin/usda-local") { csrf() }.obj().str("ready"))

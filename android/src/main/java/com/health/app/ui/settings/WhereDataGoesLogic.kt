@@ -21,7 +21,10 @@ object WhereDataGoes {
     /** "The assistant is paused in Where your data goes". */
     fun paused(what: String) = "$what is paused in Where your data goes"
 
-    const val INTRO = "Every way something about you can leave your server. Pausing one keeps how it's set up, and nothing goes until you turn it back on."
+    const val INTRO = "Each way something about you leaves your server now. Pausing one keeps how it's set up, and nothing goes until you turn it back on."
+
+    /** Said in place of the list when nothing set up sends anything off the server. */
+    const val NOTHING_LEAVES = "Nothing leaves this server right now."
 
     // ---- Sections (android.privacy): their ids are saved with the person's arrangement, so never rename one.
 
@@ -97,7 +100,7 @@ object WhereDataGoes {
     fun youLine(map: DataMap): String {
         val on = map.destinations.count { it.state == DataPathState.ON }
         val paused = map.destinations.count { it.state == DataPathState.PAUSED }
-        if (on == 0 && paused == 0) return "Nothing leaves your server"
+        if (on == 0 && paused == 0) return "Nothing leaves this server right now"
         val ways = when (on) {
             0 -> "Nothing goes out now"
             1 -> "1 way out on"
@@ -110,9 +113,10 @@ object WhereDataGoes {
     fun summary(map: DataMap): String {
         // "The assistant" reads as "the assistant" after the first.
         val on = map.destinations.filter { it.state == DataPathState.ON }.mapIndexed { i, d -> if (i > 0 && d.name.startsWith("The ")) "the " + d.name.removePrefix("The ") else d.name }
-        return when (on.size) {
-            0 -> "Nothing is on now: nothing about you leaves your server."
-            1 -> "On now: ${on[0]}."
+        return when {
+            map.destinations.isEmpty() -> NOTHING_LEAVES
+            on.isEmpty() -> "Nothing is on now: nothing about you leaves your server."
+            on.size == 1 -> "On now: ${on[0]}."
             else -> "On now: ${on.dropLast(1).joinToString(", ")} and ${on.last()}."
         }
     }

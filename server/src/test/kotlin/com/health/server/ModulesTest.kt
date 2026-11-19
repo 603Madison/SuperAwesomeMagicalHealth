@@ -402,9 +402,8 @@ class ModulesTest {
         val sessions = admin.get("/api/me/sessions").json().jsonArray.map { it.jsonObject }
         assertTrue(sessions.any { it.str("name") == "AI connector (can log) + Mind, Medications" })
 
-        // Every-account links never see them, whatever is asked for.
-        val everyone = link("""{"allAccounts":true,"modules":["MIND","CYCLE"]}""")
-        assertFalse(tools(everyone).any { it in setOf("mind", "journal", "cycle", "continence", "medications") })
+        // A link that reads every account can't be made at all.
+        assertEquals(HttpStatusCode.BadRequest, admin.postJson("/api/me/connectors", """{"allAccounts":true,"modules":["MIND","CYCLE"]}""").status)
     }
 
     @Test

@@ -222,6 +222,10 @@ private fun FromServer(state: WhereState, actions: WhereActions) {
                 map.destinations.forEach { d -> DestinationCard(d, d.path in state.busy, actions) }
                 InfoCard("Everything else", icon = Icons.Rounded.Lock, iconTint = AppTheme.status.good) {
                     Text(map.note, style = MaterialTheme.typography.bodyMedium)
+                    if (map.admins.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(map.admins, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }

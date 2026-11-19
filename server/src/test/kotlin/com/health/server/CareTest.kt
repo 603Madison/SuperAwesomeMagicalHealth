@@ -303,7 +303,7 @@ class CareTest {
             val list = kotlinx.serialization.json.buildJsonObject {
                 put("jsonrpc", kotlinx.serialization.json.JsonPrimitive("2.0")); put("id", kotlinx.serialization.json.JsonPrimitive(1)); put("method", kotlinx.serialization.json.JsonPrimitive("tools/list"))
             }
-            return mcp.handle(com.health.server.mcp.McpServer.Caller(user, false, canLog, scope), list)!!["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject.str("name") }
+            return mcp.handle(com.health.server.mcp.McpServer.Caller(user, canLog, scope), list)!!["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject.str("name") }
         }
         assertTrue(tools(emptySet()).none { it in setOf("hormones", "life_stage", "appointments") })
         val all = tools(setOf(Module.HORMONES, Module.CYCLE, Module.APPOINTMENTS), canLog = true)
@@ -313,7 +313,7 @@ class CareTest {
             put("jsonrpc", kotlinx.serialization.json.JsonPrimitive("2.0")); put("id", kotlinx.serialization.json.JsonPrimitive(2)); put("method", kotlinx.serialization.json.JsonPrimitive("tools/call"))
             put("params", kotlinx.serialization.json.buildJsonObject { put("name", kotlinx.serialization.json.JsonPrimitive("hormones")); put("arguments", kotlinx.serialization.json.JsonObject(emptyMap())) })
         }
-        val text = mcp.handle(com.health.server.mcp.McpServer.Caller(user, false, false, setOf(Module.HORMONES)), call).toString()
+        val text = mcp.handle(com.health.server.mcp.McpServer.Caller(user, false, setOf(Module.HORMONES)), call).toString()
         assertTrue(text, text.contains("Estradiol: 2 mg"))
     }
 

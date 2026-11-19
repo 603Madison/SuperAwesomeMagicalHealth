@@ -424,11 +424,11 @@ class VoiceTrainerTest {
             put("jsonrpc", JsonPrimitive("2.0")); put("id", JsonPrimitive(1)); put("method", JsonPrimitive("tools/call"))
             put("params", buildJsonObject { put("name", JsonPrimitive("transition")); put("arguments", buildJsonObject {}) })
         }
-        val text = mcp.handle(com.health.server.mcp.McpServer.Caller(s.users.byId(id)!!, false, false, setOf(Module.TRANSITION)), request)!!.toString()
+        val text = mcp.handle(com.health.server.mcp.McpServer.Caller(s.users.byId(id)!!, false, setOf(Module.TRANSITION)), request)!!.toString()
         assertTrue(text, text.contains("Voice programme: goal lighter and brighter, target range 170–210 Hz, resonance target 65 of 100; 2 of"))
         assertTrue(text, text.contains("next: Trills and hums"))
         // Out of the link's scope, nothing.
-        val none = mcp.handle(com.health.server.mcp.McpServer.Caller(s.users.byId(id)!!, false, false, setOf(Module.ACTIVITY)), request)!!.toString()
+        val none = mcp.handle(com.health.server.mcp.McpServer.Caller(s.users.byId(id)!!, false, setOf(Module.ACTIVITY)), request)!!.toString()
         assertFalse(none.contains("Voice programme"))
 
         val progress = s.transition.trainer.progress(id)

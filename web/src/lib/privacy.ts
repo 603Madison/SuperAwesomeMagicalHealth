@@ -1,10 +1,26 @@
-import type { DataDestination, DataMap, DataPath } from "./types";
+import type { DataDestination, DataMap, DataPath, User } from "./types";
 
 /*
  * Where your data goes (Settings, GET /api/privacy), the parts that don't need React (npm test
  * covers them): which ways out can be paused here, what each says about itself, where it's set up,
  * and the change to show at once while a pause is saved. Type imports only, so node can run it as it is.
  */
+
+/** Said where nothing is listed: nothing set up sends anything off the server. */
+export const NOTHING_LEAVES = "Nothing leaves this server right now.";
+
+/** How long Settings says an admin set the person's password. */
+export const ADMIN_SET_SHOWN_MS = 90 * 24 * 60 * 60 * 1000;
+
+/**
+ * "An admin set your password on 3 November 2026", for 90 days after an admin set it (a new
+ * account's, or a reset), so an admin quietly signing in as someone gets noticed; else null.
+ */
+export function adminSetText(user: Pick<User, "passwordSetByAdminAt">, now: number): string | null {
+  const at = user.passwordSetByAdminAt;
+  if (at == null || now - at > ADMIN_SET_SHOWN_MS) return null;
+  return `An admin set your password on ${new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`;
+}
 
 /** Whether the switch shows: one the person can pause, set up and not turned off on the server. */
 export function switchable(d: Pick<DataDestination, "pausable" | "state">): boolean {
@@ -81,7 +97,7 @@ export function privacyLine(map: Pick<DataMap, "destinations">): string {
   const ways = map.destinations.filter((d) => d.pausable !== false);
   const on = ways.filter((d) => d.state === "ON").length;
   const paused = ways.filter((d) => d.state === "PAUSED").length;
-  if (on === 0 && paused === 0) return "Everything stays on your server";
+  if (on === 0 && paused === 0) return "Nothing leaves this server right now";
   const parts = [on > 0 && `${on} ${on === 1 ? "way" : "ways"} out on`, paused > 0 && `${paused} paused`].filter(Boolean);
   return `${parts.join(", ")} · everything else stays on your server`;
 }

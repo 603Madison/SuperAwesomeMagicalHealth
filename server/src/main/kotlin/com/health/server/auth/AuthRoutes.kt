@@ -190,15 +190,14 @@ fun Route.authRoutes(services: Services) {
         post("/connectors") {
             val user = call.requireUser(services)
             val request = runCatching { call.receive<ConnectorRequest>() }.getOrDefault(ConnectorRequest())
-            if (request.allAccounts && !user.isAdmin) throw ApiError.forbidden("Only admins can make a link that sees every account")
-            if (request.allAccounts && request.allowLogging) throw ApiError.badRequest("A link that sees every account only reads")
+            // Admins manage accounts and never read anyone's data: no link reads another account.
+            if (request.allAccounts) throw ApiError.badRequest("A link only ever reads your own account. Admins can't make one that reads other people's.")
             val (kind, name) = when {
-                request.allAccounts -> SessionKind.MCP_ALL to "AI connector (every account)"
                 request.allowLogging -> SessionKind.MCP_WRITE to "AI connector (can log)"
                 else -> SessionKind.MCP to "AI connector"
             }
             // Sensitive modules only for the person's own links, and only the ones they chose.
-            val scope = if (request.allAccounts) emptySet() else request.modules.filter { it.sensitive }.toSet()
+            val scope = request.modules.filter { it.sensitive }.toSet()
             val label = name + scope.takeIf { it.isNotEmpty() }?.joinToString(", ", " + ") { it.label }.orEmpty()
             val token = services.sessions.create(user.id, kind, request.name.trim().take(80).ifBlank { label }, scope)
             call.respond(ConnectorLink("${publicBase(services, call)}/mcp/$token", token))

@@ -248,6 +248,7 @@ fun SettingsScreen(
                         Text(settings.user?.displayName ?: "", style = MaterialTheme.typography.titleMedium)
                         Hint("${settings.user?.username ?: ""} on ${settings.serverName.ifBlank { settings.server }}")
                         Hint(settings.server)
+                        com.health.app.ui.signin.ChoosePassword.adminSet(settings.user?.passwordSetByAdminAt, System.currentTimeMillis())?.let { Hint(it) }
                     }
                     MenuGroup(null) {
                         NavRow(Icons.Rounded.Key, "Password, sign-ins and upload keys", "On your server's web page", onClick = { actions.openWeb("account") })

@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countText, pausedToast, privacyLine, setUpPage, setUpSection, stateText, switchable, withPaused } from "../src/lib/privacy.ts";
+import { ADMIN_SET_SHOWN_MS, NOTHING_LEAVES, adminSetText, countText, pausedToast, privacyLine, setUpPage, setUpSection, stateText, switchable, withPaused } from "../src/lib/privacy.ts";
 import type { DataDestination, DataMap, DataPath, DataPathState } from "../src/lib/types.ts";
 
 function way(path: DataPath, state: DataPathState, change: Partial<DataDestination> = {}): DataDestination {
@@ -75,7 +75,9 @@ test("a pause shows at once: only that one, and only where it can be paused", ()
 
 test("You's line: how many ways out are on and paused; signing in isn't counted", () => {
   assert.equal(privacyLine(map), "1 way out on, 1 paused · everything else stays on your server");
-  assert.equal(privacyLine({ destinations: [way("SIGN_IN", "ON", { pausable: false }), way("SHARES", "NOT_SET_UP")] }), "Everything stays on your server");
+  assert.equal(privacyLine({ destinations: [way("SIGN_IN", "ON", { pausable: false }), way("SHARES", "NOT_SET_UP")] }), "Nothing leaves this server right now");
+  assert.equal(privacyLine({ destinations: [] }), "Nothing leaves this server right now");
+  assert.equal(NOTHING_LEAVES, "Nothing leaves this server right now.");
   assert.equal(privacyLine({ destinations: [way("MEALIE", "ON"), way("WEBHOOKS", "ON")] }), "2 ways out on · everything else stays on your server");
 });
 
@@ -89,4 +91,12 @@ test("medical records are set up on a page of their own", () => {
   assert.equal(setUpSection({ path: "HEALTH_RECORDS", setUp: "records" }), null);
   assert.equal(setUpPage({ setUp: "settings.sharing" }), null);
   assert.equal(setUpPage({}), null);
+});
+
+test("an admin-set password is said for 90 days, then not", () => {
+  const at = Date.UTC(2026, 10, 3, 12);
+  assert.match(adminSetText({ passwordSetByAdminAt: at }, at + 1000) ?? "", /^An admin set your password on .*2026\.$/);
+  assert.notEqual(adminSetText({ passwordSetByAdminAt: at }, at + ADMIN_SET_SHOWN_MS), null);
+  assert.equal(adminSetText({ passwordSetByAdminAt: at }, at + ADMIN_SET_SHOWN_MS + 1), null);
+  assert.equal(adminSetText({}, at), null);
 });

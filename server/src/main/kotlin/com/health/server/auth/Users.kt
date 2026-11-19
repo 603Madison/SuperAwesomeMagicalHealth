@@ -45,6 +45,8 @@ class UserStore(
         breakGlass: Boolean = false,
         oidcIssuer: String? = null,
         oidcSubject: String? = null,
+        /** An admin chose the password: it's temporary, and the person chooses their own first. */
+        byAdmin: Boolean = false,
     ): User {
         val name = validUsername(username)
         password?.let(::validPassword)
@@ -54,10 +56,13 @@ class UserStore(
             if (one("SELECT 1 FROM users WHERE username = ?", name) { true } == true) {
                 throw ApiError.conflict("The username \"$name\" is taken")
             }
+            val setByAdmin = byAdmin && hash != null
             update(
-                """INSERT INTO users (id, username, display_name, password_hash, role, break_glass, oidc_issuer, oidc_subject, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO users (id, username, display_name, password_hash, role, break_glass, oidc_issuer, oidc_subject, created_at,
+                   must_change_password, password_set_by_admin_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 id, name, displayName.trim().ifBlank { name }.take(MAX_NAME), hash, role, breakGlass, oidcIssuer, oidcSubject, clock(),
+                setByAdmin, if (setByAdmin) clock() else null,
             )
         }
         return byId(id)!!
@@ -89,10 +94,18 @@ class UserStore(
         return byId(id)!!
     }
 
-    suspend fun setPassword(id: String, password: String) {
+    /**
+     * Sets [id]'s password. [byAdmin]: an admin chose it, so it's temporary (the person must choose
+     * their own first) and when is kept; the person's own choice clears that need.
+     */
+    suspend fun setPassword(id: String, password: String, byAdmin: Boolean = false) {
         validPassword(password)
         val hash = withContext(Dispatchers.Default) { passwords.hash(password) }
-        if (db.tx { update("UPDATE users SET password_hash = ? WHERE id = ?", hash, id) } == 0) throw ApiError.notFound("No such user")
+        val changed = db.tx {
+            if (byAdmin) update("UPDATE users SET password_hash = ?, must_change_password = 1, password_set_by_admin_at = ? WHERE id = ?", hash, clock(), id)
+            else update("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?", hash, id)
+        }
+        if (changed == 0) throw ApiError.notFound("No such user")
     }
 
     suspend fun delete(id: String) {
@@ -134,6 +147,8 @@ class UserStore(
             hasPassword = row.stringOrNull("password_hash") != null,
             createdAt = row.long("created_at"),
             lastLoginAt = row.longOrNull("last_login_at"),
+            mustChangePassword = row.bool("must_change_password"),
+            passwordSetByAdminAt = row.longOrNull("password_set_by_admin_at"),
         )
     }
 }

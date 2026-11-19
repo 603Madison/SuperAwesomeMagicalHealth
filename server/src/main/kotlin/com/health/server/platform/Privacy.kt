@@ -37,7 +37,11 @@ class PrivacyStore(private val settings: UserSettingsStore) {
     }
 }
 
-/** The person's map of where their data can go (Settings › Where your data goes). */
+/**
+ * The person's map of where their data goes (Settings › Where your data goes): only the ways out
+ * that are set up and send something off this server (and any they paused). Every way out is
+ * still worked out here, so a new one gets its entry even while it's rarely shown.
+ */
 class PrivacyService(private val services: Services) {
     private val store get() = services.privacy
 
@@ -51,7 +55,7 @@ class PrivacyService(private val services: Services) {
             else -> DataPathState.ON
         }
         val sessions = services.sessions.list(user.id)
-        val links = sessions.count { it.kind == SessionKind.MCP || it.kind == SessionKind.MCP_WRITE || (it.kind == SessionKind.MCP_ALL && user.isAdmin) }
+        val links = sessions.count { it.kind.isConnector }
         val integrationKeys = sessions.count { it.kind == SessionKind.INTEGRATION }
         val mealie = services.mealie.status(user.id)
         val ai = services.ai.status(user)
@@ -169,7 +173,12 @@ class PrivacyService(private val services: Services) {
                 )
             },
         )
-        return DataMap(destinations, NOTE)
+        // Only what's set up and actually sends something out: shares stay on this server, USDA's
+        // list kept here sends nothing, and signing in sends nothing about the person. A paused one
+        // stays listed whatever it is, so it can be turned back on.
+        val staysHere = setOfNotNull(DataPath.SHARES, DataPath.SIGN_IN, DataPath.USDA_FOODS.takeIf { usdaHere })
+        val out = destinations.filter { it.state == DataPathState.PAUSED || (it.state == DataPathState.ON && it.path !in staysHere) }
+        return DataMap(out, NOTE, ADMINS)
     }
 
     suspend fun pause(user: User, path: DataPath, paused: Boolean): DataMap {
@@ -178,6 +187,7 @@ class PrivacyService(private val services: Services) {
     }
 
     companion object {
+        const val ADMINS = "This server's admins can't open your health data in the app. Whoever runs the computer it's on could, as with any server."
         const val NOTE = "Everything else stays on this server: your readings, diary and photos are never sent anywhere unless it's listed here. The apps load nothing from anywhere else (no fonts, trackers or adverts)."
 
         /** Hosts only, never whole addresses (a push address names the browser, a webhook's may carry a key). */

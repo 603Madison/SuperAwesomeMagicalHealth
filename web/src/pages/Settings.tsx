@@ -13,6 +13,7 @@ import { LAYOUT_NAV, SENSITIVE, layoutKey, visible, type Goals, type Profile as 
 import { Button, Field, IconButton, NumberInput, PageHeader, Spinner, Toggle, errorToast, toast, useLoad } from "../components/ui";
 import { NAMES, SETTINGS_PAGES, type SettingsPage } from "../lib/nav";
 import { FEATURES } from "../components/features";
+import { adminSetText } from "../lib/privacy";
 import { PlacePicker } from "../components/PlacePicker";
 import { useArrange, type Section } from "../components/Arrange";
 import { MealieSettings } from "./Mealie";
@@ -161,7 +162,10 @@ export function Settings() {
       </Panel>
     ) },
     { id: "signins", group: "appearance", label: "Signed in on", node: (
-      <Panel id="signins" title="Signed in on"><SignIns key={signIns} /></Panel>
+      <Panel id="signins" title="Signed in on">
+        {adminSetText(user, Date.now()) && <p className="notice">{adminSetText(user, Date.now())}</p>}
+        <SignIns key={signIns} />
+      </Panel>
     ) },
   ];
 
@@ -486,11 +490,9 @@ export function SignIns({ only }: { only?: string[] }) {
  * MCP client). Shown once; listed and removed with the sign-ins.
  */
 function Connector({ water, onMade }: { water: boolean; onMade: () => void }) {
-  const admin = useSession((s) => s.user)?.role === "ADMIN";
   const [link, setLink] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [logging, setLogging] = useState(false);
-  const [everyone, setEveryone] = useState(false);
   const on = useModules();
   const [scope, setScope] = useState<Module[]>([]);
   const sensitive = FEATURES.filter((f) => SENSITIVE.includes(f.id) && on.includes(f.id));
@@ -515,9 +517,9 @@ function Connector({ water, onMade }: { water: boolean; onMade: () => void }) {
         </>
       ) : (
         <>
-          <Toggle checked={logging} onChange={(v) => { setLogging(v); if (v) setEveryone(false); }} label="Let it log entries"
+          <Toggle checked={logging} onChange={setLogging} label="Let it log entries"
             help={`It may also log food, ${water ? "water, " : ""}weight, workouts and check-ins for you (say, from a photo of your lunch). Off: it only reads.`} />
-          {sensitive.length > 0 && !everyone && (
+          {sensitive.length > 0 && (
             <Field label="Also let it see" help="Off unless you choose: these stay private otherwise.">
               <div className="tag-list">
                 {sensitive.map((f) => (
@@ -527,14 +529,10 @@ function Connector({ water, onMade }: { water: boolean; onMade: () => void }) {
               </div>
             </Field>
           )}
-          {admin && (
-            <Toggle checked={everyone} onChange={(v) => { setEveryone(v); if (v) setLogging(false); }} label="See every account (admins)"
-              help="Reads every account's activity, sleep, food and devices, and the server's log, to troubleshoot anyone's devices. Read-only, and never the private modules." />
-          )}
           <div>
             <Button busy={busy} onClick={async () => {
               setBusy(true);
-              try { setLink((await api.connector(logging, admin && everyone, everyone ? [] : scope)).url); onMade(); } catch (e) { errorToast(e); }
+              try { setLink((await api.connector(logging, scope)).url); onMade(); } catch (e) { errorToast(e); }
               setBusy(false);
             }}><Bot size={18} /> Make a connector link</Button>
           </div>

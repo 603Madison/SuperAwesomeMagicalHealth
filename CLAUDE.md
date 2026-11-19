@@ -38,6 +38,9 @@
   asks `services.privacy.allows(userId, DataPath.…)` first and is listed in
   `platform/Privacy.kt`'s map (Settings › Where your data goes): a new one gets a `DataPath`, a gate
   and an entry there.
+- Admins manage accounts and never read anyone's data: no cross-account reads anywhere (no
+  every-account connector link, no "view as"). A password an admin sets is temporary
+  (`mustChangePassword`), and the person is told when an admin last set it.
 - Health alerts (`insights/AlertRules.kt`, pure; `insights/Alerts.kt`, sealed rows in
   `health_alerts`): each spell or night keeps one key, levels never go down, and what could need
   care now always says when to call emergency services. They never claim a diagnosis, are never

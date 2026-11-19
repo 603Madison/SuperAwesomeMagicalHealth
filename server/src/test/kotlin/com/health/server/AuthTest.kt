@@ -10,6 +10,9 @@ import io.ktor.client.request.request
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import io.ktor.client.statement.bodyAsText
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -90,6 +93,44 @@ class AuthTest {
     }
 
     @Test
+    fun `a password an admin sets is temporary`() = serverTest { services ->
+        val admin = adminBrowser()
+        val id = admin.postJson("/api/admin/users", """{"username":"maddie","password":"correct horse"}""").obj().str("id")
+        val maddie = browser()
+        val signedIn = maddie.post("/api/auth/login") { json("""{"username":"maddie","password":"correct horse"}""") }
+        assertEquals(HttpStatusCode.OK, signedIn.status)
+        val user = signedIn.obj()["user"]!!.jsonObject
+        assertEquals("true", user["mustChangePassword"]!!.jsonPrimitive.content)
+        assertTrue(user["passwordSetByAdminAt"]!!.jsonPrimitive.content.toLong() > 0)
+
+        // Signed in, but nothing else opens until it's changed.
+        val refused = maddie.get("/api/day/today")
+        assertEquals(HttpStatusCode.Forbidden, refused.status)
+        assertTrue(refused.bodyAsText().contains("Choose a new password first"))
+        assertEquals(HttpStatusCode.Forbidden, maddie.postJson("/api/me/connectors", "{}").status)
+        assertEquals(HttpStatusCode.OK, maddie.get("/api/me").status)
+        assertEquals(HttpStatusCode.OK, maddie.get("/api/auth/config").status)
+
+        assertEquals(HttpStatusCode.OK, maddie.postJson("/api/me/password", """{"current":"correct horse","new":"maddies-own-1"}""").status)
+        val after = maddie.get("/api/me").obj()["user"]!!.jsonObject
+        assertEquals("false", after["mustChangePassword"]!!.jsonPrimitive.content)
+        // When an admin set it is kept, so the person can see it in Settings.
+        assertTrue(after["passwordSetByAdminAt"] != null)
+        assertEquals(HttpStatusCode.OK, maddie.get("/api/day/today").status)
+
+        // A reset is temporary too; signing out still works meanwhile.
+        assertEquals(HttpStatusCode.OK, admin.postJson("/api/admin/users/$id/password", """{"password":"another-one-2"}""").status)
+        assertTrue(services.users.byId(id)!!.mustChangePassword)
+        val again = browser()
+        again.post("/api/auth/login") { json("""{"username":"maddie","password":"another-one-2"}""") }
+        assertEquals(HttpStatusCode.Forbidden, again.get("/api/profile").status)
+        assertEquals(HttpStatusCode.OK, again.post("/api/auth/logout") { csrf() }.status)
+
+        // Accounts made otherwise (single sign-on, the break-glass admin) never need it.
+        assertFalse(services.users.breakGlass()!!.mustChangePassword)
+    }
+
+    @Test
     fun `admins manage accounts and users can't`() = serverTest { services ->
         val admin = browser()
         admin.post("/api/auth/login") { json("""{"username":"admin","password":"break-glass-pw"}""") }
@@ -99,6 +140,7 @@ class AuthTest {
 
         val user = browser()
         user.post("/api/auth/login") { json("""{"username":"maddie","password":"correct horse"}""") }
+        user.postJson("/api/me/password", """{"current":"correct horse","new":"maddies-own-1"}""")
         assertEquals(HttpStatusCode.Forbidden, user.get("/api/admin/users").status)
 
         // Turning an account off signs it out.

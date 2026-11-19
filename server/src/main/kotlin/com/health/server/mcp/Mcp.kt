@@ -93,9 +93,10 @@ import kotlin.math.roundToInt
  * A link from Settings is the key: `/mcp/<token>`, or `/mcp` with the token as a bearer token.
  * Links are sign-ins of their own kind, listed and revoked with the account's devices, and open
  * nothing but this. A plain link only reads the account's own data; one made with logging
- * allowed ([SessionKind.MCP_WRITE]) can also log food, water, weight, workouts and check-ins; an
- * admin's every-account link ([SessionKind.MCP_ALL]) reads every account, for troubleshooting.
- * The server's own log is for admins.
+ * allowed ([SessionKind.MCP_WRITE]) can also log food, water, weight, workouts and check-ins.
+ * No link reads anyone else's account: admins manage accounts and never read anyone's data. An
+ * every-account link made before that ([SessionKind.MCP_ALL]) still works, reading only its own
+ * account. An admin's own link also gets the server's log and settings, which carry no one's health data.
  */
 fun Route.mcpRoutes(services: Services) {
     val mcp = McpServer(services)
@@ -106,12 +107,10 @@ fun Route.mcpRoutes(services: Services) {
         if (!services.privacy.allows(user.id, com.health.api.DataPath.AI_CONNECTORS)) {
             return respond(HttpStatusCode.Forbidden, ErrorBody(com.health.server.platform.PrivacyStore.pausedText("AI connector links")))
         }
-        val everyone = session.kind == SessionKind.MCP_ALL && user.isAdmin
         val caller = McpServer.Caller(
             user,
-            everyone = everyone,
             canLog = session.kind == SessionKind.MCP_WRITE,
-            // An every-account link never reads the sensitive modules.
+            // An old every-account link reads only its own account, and never the sensitive modules.
             scope = if (session.kind == SessionKind.MCP_ALL) emptySet() else session.scope.filter { it.sensitive }.toSet(),
             water = services.days.showsWater(user.id),
         )
@@ -154,10 +153,10 @@ private suspend fun ApplicationCall.respondJson(element: JsonElement) {
 /** The protocol: initialize, ping, and the tools. */
 class McpServer(private val services: Services) {
     /**
-     * Who's asking: the link's account, whether it sees every account, whether it may log entries,
+     * Who's asking: the link's account (the only one it reads), whether it may log entries,
      * and whether the account keeps track of water (off, water isn't offered).
      */
-    class Caller(val user: User, val everyone: Boolean, val canLog: Boolean, val scope: Set<Module> = emptySet(), val water: Boolean = true)
+    class Caller(val user: User, val canLog: Boolean, val scope: Set<Module> = emptySet(), val water: Boolean = true)
 
     private class Tool(
         val name: String,
@@ -199,8 +198,6 @@ class McpServer(private val services: Services) {
 
     private fun toolsFor(caller: Caller) = tools.filter { (!it.writes || caller.canLog) && (it.module == null || it.module in caller.scope) && (!it.water || caller.water) }
 
-    /** Whether [user] keeps track of water: the caller's own answer, or asked for another account. */
-    private suspend fun waterOf(caller: Caller, user: User) = if (user.id == caller.user.id) caller.water else services.days.showsWater(user.id)
 
     // ---- The in-app assistant (ai/) uses these tools too, through its own allowlist (ai/AiTools.kt) ----
 
@@ -261,7 +258,7 @@ class McpServer(private val services: Services) {
             )
         val arguments = params["arguments"] as? JsonObject ?: JsonObject(emptyMap())
         // What was asked, never what was said: argument names only, and a private feature's tool not by name.
-        log.info("AI connector of {}{}: {} {}", caller.user.username, if (caller.everyone) " (every account)" else "", logged(tool.name, tool.module), arguments.keys.sorted())
+        log.info("AI connector of {}: {} {}", caller.user.username, logged(tool.name, tool.module), arguments.keys.sorted())
         val (text, failed) = try {
             tool.run(caller, arguments) to false
         } catch (e: CancellationException) {
@@ -293,9 +290,6 @@ class McpServer(private val services: Services) {
         }
     }
 
-    private val account = "account" to stringProperty(
-        "Whose: an account's username (default the link's own; an admin's every-account link can name any account)",
-    )
     private val dateProperty = "date" to stringProperty("A day: YYYY-MM-DD, today or yesterday (default today, in the person's time zone)")
     private val daysProperty = { default: Int, max: Int -> "days" to intProperty("How many days back from today (default $default, at most $max)") }
 
@@ -304,21 +298,21 @@ class McpServer(private val services: Services) {
             "status", "Status",
             "Start here. The server's version and uptime; the account's profile (and what's missing for scores and calorie " +
                 "targets), its devices with when each last synced and its battery, and which kinds of data have arrived lately. " +
-                "An every-account link lists every account.",
-            schema(account),
-        ) { caller, args -> status(caller, accountOf(caller, args)) },
+                "An admin's own link also shows the server's settings.",
+            schema(),
+        ) { caller, args -> status(caller, caller.user) },
         Tool(
             "day", "Day summary",
             "One day in full: readiness, sleep and activity scores with each contributor; steps, calories, heart rate, HRV, " +
                 "SpO2, temperature; the night's sleep with its stages; food eaten against the day's targets; workouts; the " +
                 "person's check-in (mood, energy, tags); and the insights the app showed. Where more than one device measured " +
                 "something, a line gives the app's combined number, each device's own, and how it was worked out.",
-            schema(dateProperty, account),
+            schema(dateProperty),
         ) { caller, args ->
-            val user = accountOf(caller, args)
+            val user = caller.user
             formatDay(
                 services.days.summary(user.id, args.string("date") ?: "today"), services.profiles.get(user.id).units,
-                caller.scope.takeIf { user.id == caller.user.id }.orEmpty(), waterOf(caller, user),
+                caller.scope, caller.water,
             )
         },
         Tool(
@@ -326,33 +320,33 @@ class McpServer(private val services: Services) {
             "A row per day (tab-separated): scores, steps, active calories, resting heart rate, HRV, sleep (total, deep, REM), " +
                 "SpO2, temperature deviation, weight, food (calories, protein, carbs, fat), water (where it's tracked), workouts. " +
                 "Good for spotting patterns over weeks and months.",
-            schema(daysProperty(30, 365), "to" to stringProperty("The last day (default today)"), account),
+            schema(daysProperty(30, 365), "to" to stringProperty("The last day (default today)")),
         ) { caller, args ->
-            val user = accountOf(caller, args)
+            val user = caller.user
             val days = services.profiles.days(user.id)
             val to = args.string("to")?.let { days.parse(it, services.clock()) }
             trendsTable(
                 services.days.trends(user.id, null, to, args.int("days")?.coerceIn(1, 365) ?: 30).days,
-                caller.scope.takeIf { user.id == caller.user.id }.orEmpty(), waterOf(caller, user),
+                caller.scope, caller.water,
             )
         },
         Tool(
             "sleep", "Sleep",
             "Nights (and naps), newest first: bedtime, wake time, time asleep, efficiency, deep/REM/light/awake, time to fall " +
                 "asleep, lowest and average heart rate, HRV, and which device recorded it.",
-            schema(daysProperty(14, 365), "stages" to boolProperty("Also each stage with its times (long)"), account),
-        ) { caller, args -> sleep(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 14, args.bool("stages") ?: false) },
+            schema(daysProperty(14, 365), "stages" to boolProperty("Also each stage with its times (long)")),
+        ) { caller, args -> sleep(caller.user, args.int("days")?.coerceIn(1, 365) ?: 14, args.bool("stages") ?: false) },
         Tool(
             "workouts", "Workouts",
             "Workouts, newest first: type, when, how long, distance, calories, average and highest heart rate, effort, and where they came from.",
-            schema(daysProperty(30, 3650), account),
-        ) { caller, args -> workouts(accountOf(caller, args), args.int("days")?.coerceIn(1, 3650) ?: 30) },
+            schema(daysProperty(30, 3650)),
+        ) { caller, args -> workouts(caller.user, args.int("days")?.coerceIn(1, 3650) ?: 30) },
         Tool(
             "food_log", "Food log",
             "What was eaten each day, by meal, with calories and protein, carbs and fat, totals against the day's target, water (where it's tracked), " +
                 "and fibre, sodium, vitamins and minerals where the foods carried them.",
-            schema(dateProperty, "days" to intProperty("Several days ending on date (default 1, at most 31)"), account),
-        ) { caller, args -> foodLog(accountOf(caller, args), args.string("date") ?: "today", args.int("days")?.coerceIn(1, 31) ?: 1) },
+            schema(dateProperty, "days" to intProperty("Several days ending on date (default 1, at most 31)")),
+        ) { caller, args -> foodLog(caller.user, args.string("date") ?: "today", args.int("days")?.coerceIn(1, 31) ?: 1) },
         Tool(
             "readings", "Raw readings",
             "Raw readings of one metric as devices sent them, with the device each came from: for checking what a device " +
@@ -362,23 +356,22 @@ class McpServer(private val services: Services) {
                 "from" to stringProperty("Start: YYYY-MM-DD, YYYY-MM-DDTHH:MM (local time) or today/yesterday (default 24 hours ago)"),
                 "to" to stringProperty("End, as from (default now)"),
                 "limit" to intProperty("At most this many, newest last (default 300, at most 3000)"),
-                account,
                 required = listOf("metric"),
             ),
-        ) { caller, args -> readings(accountOf(caller, args), args) },
+        ) { caller, args -> readings(caller.user, args) },
         Tool(
             "devices", "Devices",
             "Every device data has come from: kind, model, firmware, battery, when it last synced, how many readings it has " +
                 "sent, and its latest reading of each kind. Upload keys and phone sign-ins are listed too.",
-            schema(account),
-        ) { caller, args -> devices(accountOf(caller, args)) },
+            schema(),
+        ) { caller, args -> devices(caller.user) },
         Tool(
             "sync_check", "Sync check",
             "Troubleshooting device syncs: for each device and day, how many heart rate, step and other readings arrived, " +
                 "nights and workouts, with gaps flagged; and nights recorded by two devices at once (duplicates the scores " +
                 "pick between).",
-            schema(daysProperty(7, 60), account),
-        ) { caller, args -> syncCheck(accountOf(caller, args), args.int("days")?.coerceIn(1, 60) ?: 7) },
+            schema(daysProperty(7, 60)),
+        ) { caller, args -> syncCheck(caller.user, args.int("days")?.coerceIn(1, 60) ?: 7) },
         Tool(
             "health_alerts", "Health alerts",
             "The person's health alerts: when a reading looked out of the ordinary for them, worth a doctor's look or urgent " +
@@ -386,19 +379,19 @@ class McpServer(private val services: Services) {
                 "getting ill, a resting heart rate that stayed up), with the readings behind each, the advice given, and what " +
                 "the person said about it. A heads-up from consumer devices, not a diagnosis: say so, and if one could be urgent, " +
                 "encourage getting care rather than reasoning it away.",
-            schema(daysProperty(30, 365), account),
-        ) { caller, args -> healthAlerts(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 30) },
+            schema(daysProperty(30, 365)),
+        ) { caller, args -> healthAlerts(caller.user, args.int("days")?.coerceIn(1, 365) ?: 30) },
         Tool(
             "profile", "Profile and goals",
             "The person's profile (birth year, height, which calorie formula, units, time zone), goals, and how today's " +
                 "calorie and macro targets were worked out (resting energy, active calories, weight change aimed for).",
-            schema(account),
-        ) { caller, args -> profile(accountOf(caller, args)) },
+            schema(),
+        ) { caller, args -> profile(caller.user) },
         Tool(
             "search_foods", "Search foods",
             "Searches the person's own foods and the Open Food Facts database; each result gives calories and macros per serving and its barcode (for log_food).",
-            schema("query" to stringProperty("What to search for"), account, required = listOf("query")),
-        ) { caller, args -> searchFoods(accountOf(caller, args), args.string("query").orEmpty()) },
+            schema("query" to stringProperty("What to search for"), required = listOf("query")),
+        ) { caller, args -> searchFoods(caller.user, args.string("query").orEmpty()) },
         Tool(
             "recent_warnings", "Recent warnings",
             "The server's latest warnings and errors (newest last): failed sign-ins, device uploads refused, food database trouble. Admins only.",
@@ -483,26 +476,26 @@ class McpServer(private val services: Services) {
             "vitals", "Blood pressure and glucose",
             "Blood pressure and glucose readings (newest first) with each one's category, averages, time in range, an A1c " +
                 "estimate from a sensor, the person's own targets, and patterns (morning against evening, after meals, lows).",
-            schema(daysProperty(30, 365), account),
-        ) { caller, args -> vitalsText(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 30) },
+            schema(daysProperty(30, 365)),
+        ) { caller, args -> vitalsText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 30) },
         Tool(
             "drinks", "Drinks",
             "Drinks by day: caffeine (mg, and when the last was), alcohol (standard drinks of 14 g), other drinks (which count " +
                 "towards water, where it's tracked); averages, and how caffeine and alcohol went with sleep and HRV.",
-            schema(daysProperty(14, 365), account),
-        ) { caller, args -> drinksText(accountOf(caller, args), args.int("days")?.coerceIn(1, 365) ?: 14) },
+            schema(daysProperty(14, 365)),
+        ) { caller, args -> drinksText(caller.user, args.int("days")?.coerceIn(1, 365) ?: 14) },
         Tool(
             "stress", "Stress and resilience",
             "Daytime stress by day: minutes stressed, engaged, relaxed and restored while awake and still (from heart rate and " +
                 "HRV against the person's baseline, or the device's own stress readings), and resilience over two weeks with what it's made of.",
-            schema(daysProperty(14, 90), account),
-        ) { caller, args -> stressText(accountOf(caller, args), args.int("days")?.coerceIn(1, 90) ?: 14) },
+            schema(daysProperty(14, 90)),
+        ) { caller, args -> stressText(caller.user, args.int("days")?.coerceIn(1, 90) ?: 14) },
         Tool(
             "habits", "Habits",
             "Habits with their status on a day: done or not, days done this week against the aim, week streaks and day streaks " +
                 "(which forgive one missed day in seven), and the last two weeks.",
-            schema(dateProperty, account),
-        ) { caller, args -> habitsText(accountOf(caller, args), args.string("date") ?: "today") },
+            schema(dateProperty),
+        ) { caller, args -> habitsText(caller.user, args.string("date") ?: "today") },
         Tool(
             "symptoms", "Symptoms and migraines",
             "Symptoms, pain and migraines: each entry with its severity (0–10), triggers and what helped; counts; and what went " +
@@ -993,7 +986,7 @@ class McpServer(private val services: Services) {
             "The conditions and goals the person keeps track of (only those whose private features this link may see), with how long and any notes.",
             schema(),
         ) { caller, _ ->
-            if (caller.everyone || caller.scope.isEmpty()) return@Tool "Conditions are private: this link wasn't given any private features."
+            if (caller.scope.isEmpty()) return@Tool "Conditions are private: this link wasn't given any private features."
             val visible = services.conditions.get(caller.user.id).conditions.filter { c ->
                 com.health.server.conditions.ConditionsService.modulesOf(c).filter { it.sensitive }.all { it in caller.scope }
             }
@@ -1056,13 +1049,6 @@ class McpServer(private val services: Services) {
             appendLine("Public address: ${settings.publicUrl.ifBlank { "(not set)" }}. Single sign-on: ${if (settings.oidc.enabled) "on (${settings.oidc.issuer})" else "off"}. Food database: USDA FoodData Central ${if (!settings.usdaFoods) "off" else if (settings.usdaLocal.use) (if (services.usdaLocal.ready) "kept on this server" else "kept on this server (not downloaded yet)") else if (services.settings.usdaApiKey().isNotEmpty()) "online" else "online (no key)"}, Open Food Facts fallback ${if (settings.foodDatabase) "on" else "off"}.")
             val fixed = services.config.overrides.keys.filter { it in ServerConfig.OVERRIDES }.sorted()
             if (fixed.isNotEmpty()) appendLine("Set by environment: ${fixed.joinToString()}.")
-        }
-        if (caller.everyone) {
-            appendLine()
-            appendLine("Accounts:")
-            services.users.list().forEach { u ->
-                appendLine("- ${u.username} (${u.displayName})${if (u.isAdmin) " admin" else ""}${if (u.disabled) " DISABLED" else ""}${if (u.oidc) " SSO" else ""}, last sign-in ${u.lastLoginAt?.let { ago(it) } ?: "never"}")
-            }
         }
         appendLine()
         appendLine("Account: ${user.username} (${user.displayName}).")
@@ -1721,17 +1707,6 @@ class McpServer(private val services: Services) {
         }
         appendLine()
         appendLine(all.limits)
-    }
-
-    /** The account a tool is asked about: the link's own, or (every-account links) any named one. */
-    private suspend fun accountOf(caller: Caller, args: JsonObject): User {
-        val name = args.string("account") ?: return caller.user
-        if (name.equals(caller.user.username, ignoreCase = true)) return caller.user
-        if (!caller.everyone) error("This link sees only ${caller.user.username}'s account (an admin's every-account link sees others)")
-        val other = services.users.byUsername(name) ?: error("No account named $name")
-        // Someone who paused AI connector links isn't read through anyone's link either.
-        if (!services.privacy.allows(other.id, com.health.api.DataPath.AI_CONNECTORS)) error("${other.username} has paused AI connector links")
-        return other
     }
 
     /** "2026-01-31T07:30" or "07:30" (today), in the person's time zone; or a date (its start). */
