@@ -65,7 +65,7 @@ import com.health.app.net.addSymptom
 import com.health.app.net.deleteMigraine
 import com.health.app.net.deleteSymptom
 import com.health.app.net.migraines
-import com.health.app.net.places
+import com.health.app.net.zipPlace
 import com.health.app.net.symptoms
 import com.health.app.net.symptomsSummary
 import com.health.app.net.updateMigraine
@@ -106,8 +106,8 @@ data class SymptomsState(
     val migraines: List<Migraine> = emptyList(),
     val summary: SymptomsSummary? = null,
     val place: Place? = null,
-    val places: List<Place> = emptyList(),
-    val searching: Boolean = false,
+    /** A ZIP code being looked up. */
+    val finding: Boolean = false,
     val loading: Boolean = true,
     val error: String? = null,
 ) {
@@ -157,19 +157,20 @@ class SymptomsViewModel(private val c: Container) : ViewModel() {
 
     fun deleteMigraine(id: String) = act(null) { c.ui.deleteMigraine(id) }
 
-    fun search(query: String) {
-        if (query.isBlank()) return
-        _state.update { it.copy(searching = true) }
+    /** Looks up a US ZIP code on the server (nothing is sent anywhere) and keeps it as the place. */
+    fun findZip(zip: String) {
+        if (!validZip(zip)) return
+        _state.update { it.copy(finding = true) }
         viewModelScope.launch {
-            val found = attempt { c.ui.places(query) }.getOrElse { c.tell(it.message ?: "Couldn't look that up"); emptyList() }
-            _state.update { it.copy(places = found, searching = false) }
+            val found: Place? = attempt { c.ui.zipPlace(zip.trim()) }.getOrElse { c.tell(it.message ?: "Couldn't look that up"); null }
+            _state.update { it.copy(finding = false) }
+            if (found != null) setPlace(found)
         }
     }
 
-    fun setPlace(place: Place?) = act(if (place != null) "Comparing with the weather in ${place.name}" else null) {
+    fun setPlace(place: Place?) = act(if (place != null) "Comparing with the weather for ${place.name}" else null) {
         val profile = c.profile.value ?: c.loadProfile() ?: return@act
         c.saveProfile(profile.copy(place = place))
-        _state.update { it.copy(places = emptyList()) }
     }
 }
 
@@ -179,7 +180,7 @@ class SymptomsActions(
     val delete: (String) -> Unit = {},
     val saveMigraine: (Migraine) -> Unit = {},
     val deleteMigraine: (String) -> Unit = {},
-    val search: (String) -> Unit = {},
+    val findZip: (String) -> Unit = {},
     val setPlace: (Place?) -> Unit = {},
 )
 
@@ -192,7 +193,7 @@ fun SymptomsRoute() {
         state, c.zone(),
         SymptomsActions(
             retry = { vm.load() }, save = { vm.save(it) }, delete = { vm.delete(it) }, saveMigraine = { vm.saveMigraine(it) },
-            deleteMigraine = { vm.deleteMigraine(it) }, search = vm::search, setPlace = { vm.setPlace(it) },
+            deleteMigraine = { vm.deleteMigraine(it) }, findZip = vm::findZip, setPlace = { vm.setPlace(it) },
         ),
     )
 }
@@ -249,7 +250,7 @@ fun SymptomsScreen(state: SymptomsState, zone: ZoneId, actions: SymptomsActions,
                     )
                     "lately" -> if (loaded) RecentCard(state, zone, now, onSymptom = { if (!readOnly) logging = it }, onMigraine = { if (!readOnly) migraine = it })
                     "summary" -> if (loaded) state.summary?.let { SummaryCard(it) }
-                    "weather" -> if (loaded && !readOnly) PlaceCard(state.place) { choosingPlace = true }
+                    "weather" -> if (loaded && !readOnly) PlaceCard(state.place, state.summary?.weatherNote) { choosingPlace = true }
                 }
             }
             when {
@@ -381,12 +382,12 @@ private fun SummaryCard(summary: SymptomsSummary) {
 }
 
 @Composable
-private fun PlaceCard(place: Place?, onChoose: () -> Unit) {
+private fun PlaceCard(place: Place?, note: String?, onChoose: () -> Unit) {
     InfoCard("Air pressure", icon = Icons.Rounded.Air) {
         if (place == null) {
-            Hint("Some people's migraines and aches follow the weather. Add your town to compare with falling air pressure (your server looks it up, roughly).")
+            Hint("Some people's migraines and aches follow the weather. Add your ZIP code to compare with falling air pressure from the National Weather Service.")
             Spacer(Modifier.height(8.dp))
-            FilledTonalButton(onClick = onChoose) { Text("Add your town") }
+            FilledTonalButton(onClick = onChoose) { Text("Add your ZIP code") }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.Icon(Icons.Rounded.Place, null, tint = MaterialTheme.colorScheme.primary)
@@ -394,28 +395,30 @@ private fun PlaceCard(place: Place?, onChoose: () -> Unit) {
                 Text(place.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                 TextButton(onClick = onChoose) { Text("Change") }
             }
+            note?.let { Hint(it) }
         }
     }
 }
 
+/** Five digits (a ZIP+4's first part is fine). */
+fun validZip(zip: String): Boolean = zip.trim().substringBefore('-').let { it.length == 5 && it.all(Char::isDigit) }
+
 @Composable
 private fun PlaceDialog(state: SymptomsState, actions: SymptomsActions, onClose: () -> Unit) {
-    var query by remember { mutableStateOf("") }
+    var zip by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("Where are you?") },
+        title = { Text("Your ZIP code") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Hint("US only. Your server looks it up; the weather service only gets a rough area.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(query, { query = it }, label = { Text("Town or city") }, singleLine = true, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { actions.search(query) }, enabled = query.isNotBlank() && !state.searching) { Text("Find") }
-                }
-                state.places.forEach { p ->
-                    Text(
-                        p.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { actions.setPlace(p); onClose() }.padding(vertical = 10.dp, horizontal = 4.dp),
+                    OutlinedTextField(
+                        zip, { zip = it.filter(Char::isDigit).take(5) }, label = { Text("ZIP code") }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
                     )
+                    TextButton(onClick = { actions.findZip(zip); onClose() }, enabled = validZip(zip) && !state.finding) { Text("Use") }
                 }
                 if (state.place != null) TextButton(onClick = { actions.setPlace(null); onClose() }) { Text("Stop comparing with the weather") }
             }

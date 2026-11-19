@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MapPin, X } from "lucide-react";
 import { api } from "../lib/api";
 import { session, useSession } from "../lib/session";
@@ -6,34 +6,29 @@ import type { Place } from "../lib/types";
 import { Button, Field, errorToast, toast } from "./ui";
 
 /**
- * Roughly where the person is, for the weather: searched through the server (the browser talks
- * only to this server), saved on the profile.
+ * Roughly where the person is, for the weather: a US ZIP code, looked up on the server (nothing is
+ * sent anywhere), saved on the profile.
  */
 export function PlacePicker() {
   const profile = useSession((s) => s.profile);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Place[] | null>(null);
+  const [zip, setZip] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) { setResults(null); return; }
-    // Only the latest search's answer shows: an earlier one that comes back late is dropped.
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      api.places(q).then((r) => { if (!cancelled) setResults(r); }, () => { if (!cancelled) setResults([]); });
-    }, 350);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [query]);
   if (!profile) return null;
   const save = async (place: Place | null) => {
     setBusy(true);
     try {
       session.setProfile(await api.saveProfile({ ...profile, place }));
       toast(place ? `Weather for ${place.name}` : "Place removed");
-      setQuery("");
-      setResults(null);
+      setZip("");
     } catch (e) { errorToast(e); }
     setBusy(false);
+  };
+  const find = async () => {
+    setBusy(true);
+    let place: Place | null = null;
+    try { place = await api.zipPlace(zip.trim()); } catch (e) { errorToast(e); }
+    setBusy(false);
+    if (place) await save(place);
   };
   if (profile.place) {
     return (
@@ -44,21 +39,13 @@ export function PlacePicker() {
       </div>
     );
   }
+  const valid = /^\d{5}$/.test(zip.trim());
   return (
-    <div className="place-picker">
-      <Field label="Your town or city" help="Only to look up the weather (air pressure); the search goes through your server.">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Leeds" aria-autocomplete="list" />
+    <form className="place-picker" onSubmit={(e) => { e.preventDefault(); if (valid) void find(); }}>
+      <Field label="Your ZIP code" help="US only. Looked up on your server; the weather service only gets a rough area.">
+        <input value={zip} onChange={(e) => setZip(e.target.value.replace(/[^\d]/g, "").slice(0, 5))} placeholder="e.g. 03820" inputMode="numeric" autoComplete="postal-code" />
       </Field>
-      {results && (
-        <ul className="place-results" role="listbox" aria-label="Places">
-          {results.length === 0 && <li className="muted small">Nothing found</li>}
-          {results.slice(0, 6).map((p) => (
-            <li key={`${p.latitude},${p.longitude}`}>
-              <button type="button" className="link-row" disabled={busy} onClick={() => save(p)}><MapPin size={16} /> {p.name}</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+      <Button type="submit" busy={busy} disabled={!valid}><MapPin size={16} /> Use this ZIP code</Button>
+    </form>
   );
 }

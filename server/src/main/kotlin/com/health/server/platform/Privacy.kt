@@ -100,10 +100,10 @@ class PrivacyService(private val services: Services) {
                 count = records.size, setUp = "records",
             ),
             DataDestination(
-                DataPath.WEATHER, "Open-Meteo", "A free weather service",
-                hosts = listOf("api.open-meteo.com", "archive-api.open-meteo.com", "geocoding-api.open-meteo.com"),
-                what = "A rough place (to about 10 km) and dates, to fetch the air pressure, and the words you type when you look for a place. Never your symptoms.",
-                whenSent = "When your symptom patterns are worked out, and when you look for a place",
+                DataPath.WEATHER, "National Weather Service", "The US government's weather service",
+                hosts = listOf("api.weather.gov"),
+                what = "A rough place (to about 10 km) and dates, to fetch the air pressure. Your ZIP code is looked up on this server and never sent. Never your symptoms.",
+                whenSent = "Once a day while you have a place, and when your symptom patterns are worked out",
                 state = state(DataPath.WEATHER, profile.place != null, server.weather), setUp = "settings.profile",
             ),
             DataDestination(

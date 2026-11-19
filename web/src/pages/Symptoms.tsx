@@ -97,7 +97,8 @@ export function Symptoms() {
     ) },
     { id: "weather", label: "Weather", when: !readOnly, node: (
       <Card title="Weather" icon={<CloudSun size={18} />}>
-        <p className="muted small">{profile?.place ? "Air pressure is compared with your migraines and headaches." : "For some people, migraines follow drops in air pressure. Add your area to compare."}</p>
+        <p className="muted small">{profile?.place ? "Air pressure is compared with your migraines and headaches." : "For some people, migraines follow drops in air pressure. Add your ZIP code to compare."}</p>
+        {profile?.place && s?.weatherNote && <p className="muted small">{s.weatherNote}</p>}
         <PlacePicker />
       </Card>
     ) },

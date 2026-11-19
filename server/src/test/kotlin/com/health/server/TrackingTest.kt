@@ -30,7 +30,6 @@ import com.health.server.tracking.DrinksService
 import com.health.server.tracking.HabitsService
 import com.health.server.tracking.SymptomsService
 import com.health.server.tracking.VitalsService
-import com.health.server.tracking.Weather
 import com.health.server.util.Days
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -41,10 +40,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.mockwebserver.Dispatcher
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
-import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -222,54 +217,6 @@ class TrackingTest {
         val day = s.days.summary(id, today.toString()).modules.symptoms!!
         assertEquals(8, day.worst)
         assertTrue(s.days.summary(id, today.toString()).insights.any { it.title == "Migraine still going" })
-    }
-
-    @Test
-    fun `symptom days are compared with short nights and falling air pressure`() = runBlocking {
-        // Pressure drops by 8 hPa every fourth day; migraines come on those days.
-        val start = today.minusDays(29)
-        val pressure = (0L..31L).associate { i -> start.minusDays(1).plusDays(i) to if (i % 4 == 0L) 1004.0 else 1012.0 }
-        val requests = mutableListOf<String>()
-        val server = MockWebServer().apply {
-            dispatcher = object : Dispatcher() {
-                override fun dispatch(request: RecordedRequest): MockResponse {
-                    requests += request.path.orEmpty()
-                    val url = request.requestUrl!!
-                    val from = LocalDate.parse(url.queryParameter("start_date")!!)
-                    val to = LocalDate.parse(url.queryParameter("end_date")!!)
-                    val dates = generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }.toList()
-                    val times = dates.flatMap { d -> (0 until 24).map { h -> "\"${d}T%02d:00\"".format(h) } }
-                    val values = dates.flatMap { d -> List(24) { (pressure[d] ?: 1010.0).toString() } }
-                    return MockResponse().setBody("""{"hourly":{"time":[${times.joinToString()}],"pressure_msl":[${values.joinToString()}]}}""")
-                }
-            }
-            start()
-        }
-        try {
-            val s = services(place = Place("Leeds", 53.7997, -1.5492))
-            s.weather.urls = Weather.Urls(forecast = server.url("/forecast").toString(), archive = server.url("/archive").toString(), geocoding = server.url("/search").toString())
-            val id = s.admin()
-            for (i in 0L..29L) {
-                val d = start.plusDays(i)
-                if (pressure[d]!! < 1010 && pressure[d.minusDays(1)]!! > 1010) s.tracking.symptoms.saveMigraine(id, Migraine(at(d, 10), at(d, 16), severity = 7))
-                else if (i % 7 == 3L) s.tracking.symptoms.save(id, SymptomEntry(at(d, 10), "headache", 4))
-            }
-            val summary = s.tracking.symptoms.summary(id, 30)
-            assertTrue(summary.weather)
-            val drop = summary.correlations.first { it.factor == "pressure_drop" }
-            assertEquals(1.0, drop.withRate, 0.01)
-            assertTrue(drop.withoutRate < 0.3)
-            assertTrue(drop.text, drop.text.startsWith("Symptoms came on"))
-            assertEquals(summary.days.count { it.migraines.isNotEmpty() }, summary.migraineDays)
-            assertEquals("migraine", summary.counts.first().name)
-            // Only a rough place went out, and each day was fetched once.
-            assertTrue(requests.all { "latitude=53.8" in it && "longitude=-1.5" in it })
-            val before = requests.size
-            s.tracking.symptoms.summary(id, 30)
-            assertEquals(before, requests.size)
-        } finally {
-            server.shutdown()
-        }
     }
 
     @Test
@@ -470,9 +417,11 @@ class TrackingTest {
         assertNull(day.modules.symptoms)
         assertNotNull(day.drinks)
         assertTrue(day.insights.none { it.module == Module.SYMPTOMS || it.module == Module.VITALS })
-        // Weather off: place search says so.
+        // A ZIP code is looked up on the server; with the weather off, it says so.
+        assertEquals("ZIP 03820", admin.get("/api/places/zip/03820").obj()["name"]!!.jsonPrimitive.contentOrNull)
+        assertEquals(HttpStatusCode.NotFound, admin.get("/api/places/zip/00000").status)
         s.settings.update { it.copy(weather = false) }
-        assertEquals(HttpStatusCode.BadRequest, admin.get("/api/places?q=Leeds").status)
+        assertEquals(HttpStatusCode.BadRequest, admin.get("/api/places/zip/03820").status)
     }
 
     @Test

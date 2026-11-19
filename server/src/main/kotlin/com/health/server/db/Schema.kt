@@ -398,6 +398,20 @@ object Schema {
             fetched_at INTEGER NOT NULL
         );
         """,
+        // Air pressure from the National Weather Service, which keeps only about a week: each day's
+        // mean for a rough place, kept as it's fetched (complete once the day was over). Open-Meteo's
+        // days go.
+        """
+        DROP TABLE IF EXISTS weather;
+        CREATE TABLE air_pressure (
+            place TEXT NOT NULL,
+            date TEXT NOT NULL,
+            hpa REAL NOT NULL,
+            complete INTEGER NOT NULL,
+            fetched_at INTEGER NOT NULL,
+            PRIMARY KEY (place, date)
+        );
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

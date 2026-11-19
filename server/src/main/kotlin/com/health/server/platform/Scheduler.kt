@@ -84,6 +84,12 @@ class Scheduler(private val services: Services) {
         } catch (e: Exception) {
             log.warn("The medical records round didn't start: {}", e.message)
         }
+        // Air pressure for everyone with a place, kept once a day (the weather service keeps only a week).
+        services.weather.startDailyRound(now) {
+            services.users.list().filter { !it.disabled }.mapNotNull { user ->
+                services.profiles.get(user.id).place?.takeIf { services.privacy.allows(user.id, com.health.api.DataPath.WEATHER) }
+            }
+        }
         lastTick = now
         lastSent = sent
         return sent
