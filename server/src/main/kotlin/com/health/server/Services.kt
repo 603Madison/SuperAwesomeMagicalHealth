@@ -116,7 +116,7 @@ class Services(
     }
 
     // Blood pressure and glucose, drinks, symptoms and migraines, habits; the weather for symptom patterns.
-    val weather = Weather(db, http, settings, clock)
+    val weather = Weather(db, http, settings, clock, loopback = { config.outboundLoopback })
     val tracking: TrackingService = run {
         val vitals = VitalsService(db, records, profiles, clock)
         val drinks = DrinksService(db, profiles, records, days, clock)

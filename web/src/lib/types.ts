@@ -695,7 +695,7 @@ export interface ServerSettings {
   foodDatabase: boolean;
   crisisResources: CrisisResource[];
   oidc: OidcSettings;
-  /** Air pressure for symptom patterns, and place search (a rough place goes to open-meteo.com). */
+  /** Air pressure for symptom patterns (a rough place goes to the National Weather Service). */
   weather?: boolean;
   smtp?: SmtpSettings;
   /** Let webhooks call addresses on private networks. */
@@ -1365,6 +1365,8 @@ export interface SymptomsSummary {
   triggers: Count[];
   correlations: Correlation[];
   weather: boolean;
+  /** Where the air pressure comes from and how much is kept, or that there's none for the place. */
+  weatherNote?: string | null;
 }
 
 export interface Place {

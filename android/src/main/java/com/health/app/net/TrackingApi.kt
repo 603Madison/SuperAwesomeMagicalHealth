@@ -76,8 +76,8 @@ suspend fun ServerApi.deleteMigraine(id: String) = delete("/api/symptoms/migrain
 
 suspend fun ServerApi.symptomsSummary(days: Int): SymptomsSummary = get("${base()}/api/symptoms/summary?days=$days", SymptomsSummary.serializer())
 
-/** Places matching [query], for the weather (through the server; the app never calls out itself). */
-suspend fun ServerApi.places(query: String): List<Place> = get("${base()}/api/places?q=${enc(query)}", ListSerializer(Place.serializer()))
+/** A US ZIP code's place, for the weather (looked up on the server; nothing is sent anywhere). */
+suspend fun ServerApi.zipPlace(zip: String): Place = get("${base()}/api/places/zip/${enc(zip)}", Place.serializer())
 
 // ---- Habits ----
 

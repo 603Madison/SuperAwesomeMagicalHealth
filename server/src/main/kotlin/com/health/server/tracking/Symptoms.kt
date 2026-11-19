@@ -5,6 +5,7 @@ import com.health.api.Count
 import com.health.api.Insight
 import com.health.api.Migraine
 import com.health.api.Module
+import com.health.api.Place
 import com.health.api.Profile
 import com.health.api.SymptomEntry
 import com.health.api.SymptomsDay
@@ -18,6 +19,7 @@ import com.health.server.modules.CycleService
 import com.health.server.modules.EntryKind
 import com.health.server.modules.EntryStore
 import com.health.server.util.Days
+import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
@@ -109,6 +111,7 @@ class SymptomsService(
             triggers = triggers,
             correlations = correlate(list.associate { LocalDate.parse(it.date) to isSymptomDay(it) }, factors.days),
             weather = factors.weather,
+            weatherNote = factors.weatherNote,
         )
     }
 
@@ -130,7 +133,7 @@ class SymptomsService(
     // ---- What went with symptoms ----
 
     /** Each factor's days: day to whether it applied (missing where unknown). */
-    class Factors(val days: Map<String, Map<LocalDate, Boolean>>, val weather: Boolean)
+    class Factors(val days: Map<String, Map<LocalDate, Boolean>>, val weather: Boolean, val weatherNote: String? = null)
 
     private suspend fun factors(userId: String, profile: Profile, zone: Days, from: LocalDate, to: LocalDate, cycleShown: Boolean = true): Factors {
         val out = linkedMapOf<String, Map<LocalDate, Boolean>>()
@@ -160,8 +163,17 @@ class SymptomsService(
         }
         // Falling air pressure, where the server may ask the weather.
         var usedWeather = false
-        profile.place?.takeIf { weatherAllowed(userId) }?.let { place ->
-            val pressure = runCatching { weather.pressure(place, from.minusDays(1), to) }.getOrDefault(emptyMap())
+        var note: String? = null
+        profile.place?.takeIf { weatherAllowed(userId) && weather.enabled() }?.let { place ->
+            val history = try {
+                weather.pressure(place, from.minusDays(1), to)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Weather.History(emptyMap(), null, null)
+            }
+            note = weatherNote(place, history, to)
+            val pressure = history.days
             if (pressure.isNotEmpty()) {
                 usedWeather = true
                 out["pressure_drop"] = range.mapNotNull { d ->
@@ -171,7 +183,17 @@ class SymptomsService(
                 }.toMap()
             }
         }
-        return Factors(out, usedWeather)
+        return Factors(out, usedWeather, note)
+    }
+
+    /** Where the air pressure comes from and how much there is, or that there's none for [place]. */
+    private fun weatherNote(place: Place, history: Weather.History, today: LocalDate): String = when {
+        history.covered == false -> "The National Weather Service only covers the US, so there's no air pressure for ${place.name}."
+        history.since == null -> "Air pressure comes from the National Weather Service. It keeps only a week, so your history builds from when you set your place."
+        else -> {
+            val days = (java.time.temporal.ChronoUnit.DAYS.between(history.since, today) + 1).coerceAtLeast(1)
+            "Air pressure comes from the National Weather Service. It keeps only a week, so your history builds from when you set your place: $days ${if (days == 1L) "day" else "days"} so far."
+        }
     }
 
     companion object {

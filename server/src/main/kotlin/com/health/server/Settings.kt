@@ -37,7 +37,7 @@ data class ServerSettings(
      * openfoodfacts.org). Off for new servers: USDA FoodData Central is the food database.
      */
     val foodDatabase: Boolean = false,
-    /** Air pressure for symptom patterns, and place search (a rough place goes to open-meteo.com). */
+    /** Air pressure for symptom patterns (a rough place goes to the National Weather Service, api.weather.gov). */
     val weather: Boolean = true,
     /** Where people can turn for support, shown in Mind: set them for where your people live. */
     val crisisResources: List<com.health.api.CrisisResource> = com.health.server.modules.MindService.DEFAULT_RESOURCES,

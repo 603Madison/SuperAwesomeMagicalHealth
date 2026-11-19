@@ -177,7 +177,7 @@ database), and shown to an AI connector only if the person says so when making i
 - **Symptoms & pain**: symptoms with severity, body areas, triggers and what helped, and
   **migraines** with aura, timing and medication. What went with them in your own data: short
   nights, stressful days, caffeine, alcohol, your cycle, and falling **air pressure** (from
-  Open-Meteo, for a rough place you set, if the admin allows it).
+  the US National Weather Service, for the ZIP code you set, if the admin allows it).
 - **Hormone therapy**, of any kind: hormone medications with how long you've been on them and
   every **dose change**, your **levels against the target ranges your clinician set**, and when
   labs are next due.

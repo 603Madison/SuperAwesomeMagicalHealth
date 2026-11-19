@@ -218,9 +218,11 @@ data class SymptomsSummary(
     val correlations: List<Correlation> = emptyList(),
     /** Whether weather (air pressure) was part of the comparison. */
     val weather: Boolean = false,
+    /** Where the air pressure comes from and how much is kept, or that there's none for the place (null: no place, or weather off). */
+    val weatherNote: String? = null,
 )
 
-/** Where the person is, roughly, for the weather (air pressure goes with migraines for some). */
+/** Where the person is, roughly, for the weather (air pressure goes with migraines for some): a US ZIP code's centre, or a place saved before. */
 @Serializable
 data class Place(val name: String, val latitude: Double, val longitude: Double)
 

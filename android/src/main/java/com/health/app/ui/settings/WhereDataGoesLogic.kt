@@ -109,7 +109,7 @@ object WhereDataGoes {
         return if (paused > 0) "$ways · $paused paused" else ways
     }
 
-    /** "On now: Open Food Facts, Open-Meteo and Signing in.", or that nothing is. */
+    /** "On now: Open Food Facts, National Weather Service and Signing in.", or that nothing is. */
     fun summary(map: DataMap): String {
         // "The assistant" reads as "the assistant" after the first.
         val on = map.destinations.filter { it.state == DataPathState.ON }.mapIndexed { i, d -> if (i > 0 && d.name.startsWith("The ")) "the " + d.name.removePrefix("The ") else d.name }

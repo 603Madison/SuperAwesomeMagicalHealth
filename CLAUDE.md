@@ -12,7 +12,8 @@
   write path must call `days.changed…`** for the days it touches (raise `DayStats.VERSION` when
   the way days are worked out changes). The MCP server is `mcp/Mcp.kt`.
 - Server features by package: `modules/` (mind, cycle, continence, medications), `tracking/`
-  (vitals, drinks, symptoms with the weather, habits; stress in `insights/Stress.kt`), `care/`
+  (vitals, drinks, symptoms with the weather from the National Weather Service, places from US ZIP codes in
+  `zip-centroids.csv`, habits; stress in `insights/Stress.kt`), `care/`
   (hormone therapy, life stages, appointments, sharing via the `X-SAMH-View` header, allowlisted
   per path in `SharedView`; every route a share can reach filters what it returns by
   `call.viewScope`, never only by the owner's features), `platform/` (scheduler, web push,

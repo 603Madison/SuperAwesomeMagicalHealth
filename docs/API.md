@@ -412,8 +412,12 @@ entered by hand can be deleted.
 | `GET /api/symptoms/migraines?days=90` · `POST` · `PUT /{id}` · `DELETE /{id}` | `Migraine` (an open one has no `end`) |
 | `GET /api/symptoms/summary?days=90` | `SymptomsSummary`: counts, triggers, and what went with symptoms (sleep, cycle, caffeine, alcohol, stress, air pressure) |
 
-Air pressure comes from Open-Meteo for `Profile.place`, when the admin allows it (`weather`).
-`GET /api/places?q=Leeds` finds places (`[Place]`) for the profile, through the server.
+Air pressure comes from the US National Weather Service (`api.weather.gov`) for `Profile.place`,
+when the admin allows it (`weather`). It keeps only about a week, so the server keeps each day's mean
+(fetched once a day, and when the summary is worked out): history builds from when the place is set.
+`SymptomsSummary.weatherNote` says so, or that there's no data outside the US.
+`GET /api/places/zip/03820` gives a US ZIP code's `Place` (404 if unknown), from the Census
+Bureau's ZCTA centres kept with the server: nothing is sent anywhere.
 
 ### Stress and resilience
 

@@ -293,7 +293,7 @@ export const api = {
   saveMigraine: (m: Migraine) => (m.id ? put<Migraine>(`/api/symptoms/migraines/${q(m.id)}`, m) : post<Migraine>("/api/symptoms/migraines", m)),
   deleteMigraine: (id: string) => del<unknown>(`/api/symptoms/migraines/${q(id)}`),
   symptomsSummary: (days = 90) => get<SymptomsSummary>(`/api/symptoms/summary?days=${days}`),
-  places: (query: string) => get<Place[]>(`/api/places?q=${q(query)}`),
+  zipPlace: (zip: string) => get<Place>(`/api/places/zip/${encodeURIComponent(zip)}`),
 
   // Habits
   habits: (all = false) => get<Habit[]>(`/api/habits${all ? "?all=true" : ""}`),

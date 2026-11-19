@@ -964,9 +964,7 @@ button.row:hover { background: var(--surface-2); }
 .place-chosen { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .place-chosen svg { color: var(--primary); }
 .place-picker { display: flex; flex-direction: column; gap: 6px; }
-.place-results { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; background: var(--surface-2); border-radius: var(--radius-sm); }
-.place-results .link-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; width: 100%; }
-.place-results .link-row:hover { background: var(--surface-3); }
+.place-picker > .btn { align-self: flex-start; }
 
 /* Symptoms */
 .migraine-open {

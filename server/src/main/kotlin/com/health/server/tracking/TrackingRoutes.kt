@@ -87,9 +87,10 @@ fun Route.trackingRoutes(services: Services) {
         get("/{id}/history") { call.respond(t.habits.history(call.requireUser(services).id, call.id(), call.days(90))) }
     }
 
-    get("/api/places") {
-        val user = call.requireUser(services)
-        if (!services.privacy.allows(user.id, com.health.api.DataPath.WEATHER)) throw ApiError.conflict(com.health.server.platform.PrivacyStore.pausedText("The weather"))
-        call.respond(t.weather.places(call.request.queryParameters["q"].orEmpty()))
+    // A US ZIP code's place, from the list kept with the server: nothing is sent anywhere.
+    get("/api/places/zip/{zip}") {
+        call.requireUser(services)
+        if (!t.weather.enabled()) throw ApiError.badRequest("Weather is turned off on this server")
+        call.respond(t.weather.zip(call.parameters["zip"].orEmpty()) ?: throw ApiError.notFound("That isn't a US ZIP code we know"))
     }
 }

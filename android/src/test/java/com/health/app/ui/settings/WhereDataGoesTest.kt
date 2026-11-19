@@ -80,10 +80,10 @@ class WhereDataGoesTest {
             WhereDataGoes.summary(map(way(DataPath.AI_ASSISTANT, DataPathState.ON, name = "The assistant"), way(DataPath.SHARES, DataPathState.ON, name = "The other one"))),
         )
         assertEquals(
-            "On now: Open Food Facts, Open-Meteo and Signing in.",
+            "On now: Open Food Facts, National Weather Service and Signing in.",
             WhereDataGoes.summary(
                 map(
-                    way(DataPath.FOOD_DATABASE, DataPathState.ON, name = "Open Food Facts"), way(DataPath.WEATHER, DataPathState.ON, name = "Open-Meteo"),
+                    way(DataPath.FOOD_DATABASE, DataPathState.ON, name = "Open Food Facts"), way(DataPath.WEATHER, DataPathState.ON, name = "National Weather Service"),
                     way(DataPath.MEALIE, DataPathState.PAUSED), way(DataPath.SIGN_IN, DataPathState.ON, pausable = false, name = "Signing in"),
                 ),
             ),
