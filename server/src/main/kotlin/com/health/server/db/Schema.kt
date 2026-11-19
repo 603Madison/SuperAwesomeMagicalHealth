@@ -398,6 +398,12 @@ object Schema {
             fetched_at INTEGER NOT NULL
         );
         """,
+        // A password an admin set (a new account's, or a reset) is temporary: the person chooses
+        // their own before anything else. When an admin last set it stays, so it can be noticed.
+        """
+        ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN password_set_by_admin_at INTEGER;
+        """,
     )
 
     fun migrate(db: Database) = db.blockingTx {

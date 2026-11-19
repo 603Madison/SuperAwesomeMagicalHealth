@@ -41,7 +41,7 @@ suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean =
     // Someone viewing another account's shared data may only read, and only what can be shared.
     if (request.header(com.health.server.care.SharedView.HEADER) != null) com.health.server.care.SharedView.check(this)
     attributes.getOrNull(PrincipalKey)?.let { resolved ->
-        return resolved.principal?.takeIf { it.session.kind.opensApi(allowUpload) }
+        return resolved.principal?.takeIf { it.session.kind.opensApi(allowUpload) }?.let { passwordChosen(it) }
     }
     val bearer = request.header(HttpHeaders.Authorization)?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }?.substring(7)?.trim()
     val cookie = request.cookies[SESSION_COOKIE]
@@ -54,8 +54,23 @@ suspend fun ApplicationCall.principal(services: Services, allowUpload: Boolean =
         throw ApiError.forbidden("Missing $CSRF_HEADER header")
     }
     attributes.put(PrincipalKey, Resolved(found))
-    return found?.takeIf { it.session.kind.opensApi(allowUpload) }
+    return found?.takeIf { it.session.kind.opensApi(allowUpload) }?.let { passwordChosen(it) }
 }
+
+/**
+ * An admin set this person's password (a new account, or a reset): until they choose their own,
+ * nothing opens but what choosing one needs (who they are, the sign-in setup, signing out).
+ */
+private fun ApplicationCall.passwordChosen(principal: Principal): Principal {
+    if (!principal.user.mustChangePassword) return principal
+    val path = request.local.uri.substringBefore('?')
+    val open = path.startsWith("/api/auth/") || path == "/api/me/password" || (path == "/api/me" && request.local.method == HttpMethod.Get)
+    if (!open) throw ApiError.forbidden(CHOOSE_PASSWORD)
+    return principal
+}
+
+/** Said to every other request while an admin-set password hasn't been changed yet. */
+const val CHOOSE_PASSWORD = "Choose a new password first"
 
 /** Upload routes take upload keys too; a watch's key only ever opens the watch's own routes. */
 private fun SessionKind.opensApi(allowUpload: Boolean) =

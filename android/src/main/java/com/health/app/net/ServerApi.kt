@@ -103,6 +103,15 @@ class ServerApi(
 
     suspend fun me(): Me = get("${base()}/api/me", Me.serializer())
 
+    /** Changes the person's own password (which also ends a temporary one an admin set). */
+    suspend fun changePassword(current: String, new: String) {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("current", kotlinx.serialization.json.JsonPrimitive(current))
+            put("new", kotlinx.serialization.json.JsonPrimitive(new))
+        }
+        send("POST", "${base()}/api/me/password", body.toString(), Unit.serializer())
+    }
+
     // ---- Profile and days ----
 
     suspend fun profile(): Profile = get("${base()}/api/profile", Profile.serializer())

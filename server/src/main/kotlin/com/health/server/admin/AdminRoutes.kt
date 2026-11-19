@@ -70,7 +70,7 @@ fun Route.adminRoutes(services: Services) {
             post {
                 call.requireAdmin(services)
                 val request = call.receive<NewUser>()
-                call.respond(services.users.create(request.username, request.displayName, request.role, request.password))
+                call.respond(services.users.create(request.username, request.displayName, request.role, request.password, byAdmin = true))
             }
             route("/{id}") {
                 patch {
@@ -98,7 +98,7 @@ fun Route.adminRoutes(services: Services) {
                     val id = call.parameters["id"].orEmpty()
                     val user: User = services.users.byId(id) ?: throw ApiError.notFound("No such user")
                     if (user.oidc && !user.hasPassword) throw ApiError.badRequest("${user.username} signs in through single sign-on")
-                    services.users.setPassword(id, call.receive<PasswordReset>().password)
+                    services.users.setPassword(id, call.receive<PasswordReset>().password, byAdmin = true)
                     services.sessions.revokeAll(id)
                     call.respond(mapOf("ok" to true))
                 }

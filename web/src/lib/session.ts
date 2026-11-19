@@ -54,12 +54,13 @@ export const session = {
       api.me().catch((e) => (e instanceof ApiError && e.status === 401 ? null : Promise.reject(e))).catch(() => null),
     ]);
     useSession.setState({ config, user: me?.user ?? null, loading: false });
-    if (me) void session.loadProfile();
+    if (me && !me.user.mustChangePassword) void session.loadProfile();
   },
 
   signedIn(user: User) {
     useSession.setState({ user });
-    void session.loadProfile();
+    // Nothing else opens until a password an admin set is changed (ChoosePassword loads it after).
+    if (!user.mustChangePassword) void session.loadProfile();
   },
 
   setUser(user: User) {

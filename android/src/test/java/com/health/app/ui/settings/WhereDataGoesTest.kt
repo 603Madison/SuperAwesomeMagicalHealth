@@ -70,6 +70,9 @@ class WhereDataGoesTest {
     @Test
     fun `what's on now, in a line`() {
         fun map(vararg ways: DataDestination) = DataMap(ways.toList(), "")
+        // Nothing listed: nothing set up sends anything off the server.
+        assertEquals("Nothing leaves this server right now.", WhereDataGoes.summary(map()))
+        assertEquals("Nothing leaves this server right now", WhereDataGoes.youLine(map()))
         assertEquals("Nothing is on now: nothing about you leaves your server.", WhereDataGoes.summary(map(way(DataPath.MEALIE, DataPathState.PAUSED))))
         assertEquals("On now: Open Food Facts.", WhereDataGoes.summary(map(way(DataPath.FOOD_DATABASE, DataPathState.ON, name = "Open Food Facts"))))
         assertEquals(

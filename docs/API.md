@@ -25,7 +25,7 @@ Errors come back as `{"error": "A message meant for people"}` with a fitting sta
 | `POST /api/auth/app/token` | `AppTokenRequest` → `SignedIn` with the app's token |
 | `GET /api/me` | `Me` |
 | `PATCH /api/me` | `{displayName}` → `User` |
-| `POST /api/me/password` | `{current, new}` |
+| `POST /api/me/password` | `{current, new}`. A password an admin set (`User.mustChangePassword`) must be changed here first: until then every other route but `/api/auth/…` and `GET /api/me` answers 403 "Choose a new password first" |
 | `GET /api/me/sessions` · `DELETE /api/me/sessions/{id}` | Signed-in browsers, apps, upload keys and connector links |
 | `POST /api/me/connectors` | `ConnectorRequest` → `ConnectorLink`: an AI connector (MCP) link, shown once |
 
@@ -753,7 +753,7 @@ reports, exports) is refused with 403. Shares go to existing accounts by usernam
 
 | | |
 |---|---|
-| `GET /api/privacy` | `DataMap`: every way something about the person can leave the server (`DataDestination`: who's at the other end, the `hosts`, what goes and when, its `state`, how many are set up, and `setUp`, where in the apps it's set up), and a `note` on what stays put. Never shared |
+| `GET /api/privacy` | `DataMap`: each way something about the person leaves the server now (only those set up that send something out, and any paused) (`DataDestination`: who's at the other end, the `hosts`, what goes and when, its `state`, how many are set up, and `setUp`, where in the apps it's set up), a `note` on what stays put, and `admins`, what the server's admins can and can't see. Never shared |
 | `PUT /api/privacy/{path}` | `DataPathChange` (`{paused}`) → `DataMap`: pauses or resumes one `DataPath` for this person |
 
 `state` is `ON`, `PAUSED` (set up, but paused by the person: nothing goes), `NOT_SET_UP` or
@@ -820,9 +820,10 @@ kept sealed. Digest emails leave out sensitive features not in `DigestPrefs.emai
 `POST /mcp/<token>` (or `POST /mcp` with `Authorization: Bearer <token>`) speaks the Model
 Context Protocol over Streamable HTTP, answering each JSON-RPC request with plain JSON. Tokens
 come from `POST /api/me/connectors`: `MCP` links read the account's data, `MCP_WRITE` links can
-also log entries, and an admin's `MCP_ALL` link reads every account and the server's log.
-`ConnectorRequest.modules` names the sensitive modules a link may read (and, for `MCP_WRITE`,
-log to); every-account links never see them. `tools/list` describes each tool.
+also log entries. A link only ever reads its own account: `allAccounts` is refused, and an old
+`MCP_ALL` link reads only its own account (never the sensitive modules). An admin's own link also
+gets the server's log and settings. `ConnectorRequest.modules` names the sensitive modules a link
+may read (and, for `MCP_WRITE`, log to). `tools/list` describes each tool.
 
 ## Admin
 

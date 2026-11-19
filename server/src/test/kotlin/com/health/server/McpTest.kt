@@ -82,24 +82,37 @@ class McpTest {
     }
 
     @Test
-    fun `the log is for admins, and other accounts only through an admin's every-account link`() = serverTest {
+    fun `the log is for admins, and no link reads another account`() = serverTest { services ->
         val admin = adminBrowser()
-        admin.postJson("/api/admin/users", """{"username":"robin","password":"robin-password"}""")
+        services.users.create("robin", password = "robin-password")
         val robin = browser()
         robin.post("/api/auth/login") { json("""{"username":"robin","password":"robin-password"}""") }
         val robinUrl = robin.postJson("/api/me/connectors", "{}").obj().str("url").substringAfter("localhost")
         val client = createClient { }
 
         assertTrue(client.call(robinUrl, "server_log").failed())
-        assertTrue(client.call(robinUrl, "status", """{"account":"admin"}""").failed())
+        // Asking for another account reads the link's own.
+        assertTrue(client.call(robinUrl, "status", """{"account":"admin"}""").text().contains("Account: robin"))
 
-        val everyone = admin.postJson("/api/me/connectors", """{"allAccounts":true}""").obj().str("url").substringAfter("localhost")
-        val status = client.call(everyone, "status", """{"account":"robin"}""")
+        // An admin's own link: the server's log and settings, and only the admin's own account.
+        val adminUrl = admin.postJson("/api/me/connectors", "{}").obj().str("url").substringAfter("localhost")
+        val status = client.call(adminUrl, "status", """{"account":"robin"}""")
         assertFalse(status.text(), status.failed())
-        assertTrue(status.text().contains("Account: robin"))
-        assertTrue(status.text().contains("Accounts:"))
-        val log = client.call(everyone, "server_log", """{"contains":"AI connector"}""")
-        assertFalse(log.failed())
+        assertTrue(status.text().contains("Account: admin"))
+        assertFalse(status.text().contains("robin"))
+        assertTrue(status.text().contains("Public address"))
+        assertFalse(client.call(adminUrl, "server_log", """{"contains":"AI connector"}""").failed())
+        val tools = client.post(adminUrl) { json("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""") }.obj()["result"]!!.jsonObject["tools"]!!.jsonArray
+        assertTrue(tools.none { "account" in it.jsonObject["inputSchema"]!!.jsonObject["properties"]!!.jsonObject })
+
+        // An every-account link made before keeps working, reading only its own account.
+        val adminId = services.users.byUsername("admin")!!.id
+        val old = "/mcp/" + services.sessions.create(adminId, com.health.api.SessionKind.MCP_ALL, "AI connector (every account)")
+        val oldStatus = client.call(old, "status", """{"account":"robin"}""")
+        assertFalse(oldStatus.text(), oldStatus.failed())
+        assertTrue(oldStatus.text().contains("Account: admin"))
+        assertFalse(oldStatus.text().contains("Accounts:"))
+        assertFalse(oldStatus.text().contains("robin"))
     }
 
     @Test

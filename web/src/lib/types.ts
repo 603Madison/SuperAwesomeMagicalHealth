@@ -14,6 +14,10 @@ export interface User {
   hasPassword: boolean;
   createdAt: number;
   lastLoginAt?: number;
+  /** An admin set the password: until the person chooses their own, only that (and signing out) works. */
+  mustChangePassword?: boolean;
+  /** When an admin last set the password (a new account's or a reset), so the person can notice. */
+  passwordSetByAdminAt?: number;
 }
 
 export interface SessionInfo {
@@ -2747,6 +2751,8 @@ export interface DataMap {
   destinations: DataDestination[];
   /** What stays put: everything else. */
   note: string;
+  /** What the server's admins can and can't see, said honestly. */
+  admins?: string;
 }
 
 /** Pausing or resuming one way out (PUT /api/privacy/{path}). */

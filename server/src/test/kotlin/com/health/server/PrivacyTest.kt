@@ -22,28 +22,26 @@ class PrivacyTest {
     private fun JsonObject.destinations() = this["destinations"]!!.jsonArray.map { it.jsonObject }.associateBy { it["path"]!!.jsonPrimitive.content }
     private fun JsonObject.state(path: DataPath) = destinations().getValue(path.name)["state"]!!.jsonPrimitive.content
 
+    private fun JsonObject.paths() = this["destinations"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content }
+
     @Test
-    fun `every way out is listed, and pausing one stops it`() = serverTest { s ->
+    fun `only what's set up and sends something out is listed, and pausing one stops it`() = serverTest { s ->
         val me = runBlocking { s.users.byUsername("admin")!!.id }
-        // Open Food Facts, USDA's fallback, is off for new servers: this one has it on.
-        assertEquals("OFF_ON_SERVER", adminBrowser().get("/api/privacy").obj().state(DataPath.FOOD_DATABASE))
+        // A new server sends nothing anywhere: Open Food Facts is off, and USDA, records, Mealie and
+        // the assistant aren't set up, so nothing is listed.
+        val empty = adminBrowser().get("/api/privacy").obj()
+        assertEquals(emptyList<String>(), empty.paths())
+        assertTrue(empty["note"]!!.jsonPrimitive.content.startsWith("Everything else stays on this server"))
+        assertEquals(
+            "This server's admins can't open your health data in the app. Whoever runs the computer it's on could, as with any server.",
+            empty["admins"]!!.jsonPrimitive.content,
+        )
+        // This one has Open Food Facts, USDA's fallback, on.
         runBlocking { s.settings.update { it.copy(foodDatabase = true) } }
         val admin = adminBrowser()
         val map = admin.get("/api/privacy").obj()
-        assertEquals(
-            listOf(
-                "FOOD_DATABASE", "USDA_FOODS", "HEALTH_RECORDS", "WEATHER", "MEALIE", "AI_ASSISTANT", "AI_CONNECTORS", "WEBHOOKS", "BROWSER_PUSH",
-                "EMAIL", "SHARES", "HOME_ASSISTANT",
-            ),
-            map["destinations"]!!.jsonArray.map { it.jsonObject["path"]!!.jsonPrimitive.content },
-        )
+        assertEquals(listOf("FOOD_DATABASE"), map.paths())
         assertEquals("ON", map.state(DataPath.FOOD_DATABASE))
-        // USDA needs a key, and medical records an app registered with Epic or athenahealth: neither is set up here.
-        assertEquals("NOT_SET_UP", map.state(DataPath.USDA_FOODS))
-        assertEquals("OFF_ON_SERVER", map.state(DataPath.HEALTH_RECORDS))
-        assertEquals("NOT_SET_UP", map.state(DataPath.MEALIE))
-        assertEquals("OFF_ON_SERVER", map.state(DataPath.AI_ASSISTANT))
-        assertTrue(map["note"]!!.jsonPrimitive.content.startsWith("Everything else stays on this server"))
 
         // The food database: asked (and, in tests, unreachable) until paused, then never asked; with no
         // USDA key either, search says what it needs.
@@ -83,8 +81,12 @@ class PrivacyTest {
         assertEquals(HttpStatusCode.Forbidden, viewer.get("/api/day/today") { header("X-SAMH-View", me) }.status)
         assertTrue(viewer.get("/api/shares").obj()["received"]!!.jsonArray.isEmpty())
 
-        // The map itself is never shared.
+        // Paused, a share is listed so it can be turned back on; on, it isn't: it stays on this server.
+        assertEquals("PAUSED", admin.get("/api/privacy").obj().state(DataPath.SHARES))
         admin.putJson("/api/privacy/SHARES", """{"paused":false}""")
+        assertFalse("SHARES" in admin.get("/api/privacy").obj().paths())
+
+        // The map itself is never shared.
         assertEquals(HttpStatusCode.Forbidden, viewer.get("/api/privacy") { header("X-SAMH-View", me) }.status)
 
         // Pauses are the person's own, kept sealed.

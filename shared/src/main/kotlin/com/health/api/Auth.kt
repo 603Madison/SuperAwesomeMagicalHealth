@@ -27,13 +27,18 @@ data class User(
     val hasPassword: Boolean = false,
     val createdAt: Long,
     val lastLoginAt: Long? = null,
+    /** An admin set the password: until the person chooses their own, only that (and signing out) works. */
+    val mustChangePassword: Boolean = false,
+    /** When an admin last set the password (a new account's or a reset), so the person can notice. */
+    val passwordSetByAdminAt: Long? = null,
 ) {
     val isAdmin: Boolean get() = role == Role.ADMIN
 }
 
 /**
  * A browser, the app, an upload key (which can only send data in), an AI connector link (MCP):
- * read-only, able to log entries too, or (an admin's) seeing every account; a Home Assistant key
+ * read-only, or able to log entries too (MCP_ALL: an admin's old every-account link, which now
+ * reads only its own account); a Home Assistant key
  * (reads /api/integrations/state only); or the watch app (/api/watch/… only).
  */
 @Serializable
@@ -47,7 +52,7 @@ enum class SessionKind {
 data class ConnectorRequest(
     /** Let the AI log food, water, weight, workouts and check-ins (not only read). */
     val allowLogging: Boolean = false,
-    /** An admin's link that sees every account (read-only, and never sensitive modules). */
+    /** No longer offered: a link only reads its own account. Sent true, it's refused. */
     val allAccounts: Boolean = false,
     val name: String = "",
     /** The sensitive modules (mind, cycle, bladder and bowel, medications, symptoms, hormones, appointments) it may read. */

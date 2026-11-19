@@ -226,7 +226,6 @@ class AiService(private val services: Services) {
         val modules = ready.consent.modules - AiTools.NEVER
         val caller = McpServer.Caller(
             user = user,
-            everyone = false,
             canLog = ready.settings.allowLogging && ready.consent.allowLogging,
             scope = modules.filter { it.sensitive }.toSet(),
             // Water turned off: log_water isn't offered, and the day and trends leave water out.

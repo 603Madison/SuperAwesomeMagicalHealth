@@ -112,7 +112,7 @@ function AddUser({ onClose, onAdded }: { onClose: () => void; onAdded: (u: User)
       <form className="form-stack" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <Field label="Username"><input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" required /></Field>
         <Field label="Name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></Field>
-        <Field label="Password" help="At least 8 characters. They can change it in You › Look and account."><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required /></Field>
+        <Field label="Password" help="At least 8 characters. It's temporary: they choose their own when they first sign in."><input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required /></Field>
         <Toggle label="Admin" help="Admins manage people and these settings." checked={admin} onChange={setAdmin} />
         <button type="submit" hidden />
       </form>
@@ -125,7 +125,7 @@ function ResetPassword({ user, onClose }: { user: User; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const save = async () => {
     setBusy(true);
-    try { await api.resetPassword(user.id, password); toast(`New password set for ${user.username}; they were signed out`); onClose(); }
+    try { await api.resetPassword(user.id, password); toast(`Temporary password set for ${user.username}: they were signed out, and choose their own when they next sign in`); onClose(); }
     catch (e) { errorToast(e); setBusy(false); }
   };
   return (

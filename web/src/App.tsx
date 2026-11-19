@@ -24,6 +24,7 @@ import { startViewing, useViewing } from "./lib/viewing";
 import { api } from "./lib/api";
 import { Button, Menu, Spinner, Toasts, useLoad } from "./components/ui";
 import { Login } from "./pages/Login";
+import { ChoosePassword } from "./pages/ChoosePassword";
 import { ConnectApp } from "./pages/ConnectApp";
 import { WatchSetup } from "./pages/WatchSetup";
 import { Today } from "./pages/Today";
@@ -67,6 +68,8 @@ function Root() {
   if (loading) return <div className="splash"><Spinner size={32} /></div>;
   if (location.pathname === "/login") return user ? <Navigate to={safeReturn(new URLSearchParams(location.search).get("return"))} replace /> : <Login />;
   if (!user) return <Navigate to={`/login?return=${encodeURIComponent(here)}`} replace />;
+  // An admin set the password: the person chooses their own before anything else opens.
+  if (user.mustChangePassword) return <ChoosePassword />;
   if (location.pathname === "/connect-app") return <ConnectApp />;
   if (location.pathname === "/watch-setup") return <WatchSetup />;
   // Calm mode fills the screen, with nothing else around it.

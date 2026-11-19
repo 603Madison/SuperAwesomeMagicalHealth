@@ -161,8 +161,8 @@ export const api = {
   changePassword: (current: string, next: string) => post<unknown>("/api/me/password", { current, new: next }),
   sessions: () => get<SessionInfo[]>("/api/me/sessions"),
   revokeSession: (id: string) => del<unknown>(`/api/me/sessions/${q(id)}`),
-  connector: (allowLogging: boolean, allAccounts: boolean, modules: Module[]) =>
-    post<{ url: string; token: string }>("/api/me/connectors", { allowLogging, allAccounts, modules }),
+  connector: (allowLogging: boolean, modules: Module[]) =>
+    post<{ url: string; token: string }>("/api/me/connectors", { allowLogging, modules }),
 
   profile: () => get<Profile>("/api/profile"),
   /** While viewing a share, the owner's profile as shared (their time zone, for their days). */

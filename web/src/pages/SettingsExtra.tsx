@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Bell, Clock, Copy, Eye, Home, Lock, LogOut, Mail, Pencil, Plus, Send, ShieldCheck, Trash2, UserPlus, Webhook as WebhookIcon } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
-import { countText, pausedToast, setUpPage, setUpSection, stateText, switchable, withPaused } from "../lib/privacy";
+import { NOTHING_LEAVES, countText, pausedToast, setUpPage, setUpSection, stateText, switchable, withPaused } from "../lib/privacy";
 import { disablePush, enablePush, pushEnabledHere, pushPermission, pushSupported, thisBrowserPushId } from "../lib/push";
 import { session, useSession } from "../lib/session";
 import { startViewing } from "../lib/viewing";
@@ -531,10 +531,11 @@ export function PrivacySettings({ where }: { where: (section: string) => Setting
   };
   return (
     <div className="form-stack">
-      <p className="muted">Everything you record is kept on this server. These are the only ways anything about you can leave it. Turn one off to pause it: what you've set up stays, and nothing goes until you turn it back on.</p>
+      <p className="muted">Everything you record is kept on this server. Listed here is each way something about you leaves it now. Turn one off to pause it: what you've set up stays, and nothing goes until you turn it back on.</p>
       {error && <ErrorNotice message={error} onRetry={reload} />}
       {loading && !data && <Spinner />}
-      {data && (
+      {data && data.destinations.length === 0 && <p><strong>{NOTHING_LEAVES}</strong></p>}
+      {data && data.destinations.length > 0 && (
         <ul className="privacy-list">
           {data.destinations.map((d) => (
             <Destination key={d.path} d={d} saving={saving === d.path} where={where} onToggle={(allowed) => void toggle(d, allowed)} />
@@ -542,6 +543,7 @@ export function PrivacySettings({ where }: { where: (section: string) => Setting
         </ul>
       )}
       {data?.note && <p className="privacy-note"><ShieldCheck size={18} aria-hidden="true" /><span>{data.note}</span></p>}
+      {data?.admins && <p className="privacy-note"><ShieldCheck size={18} aria-hidden="true" /><span>{data.admins}</span></p>}
     </div>
   );
 }
