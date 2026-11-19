@@ -5,7 +5,9 @@ import com.health.api.AiChatRequest
 import com.health.api.AiConsent
 import com.health.api.AiKey
 import com.health.api.AiSettings
+import com.health.api.ApiJson
 import com.health.api.Meal
+import com.health.api.PortionFood
 import com.health.server.ApiError
 import com.health.server.Services
 import com.health.server.auth.requireAdmin
@@ -99,6 +101,42 @@ fun Route.aiRoutes(services: Services) {
             val picture = photo ?: throw ApiError.badRequest("Send the picture as `photo`")
             call.response.header(HttpHeaders.CacheControl, "no-store")
             call.respond(services.ai.foodPhoto(user, picture, meal, note))
+        }
+        // "How much did I have?": a photo (and the package's, if sent) with the food being added, as servings. Nothing keeps the photos.
+        post("/portion") {
+            val user = call.requireUser(services)
+            call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()?.let {
+                if (it > 2L * Images.MAX_BYTES + 256 * 1024) throw ApiError(HttpStatusCode.PayloadTooLarge, "Photos can be up to 20 MB")
+            }
+            var photo: ByteArray? = null
+            var pack: ByteArray? = null
+            var food: PortionFood? = null
+            var note: String? = null
+            call.receiveMultipart(formFieldLimit = Images.MAX_BYTES + 256 * 1024L).forEachPart { part ->
+                try {
+                    when {
+                        part is PartData.FileItem && (part.name == "photo" || part.name == "package") -> {
+                            val read = part.provider().readRemaining(Images.MAX_BYTES + 1L).readByteArray()
+                            if (read.size > Images.MAX_BYTES) throw ApiError(HttpStatusCode.PayloadTooLarge, "Photos can be up to 20 MB")
+                            if (part.name == "photo") photo = read else pack = read
+                        }
+                        part is PartData.FormItem && part.name == "food" -> food = try {
+                            ApiJson.decodeFromString(PortionFood.serializer(), part.value.take(4_000))
+                        } catch (e: kotlinx.serialization.SerializationException) {
+                            throw ApiError.badRequest("Send the food as `food`: its name and serving")
+                        } catch (e: IllegalArgumentException) {
+                            throw ApiError.badRequest("Send the food as `food`: its name and serving")
+                        }
+                        part is PartData.FormItem && part.name == "note" -> note = part.value.trim().ifEmpty { null }
+                    }
+                } finally {
+                    part.dispose()
+                }
+            }
+            val picture = photo ?: throw ApiError.badRequest("Send the picture as `photo`")
+            val what = food ?: throw ApiError.badRequest("Send the food as `food`: its name and serving")
+            call.response.header(HttpHeaders.CacheControl, "no-store")
+            call.respond(services.ai.portion(user, picture, pack, what, note))
         }
         get("/audit") {
             val user = call.requireUser(services)

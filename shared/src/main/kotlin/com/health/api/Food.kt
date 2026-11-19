@@ -181,6 +181,10 @@ data class Food(
     val ref: String? = null,
     /** Where to see it there (a Mealie recipe's page); not kept with the person's foods. */
     val link: String? = null,
+    /** The whole package in grams, when the food database says; not kept with the person's foods. */
+    val packageGrams: Double? = null,
+    /** A Mealie recipe's yield (servings it makes); not kept with the person's foods. */
+    val recipeServings: Double? = null,
 )
 
 /** One thing eaten: [servings] of a food, with the nutrients that amount holds. */

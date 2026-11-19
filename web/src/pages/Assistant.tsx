@@ -252,7 +252,7 @@ export function AssistantSent() {
               <tbody>
                 {[...audit.data].sort((a, b) => b.at - a.at).map((a, i) => (
                   <tr key={i}>
-                    <td>{when(a.at)}</td><td>{a.kind === "breakdown" ? "Break down a task" : a.kind === "food_photo" ? "Food photo" : "Question"}</td>
+                    <td>{when(a.at)}</td><td>{a.kind === "breakdown" ? "Break down a task" : a.kind === "food_photo" ? "Food photo" : a.kind === "portion" ? "How much did I have?" : "Question"}</td>
                     <td>{a.modules.map(featureName).join(", ") || "None"}</td><td>{a.model}</td>
                     <td>{a.inputTokens + a.outputTokens > 0 ? `${a.inputTokens.toLocaleString()} in, ${a.outputTokens.toLocaleString()} out` : "–"}</td>
                   </tr>

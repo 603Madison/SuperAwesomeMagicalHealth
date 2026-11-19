@@ -13,7 +13,7 @@ import type {
   EnergyFocusSettings,
   Routine, RoutineRun, CommunicationCard, NeuroSummary, TransitionOverview, TransitionProfile, MilestoneTemplate, Milestone,
   BodyChange, VoiceSession, HairRemovalSession, GenderMoment, Photo, PhotoAlbum, AiSettings, AiStatus, AiConsent, AiMessage,
-  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices, FoodPhotoEstimate,
+  AiChatReply, AiBreakdownReply, AiAuditEntry, LayoutPrefs, ScreenLayout, VoicePlan, VoiceProgram, VoiceProgress, DeviceChoices, FoodPhotoEstimate, PortionEstimate, PortionFood,
   NutrientTargets, RecentReadings, DeviceComparison, DataMap, DataPath, HealthAlerts, HealthAlert, AlertSettings, AlertFeedback,
 } from "./types";
 import { viewingOwner } from "./viewing";
@@ -506,6 +506,16 @@ export const api = {
     if (meal) form.append("meal", meal);
     if (note?.trim()) form.append("note", note.trim());
     return post<FoodPhotoEstimate>("/api/ai/food-photo", form);
+  },
+  /** "How much did I have?": a photo (and the package's, if given), already shrunk here, as servings of the food. */
+  aiPortion: (photo: Blob, pack: Blob | null, food: PortionFood, note?: string) => {
+    if (viewingOwner()) return Promise.reject(new ApiError(403, "You're looking at someone else's data, so nothing can be changed here."));
+    const form = new FormData();
+    form.append("food", JSON.stringify(food));
+    if (note?.trim()) form.append("note", note.trim());
+    form.append("photo", photo, "food.jpg");
+    if (pack) form.append("package", pack, "package.jpg");
+    return post<PortionEstimate>("/api/ai/portion", form);
   },
 
   users: () => get<User[]>("/api/admin/users"),

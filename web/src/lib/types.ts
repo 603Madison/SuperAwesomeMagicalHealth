@@ -370,6 +370,10 @@ export interface Food {
   ref?: string;
   /** Its page there (a Mealie recipe). */
   link?: string;
+  /** The whole package in grams, when the food database says. */
+  packageGrams?: number;
+  /** A Mealie recipe's yield: how many servings it makes. */
+  recipeServings?: number;
 }
 
 export interface FoodEntry {
@@ -2597,6 +2601,26 @@ export interface FoodPhotoEstimate {
   usedToday: number;
   /** Eating-disorder recovery: show foods and portions without calorie or macro numbers (they're still here, for logging). */
   hideNumbers: boolean;
+}
+
+/** The food in POST /api/ai/portion: only these words go with the photo (PortionFood). */
+export interface PortionFood {
+  name: string;
+  serving: string;
+  servingGrams?: number;
+  brand?: string;
+  packageGrams?: number;
+  recipeServings?: number;
+}
+
+/** POST /api/ai/portion (multipart: photo, package?, food, note?): how many servings the photo shows. */
+export interface PortionEstimate {
+  servings: number;
+  /** One short sentence on how it judged it. */
+  note: string;
+  /** Couldn't tell (note says what to try); servings is 0. */
+  refused: boolean;
+  usedToday: number;
 }
 
 // ---------------------------------------------------------------- Arranging screens (Layouts.kt)

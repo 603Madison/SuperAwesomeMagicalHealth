@@ -54,6 +54,7 @@ import com.health.api.Food
 import com.health.api.Meal
 import com.health.api.Nutrients
 import com.health.app.attempt
+import com.health.app.net.portion
 import com.health.app.ui.Format
 import com.health.app.ui.care.LocalReadOnly
 import com.health.app.ui.components.BackBar
@@ -86,6 +87,8 @@ class AddFoodActions(
     val openLink: (String) -> Unit = {},
     /** Opens Settings › Where your data goes (where Mealie or the assistant is paused). */
     val privacy: () -> Unit = {},
+    /** "How much did I have?" from a photo, in the servings dialog (PortionPhoto); none: not offered. */
+    val portion: PortionAsk? = null,
 )
 
 @Composable
@@ -123,6 +126,7 @@ fun AddFoodRoute(date: LocalDate, meal: Meal, onDone: () -> Unit, onPrivacy: () 
             snap = { snapping = true },
             openLink = { link -> attempt { uri.openUri(link) } },
             privacy = onPrivacy,
+            portion = { photo, pack, food, note -> c.api.portion(photo, pack, food, note) },
         ),
         numbers = com.health.app.ui.components.foodNumbers(),
         micros = showsMicros(),
@@ -221,7 +225,8 @@ fun AddFoodScreen(meal: Meal, state: AddFoodState, actions: AddFoodActions, numb
     }
 
     state.picked?.let { food ->
-        ServingsDialog(food, numbers, micros, makes = MealieText.makes(food, state.mealie?.items.orEmpty()), onDismiss = { actions.pick(null) }) { actions.add(food, it) }
+        ServingsDialog(food, numbers, micros, makes = MealieText.makes(food, state.mealie?.items.orEmpty()), onDismiss = { actions.pick(null) },
+            portion = actions.portion.takeIf { state.photoOffer == PhotoOffer.READY }) { actions.add(food, it) }
     }
     state.unknownBarcode?.let { code ->
         AlertDialog(
@@ -265,7 +270,7 @@ fun FoodRow(food: Food, numbers: Boolean = true, micros: Boolean = false, onClic
  * food don't show: [numbers]). A Mealie recipe says how many servings it [makes], when known.
  */
 @Composable
-fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false, makes: Double? = null, onDismiss: () -> Unit, onAdd: (Double) -> Unit) {
+fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false, makes: Double? = null, onDismiss: () -> Unit, portion: PortionAsk? = null, onAdd: (Double) -> Unit) {
     var servings by remember { mutableDoubleStateOf(1.0) }
     var text by remember { mutableStateOf("1") }
     fun set(v: Double) {
@@ -293,6 +298,7 @@ fun ServingsDialog(food: Food, numbers: Boolean = true, micros: Boolean = false,
                     FilledTonalIconButton(onClick = { set(servings + 0.25) }) { Icon(Icons.Rounded.Add, "More") }
                 }
                 Hint(MealieText.servingLine(food, makes))
+                portion?.let { ask -> PortionPhoto(food, makes, ask) { v -> servings = v; text = PortionText.text(v) } }
                 if (numbers) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {

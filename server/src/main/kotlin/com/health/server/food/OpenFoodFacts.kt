@@ -73,7 +73,7 @@ class OpenFoodFacts(
         .build()
 
     companion object {
-        private const val FIELDS = "code,lang,product_name,product_name_en,brands,nutriments,serving_size,serving_quantity"
+        private const val FIELDS = "code,lang,product_name,product_name_en,brands,nutriments,serving_size,serving_quantity,product_quantity,product_quantity_unit"
 
         /**
          * A product as a food: per serving where the label gives one, else per 100 g. Its English
@@ -99,6 +99,9 @@ class OpenFoodFacts(
                 micros = micros(n, "_100g"),
             )
             val grams = product.number("serving_quantity")?.takeIf { it > 0 && it < 2000 }
+            // The whole package (grams, or millilitres: close enough), for judging how much a photo shows.
+            val unit = product.text("product_quantity_unit")?.trim()?.lowercase()
+            val pack = product.number("product_quantity")?.takeIf { it > 0 && it < 100_000 && (unit.isNullOrEmpty() || unit == "g" || unit == "ml") }
             val label = product.text("serving_size")?.trim()?.takeIf { it.isNotEmpty() && it.length <= 60 }
             val brand = when (val b = product["brands"]) {
                 is JsonArray -> (b.firstOrNull() as? JsonPrimitive)?.contentOrNull
@@ -127,6 +130,7 @@ class OpenFoodFacts(
                 brand = brand,
                 barcode = product.text("code")?.filter { it.isDigit() }?.takeIf { it.isNotEmpty() },
                 source = FoodSource.OPEN_FOOD_FACTS,
+                packageGrams = pack,
             )
         }
 

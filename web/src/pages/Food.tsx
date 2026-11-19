@@ -15,6 +15,7 @@ import { DrinksCard } from "./Drinks";
 import { useReadOnly } from "../lib/viewing";
 import { amountText, logSuggestion } from "../components/Insights";
 import { FoodPhotoFlow, SnapPhoto } from "./FoodPhoto";
+import { PortionPhoto } from "./PortionPhoto";
 import { CarriedLine, CarriedList, MicrosCard, MoreNutrients } from "./FoodMicros";
 import { scaled, typedNutrients, type NutrientKey } from "../lib/micros";
 import { sourceGroups, sourceName } from "../lib/foodSources";
@@ -387,6 +388,7 @@ function Servings({ food, date, meal, numbers, micros, onBack, onClose, onAdded 
         ) : <div />}
         <button type="submit" hidden />
       </form>
+      <PortionPhoto food={food} onServings={(c) => { setServings(String(c)); if (food.servingGrams) setGrams(String(Math.round(c * food.servingGrams))); }} />
       {numbers && <div className="amounts">
         <div className="stat"><div className="stat-label">Calories</div><div className="stat-value">{num(n.calories)}</div></div>
         <div className="stat"><div className="stat-label">Protein</div><div className="stat-value">{num(n.protein, 1)}<span className="stat-unit">g</span></div></div>

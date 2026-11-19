@@ -237,6 +237,8 @@ class FoodStore(private val db: Database, private val clock: () -> Long = System
                 serving = food.serving.trim().take(80).ifBlank { "1 serving" },
                 ref = food.ref?.trim()?.take(120)?.ifBlank { null },
                 link = null,
+                packageGrams = null,
+                recipeServings = null,
                 servingGrams = food.servingGrams?.takeIf { it.isFinite() && it > 0 && it < 10_000 },
                 // What the person typed must make sense; a food database's odd values are left out.
                 nutrients = checked(food.nutrients, strict = food.source == FoodSource.CUSTOM),

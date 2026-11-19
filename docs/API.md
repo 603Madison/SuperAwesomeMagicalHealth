@@ -680,6 +680,7 @@ in. What it looks at is sent to Anthropic, under Anthropic's commercial terms an
 | `POST /api/ai/chat` | `AiChatRequest` → `AiChatReply` (with what it looked at) |
 | `POST /api/ai/breakdown` | `AiBreakdownRequest` → `AiBreakdownReply` (a task's text only) |
 | `POST /api/ai/food-photo` | multipart: `photo` (JPEG, PNG or WebP, up to 20 MB), optional `meal` (`Meal`) and `note` → `FoodPhotoEstimate` |
+| `POST /api/ai/portion` | multipart: `photo`, optional `package` (each JPEG, PNG or WebP, up to 20 MB), `food` (`PortionFood` JSON) and optional `note` → `PortionEstimate` |
 | `GET /api/ai/audit?days=30` | `[AiAuditEntry]` |
 
 **Food photo estimates.** With Food among the features the person allowed, `POST /api/ai/food-photo`
@@ -696,6 +697,16 @@ tokens. With the condition `eating-disorder`, `hideNumbers` is true: the apps sh
 portions without calorie or macro numbers (the numbers are still there, for logging). Nothing is
 logged until the person checks the estimate and logs it with `POST /api/food/entries`. Someone
 viewing a share can't send one.
+
+**How much did I have?** With the same gates (the assistant on, the person's consent with Food,
+and the assistant not paused in Where your data goes), `POST /api/ai/portion` sends a photo of
+what's being eaten (and the package's, if given) with the food's words only: its name, brand,
+serving label and grams, the package size (`Food.packageGrams`, from Open Food Facts) and a
+Mealie recipe's yield (`Food.recipeServings`). It returns `servings` (above 0, at most 50, to two
+places) and one short `note`; `refused: true` (with `servings` 0) means it couldn't tell. The
+photos go through the same pipeline as food photos and are never kept. It counts towards the
+day's limit and the audit log records `portion`, Food, the model and the tokens. The apps prefill
+the servings field with it; nothing is logged until the person adds the food.
 
 ## Medical records
 

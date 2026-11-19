@@ -116,7 +116,7 @@ class PrivacyService(private val services: Services) {
             DataDestination(
                 DataPath.AI_ASSISTANT, "The assistant", "Anthropic, who make Claude",
                 hosts = listOf("api.anthropic.com"),
-                what = "What you ask it and the readings it looks up to answer (only the features you let it read), and food photos you send it.",
+                what = "What you ask it and the readings it looks up to answer (only the features you let it read), and food photos you send it (to estimate a meal, or how much of a food you had).",
                 whenSent = "Only when you ask it something or snap a meal",
                 state = state(DataPath.AI_ASSISTANT, ai.consent != null, ai.available), setUp = "settings.ai",
             ),

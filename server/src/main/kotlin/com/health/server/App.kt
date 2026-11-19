@@ -59,6 +59,7 @@ private val log = LoggerFactory.getLogger("samh")
 fun bodyLimitFor(path: String): Long = when {
     path == "/api/import/fit" -> 101L * 1024 * 1024
     path == "/api/photos" || path == "/api/ai/food-photo" -> com.health.server.photos.Images.MAX_BYTES + 1024L * 1024
+    path == "/api/ai/portion" -> 2L * com.health.server.photos.Images.MAX_BYTES + 1024L * 1024
     path == "/api/ingest" -> 32L * 1024 * 1024
     else -> 4L * 1024 * 1024
 }

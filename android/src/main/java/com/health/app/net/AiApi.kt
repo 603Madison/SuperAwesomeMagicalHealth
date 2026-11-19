@@ -8,6 +8,8 @@ import com.health.api.AiStatus
 import com.health.api.ApiJson
 import com.health.api.FoodPhotoEstimate
 import com.health.api.Meal
+import com.health.api.PortionEstimate
+import com.health.api.PortionFood
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 
@@ -40,3 +42,15 @@ internal fun foodPhotoParts(jpeg: ByteArray, meal: Meal?, note: String?): List<S
 /** A photo of a meal, estimated by the assistant (never kept by the server). Can take a while. */
 suspend fun ServerApi.foodPhoto(jpeg: ByteArray, meal: Meal?, note: String?): FoodPhotoEstimate =
     multipart("/api/ai/food-photo", foodPhotoParts(jpeg, meal, note), FoodPhotoEstimate.serializer(), readTimeoutSeconds = 180)
+
+/** The parts of "How much did I have?": the food's words as `food`, a note, the photo, and the package's if taken (both already shrunk). */
+internal fun portionParts(jpeg: ByteArray, pack: ByteArray?, food: PortionFood, note: String?): List<ServerApi.Part> = listOfNotNull(
+    ServerApi.Part("food", text = ApiJson.encodeToString(PortionFood.serializer(), food)),
+    note?.trim()?.takeIf { it.isNotEmpty() }?.let { ServerApi.Part("note", text = it.take(200)) },
+    ServerApi.Part("photo", bytes = jpeg, fileName = "food.jpg", type = "image/jpeg"),
+    pack?.let { ServerApi.Part("package", bytes = it, fileName = "package.jpg", type = "image/jpeg") },
+)
+
+/** How many servings of a food a photo shows, estimated by the assistant (the photos are never kept). Nothing is logged. */
+suspend fun ServerApi.portion(jpeg: ByteArray, pack: ByteArray?, food: PortionFood, note: String?): PortionEstimate =
+    multipart("/api/ai/portion", portionParts(jpeg, pack, food, note), PortionEstimate.serializer(), readTimeoutSeconds = 180)

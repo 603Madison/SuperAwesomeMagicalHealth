@@ -532,6 +532,7 @@ fun AiAuditScreen(audit: List<AiAuditEntry>?, zone: ZoneId, onBack: () -> Unit, 
                                 CareFormat.dayTime(a.at, zone) + " · " + when (a.kind) {
                                     "chat" -> "A question"
                                     "food_photo" -> "A food photo"
+                                    "portion" -> "How much did I have?"
                                     "breakdown" -> "Breaking down a task"
                                     else -> a.kind.replaceFirstChar { it.uppercase() }
                                 },

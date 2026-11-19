@@ -395,7 +395,7 @@ fun FoodPhotoCapture(meal: Meal, state: FoodPhotoState, actions: FoodPhotoAction
 
 /** The camera, in memory: the picture goes straight to [onTaken] with how far to turn it. */
 @Composable
-private fun FoodCamera(onTaken: (ByteArray, Int) -> Unit) {
+internal fun FoodCamera(onTaken: (ByteArray, Int) -> Unit) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     var busy by remember { mutableStateOf(false) }

@@ -286,7 +286,7 @@ class MealieService(
             val servings = json.num("recipeServings")?.takeIf { it > 0 } ?: json.num("recipeYieldQuantity")?.takeIf { it > 0 }
             val link = saved.groupSlug?.let { "${saved.url}/g/$it/r/$slug" } ?: "${saved.url}/recipe/$slug"
             val food = nutrients(json["nutrition"] as? JsonObject)?.let {
-                Food(name = name, nutrients = it, serving = "1 serving", source = FoodSource.MEALIE, ref = "mealie:$id", link = link)
+                Food(name = name, nutrients = it, serving = "1 serving", source = FoodSource.MEALIE, ref = "mealie:$id", link = link, recipeServings = servings)
             }
             return MealieRecipe(slug, name, food, servings, link)
         }

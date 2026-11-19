@@ -39,6 +39,8 @@ import com.health.api.FoodPhotoItem
 import com.health.api.Meal
 import com.health.api.Metric
 import com.health.api.Module
+import com.health.api.PortionEstimate
+import com.health.api.PortionFood
 import com.health.api.RoutineStep
 import com.health.api.User
 import com.health.server.ApiError
@@ -496,6 +498,52 @@ class AiService(private val services: Services) {
         val items = FoodPhoto.items(reading)
         val notes = reading.notes.trim().take(300).ifEmpty { if (items.isEmpty()) FoodPhoto.NOTHING_SEEN else "" }
         return FoodPhotoEstimate(withMatches(user.id, items), notes, refused = false, usedToday = used, hideNumbers = hide)
+    }
+
+    /**
+     * "How much did I have?": a photo of what's being eaten (and its package, if sent) with the food
+     * being added, judged as a number of servings. The photos go upright, shrunk and without their
+     * details, as with [foodPhoto], and are never kept.
+     */
+    suspend fun portion(user: User, photo: ByteArray, pack: ByteArray?, food: PortionFood, note: String?): PortionEstimate = withSlot(user) { ready ->
+        if (Module.NUTRITION !in ready.consent.modules - AiTools.NEVER) {
+            throw ApiError.forbidden("Let the assistant see Food first, in Settings › AI assistant")
+        }
+        if (food.name.isBlank()) throw ApiError.badRequest("Say which food it is")
+        val images = withContext(Dispatchers.Default) { listOfNotNull(photo, pack).map { Images.shrunk(it, FoodPhoto.SIDE) } }.map { jpeg ->
+            BetaContentBlockParam.ofImage(
+                BetaImageBlockParam.builder()
+                    .source(BetaBase64ImageSource.builder().mediaType(BetaBase64ImageSource.MediaType.IMAGE_JPEG).data(Base64.getEncoder().encodeToString(jpeg)).build())
+                    .build(),
+            )
+        }
+        val response = send(ready.key) { messages ->
+            messages.create(
+                base(ready.settings.model, Portion.MAX_TOKENS)
+                    .systemOfBetaTextBlockParams(listOf(BetaTextBlockParam.builder().text(Portion.SYSTEM_PROMPT).build()))
+                    .outputConfig(
+                        StructuredOutputConfig.builder<Portion.Reading>()
+                            .format(Portion.Reading::class.java)
+                            .effort(BetaOutputConfig.Effort.of(ready.settings.effort))
+                            .build(),
+                    )
+                    .addUserMessageOfContentBlockParams(images + BetaContentBlockParam.ofText(Portion.request(food, pack != null, note?.take(MAX_NOTE_CHARS))))
+                    .build(),
+            )
+        }
+        val usage = response.usage()
+        store.audit(user.id, AiAuditEntry(services.clock(), "portion", setOf(Module.NUTRITION), emptyList(), response.model().asString(), usage.inputTokens().toInt(), usage.outputTokens().toInt()))
+        val used = ready.used + 1
+        val reading = when (response.stopReason().orElse(null)) {
+            BetaStopReason.REFUSAL, BetaStopReason.MAX_TOKENS -> null
+            // Only the kind of problem is logged: the log keeps no words.
+            else -> runCatching { response.content().firstNotNullOfOrNull { it.text().orElse(null) }?.text() }
+                .onFailure { log.warn("A portion estimate couldn't be read ({})", it.javaClass.simpleName) }
+                .getOrNull()
+        }
+        val servings = reading?.let(Portion::servings)
+            ?: return PortionEstimate(note = reading?.let(Portion::note)?.ifEmpty { null } ?: Portion.COULD_NOT, refused = true, usedToday = used)
+        return PortionEstimate(servings, Portion.note(reading), refused = false, usedToday = used)
     }
 
     /** Each item with the person's own food of a similar name, if they've logged one. */

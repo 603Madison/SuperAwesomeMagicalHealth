@@ -87,6 +87,42 @@ data class AiBreakdownReply(val steps: List<RoutineStep>)
 @Serializable
 data class AiAuditEntry(val at: Long, val kind: String, @Serializable(with = ModuleSetSerializer::class) val modules: Set<Module>, val tools: List<String>, val model: String, val inputTokens: Int = 0, val outputTokens: Int = 0)
 
+/**
+ * The food in POST /api/ai/portion (the `food` part): what's being added, so the assistant can
+ * judge the amount in a photo. Only these words go with the photo, never the food's numbers.
+ */
+@Serializable
+data class PortionFood(
+    val name: String,
+    /** One serving's label: "1 bar (40 g)", "1 serving". */
+    val serving: String = "1 serving",
+    val servingGrams: Double? = null,
+    val brand: String? = null,
+    /** The whole package, when the food database says (Open Food Facts' quantity). */
+    val packageGrams: Double? = null,
+    /** A Mealie recipe's yield: how many servings the whole recipe makes. */
+    val recipeServings: Double? = null,
+) {
+    companion object {
+        fun of(food: Food) = PortionFood(food.name, food.serving, food.servingGrams, food.brand, food.packageGrams, food.recipeServings)
+    }
+}
+
+/**
+ * POST /api/ai/portion (multipart: `photo`, optional `package`, and `food` as [PortionFood] JSON):
+ * how many servings the photo shows, to prefill the servings field for the person to check. The
+ * photos go to Anthropic for this and aren't kept. [refused] means it couldn't tell ([note] says
+ * what to try) and [servings] is 0.
+ */
+@Serializable
+data class PortionEstimate(
+    val servings: Double = 0.0,
+    /** One short sentence on how it judged it. */
+    val note: String = "",
+    val refused: Boolean = false,
+    val usedToday: Int = 0,
+)
+
 /** How close a food photo's estimate is likely to be. */
 @Serializable
 enum class EstimateConfidence(val label: String) { LOW("A rough guess"), MEDIUM("A fair guess"), HIGH("A close guess") }
