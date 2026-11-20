@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -37,8 +38,15 @@ object OrchestratorSteps {
     }
 
     sealed interface Step {
-        /** Hand the ticket to the app's server at [url], and carry on into the app. */
-        data class HandIn(val url: String, val ticket: String) : Step
+        /** Hand the ticket to the app's server, and carry on into the app. */
+        data class HandIn(val ticket: OrchestratorLink.SignIn.Ticket) : Step
+
+        /**
+         * The orchestrator app can't yet be told from an impostor, and the person hasn't agreed to
+         * this server through it: show the button with [url]'s host under it and wait for a tap.
+         * The app syncs to whatever server it signs in to, so this is never skipped.
+         */
+        data class Confirm(val url: String) : Step
 
         /** Open the orchestrator's page asking whether this app may sign in as them, now. */
         data class AskApproval(val intent: Intent) : Step
@@ -58,22 +66,47 @@ object OrchestratorSteps {
     fun asksAtStart(signedIn: Boolean, signedOutOnPurpose: Boolean, triedAlready: Boolean): Boolean =
         !signedIn && !signedOutOnPurpose && !triedAlready
 
-    fun next(answer: OrchestratorLink.SignIn, why: Why): Step = when (answer) {
-        is OrchestratorLink.SignIn.Ticket -> Step.HandIn(answer.url, answer.ticket)
+    /**
+     * [shownUrl]: the server whose address the button is showing, if any. A ticket that needs
+     * confirming is only used on a tap, and only for the very address the person was looking at
+     * when they tapped (tickets are short-lived, so the tap asks for a fresh one: if that names
+     * another server, the new address is shown and nothing is used).
+     */
+    fun next(answer: OrchestratorLink.SignIn, why: Why, shownUrl: String? = null): Step = when (answer) {
+        is OrchestratorLink.SignIn.Ticket -> when {
+            !answer.confirm -> Step.HandIn(answer)
+            why == Why.TAPPED && shownUrl == answer.url -> Step.HandIn(answer)
+            else -> Step.Confirm(answer.url)
+        }
         // Its page only opens when the person asked for it; never by itself, and never twice in a row.
         is OrchestratorLink.SignIn.NeedsApproval -> if (why == Why.TAPPED) Step.AskApproval(answer.intent) else Step.OfferApproval(answer.intent)
         is OrchestratorLink.SignIn.Unavailable -> Step.Usual
     }
 
-    /** The button's words on the sign-in screen, or null for no button. */
-    fun label(approvalWaiting: Boolean, status: OrchestratorLink.Status?): String? {
+    /**
+     * The button's words on the sign-in screen, or null for no button. [confirming]: a ticket is
+     * waiting for the person to agree to its server. (The orchestrator only tells who is signed in
+     * once this app has been approved there: until then there's no name to show.)
+     */
+    fun label(approvalWaiting: Boolean, status: OrchestratorLink.Status?, confirming: Boolean = false): String? {
         val name = status?.takeIf { it.signedIn }?.let { it.displayName.ifBlank { it.username } }.orEmpty().trim()
         return when {
             approvalWaiting -> WITH_ORCHESTRATOR
-            status?.signedIn != true -> null
-            name.isEmpty() -> WITH_ORCHESTRATOR
-            else -> "Continue as $name"
+            name.isNotEmpty() -> "Continue as $name"
+            confirming || status?.signedIn == true -> WITH_ORCHESTRATOR
+            else -> null
         }
+    }
+
+    /** "at health.example.com": the server a tap would sign in to, said under the button. */
+    fun place(url: String): String {
+        val address = url.toHttpUrlOrNull()
+        val host = when {
+            address == null -> url
+            address.port == okhttp3.HttpUrl.defaultPort(address.scheme) -> address.host
+            else -> "${address.host}:${address.port}"
+        }
+        return "at $host"
     }
 
     const val WITH_ORCHESTRATOR = "Continue with SuperAwesomeMagicalOrchestrator"
@@ -84,6 +117,9 @@ interface OrchestratorAgent {
     fun status(): OrchestratorLink.Status?
 
     fun signIn(): OrchestratorLink.SignIn
+
+    /** The person agreed to sign in to [ticket]'s server through the orchestrator app as it is now. */
+    fun confirmed(ticket: OrchestratorLink.SignIn.Ticket)
 }
 
 /**
@@ -99,8 +135,12 @@ class OrchestratorSignIn(
     private val prefs: Prefs,
     private val deviceName: () -> String = SignIn::deviceName,
 ) {
-    /** What the sign-in screen shows: the button's words (null: no button) and whether a ticket is being handed in. */
-    data class Offer(val label: String? = null, val working: Boolean = false)
+    /**
+     * What the sign-in screen shows: the button's words (null: no button), under it the server a
+     * tap would sign in to ("at health.example.com") when the person is being asked to agree to it,
+     * and whether a ticket is being handed in.
+     */
+    data class Offer(val label: String? = null, val place: String? = null, val working: Boolean = false)
 
     private val _offer = MutableStateFlow(Offer())
     val offer: StateFlow<Offer> = _offer.asStateFlow()
@@ -116,6 +156,9 @@ class OrchestratorSignIn(
     @Volatile private var approval: Intent? = null
     @Volatile private var status: OrchestratorLink.Status? = null
     @Volatile private var gaveUp = false
+
+    /** The server whose address the button shows, waiting for the person's tap. */
+    @Volatile private var shownUrl: String? = null
 
     /** The app came to the front: who is signed in to the orchestrator, and (once) a quiet try at signing in. */
     fun opened(scope: CoroutineScope) {
@@ -149,13 +192,23 @@ class OrchestratorSignIn(
     internal suspend fun run(why: OrchestratorSteps.Why) {
         if (!busy.compareAndSet(false, true)) return
         try {
+            // Just approved: the orchestrator now says who is signed in.
+            if (why == OrchestratorSteps.Why.APPROVED) status = attempt { asked { agent.status() } }.getOrNull() ?: status
             val answer = attempt { asked { agent.signIn() } }.getOrElse { OrchestratorLink.SignIn.Unavailable(it.message ?: "No answer") }
-            when (val step = OrchestratorSteps.next(answer, why)) {
+            when (val step = OrchestratorSteps.next(answer, why, shownUrl)) {
                 is OrchestratorSteps.Step.HandIn -> {
+                    approval = null
                     _offer.value = _offer.value.copy(working = true)
-                    val worked = attempt { handIn(step.url, step.ticket) }.isSuccess
+                    // The tap on the button showing this server's address was the person agreeing to it.
+                    if (step.ticket.confirm) attempt { agent.confirmed(step.ticket) }
+                    shownUrl = null
+                    val worked = attempt { handIn(step.ticket.url, step.ticket.ticket) }.isSuccess
                     // Didn't work here (no account, an older server, no network): the usual sign-in, and no button to try in vain.
                     if (!worked) fellBack()
+                }
+                is OrchestratorSteps.Step.Confirm -> {
+                    approval = null
+                    shownUrl = step.url
                 }
                 is OrchestratorSteps.Step.AskApproval -> {
                     approval = step.intent
@@ -175,6 +228,7 @@ class OrchestratorSignIn(
     private fun fellBack() {
         gaveUp = true
         approval = null
+        shownUrl = null
     }
 
     /** Hands [ticket] to the server at [url] and keeps the sign-in as every other way of signing in does. */
@@ -188,7 +242,9 @@ class OrchestratorSignIn(
     }
 
     private fun show(working: Boolean = _offer.value.working) {
-        _offer.value = Offer(if (gaveUp) null else OrchestratorSteps.label(approval != null, status), working)
+        val url = shownUrl
+        val label = if (gaveUp) null else OrchestratorSteps.label(approval != null, status, confirming = url != null)
+        _offer.value = Offer(label, url?.takeIf { label != null }?.let(OrchestratorSteps::place), working)
     }
 
     /** The agent is another app, which may ask its server: never on the main thread. */
@@ -207,14 +263,11 @@ class OrchestratorSignIn(
          * is nothing for their other devices to "carry on" with.
          */
         fun onThisPhone(context: Context): OrchestratorAgent = object : OrchestratorAgent {
-            // The kit asks whoever answers at the orchestrator's address: only the app of that name counts.
-            private fun there(): Boolean =
-                context.packageManager.resolveContentProvider("${OrchestratorLink.PACKAGE}.link", 0)?.packageName == OrchestratorLink.PACKAGE
+            override fun status(): OrchestratorLink.Status? = OrchestratorLink.status(context)
 
-            override fun status(): OrchestratorLink.Status? = if (there()) OrchestratorLink.status(context) else null
+            override fun signIn(): OrchestratorLink.SignIn = OrchestratorLink.signIn(context, APP)
 
-            override fun signIn(): OrchestratorLink.SignIn =
-                if (there()) OrchestratorLink.signIn(context, APP) else OrchestratorLink.SignIn.Unavailable("SuperAwesomeMagicalOrchestrator isn't installed")
+            override fun confirmed(ticket: OrchestratorLink.SignIn.Ticket) = OrchestratorLink.confirmed(context, ticket)
         }
     }
 }

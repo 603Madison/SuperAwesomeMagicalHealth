@@ -106,6 +106,7 @@ fun SignInRoute(finishing: Boolean, error: String?) {
             orchestratorSignIn = { c.orchestratorSignIn.tapped(c.scope) },
         ),
         orchestrator = orchestrator.label,
+        orchestratorPlace = orchestrator.place,
     )
 }
 
@@ -136,6 +137,8 @@ fun SignInScreen(
     initialConfig: Pair<String, AuthConfig>? = null,
     /** "Continue as Maddie", when someone is signed in to SuperAwesomeMagicalOrchestrator on this phone. */
     orchestrator: String? = null,
+    /** "at health.example.com": the server that button signs in to, when the person is being asked to agree to it. */
+    orchestratorPlace: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf(initialServer.removePrefix("https://")) }
@@ -227,7 +230,10 @@ fun SignInScreen(
                         if (orchestrator != null && !finishing) {
                             Button(onClick = actions.orchestratorSignIn, modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
-                                Text(orchestrator, modifier = Modifier.padding(start = 8.dp), textAlign = TextAlign.Center)
+                                Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(orchestrator, textAlign = TextAlign.Center)
+                                    orchestratorPlace?.let { Text(it, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center) }
+                                }
                             }
                             Text("or", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

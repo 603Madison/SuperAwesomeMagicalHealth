@@ -422,7 +422,7 @@ class ScreenshotTest {
 
     @Test
     fun signInWithOrchestrator() {
-        render { SignInScreen("", finishing = false, error = null, actions = noSignIn, orchestrator = "Continue as Maddie") }
+        render { SignInScreen("", finishing = false, error = null, actions = noSignIn, orchestrator = "Continue as Maddie", orchestratorPlace = "at health.example.com") }
         save("sign_in_orchestrator")
     }
 

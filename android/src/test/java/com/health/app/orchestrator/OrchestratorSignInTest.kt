@@ -45,7 +45,9 @@ class OrchestratorSignInTest {
     private var status: OrchestratorLink.Status? = maddie
     private var answers = ArrayDeque<OrchestratorLink.SignIn>()
     private var asked = 0
+    private val confirmed = mutableListOf<OrchestratorLink.SignIn.Ticket>()
     private val agent = object : OrchestratorAgent {
+        override fun confirmed(ticket: OrchestratorLink.SignIn.Ticket) { confirmed += ticket }
         override fun status() = status
         override fun signIn(): OrchestratorLink.SignIn {
             asked++
@@ -87,7 +89,7 @@ class OrchestratorSignInTest {
         prefs.signOut(onPurpose)
     }
 
-    private fun ticket() = OrchestratorLink.SignIn.Ticket(base, "the.ticket.jwt")
+    private fun ticket(confirm: Boolean = false, url: String = base, jwt: String = "the.ticket.jwt") = OrchestratorLink.SignIn.Ticket(url, jwt, confirm, "c3rt")
 
     // ---- The decisions ----
 
@@ -101,8 +103,9 @@ class OrchestratorSignInTest {
 
     @Test
     fun `a ticket is handed in, approval is only opened when asked for, and anything else is the usual sign-in`() {
+        val known = ticket(url = "https://health.example.com")
         Why.entries.forEach { why ->
-            assertEquals(Step.HandIn("https://health.example.com", "t"), OrchestratorSteps.next(OrchestratorLink.SignIn.Ticket("https://health.example.com", "t"), why))
+            assertEquals(Step.HandIn(known), OrchestratorSteps.next(known, why))
             assertEquals(Step.Usual, OrchestratorSteps.next(OrchestratorLink.SignIn.Unavailable("not installed"), why))
         }
         val needs = OrchestratorLink.SignIn.NeedsApproval(approvalPage)
@@ -110,6 +113,37 @@ class OrchestratorSignInTest {
         assertEquals(Step.AskApproval(approvalPage), OrchestratorSteps.next(needs, Why.TAPPED))
         // Said yes and it still asks: the button again, not the page in a loop.
         assertEquals(Step.OfferApproval(approvalPage), OrchestratorSteps.next(needs, Why.APPROVED))
+    }
+
+    @Test
+    fun `a ticket to confirm is never used by itself - only on a tap, for the address that was shown`() {
+        val health = "https://health.example.com"
+        val first = ticket(confirm = true, url = health)
+        // At start, and after approving the app: shown, not used.
+        assertEquals(Step.Confirm(health), OrchestratorSteps.next(first, Why.START))
+        assertEquals(Step.Confirm(health), OrchestratorSteps.next(first, Why.APPROVED))
+        assertEquals(Step.Confirm(health), OrchestratorSteps.next(first, Why.START, shownUrl = health))
+        assertEquals(Step.Confirm(health), OrchestratorSteps.next(first, Why.APPROVED, shownUrl = health))
+        // A tap before any address was shown: the address first.
+        assertEquals(Step.Confirm(health), OrchestratorSteps.next(first, Why.TAPPED, shownUrl = null))
+        // A tap on the button showing that address: a fresh ticket for the same server is used.
+        val fresh = ticket(confirm = true, url = health, jwt = "fresh.ticket")
+        assertEquals(Step.HandIn(fresh), OrchestratorSteps.next(fresh, Why.TAPPED, shownUrl = health))
+        // The fresh ticket names another server: not used, the new address shown.
+        val elsewhere = ticket(confirm = true, url = "https://health.elsewhere.example")
+        assertEquals(Step.Confirm("https://health.elsewhere.example"), OrchestratorSteps.next(elsewhere, Why.TAPPED, shownUrl = health))
+    }
+
+    @Test
+    fun `the server's address under the button`() {
+        assertEquals("at health.example.com", OrchestratorSteps.place("https://health.example.com"))
+        assertEquals("at health.example.com", OrchestratorSteps.place("https://health.example.com:443/"))
+        assertEquals("at 192.168.1.20:8090", OrchestratorSteps.place("http://192.168.1.20:8090"))
+        assertEquals("at not a url", OrchestratorSteps.place("not a url"))
+        // Before the app is approved the orchestrator gives no name: its own, with the address once known.
+        assertEquals("Continue with SuperAwesomeMagicalOrchestrator", OrchestratorSteps.label(false, maddie.copy(username = "", displayName = ""), confirming = true))
+        assertEquals("Continue with SuperAwesomeMagicalOrchestrator", OrchestratorSteps.label(false, null, confirming = true))
+        assertEquals("Continue as Maddie", OrchestratorSteps.label(false, maddie, confirming = true))
     }
 
     @Test
@@ -137,11 +171,62 @@ class OrchestratorSignInTest {
 
         val settings = prefs.current()
         assertTrue(settings.signedIn)
+        assertTrue(confirmed.isEmpty()) // nothing to agree to: the kit already knew this orchestrator and server
         assertEquals(base, settings.server)
         assertEquals("t0k3n", settings.token)
         assertEquals("maddie", settings.user?.username)
         assertEquals("Health at home", settings.serverName)
         assertFalse(signIn.offer.value.working)
+    }
+
+    @Test
+    fun `a server not agreed to yet is shown and waits for the tap, which uses a fresh ticket and remembers`() = runBlocking {
+        answers += ticket(confirm = true, jwt = "first.ticket")
+        signIn.open()
+        assertTrue(sent.isEmpty())
+        assertFalse(prefs.current().signedIn)
+        assertTrue(confirmed.isEmpty())
+        val host = "at ${server.hostName}:${server.port}"
+        assertEquals(OrchestratorSignIn.Offer("Continue as Maddie", host), signIn.offer.value)
+
+        val fresh = ticket(confirm = true, jwt = "fresh.ticket")
+        answers += fresh
+        signIn.run(Why.TAPPED)
+        assertTrue(sent.single().body.readUtf8().contains("fresh.ticket"))
+        assertEquals(listOf(fresh), confirmed)
+        assertTrue(prefs.current().signedIn)
+        assertEquals(base, prefs.current().server)
+    }
+
+    @Test
+    fun `a fresh ticket for another server isn't used - its address is shown instead`() = runBlocking {
+        answers += ticket(confirm = true)
+        signIn.open()
+        answers += ticket(confirm = true, url = "https://health.elsewhere.example")
+        signIn.run(Why.TAPPED)
+        assertTrue(sent.isEmpty())
+        assertTrue(confirmed.isEmpty())
+        assertFalse(prefs.current().signedIn)
+        assertEquals(OrchestratorSignIn.Offer("Continue as Maddie", "at health.elsewhere.example"), signIn.offer.value)
+    }
+
+    @Test
+    fun `before the app is approved there's no name - the address shows once the person has said yes`() = runBlocking {
+        status = OrchestratorLink.Status(signedIn = true, server = "", username = "", displayName = "")
+        answers += OrchestratorLink.SignIn.NeedsApproval(approvalPage)
+        signIn.open()
+        assertEquals(OrchestratorSignIn.Offer("Continue with SuperAwesomeMagicalOrchestrator"), signIn.offer.value)
+        // Approved there: who it is, and where to, and still a tap away.
+        status = maddie
+        answers += ticket(confirm = true)
+        signIn.run(Why.APPROVED)
+        assertTrue(sent.isEmpty())
+        assertEquals("Continue as Maddie", signIn.offer.value.label)
+        assertEquals("at ${server.hostName}:${server.port}", signIn.offer.value.place)
+        answers += ticket(confirm = true)
+        signIn.run(Why.TAPPED)
+        assertTrue(prefs.current().signedIn)
+        assertEquals(1, confirmed.size)
     }
 
     @Test
