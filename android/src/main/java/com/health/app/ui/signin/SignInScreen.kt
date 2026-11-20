@@ -19,7 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Login
@@ -34,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,12 +72,28 @@ class SignInActions(
     /** Opens the page for the sign-in just started. */
     val openBrowser: (String) -> Unit = {},
     val passwordSignIn: suspend (server: String, username: String, password: String) -> Unit,
+    /** Signs in as whoever is signed in to SuperAwesomeMagicalOrchestrator on this phone. */
+    val orchestratorSignIn: () -> Unit = {},
 )
 
 @Composable
 fun SignInRoute(finishing: Boolean, error: String?) {
     val c = appContainer()
     val settings by c.settings.collectAsState()
+    val orchestrator by c.orchestratorSignIn.offer.collectAsState()
+    // The orchestrator's page asking whether this app may sign in as them: yes, and the app asks again.
+    val approval = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) c.orchestratorSignIn.approved(c.scope)
+    }
+    LaunchedEffect(Unit) {
+        c.orchestratorSignIn.approvals.collect { page ->
+            try {
+                approval.launch(page)
+            } catch (e: android.content.ActivityNotFoundException) {
+                c.orchestratorSignIn.unavailable()
+            }
+        }
+    }
     SignInScreen(
         initialServer = settings.server,
         finishing = finishing,
@@ -83,7 +103,9 @@ fun SignInRoute(finishing: Boolean, error: String?) {
             browserSignIn = { c.signIn.prepareBrowserSignIn(it) },
             openBrowser = { c.signIn.openBrowserSignIn(it) },
             passwordSignIn = { s, u, p -> c.signIn.signInWithPassword(s, u, p) },
+            orchestratorSignIn = { c.orchestratorSignIn.tapped(c.scope) },
         ),
+        orchestrator = orchestrator.label,
     )
 }
 
@@ -112,6 +134,8 @@ fun SignInScreen(
     error: String?,
     actions: SignInActions,
     initialConfig: Pair<String, AuthConfig>? = null,
+    /** "Continue as Maddie", when someone is signed in to SuperAwesomeMagicalOrchestrator on this phone. */
+    orchestrator: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf(initialServer.removePrefix("https://")) }
@@ -199,6 +223,14 @@ fun SignInScreen(
                             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                         }
                         val current = config
+                        // Above the usual ways: one tap, as whoever is signed in to the orchestrator here.
+                        if (orchestrator != null && !finishing) {
+                            Button(onClick = actions.orchestratorSignIn, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
+                                Text(orchestrator, modifier = Modifier.padding(start = 8.dp), textAlign = TextAlign.Center)
+                            }
+                            Text("or", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         when {
                             finishing -> {
                                 CircularProgressIndicator()

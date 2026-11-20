@@ -56,6 +56,27 @@ class ServerApiTest {
     }
 
     @Test
+    fun `an orchestrator's ticket is handed to the server it names, without a token`() = runBlocking {
+        server.enqueue(json("""{"user":{"id":"u1","username":"maddie","displayName":"Maddie","role":"USER","createdAt":1},"token":"t0k3n"}"""))
+        val signedIn = api.orchestratorSignIn(server.url("/").toString().trimEnd('/'), "the.ticket.jwt", "Pixel 9")
+        assertEquals("t0k3n", signedIn.token)
+        val request = server.takeRequest()
+        assertEquals("/api/auth/orchestrator", request.path)
+        assertNull(request.getHeader("Authorization"))
+        assertEquals("""{"ticket":"the.ticket.jwt","deviceName":"Pixel 9"}""", request.body.readUtf8())
+
+        // A refusal is an error to the caller (who shows none), and never signs the app out.
+        server.enqueue(json("""{"error":"That sign-in didn't work here. Sign in the usual way."}""", 401))
+        try {
+            api.orchestratorSignIn(server.url("/").toString().trimEnd('/'), "used.ticket", "Pixel 9")
+            fail("refused")
+        } catch (e: ServerException) {
+            assertEquals(401, e.code)
+        }
+        assertEquals(0, signedOut)
+    }
+
+    @Test
     fun `requests carry the app's token, and dates go in the path`() = runBlocking {
         server.enqueue(json("""{"date":"2026-11-12","steps":4200,"goals":{}}"""))
         val day = api.day("2026-11-12")

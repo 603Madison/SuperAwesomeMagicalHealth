@@ -41,6 +41,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             val settings by c.settings.collectAsState()
             val finishing by c.signIn.finishing.collectAsState()
             val signInError by c.signIn.error.collectAsState()
+            val orchestrator by c.orchestratorSignIn.offer.collectAsState()
             // The status and navigation bars' icons follow the app's theme, which may not be the phone's.
             val dark = isAppInDarkTheme(settings.themeMode)
             LaunchedEffect(dark) {
@@ -51,13 +52,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             }
             HealthTheme(settings.themeMode, settings.wallpaperColors, settings.boldText, settings.palette) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    if (settings.signedIn && !finishing && settings.user?.mustChangePassword == true) {
+                    if (settings.signedIn && !finishing && !orchestrator.working && settings.user?.mustChangePassword == true) {
                         // An admin set the password: the person chooses their own before anything else.
                         ChoosePasswordRoute()
-                    } else if (settings.signedIn && !finishing) {
+                    } else if (settings.signedIn && !finishing && !orchestrator.working) {
                         MainScaffold(open = openRoute.value, onOpened = { openRoute.value = null })
                     } else {
-                        SignInRoute(finishing, signInError)
+                        SignInRoute(finishing || orchestrator.working, signInError)
                     }
                 }
             }
@@ -74,6 +75,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         // Opening the app is a good moment to bring in what the ring and watch recorded.
         val c = container
         if (c.settings.value.signedIn) c.syncNowQuietly()
+        // Not signed in: where someone is signed in to SuperAwesomeMagicalOrchestrator on this phone, as them (quietly).
+        else c.orchestratorSignIn.opened(c.scope)
         c.resumeStrapRecording()
     }
 

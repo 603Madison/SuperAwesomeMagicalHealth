@@ -421,6 +421,22 @@ class ScreenshotTest {
     }
 
     @Test
+    fun signInWithOrchestrator() {
+        render { SignInScreen("", finishing = false, error = null, actions = noSignIn, orchestrator = "Continue as Maddie") }
+        save("sign_in_orchestrator")
+    }
+
+    @Test
+    fun signInWithOrchestratorApproval() {
+        val config = AuthConfig("Health at home", "0.12.0", localLogin = false, oidc = OidcButton("Sign in with Authentik"), orchestrator = true)
+        render(dark = true) {
+            SignInScreen("health.home.arpa", finishing = false, error = null, actions = noSignIn, initialConfig = "https://health.home.arpa" to config,
+                orchestrator = "Continue with SuperAwesomeMagicalOrchestrator")
+        }
+        save("sign_in_orchestrator_approve_dark")
+    }
+
+    @Test
     fun signInOverPlainHttp() {
         val config = AuthConfig("Health", "0.6.1", localLogin = true, oidc = OidcButton("Sign in with Authentik"))
         render { SignInScreen("http://health.example.com", finishing = false, error = null, actions = noSignIn, initialConfig = "http://health.example.com" to config) }

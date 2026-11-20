@@ -41,6 +41,11 @@ data class Settings(
     val units: Units = Units.METRIC,
     /** The "update your server" notice put away, for this pair of versions (ServerVersion.key). */
     val versionNoticeDismissed: String = "",
+    /**
+     * The person signed out themselves: the app doesn't sign straight back in through
+     * SuperAwesomeMagicalOrchestrator until they sign in again, by any means.
+     */
+    val signedOutOnPurpose: Boolean = false,
 ) {
     val signedIn: Boolean get() = server.isNotEmpty() && token != null
 
@@ -81,11 +86,14 @@ class Prefs(private val context: Context) {
         it[TOKEN] = token
         it[USER] = ApiJson.encodeToString(User.serializer(), user)
         it[SERVER_NAME] = serverName
+        it.remove(SIGNED_OUT_ON_PURPOSE)
     }
 
-    suspend fun signOut() = context.store.edit {
+    /** [onPurpose]: the person asked to (rather than the server ending the sign-in). */
+    suspend fun signOut(onPurpose: Boolean = true) = context.store.edit {
         it.remove(TOKEN)
         it.remove(USER)
+        if (onPurpose) it[SIGNED_OUT_ON_PURPOSE] = true
     }
 
     /** Puts the "update your server" notice away for this pair of versions. */
@@ -116,6 +124,7 @@ class Prefs(private val context: Context) {
         syncOnWifiOnly = prefs[SYNC_WIFI_ONLY] ?: false,
         units = Units.entries.firstOrNull { it.name == prefs[UNITS] } ?: Units.METRIC,
         versionNoticeDismissed = prefs[VERSION_NOTICE].orEmpty(),
+        signedOutOnPurpose = prefs[SIGNED_OUT_ON_PURPOSE] ?: false,
     )
 
     private companion object {
@@ -131,5 +140,6 @@ class Prefs(private val context: Context) {
         val SYNC_WIFI_ONLY = booleanPreferencesKey("sync_wifi_only")
         val UNITS = stringPreferencesKey("units")
         val VERSION_NOTICE = stringPreferencesKey("version_notice_dismissed")
+        val SIGNED_OUT_ON_PURPOSE = booleanPreferencesKey("signed_out_on_purpose")
     }
 }

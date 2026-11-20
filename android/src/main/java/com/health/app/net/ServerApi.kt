@@ -1,6 +1,7 @@
 package com.health.app.net
 
 import com.health.api.CrisisResource
+import com.health.api.OrchestratorSignIn
 import com.health.api.CycleDay
 import com.health.api.CycleOverview
 import com.health.api.ContinenceEntry
@@ -96,6 +97,13 @@ class ServerApi(
     suspend fun exchangeCode(server: String, code: String, verifier: String, deviceName: String): SignedIn = send(
         "POST", "$server/api/auth/app/token",
         ApiJson.encodeToString(AppTokenRequest.serializer(), AppTokenRequest(code, verifier, deviceName)),
+        SignedIn.serializer(), auth = false,
+    )
+
+    /** Hands a sign-in ticket from SuperAwesomeMagicalOrchestrator to the server at [server], for the app's own token. */
+    suspend fun orchestratorSignIn(server: String, ticket: String, deviceName: String): SignedIn = send(
+        "POST", "$server/api/auth/orchestrator",
+        ApiJson.encodeToString(OrchestratorSignIn.serializer(), OrchestratorSignIn(ticket, deviceName)),
         SignedIn.serializer(), auth = false,
     )
 

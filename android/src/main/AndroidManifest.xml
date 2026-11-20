@@ -68,6 +68,8 @@
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- SuperAwesomeMagicalOrchestrator, to sign in as whoever is signed in there (nothing else is shared with it). -->
+        <package android:name="app.superawesomemagical.orchestrator" />
     </queries>
 
     <!-- Home servers are often plain HTTP on the home network. -->

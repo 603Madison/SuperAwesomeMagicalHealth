@@ -87,6 +87,9 @@ class Container(val context: Context) {
 
     val signIn = SignIn(context, api, prefs)
 
+    /** Signing in as whoever is signed in to SuperAwesomeMagicalOrchestrator on this phone (sign-in only: nothing else goes to it). */
+    val orchestratorSignIn = com.health.app.orchestrator.OrchestratorSignIn(com.health.app.orchestrator.OrchestratorSignIn.onThisPhone(context), api, prefs)
+
     val syncStore = SyncStore(context)
     val outbox = Outbox(File(context.filesDir, "outbox"))
     val colmi = ColmiConduit(context, syncStore, zone = ::zone)
@@ -546,7 +549,7 @@ class Container(val context: Context) {
         } else if (!settings.value.signedIn) {
             return // Already signed out: several requests can come back refused at once.
         }
-        prefs.signOut()
+        prefs.signOut(onPurpose = requested)
         // The strap stops recording, and what it has waiting is forgotten with the rest, or kept under
         // the account when the sign-out wasn't asked for (needs the strap's cursor: before the sync store goes).
         strapRecorder.stop(send = false)
