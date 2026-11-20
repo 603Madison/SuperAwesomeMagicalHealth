@@ -42,6 +42,12 @@
 - Admins manage accounts and never read anyone's data: no cross-account reads anywhere (no
   every-account connector link, no "view as"). A password an admin sets is temporary
   (`mustChangePassword`), and the person is told when an admin last set it.
+- Signing in through SuperAwesomeMagicalOrchestrator (`POST /api/auth/orchestrator`, when
+  `ServerSettings.orchestratorUrl` is set): `auth/OrchestratorTickets.kt` and the app's
+  `orchestrator/OrchestratorLink.kt` are the family's kits, kept in SAM-DeviceOrchestrator (only the
+  package line differs: change them there and copy). The account is found by the same rules as
+  single sign-on (`ssoAccount` in `AuthRoutes.kt`). Only sign-in goes through the orchestrator:
+  Health never publishes activities to it (nothing about what someone logs leaves the phone that way).
 - Health alerts (`insights/AlertRules.kt`, pure; `insights/Alerts.kt`, sealed rows in
   `health_alerts`): each spell or night keeps one key, levels never go down, and what could need
   care now always says when to call emergency services. They never claim a diagnosis, are never

@@ -33,6 +33,11 @@ data class ServerSettings(
     /** Whether accounts other than the break-glass admin may sign in with a password. */
     val localLogin: Boolean = true,
     /**
+     * SuperAwesomeMagicalOrchestrator's address, e.g. https://orchestrator.example.com: apps on a
+     * device signed in there sign in here with its tickets. Blank: none of that exists.
+     */
+    val orchestratorUrl: String = "",
+    /**
      * Also ask Open Food Facts when USDA doesn't know a food (the search terms and barcodes go to
      * openfoodfacts.org). Off for new servers: USDA FoodData Central is the food database.
      */

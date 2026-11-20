@@ -43,6 +43,7 @@ data class ServerConfig(
 
         val OVERRIDES = setOf(
             "SAMH_PUBLIC_URL",
+            "SAMH_ORCHESTRATOR_URL",
             "SAMH_OIDC_ISSUER",
             "SAMH_OIDC_CLIENT_ID",
             "SAMH_OIDC_CLIENT_SECRET",

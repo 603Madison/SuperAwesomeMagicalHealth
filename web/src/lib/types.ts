@@ -36,6 +36,8 @@ export interface AuthConfig {
   version: string;
   localLogin: boolean;
   oidc?: { label: string };
+  /** Whether apps may sign in with a ticket from SuperAwesomeMagicalOrchestrator. */
+  orchestrator?: boolean;
 }
 
 export type Metric =
@@ -708,6 +710,8 @@ export interface ServerSettings {
   serverName: string;
   publicUrl: string;
   localLogin: boolean;
+  /** SuperAwesomeMagicalOrchestrator's address; blank: apps don't sign in through it. */
+  orchestratorUrl?: string;
   /** Also ask Open Food Facts when USDA doesn't know a food (off for new servers). */
   foodDatabase: boolean;
   crisisResources: CrisisResource[];

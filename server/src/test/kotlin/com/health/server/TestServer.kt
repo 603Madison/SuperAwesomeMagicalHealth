@@ -35,11 +35,12 @@ fun testServices(
     usdaUrl: String = "http://127.0.0.1:9/fdc/v1/foods/search",
     usdaDownloadsUrl: String = "http://127.0.0.1:9/download-datasets/",
     usdaFreeSpace: (() -> Long)? = null,
+    orchestratorFetch: (suspend (String) -> String)? = null,
 ): Services {
     val db = Database.inMemory()
     Schema.migrate(db)
     return Services(config, db, SecretBox(Random.bytes(32)), passwords = Passwords(iterations = 1_000), clock = clock, foodDatabaseUrls = foodUrls, usdaFoodsUrl = usdaUrl,
-        usdaDownloadsUrl = usdaDownloadsUrl, usdaFreeSpace = usdaFreeSpace,
+        usdaDownloadsUrl = usdaDownloadsUrl, usdaFreeSpace = usdaFreeSpace, orchestratorFetch = orchestratorFetch,
     ).also {
         // The tests' webhooks and Mealie are on this machine: home networks allowed, as a server that turned it on.
         kotlinx.coroutines.runBlocking { it.settings.update { s -> s.copy(webhooksPrivateNetworks = true) } }

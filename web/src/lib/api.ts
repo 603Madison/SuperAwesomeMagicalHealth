@@ -536,6 +536,7 @@ export const api = {
   /** Saves the server's settings; each secret given is changed (an empty one removes it), the rest kept. */
   saveSettings: (settings: ServerSettings, secrets: SettingsSecrets = {}) => put<AdminSettings>("/api/admin/settings", { settings, ...secrets }),
   testOidc: (oidc: OidcSettings) => post<{ ok: boolean; message: string }>("/api/admin/oidc/test", oidc),
+  testOrchestrator: (url: string) => post<{ ok: boolean; message: string }>("/api/admin/orchestrator/test", { url }),
   // USDA's food list kept on this server (Admin › Food search).
   usdaLocal: () => get<UsdaLocalStatus>("/api/admin/usda-local"),
   downloadUsdaLocal: () => post<UsdaLocalStatus>("/api/admin/usda-local/download"),

@@ -363,6 +363,7 @@ around the proxy and claim any address in its headers.
 | `SAMH_PORT`, `SAMH_HOST` | Where it listens (8080, all addresses) |
 | `SAMH_ADMIN_USERNAME`, `SAMH_ADMIN_PASSWORD` | The break-glass admin, made at first start |
 | `SAMH_PUBLIC_URL` | The address people use (for sign-in redirects and links) |
+| `SAMH_ORCHESTRATOR_URL` | SuperAwesomeMagicalOrchestrator's address: apps on devices signed in there sign in here by themselves |
 | `SAMH_TRUST_PROXY`, `SAMH_PROXIES`, `SAMH_CLIENT_IP_HEADER` | Behind reverse proxies (and Cloudflare's `CF-Connecting-IP`) |
 | `SAMH_OIDC_ISSUER`, `SAMH_OIDC_CLIENT_ID`, `SAMH_OIDC_CLIENT_SECRET` | Single sign-on (turns it on) |
 | `SAMH_OIDC_BUTTON_LABEL`, `SAMH_OIDC_SCOPES`, `SAMH_OIDC_USER_GROUP`, `SAMH_OIDC_ADMIN_GROUP` | Its details |

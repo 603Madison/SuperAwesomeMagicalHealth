@@ -16,13 +16,14 @@ Errors come back as `{"error": "A message meant for people"}` with a fitting sta
 | | |
 |---|---|
 | `GET /api/health` | `{ok, version}` |
-| `GET /api/auth/config` | `AuthConfig`: server name, whether passwords are offered, the SSO button |
+| `GET /api/auth/config` | `AuthConfig`: server name, whether passwords are offered, the SSO button, `orchestrator` (whether tickets are taken) |
 | `POST /api/auth/login` | `LoginRequest` → `SignedIn` (`app: true` gets a token instead of a cookie) |
 | `POST /api/auth/logout` | Ends this sign-in |
 | `GET /api/auth/oidc/start?return=/path` | Off to the identity provider (Authentik…) |
 | `GET /api/auth/oidc/callback` | And back |
 | `POST /api/auth/app/code` | (cookie only) `AppCodeRequest` → `AppCodeResponse`: the web page hands the app a one-time code |
 | `POST /api/auth/app/token` | `AppTokenRequest` → `SignedIn` with the app's token |
+| `POST /api/auth/orchestrator` | `OrchestratorSignIn` `{ticket, deviceName}` → `SignedIn` with the app's token. 404 when no orchestrator is set up; 401 when the ticket or the account isn't accepted |
 | `GET /api/me` | `Me` |
 | `PATCH /api/me` | `{displayName}` → `User` |
 | `POST /api/me/password` | `{current, new}`. A password an admin set (`User.mustChangePassword`) must be changed here first: until then every other route but `/api/auth/…` and `GET /api/me` answers 403 "Choose a new password first" |
@@ -32,6 +33,24 @@ Errors come back as `{"error": "A message meant for people"}` with a fitting sta
 The app's browser sign-in: open `<server>/connect-app?challenge=<S256 of verifier>&state=<random>&device=<name>`
 in a Custom Tab; the page sends the person to `samhealth://signed-in?code=…&state=…`; the app
 then calls `POST /api/auth/app/token` with the code and its verifier.
+
+Signing in through SuperAwesomeMagicalOrchestrator (when the admin has set its address: Admin ›
+Server, or `SAMH_ORCHESTRATOR_URL`): the app asks the orchestrator's agent on the same device for a
+ticket for the app `health` and posts it to `/api/auth/orchestrator`. The ticket is a short-lived
+JWT the orchestrator signs (ES256); the server checks it against the keys the orchestrator publishes
+(`<orchestrator>/api/orchestrator/keys`): signature, issuer, audience (this server's public address,
+or the address the request came to), app, dates, and that it hasn't been used before. Whose account:
+
+1. The ticket carries the person's subject at the identity provider, and that's this server's own
+   provider (single sign-on is on, same scheme, host and port as its issuer): the account with that
+   subject, by the same rules as single sign-on here (the allowed group, the admin group, a new
+   account if that's on), from the ticket's groups, name and email.
+2. Otherwise the account with the ticket's username, if it's an ordinary one: not the break-glass
+   admin, not turned off, not tied to an identity provider.
+3. Otherwise 401.
+
+Refusals are logged with the reason and count against the address like wrong passwords. The session
+is named after the ticket's device. A password an admin set still has to be changed first.
 
 ## Profile and days
 
@@ -863,7 +882,8 @@ may read (and, for `MCP_WRITE`, log to). `tools/list` describes each tool.
 
 `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/{id}`,
 `POST /api/admin/users/{id}/password`, `DELETE /api/admin/users/{id}/sessions`,
-`GET/PUT /api/admin/settings`, `POST /api/admin/oidc/test`.
+`GET/PUT /api/admin/settings`, `POST /api/admin/oidc/test`, `POST /api/admin/orchestrator/test`
+`{url}` → `{ok, message}` (whether an orchestrator answers there).
 
 **USDA's food list on this server** (Admin › Food search; `ServerSettings.usdaLocal`: `use`,
 `packaged`, `autoUpdate`). With `use` and a copy here, food searches and barcodes are answered from

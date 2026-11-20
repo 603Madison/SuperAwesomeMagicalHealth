@@ -18,6 +18,8 @@ services:
       # The address people use, needed for single sign-on behind a reverse proxy.
       # SAMH_PUBLIC_URL: https://health.example.com
       # SAMH_TRUST_PROXY: "true"
+      # SuperAwesomeMagicalOrchestrator, so the app signs in by itself on devices signed in there:
+      # SAMH_ORCHESTRATOR_URL: https://orchestrator.example.com
       # Behind Cloudflare, so each visitor's own address is known:
       # SAMH_CLIENT_IP_HEADER: CF-Connecting-IP
       # The break-glass admin's first password, 12 characters or more (otherwise one is generated and logged once).

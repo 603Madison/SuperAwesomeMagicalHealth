@@ -38,6 +38,7 @@ import com.health.server.tracking.VitalsService
 import com.health.server.tracking.Weather
 import com.health.server.platform.Platform
 import com.health.server.util.Http
+import com.health.server.util.fetchString
 import com.health.server.util.Passwords
 import com.health.server.util.Random
 import com.health.server.util.SecretBox
@@ -62,12 +63,23 @@ class Services(
     /** USDA's download page, for the copy kept on this server, and the data folder's free space (both stand-ins in tests). */
     usdaDownloadsUrl: String = com.health.server.food.UsdaLocal.PAGE_URL,
     usdaFreeSpace: (() -> Long)? = null,
+    /** How SuperAwesomeMagicalOrchestrator's published keys are fetched (a stand-in in tests); null: with [http]. */
+    orchestratorFetch: (suspend (url: String) -> String)? = null,
 ) : AutoCloseable {
     val users = UserStore(db, passwords, clock)
     val sessions = SessionStore(db, clock)
     val settings = SettingsStore(db, box)
     val oidc = OidcClient(http, clock)
     val pending = PendingLogins(clock)
+    /**
+     * Checks SuperAwesomeMagicalOrchestrator's sign-in tickets. Its keys are fetched with the same
+     * client, and so the same reach, as the identity provider's: the orchestrator is the admin's own
+     * server, set on the Admin page, and like Authentik it often lives on the home network.
+     */
+    val orchestrator = com.health.server.auth.OrchestratorTickets(
+        fetch = orchestratorFetch ?: { url -> http.fetchString(okhttp3.Request.Builder().url(url).build(), max = 256 * 1024) },
+        clock = clock,
+    )
     val throttle = LoginThrottle(clock = clock)
     val profiles = ProfileStore(db, clock)
     val devices = DeviceStore(db, clock)
@@ -259,6 +271,7 @@ class Services(
             settings.update { current ->
                 current.copy(
                     publicUrl = env["SAMH_PUBLIC_URL"]?.trimEnd('/') ?: current.publicUrl,
+                    orchestratorUrl = env["SAMH_ORCHESTRATOR_URL"]?.trim()?.trimEnd('/') ?: current.orchestratorUrl,
                     localLogin = flag("SAMH_LOCAL_LOGIN") ?: current.localLogin,
                     foodDatabase = flag("SAMH_FOOD_DATABASE") ?: current.foodDatabase,
                     usdaFoods = flag("SAMH_USDA_FOODS") ?: current.usdaFoods,
