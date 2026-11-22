@@ -271,7 +271,9 @@ private fun ScoresCard(days: List<TrendDay>, labels: Triple<String, String?, Str
 }
 
 @Composable
-private fun WeightCard(weights: List<Sample>, units: Units, goals: Goals, zone: ZoneId, onAdd: () -> Unit, onDelete: (Long) -> Unit) {
+private fun WeightCard(all: List<Sample>, units: Units, goals: Goals, zone: ZoneId, onAdd: () -> Unit, onDelete: (Long) -> Unit) {
+    // Oldest first, whatever order they came in (the server sends newest first): the latest is the last.
+    val weights = all.sortedBy { it.start }
     val readOnly = com.health.app.ui.care.LocalReadOnly.current
     TitledCard("Weight", trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Weigh in", onAdd) })) {
         if (weights.isEmpty()) {
