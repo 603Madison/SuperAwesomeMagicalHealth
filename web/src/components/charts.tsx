@@ -38,6 +38,16 @@ function ticks(min: number, max: number, count = 3): number[] {
 
 const compact = (v: number) => (Math.abs(v) >= 10_000 ? `${Math.round(v / 1000)}K` : v.toLocaleString(undefined, { maximumFractionDigits: 1 }));
 
+/** The person's usual: a dotted hairline across, named at its right end. */
+function UsualLine({ x1, x2, y }: { x1: number; x2: number; y: number }) {
+  return (
+    <g className="usual-line" pointerEvents="none">
+      <line x1={x1} x2={x2} y1={y} y2={y} />
+      <text x={x2} y={y - 5} textAnchor="end">usual</text>
+    </g>
+  );
+}
+
 function Tooltip({ x, y, width, children }: { x: number; y: number; width: number; children: ReactNode }) {
   const left = Math.min(Math.max(x, 70), width - 70);
   return <div className="chart-tip" style={{ left, top: y }} role="status">{children}</div>;
@@ -95,7 +105,7 @@ export interface LinePoint {
  * nearest point and the tooltip reads it out.
  */
 export function LineChart({
-  points, height = 180, color = "var(--c1)", formatX, formatY, formatTick = formatY, yMin, yMax, area = true, band, label, dots = false, extra = [], name,
+  points, height = 180, color = "var(--c1)", formatX, formatY, formatTick = formatY, yMin, yMax, area = true, band, label, dots = false, extra = [], name, usual,
 }: {
   points: LinePoint[];
   height?: number;
@@ -115,6 +125,8 @@ export function LineChart({
   extra?: { points: LinePoint[]; color: string; name: string }[];
   /** The main line's name, when there are [extra] ones. */
   name?: string;
+  /** The person's usual, drawn as a dotted line. */
+  usual?: number;
 }) {
   const [ref, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -123,8 +135,9 @@ export function LineChart({
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
   if (values.length === 0) return <div ref={ref} className="chart-empty" style={{ height }}>Nothing recorded</div>;
-  let lo = yMin ?? Math.min(...values, ...(band ?? []));
-  let hi = yMax ?? Math.max(...values, ...(band ?? []));
+  const marks = [...(band ?? []), ...(usual != null ? [usual] : [])];
+  let lo = yMin ?? Math.min(...values, ...marks);
+  let hi = yMax ?? Math.max(...values, ...marks);
   if (hi === lo) { hi += 1; lo -= 1; }
   if (yMin == null) lo -= (hi - lo) * 0.08;
   if (yMax == null) hi += (hi - lo) * 0.08;
@@ -194,6 +207,7 @@ export function LineChart({
             ? <path key={i} d={path(run)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             : run.length === 1 ? <circle key={i} cx={sx(run[0].x)} cy={sy(run[0].y!)} r={3} fill={color} /> : null)}
           {dots && points.filter((p) => p.y != null).map((p, i) => <circle key={`d${i}`} cx={sx(p.x)} cy={sy(p.y!)} r={4} fill={color} stroke="var(--chart-surface)" strokeWidth={2} />)}
+          {usual != null && usual >= lo && usual <= hi && <UsualLine x1={pad.left} x2={pad.left + w} y={sy(usual)} />}
           {extra.map((e, k) => {
             const known = e.points.filter((p) => p.y != null);
             return (
@@ -241,7 +255,7 @@ export interface Bar {
 
 /** Columns from one baseline; each column is its own hover target. [goal] draws a hairline to reach for. */
 export function BarChart({
-  bars, height = 160, color = "var(--c1)", formatY, formatTick = compact, goal, label, labelEvery = 1, highlight,
+  bars, height = 160, color = "var(--c1)", formatY, formatTick = compact, goal, label, labelEvery = 1, highlight, usual,
 }: {
   bars: Bar[];
   height?: number;
@@ -253,6 +267,8 @@ export function BarChart({
   label: string;
   labelEvery?: number;
   highlight?: string;
+  /** The person's usual, drawn as a dotted line. */
+  usual?: number;
 }) {
   const [ref, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -260,13 +276,15 @@ export function BarChart({
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
   const values = bars.map((b) => b.value ?? 0);
-  const hi = Math.max(1, ...values, goal ?? 0) * 1.08;
+  const hi = Math.max(1, ...values, goal ?? 0, usual ?? 0) * 1.08;
   const slot = bars.length ? w / bars.length : 0;
   const bw = Math.max(2, Math.min(24, slot - 2));
   const sy = (v: number) => pad.top + h - (v / hi) * h;
   const yTicks = ticks(0, hi, 3);
   const hovered = hover != null ? bars[hover] : null;
   const r = Math.min(4, bw / 2);
+  // Labels at least 52px apart, so they never run into each other on a phone.
+  const every = Math.max(labelEvery, slot > 0 ? Math.ceil(52 / slot) : 1);
 
   return (
     <div ref={ref} className="chart" style={{ height }}>
@@ -294,7 +312,7 @@ export function BarChart({
                     fill={color} opacity={hover != null && !lit ? 0.55 : 1}
                   />
                 )}
-                {i % labelEvery === 0 && (
+                {i % every === 0 && (
                   <text x={x + bw / 2} y={height - 6} className="axis" textAnchor="middle">{b.label}</text>
                 )}
                 {/* The hit area is the whole slot, taller than the bar. */}
@@ -311,6 +329,7 @@ export function BarChart({
               <line x1={pad.left} x2={pad.left + w} y1={sy(goal)} y2={sy(goal)} className="goal-line" />
             </g>
           )}
+          {usual != null && usual > 0 && <UsualLine x1={pad.left} x2={pad.left + w} y={sy(usual)} />}
         </svg>
       )}
       {hovered && (
@@ -348,7 +367,7 @@ export interface TimePoint {
  * follows the pointer and the arrow keys, and the tooltip reads out the value and its time.
  */
 export function TimeChart({
-  axis, points, kind = "line", color = "var(--c1)", formatY, formatTick = compact, yMin, yMax, gapMinutes = 30, bucketMinutes = 60, zero = false, label, height = 150,
+  axis, points, kind = "line", color = "var(--c1)", formatY, formatTick = compact, yMin, yMax, gapMinutes = 30, bucketMinutes = 60, zero = false, label, height = 150, usual,
 }: {
   axis: TimeAxis;
   /** Oldest first. */
@@ -367,6 +386,8 @@ export function TimeChart({
   /** What the chart shows, for screen readers. */
   label: string;
   height?: number;
+  /** The person's usual, drawn as a dotted line (in the points' own terms: an hour's steps for bars). */
+  usual?: number;
 }) {
   const [ref, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -379,8 +400,9 @@ export function TimeChart({
   const span = Math.max(1, axis.to - axis.from);
   const sx = (t: number) => pad.left + ((Math.min(Math.max(t, axis.from), axis.to) - axis.from) / span) * w;
   const values = points.map((p) => p.value);
-  let lo = bars ? 0 : yMin ?? Math.min(...values, ...(zero ? [0] : []));
-  let hi = bars ? Math.max(1, ...values) * 1.08 : yMax ?? Math.max(...values, ...(zero ? [0] : []));
+  const marks = [...(zero ? [0] : []), ...(usual != null ? [usual] : [])];
+  let lo = bars ? 0 : yMin ?? Math.min(...values, ...marks);
+  let hi = bars ? Math.max(1, ...values, ...marks) * 1.08 : yMax ?? Math.max(...values, ...marks);
   // Every reading the same (blood oxygen at 100%): room around it, but not past a fixed end.
   if (hi === lo) {
     if (yMin == null) lo -= 1;
@@ -475,6 +497,7 @@ export function TimeChart({
             ? <path key={i} d={path(run)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             : marker(run[0], i, 3)))}
           {kind === "points" && points.map((p, i) => marker(p, `d${i}`))}
+          {usual != null && usual >= lo && usual <= hi && <UsualLine x1={pad.left} x2={pad.left + w} y={sy(usual)} />}
           {hovered && (
             <g pointerEvents="none">
               {!bars && <line x1={sx(hovered.at)} x2={sx(hovered.at)} y1={pad.top} y2={pad.top + h} className="crosshair" />}

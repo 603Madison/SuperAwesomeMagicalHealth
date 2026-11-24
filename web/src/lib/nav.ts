@@ -124,6 +124,8 @@ export function backFor(pathname: string): { to: string; label: string } | null 
   const path = clean(pathname);
   if (isTabRoot(path)) return null;
   if (PARENTS[path]) return PARENTS[path];
+  // A card's details (/body/hrv).
+  if (under(path, "/body")) return { to: "/body", label: NAMES.body };
   if (CARE_PATHS[path]) return { to: "/care", label: NAMES.care };
   if (YOU_PAGES.some((p) => under(path, p))) return { to: "/you", label: NAMES.you };
   return null;

@@ -393,10 +393,12 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data: T |
  * the feature's page ([link], "Open Mind" for screen readers). A card with nothing in it is a slim
  * row: the title and its action.
  */
-export function Card({ title, icon, action, link, children, className = "", onClick, id, heading: Heading = "h3" }: {
+export function Card({ title, icon, action, link, children, className = "", onClick, id, heading: Heading = "h3", open }: {
   title?: ReactNode; icon?: ReactNode; action?: ReactNode; link?: { to: string; label: string }; children?: ReactNode; className?: string; onClick?: () => void; id?: string;
   /** The title's heading level: h2 where cards sit straight under the page's h1 (Today). */
   heading?: "h2" | "h3";
+  /** The whole card opens [open.to] ([CardCover]); its own buttons still work on their own. */
+  open?: { to: string; label: string };
 }) {
   const slim = Children.toArray(children).length === 0;
   const head = (title || action || link) && (
@@ -417,7 +419,17 @@ export function Card({ title, icon, action, link, children, className = "", onCl
       </section>
     );
   }
+  if (open) return <section id={id} className={`panel-card is-linked ${className}`}><CardCover {...open} />{head}{children}</section>;
   return <section id={id} className={`panel-card ${slim ? "is-slim" : ""} ${className}`}>{head}{children}</section>;
+}
+
+/**
+ * Makes the card it's in open [to] from anywhere on it: a real link over the whole card, named
+ * [label] ("Heart rate: details"), reached with the keyboard like any link. The card's own buttons,
+ * links and menus sit above it and work on their own. The card needs the class "is-linked".
+ */
+export function CardCover({ to, label }: { to: string; label: string }) {
+  return <Link to={to} className="card-cover" aria-label={label} title={label} />;
 }
 
 /** The one primary action in a card's heading row: a round icon button with its name for screen readers. */

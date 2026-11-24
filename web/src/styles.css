@@ -460,6 +460,13 @@ input:not([type="checkbox"]):not([type="range"]):focus, select:focus, textarea:f
 }
 .panel-card.is-clickable { cursor: pointer; transition: background 0.15s, transform 0.1s; }
 .panel-card.is-clickable:hover { background: var(--surface-2); }
+/* A card that opens its details from anywhere on it (CardCover): a link over the whole card, with the
+   card's own buttons, links, menus and pickers above it. */
+.is-linked { position: relative; transition: background 0.15s, border-color 0.15s; }
+.is-linked:hover { background: var(--surface-2); }
+.card-cover { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.card-cover:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: inherit; }
+.is-linked :is(button, select, input, label, a, summary, [role="button"]):not(.card-cover) { position: relative; z-index: 2; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; }
 .card-heading { display: flex; align-items: center; gap: 8px; font-size: 0.95rem; color: var(--muted); font-weight: var(--w-semibold); }
 .card-heading svg { color: var(--primary); }
@@ -559,6 +566,8 @@ button.insight-main:focus-visible { outline: 2px solid var(--primary); outline-o
 .chart .crosshair { stroke: var(--muted); stroke-width: 1; }
 .chart .goal-line { stroke: var(--text); stroke-opacity: 0.5; stroke-width: 1; stroke-dasharray: 3 4; }
 .chart-band { fill: var(--c2); opacity: 0.08; }
+.chart .usual-line line { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 1 4; stroke-linecap: round; }
+.chart .usual-line text { fill: var(--muted); font-size: 11px; paint-order: stroke; stroke: var(--chart-surface); stroke-width: 3px; stroke-linejoin: round; }
 .chart-empty { display: grid; place-items: center; color: var(--faint); font-size: 0.9rem; border-radius: 14px; background: var(--surface-2); }
 .chart-tip {
   position: absolute; transform: translateX(-50%); pointer-events: none; z-index: 5;
@@ -2110,6 +2119,21 @@ button.day-row-btn:hover .day-title, a.day-row-btn:hover .day-now { color: var(-
 .body-tile-sub { color: var(--muted); font-size: 0.8rem; }
 .body-tile-sub.is-notable { color: color-mix(in srgb, var(--c3) 75%, var(--text)); font-weight: var(--w-medium); }
 .body-page > .menu-group { margin-top: 20px; }
+.body-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 20px; }
+
+/* A card's details (pages/BodyDetail.tsx): the latest large, the chart, the numbers, the list. */
+.detail-headline { gap: 4px; }
+.detail-label { color: var(--muted); font-size: 0.87rem; font-weight: var(--w-semibold); }
+.detail-big { margin: 0; font-size: 2.2rem; font-weight: var(--w-bold); letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.detail-stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.detail-stats .stat-value { font-size: 1.35rem; }
+.detail-stats .stat-sub { display: flex; flex-direction: column; }
+.detail-stats .usual-against { color: var(--muted); }
+.detail-row .row-end strong { font-weight: var(--w-semibold); }
+.detail-row .row-sub { white-space: normal; }
+.detail-pick { margin: -4px 0 16px; }
+.detail-pick select { min-height: 40px; }
+.show-all { align-self: flex-start; }
 .body-grid { align-items: start; }
 @media (min-width: 1100px) {
   .body-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -2119,6 +2143,10 @@ button.day-row-btn:hover .day-title, a.day-row-btn:hover .day-now { color: var(-
   .stage-tile { padding: 8px; }
   .body-figure-value { font-size: 1.5rem; }
   .device-filter { max-width: 160px; }
+  .detail-big { font-size: 1.9rem; }
+  .detail-add span { display: none; }
+  .detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+  .detail-stats .stat-value { font-size: 1.2rem; }
 }
 
 /* ---------- Care: a card for each area, soonest first ---------- */

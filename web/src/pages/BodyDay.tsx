@@ -1,69 +1,34 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Clock } from "lucide-react";
 import { ApiError, api } from "../lib/api";
 import { hm, num, today, useUnits, when } from "../lib/format";
 import type { BodySpan } from "../lib/nav";
+import { detailOf, detailPath } from "../lib/bodyDetail";
 import {
   BODY_DAY_SECTIONS, BODY_DAY_TILES, RECENT_HOURS, againstUsual, devicesTogether, drawnAsLine, lastSynced, lowestPoint, mainNight, nightDevice,
-  nightMinutes, nightSummary, nothingRecorded, readingStats, readingsByMetric, readingsSummary, signed, sleepSpans, stepsSummary, temperature,
-  temperatureChange, temperatureChangeText, temperatureText, temperatureUnit, usualOf, type RecentMetric, type RecentSection,
+  nightMinutes, nightSummary, nothingRecorded, readingsByMetric, readingsSummary, sleepSpans, stepsSummary,
+  temperatureChangeText, temperatureText, usualOf, type RecentMetric, type RecentSection,
 } from "../lib/recent";
 import { useSession } from "../lib/session";
 import { clockTime, hourTicks } from "../lib/today";
-import { layoutKey, type RecentReadings, type RecentSeries, type SleepSession, type Units } from "../lib/types";
+import { layoutKey, type RecentReadings, type SleepSession } from "../lib/types";
 import { Hypnogram, TimeChart, type TimeAxis } from "../components/charts";
 import { useLogged } from "../components/LogSheet";
-import { Button, Card, Empty, ErrorNotice, Modal, Spinner, Stat, useLoad } from "../components/ui";
+import { Button, Card, CardCover, Empty, ErrorNotice, Spinner, useLoad } from "../components/ui";
 import { useArrange, type Section } from "../components/Arrange";
 import { BodyFrame, DeviceFilter, useReadingDevices } from "./Body";
+import { kinds, oneDecimal } from "./bodyMetrics";
 
 /*
  * Body at 24 hours, as the person's devices recorded it (GET /api/recent): last night large, with
  * its stages; heart rate with the night shaded; small tiles for HRV, blood oxygen, breathing,
- * temperature and stress, each against the person's usual where that's known (the last 30 days)
- * and each opening its chart; then steps by the hour. One device or all of them. The sections keep
- * Last 24 hours' saved arrangement (layoutKey("recent")) and ids.
+ * temperature and stress, each against the person's usual where that's known (the last 30 days);
+ * then steps by the hour. Every card opens its details (BodyDetail.tsx). One device or all of them.
+ * The sections keep Last 24 hours' saved arrangement (layoutKey("recent")) and ids.
  */
 
-const oneDecimal = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
-
-/** How each kind of reading is drawn and written. */
-interface Kind {
-  name: string;
-  value: (v: number) => string;
-  unit?: string;
-  text: (v: number) => string;
-  tick?: (v: number) => string;
-  bars?: boolean;
-  color: string;
-  yMin?: number;
-  yMax?: number;
-  zero?: boolean;
-  drawn?: { convert: (v: number) => number; text: (v: number) => string };
-}
-
-function kinds(units: Units): Record<RecentMetric, Kind> {
-  const deg = temperatureUnit(units);
-  return {
-    HEART_RATE: { name: "Heart rate", value: (v) => num(v), unit: "bpm", text: (v) => `${num(v)} bpm`, color: "var(--c1)" },
-    SPO2: { name: "Blood oxygen", value: oneDecimal, unit: "%", text: (v) => `${oneDecimal(v)}%`, color: "var(--c2)", yMax: 100 },
-    HRV: { name: "Heart rate variability", value: (v) => num(v), unit: "ms", text: (v) => `${num(v)} ms`, color: "var(--c1)" },
-    STRESS: { name: "Stress", value: (v) => num(v), text: (v) => `${num(v)} of 100`, color: "var(--c3)", yMin: 0, yMax: 100 },
-    RESPIRATORY_RATE: { name: "Breathing rate", value: oneDecimal, unit: "per min", text: (v) => `${oneDecimal(v)} breaths a minute`, color: "var(--c2)" },
-    SKIN_TEMPERATURE: {
-      name: "Skin temperature", value: (v) => temperature(v, units).toFixed(1), unit: deg, text: (v) => temperatureText(v, units), tick: oneDecimal, color: "var(--c3)",
-      drawn: { convert: (v) => temperature(v, units), text: (v) => `${v.toFixed(1)} ${deg}` },
-    },
-    TEMPERATURE_DEVIATION: {
-      name: "Temperature against your usual", value: (v) => temperatureChangeText(v, units), text: (v) => temperatureChangeText(v, units),
-      tick: (v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 }),
-      color: "var(--c3)", zero: true, drawn: { convert: (v) => temperatureChange(v, units), text: (v) => signed(v, deg) },
-    },
-    STEPS: { name: "Steps", value: (v) => num(v), unit: "steps", text: (v) => `${num(v)} steps`, bars: true, color: "var(--c2)" },
-  };
-}
-
-/** A tile: its name, number, one line under it (notable when it's well off the usual), and the readings its chart shows. */
+/** A tile: its name, number, one line under it (notable when it's well off the usual), and the readings it's about. */
 interface Tile {
   name: string;
   value: string;
@@ -90,7 +55,8 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
   const date = today();
   const day = useLoad(() => (device ? Promise.resolve(null) : api.day(date).catch(() => null)), [device, date]);
   const known = useReadingDevices();
-  const [open, setOpen] = useState<RecentSection | null>(null);
+  /** Where a card's details are, and their name for screen readers. */
+  const details = (id: RecentSection, name: string) => ({ to: detailPath(detailOf(id), "day", device), label: `${name}: details` });
 
   const data = load.data && load.data !== "gone" ? load.data : null;
   const empty = data ? nothingRecorded(data) : false;
@@ -103,30 +69,6 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
     shade: sleepSpans(data.sleep, data.from, data.to), time,
   };
   const before = (usual.data?.days ?? []).filter((d) => d.date < date);
-
-  /** A kind of reading: its numbers, then its chart. */
-  const chart = (metric: RecentMetric, s: RecentSeries, heading?: string) => {
-    const kind = k[metric];
-    return (
-      <div className="recent-reading" key={metric}>
-        {heading && <h4 className="recent-subhead">{heading}</h4>}
-        <div className="stats recent-stats">
-          {readingStats(metric, s).map((stat) => (
-            <Stat key={stat.label} label={stat.label} value={kind.value(stat.value)} unit={kind.unit} sub={stat.at != null ? time(stat.at) : undefined} />
-          ))}
-        </div>
-        {(kind.bars || s.points.length > 1) && axis && (
-          <TimeChart
-            axis={axis} kind={kind.bars ? "bars" : drawnAsLine(s.points) ? "line" : "points"} color={kind.color} yMin={kind.yMin} yMax={kind.yMax} zero={kind.zero}
-            bucketMinutes={s.bucketMinutes ?? 60}
-            points={kind.drawn ? s.points.map((p) => ({ at: p.at, value: kind.drawn!.convert(p.value) })) : s.points}
-            formatY={kind.drawn?.text ?? kind.text} formatTick={kind.tick}
-            label={metric === "STEPS" ? stepsSummary(s, (v) => num(v), time) : readingsSummary(kind.name, s, kind.text, time)}
-          />
-        )}
-      </div>
-    );
-  };
 
   // ---- The tiles ----
   const tiles: Partial<Record<RecentSection, Tile | null>> = {};
@@ -174,11 +116,11 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
     const t = tiles[id];
     if (!t) return null;
     return (
-      <button type="button" className="body-tile" onClick={() => setOpen(id)} aria-haspopup="dialog" aria-label={`${t.name}: ${t.value}${t.sub ? `, ${t.sub}` : ""}. Its chart`}>
+      <Link to={details(id, t.name).to} className="body-tile" aria-label={`${t.name}: ${t.value}${t.sub ? `, ${t.sub}` : ""}. Details`}>
         <span className="body-tile-name">{t.name}</span>
         <span className="body-tile-value">{t.value}</span>
         {t.sub && <span className={`body-tile-sub ${t.notable ? "is-notable" : ""}`}>{t.sub}</span>}
-      </button>
+      </Link>
     );
   };
 
@@ -192,7 +134,8 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
   const sections: (Section & { id: RecentSection })[] = BODY_DAY_SECTIONS.map((id): Section & { id: RecentSection } => {
     switch (id) {
       case "sleep": return { id, label: "Last night", node: shows && (
-        <section className="panel-card body-card night-card" aria-labelledby="night-title">
+        <section className="panel-card body-card night-card is-linked" aria-labelledby="night-title">
+          <CardCover {...details("sleep", "Last night")} />
           <div className="body-card-head">
             <h2 id="night-title">Last night</h2>
             {night && <span>{time(night.start)} – {time(night.end)}</span>}
@@ -207,7 +150,8 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
         </section>
       ) };
       case "heart": return { id, label: "Heart rate", node: shows && heart && (
-        <section className="panel-card body-card" aria-labelledby="heart-title">
+        <section className="panel-card body-card is-linked" aria-labelledby="heart-title">
+          <CardCover {...details("heart", "Heart rate")} />
           <div className="body-card-head">
             <h2 id="heart-title">Heart rate</h2>
             <span>{devicesTogether(data!.devices, device)}</span>
@@ -226,7 +170,8 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
         </section>
       ) };
       case "steps": return { id, label: "Steps", node: shows && steps && (
-        <section className="panel-card body-card" aria-labelledby="steps-title">
+        <section className="panel-card body-card is-linked" aria-labelledby="steps-title">
+          <CardCover {...details("steps", "Steps")} />
           <div className="body-card-head">
             <h2 id="steps-title">Steps</h2>
             <strong className="body-card-total">{num(steps.total ?? steps.points.reduce((s, p) => s + p.value, 0))}</strong>
@@ -256,7 +201,6 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
 
   const devices = data ? [...data.devices, ...known.filter((d) => !data.devices.some((x) => x.id === d.id))] : known;
   const synced = data && empty ? lastSynced([...data.devices, ...known], device) : null;
-  const shown = open ? tiles[open] : null;
 
   return (
     <BodyFrame span="day" setSpan={setSpan} actions={<>
@@ -284,11 +228,6 @@ export function BodyDay({ device, choose, setSpan }: { device?: string; choose: 
           {arranged.shown.length === 0 && <p className="muted arranged-empty">Everything here is hidden. Use Arrange, at the top, to show it again.</p>}
         </div>
       )}
-      {shown && open && (
-        <Modal title={k[shown.metrics[0]].name} subtitle="The last 24 hours" onClose={() => setOpen(null)} wide>
-          {shown.metrics.map((m, i) => readings[m] && <Fragment key={m}>{chart(m, readings[m]!, shown.metrics.length > 1 && i > 0 ? k[m].name : undefined)}</Fragment>)}
-        </Modal>
-      )}
     </BodyFrame>
   );
 }
@@ -309,12 +248,12 @@ function Figure({ value, label }: { value: string; label: string }) {
 }
 
 /** Last night: how long asleep, its stages, and the minutes in each. */
-function NightBody({ session, zone, device }: { session: SleepSession; zone?: string; device: string | null }) {
+export function NightBody({ session, zone, device, total = true }: { session: SleepSession; zone?: string; device: string | null; total?: boolean }) {
   const time = (ms: number) => clockTime(ms, zone);
   const n = nightMinutes(session);
   return (
     <>
-      <p className="body-big">{hm(n.asleep)} <span className="body-big-unit">asleep{device ? ` · ${device}` : ""}</span></p>
+      {total && <p className="body-big">{hm(n.asleep)} <span className="body-big-unit">asleep{device ? ` · ${device}` : ""}</span></p>}
       {session.stages.length > 0 && (
         <Hypnogram stages={session.stages} start={session.start} end={session.end} height={128} time={time}
           hours={hourTicks(session.start, session.end, 2, zone).map((at) => ({ at, label: clockTime(at, zone, true) }))}

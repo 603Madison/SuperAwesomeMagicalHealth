@@ -172,7 +172,8 @@ export const api = {
   /** The day as one place: what's live now (today, one's own only) and the timeline, newest first. */
   feed: (date: string) => get<DayFeed>(`/api/feed?date=${q(date)}`),
   trends: (days: number) => get<Trends>(`/api/trends?days=${days}`),
-  series: (metric: Metric, from: number, to: number) => get<Point[]>(`/api/series?metric=${metric}&from=${from}&to=${to}`),
+  /** [metric]'s readings from [from] to [to], thinned to about [points] (averaged, or added up for counts like steps). */
+  series: (metric: Metric, from: number, to: number, points?: number) => get<Point[]>(`/api/series?metric=${metric}&from=${from}&to=${to}${points ? `&points=${points}` : ""}`),
 
   foodDay: (date: string) => get<FoodDay>(`/api/food/${q(date)}`),
   nutrientTargets: () => get<NutrientTargets>("/api/food/targets"),

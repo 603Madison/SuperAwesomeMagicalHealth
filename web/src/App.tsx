@@ -31,6 +31,7 @@ import { Today } from "./pages/Today";
 import { Food } from "./pages/Food";
 import { Shopping } from "./pages/Shopping";
 import { Body } from "./pages/Body";
+import { BodyDetail } from "./pages/BodyDetail";
 import { Weight } from "./pages/Weight";
 import { Care } from "./pages/Care";
 import { You } from "./pages/You";
@@ -116,6 +117,8 @@ function Shell() {
           {/* What the devices measured: 24 hours (only ever the person's own), a week, a month or a year. */}
           <Route path="/body" element={<Body />} />
           <Route path="/body/weight" element={<Shared id="BODY"><Weight /></Shared>} />
+          {/* A card's details: /body/hrv?span=week (each checks what's shared itself; Weight has its page above). */}
+          <Route path="/body/:id" element={<BodyDetail />} />
           {/* What the person looks after: a card per area, each opening its page. */}
           <Route path="/care" element={<Care />} />
           {/* Every feature's page is always reachable by its link (the profile may still be loading);
