@@ -149,7 +149,7 @@ function Totals({ day }: { day: FoodDay }) {
           <Meter value={day.totals.calories} max={t.calories} color="var(--c1)" label="Calories against your target" over />
           <p className="muted small">
             {left >= 0 ? `${num(left)} kcal left` : `${num(-left)} kcal over`}
-            {day.burned != null ? ` · ${num(day.burned)} burned so far` : ""}
+            {day.burned != null ? ` · ${num(day.burned)} kcal burned so far today, resting included` : ""}
           </p>
           <p className="muted small">{t.basis}</p>
         </div>

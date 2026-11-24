@@ -45,11 +45,17 @@ object Energy {
                 val change = goals.weeklyChangeKg * KCAL_PER_KG / 7
                 val target = ((maintain + change) / 10).roundToInt() * 10
                 val floor = 1200
-                val activeText = if (averageActive != null) "active %,d on average".format(active.roundToInt()) else "about %,d for moving about".format(active.roundToInt())
-                val head = "About %,d kcal keeps your weight (resting %,d, %s)".format((maintain / 10).roundToInt() * 10, resting.roundToInt(), activeText)
+                // Every part named, so the sum can be checked: resting, the 10% for digesting and
+                // everyday moving, and active; then the change for the goal, in the person's units.
+                val everyday = resting * 0.1
+                val activeText = if (averageActive != null) "%,d active (your average)".format(active.roundToInt()) else "%,d for moving about".format(active.roundToInt())
+                val head = "%,d resting + %,d digesting and everyday moving + %s ≈ %,d kcal keeps your weight".format(
+                    resting.roundToInt(), everyday.roundToInt(), activeText, (maintain / 10).roundToInt() * 10,
+                )
+                val amount = weekly(abs(goals.weeklyChangeKg), profile.units)
                 val tail = when {
-                    change < -1 -> ", less %,d to lose %s kg a week".format(abs(change).roundToInt(), kg(abs(goals.weeklyChangeKg)))
-                    change > 1 -> ", plus %,d to gain %s kg a week".format(change.roundToInt(), kg(goals.weeklyChangeKg))
+                    change < -1 -> ". Less %,d to lose %s a week: %,d".format(abs(change).roundToInt(), amount, maxOf(target, floor))
+                    change > 1 -> ". Plus %,d to gain %s a week: %,d".format(change.roundToInt(), amount, maxOf(target, floor))
                     else -> ""
                 }
                 maxOf(target, floor) to (head + tail + if (target < floor) ". Kept to 1,200 kcal at least." else "")
@@ -62,5 +68,10 @@ object Energy {
         return NutritionTarget(calories, protein, carbs, fat, goals.waterMl, basis)
     }
 
-    private fun kg(value: Double): String = if (value % 1.0 == 0.0) value.roundToInt().toString() else String.format(java.util.Locale.ROOT, "%.2f", value).trimEnd('0').trimEnd('.')
+    /** A weekly change in the person's units: "0.25 kg", "0.55 lb". */
+    private fun weekly(kg: Double, units: com.health.api.Units): String =
+        if (units == com.health.api.Units.IMPERIAL) "${trim(kg * 2.20462)} lb" else "${trim(kg)} kg"
+
+    private fun trim(value: Double): String = String.format(java.util.Locale.ROOT, "%.2f", value).trimEnd('0').trimEnd('.')
+
 }

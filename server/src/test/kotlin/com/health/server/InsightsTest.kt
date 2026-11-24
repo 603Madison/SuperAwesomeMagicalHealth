@@ -192,7 +192,7 @@ class InsightsTest {
         assertEquals(64.0, day.weightKg!!, 0.0)
         // 10×64 + 6.25×168 − 5×36 − 161 = 1349
         assertEquals(1349.0, day.restingCalories!!, 0.5)
-        assertTrue(day.nutritionTarget!!.basis.startsWith("About"))
+        assertTrue(day.nutritionTarget!!.basis.contains(" resting + "))
         s.ingest.deleteSample(user.id, weight.id!!)
         assertNull(s.days.summary(user.id, "2026-03-09").weightKg)
     }
@@ -299,7 +299,11 @@ class InsightsTest {
         // Keeping weight: 1451.5 × 1.1 + 400 ≈ 1997; losing half a kilo a week: 550 less.
         assertEquals(1450, target.calories)
         assertEquals(98, target.protein)
-        assertTrue(target.basis.contains("lose 0.5 kg a week"))
+        assertTrue(target.basis, target.basis.contains("lose 0.5 kg a week: 1,450"))
+        // Every part is named and the parts add up to what keeps the weight.
+        assertTrue(target.basis, target.basis.startsWith("1,452 resting + 145 digesting and everyday moving + 400 active (your average) ≈ 2,000 kcal keeps your weight"))
+        val pounds = Energy.target(base.copy(units = com.health.api.Units.IMPERIAL), 70.0, female, 400.0)
+        assertTrue(pounds.basis, pounds.basis.contains("lose 1.1 lb a week"))
     }
 
     @Test
