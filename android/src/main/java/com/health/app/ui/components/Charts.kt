@@ -401,22 +401,47 @@ fun TimeChart(
     gap: Long = 45 * 60_000L,
     height: Dp = 112.dp,
     reference: Double? = null,
+) = TimeLines(listOf(points to color), axis, scale, description, modifier, style, shaded, gap, height, reference)
+
+/**
+ * Several lines on one [axis] and [scale], drawn as [TimeChart] draws one: the first solid, the
+ * second dashed and the third dotted, so they're told apart by more than colour.
+ */
+@Composable
+fun TimeLines(
+    lines: List<Pair<List<Point>, Color>>,
+    axis: TimeAxis,
+    scale: ChartScale,
+    description: String,
+    modifier: Modifier = Modifier,
+    style: TimeChartStyle = TimeChartStyle.LINE,
+    shaded: List<Pair<Long, Long>> = emptyList(),
+    gap: Long = 45 * 60_000L,
+    height: Dp = 112.dp,
+    reference: Double? = null,
 ) {
     val refColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
     TimePlot(axis, scale, description, modifier, shaded, height) { x, y ->
         reference?.let {
             drawLine(refColor, Offset(0f, y(it)), Offset(size.width, y(it)), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
         }
-        val runs = timeRuns(points, gap)
-        val dots = style == TimeChartStyle.DOTS || points.size <= 24
-        val radius = (if (style == TimeChartStyle.DOTS) 3.5.dp else 2.5.dp).toPx()
-        for (run in runs) {
-            if (style == TimeChartStyle.LINE && run.size >= 2) {
-                val line = Path()
-                run.forEachIndexed { i, p -> if (i == 0) line.moveTo(x(p.t), y(p.v)) else line.lineTo(x(p.t), y(p.v)) }
-                drawPath(line, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        lines.forEachIndexed { index, (points, color) ->
+            val runs = timeRuns(points, gap)
+            val dots = style == TimeChartStyle.DOTS || points.size <= 24
+            val radius = (if (style == TimeChartStyle.DOTS) 3.5.dp else 2.5.dp).toPx()
+            val effect = when (index) {
+                1 -> PathEffect.dashPathEffect(floatArrayOf(14f, 8f))
+                2 -> PathEffect.dashPathEffect(floatArrayOf(3f, 7f))
+                else -> null
             }
-            if (dots || run.size == 1) run.forEach { p -> drawCircle(color, radius, Offset(x(p.t), y(p.v))) }
+            for (run in runs) {
+                if (style == TimeChartStyle.LINE && run.size >= 2) {
+                    val line = Path()
+                    run.forEachIndexed { i, p -> if (i == 0) line.moveTo(x(p.t), y(p.v)) else line.lineTo(x(p.t), y(p.v)) }
+                    drawPath(line, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = effect))
+                }
+                if (dots || run.size == 1) run.forEach { p -> drawCircle(color, radius, Offset(x(p.t), y(p.v))) }
+            }
         }
     }
 }
@@ -436,17 +461,25 @@ fun TimeBars(
     color: Color = MaterialTheme.colorScheme.primary,
     shaded: List<Pair<Long, Long>> = emptyList(),
     height: Dp = 96.dp,
+    reference: Double? = null,
 ) {
+    val refColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
     TimePlot(axis, scale, description, modifier, shaded, height) { x, y ->
         val gap = 1.5.dp.toPx()
         val base = y(scale.low)
         points.forEach { p ->
             if (p.v <= 0) return@forEach
-            val x0 = x(p.t) + gap / 2
-            val w = (x(p.t + bucket) - x(p.t) - gap).coerceAtLeast(1f)
+            // Wide bars (a day, a week) keep a little room between them.
+            val room = if (bucket >= 86_400_000L) maxOf(gap, (x(p.t + bucket) - x(p.t)) * 0.25f) else gap
+            val x0 = x(p.t) + room / 2
+            val w = (x(p.t + bucket) - x(p.t) - room).coerceAtLeast(1f)
             val top = y(p.v).coerceAtMost(base - 1f)
             val r = minOf(w / 3, 3.dp.toPx())
             drawRoundRect(color.copy(alpha = 0.85f), Offset(x0, top), Size(w, base - top), CornerRadius(r, r))
+        }
+        // Over the bars, so it shows across them.
+        reference?.let {
+            drawLine(refColor, Offset(0f, y(it)), Offset(size.width, y(it)), 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
         }
     }
 }

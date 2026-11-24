@@ -146,7 +146,7 @@ private fun rootOf(route: String): String = route.substringBefore('?').substring
 /** The pages under You: devices, your records, the assistant and Settings. */
 private val UNDER_YOU = setOf("you", "devices", "digest", "reports", "assistant", "settings", "records")
 
-/** The pages under Body: Health alerts, and comparing two devices. */
+/** The pages under Body: its cards opened (body/detail/…), Health alerts, and comparing two devices. */
 private val UNDER_BODY = setOf("body", "alerts")
 
 /**
@@ -409,6 +409,14 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
         page("devices/ring", nav) { RingPairRoute(onDone = ::back) }
         page("devices/strap", nav) { StrapPairRoute(onDone = ::back) }
         page("devices/monitor", nav) { MonitorPairRoute(onDone = ::back) }
+
+        // ---- A card on Body, opened: its details over 24 hours, a week, a month or a year (under Body).
+        page(com.health.app.ui.body.BodyDetail.ROUTE, nav, listOf(required("id"), arg("span"), arg("device"))) { entry ->
+            val a = entry.arguments
+            com.health.app.ui.body.BodyDetailRoute(
+                a?.getString("id").orEmpty(), com.health.app.ui.body.BodyDetail.spanNamed(a?.getString("span")), a?.getString("device"), onBack = ::back,
+            )
+        }
 
         // ---- Health alerts (under Body; also from Today's bell and card, and their notifications), your records and the assistant (under You).
         page("alerts", nav) { com.health.app.ui.alerts.AlertsRoute(onBack = ::back) }

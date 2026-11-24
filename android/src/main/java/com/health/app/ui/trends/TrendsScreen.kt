@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
@@ -24,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,6 +44,7 @@ import com.health.app.ui.components.BarChart
 import com.health.app.ui.components.Hint
 import com.health.app.ui.components.LineChart
 import com.health.app.ui.components.TitledCard
+import com.health.app.ui.components.opensDetails
 import com.health.app.ui.modules.FeatureScreens
 import com.health.app.ui.modules.ModuleInfo
 import com.health.app.ui.modules.Moods
@@ -91,7 +92,7 @@ fun trendsSections(modules: Set<Module>, water: Boolean = true, micros: Boolean 
  * Body's week, month or year ([trends] over its days): the charts for the features on, in the
  * person's order ([FeatureScreens.TRENDS]); weight with its weigh-ins ([weights]). [combined] and
  * [combinedSleep] are today's readings more than one device measured ("From 2 devices" under their
- * charts); [onRecent], where given, opens the last 24 hours from the Sleep chart.
+ * charts). Each card, tapped, opens its details ([onDetails], given the card's id) where that's given.
  */
 @Composable
 fun TrendSections(
@@ -106,7 +107,7 @@ fun TrendSections(
     micros: Boolean = false,
     combined: List<com.health.api.CombinedValue> = emptyList(),
     combinedSleep: com.health.api.CombinedSleep? = null,
-    onRecent: (() -> Unit)? = null,
+    onDetails: ((String) -> Unit)? = null,
     onWeighIn: () -> Unit = {},
     onDeleteWeight: (Long) -> Unit = {},
 ) {
@@ -114,16 +115,19 @@ fun TrendSections(
     val labels = axis(days)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Sections(arrangedIn(FeatureScreens.TRENDS, trendsSections(modules, water, micros))) { id ->
+            // Each card opens its own details (ChartCard and the cards below read it).
+            androidx.compose.runtime.CompositionLocalProvider(LocalOpenDetails provides onDetails?.let { open -> { open(id) } }) {
             when (id) {
                 "scores" -> ScoresCard(days, labels)
                 "weight" -> WeightCard(weights, units, goals, zone, onAdd = onWeighIn, onDelete = onDeleteWeight)
                 "workouts" -> WorkoutsSummary(days)
-                NUTRIENT -> NutrientTrendCard(days, trends.nutritionTarget, labels)
+                NUTRIENT -> NutrientTrendCard(days, trends.nutritionTarget, labels, onDetails = onDetails)
                 // Combined devices: the chart's "From 2 devices", if today's reading has more than one (ui/components/Sources.kt).
                 in TREND_CHARTS -> androidx.compose.runtime.CompositionLocalProvider(
                     com.health.app.ui.components.LocalChartSources provides com.health.app.ui.components.Sources.chart(id, combined, combinedSleep, units, zone),
-                ) { TrendChart(id, days, labels, goals, units, onRecent) }
+                ) { TrendChart(id, days, labels, goals, units) }
                 else -> TrackingTrend(id, days, labels, vitalsTargets)
+            }
             }
         }
     }
@@ -135,9 +139,9 @@ internal const val NUTRIENT = "nutrient"
 /** Trends' own charts' ids; the rest are [TrackingTrend]'s. */
 private val TREND_CHARTS = setOf("mood", "doses", "period", "trips", "leaks", "sleep", "steps", "heart", "hrv", "calories", "water")
 
-/** One of Trends' own charts ([TREND_CHARTS]), by its section id; Sleep's chevron opens the last 24 hours ([onRecent]). */
+/** One of Trends' own charts ([TREND_CHARTS]), by its section id. */
 @Composable
-private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, String?, String>, goals: Goals, units: Units, onRecent: (() -> Unit)? = null) {
+private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, String?, String>, goals: Goals, units: Units) {
     when (id) {
         "mood" -> ChartCard(
             "Mood", ModuleInfo.icon(Module.MIND), MaterialTheme.colorScheme.primary,
@@ -177,7 +181,6 @@ private fun TrendChart(id: String, days: List<TrendDay>, labels: Triple<String, 
             "Sleep", Icons.Rounded.Bedtime, AppTheme.data.rem,
             average(days.map { it.sleepMinutes?.toDouble() })?.let { Format.minutes(it.roundToInt()) },
             "a night", labels,
-            onOpen = onRecent, openLabel = "last 24 hours",
         ) { BarChart(days.map { d -> d.sleepMinutes?.let { it / 60.0 } }, color = AppTheme.data.rem, goal = goals.sleepMinutes / 60.0) }
         "steps" -> ChartCard(
             "Steps", Icons.AutoMirrored.Rounded.DirectionsWalk, MaterialTheme.colorScheme.tertiary,
@@ -212,6 +215,10 @@ private fun axis(days: List<TrendDay>): Triple<String, String?, String> {
     return Triple(first, middle, last)
 }
 
+/** What a card on Body opens when it's tapped (its details), provided around each one by [TrendSections]. */
+internal val LocalOpenDetails = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/** A chart's card; the whole card opens its details ([onDetails]), read out as "[title]: details". */
 @Composable
 internal fun ChartCard(
     title: String,
@@ -221,20 +228,10 @@ internal fun ChartCard(
     caption: String,
     labels: Triple<String, String?, String>,
     footer: String? = null,
-    onOpen: (() -> Unit)? = null,
-    openLabel: String? = null,
+    onDetails: (() -> Unit)? = LocalOpenDetails.current,
     chart: @Composable () -> Unit,
 ) {
-    TitledCard(
-        title,
-        trailing = onOpen?.let { open ->
-            {
-                IconButton(onClick = open) {
-                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, "Open ${openLabel ?: title}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        },
-    ) {
+    TitledCard(title, Modifier.opensDetails(title, onDetails)) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(headline ?: "—", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = if (headline == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.width(6.dp))
@@ -252,7 +249,7 @@ internal fun ChartCard(
 
 @Composable
 private fun ScoresCard(days: List<TrendDay>, labels: Triple<String, String?, String>) {
-    TitledCard("Scores") {
+    TitledCard("Scores", Modifier.opensDetails("Scores", LocalOpenDetails.current)) {
         listOf(
             Triple("Readiness", days.map { it.readiness?.toDouble() }, MaterialTheme.colorScheme.primary),
             Triple("Sleep", days.map { it.sleepScore?.toDouble() }, AppTheme.data.rem),
@@ -275,7 +272,7 @@ private fun WeightCard(all: List<Sample>, units: Units, goals: Goals, zone: Zone
     // Oldest first, whatever order they came in (the server sends newest first): the latest is the last.
     val weights = all.sortedBy { it.start }
     val readOnly = com.health.app.ui.care.LocalReadOnly.current
-    TitledCard("Weight", trailing = if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Weigh in", onAdd) })) {
+    TitledCard("Weight", Modifier.opensDetails("Weight", LocalOpenDetails.current), trailing =if (readOnly) null else ({ TitleAction(Icons.Rounded.Add, "Weigh in", onAdd) })) {
         if (weights.isEmpty()) {
             Hint(if (readOnly) "No weigh-ins yet." else "Weigh in now and then (or connect a smart scale through Health Connect) to see your trend.")
             return@TitledCard
@@ -317,7 +314,7 @@ private fun WeightCard(all: List<Sample>, units: Units, goals: Goals, zone: Zone
 private fun WorkoutsSummary(days: List<TrendDay>) {
     val count = days.sumOf { it.workouts }
     val minutes = days.sumOf { it.workoutMinutes }
-    TitledCard("Workouts") {
+    TitledCard("Workouts", Modifier.opensDetails("Workouts", LocalOpenDetails.current)) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text("$count", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(6.dp))
