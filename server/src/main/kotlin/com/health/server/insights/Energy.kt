@@ -30,9 +30,9 @@ object Energy {
     }
 
     /**
-     * The day's targets: the person's own, or worked out from what they burn (resting energy, a
-     * little more for digesting and pottering about, and their devices' active calories, averaged
-     * over recent days) and the weight change they're aiming for.
+     * The day's targets: the person's own, or worked out from what they burn (resting energy; 10%
+     * of it for digesting food, which costs about 10% of what's eaten; and their devices' active
+     * calories, averaged over recent days) and the weight change they're aiming for.
      */
     fun target(profile: Profile, weightKg: Double?, resting: Double?, averageActive: Double?): NutritionTarget {
         val goals = profile.goals
@@ -45,12 +45,12 @@ object Energy {
                 val change = goals.weeklyChangeKg * KCAL_PER_KG / 7
                 val target = ((maintain + change) / 10).roundToInt() * 10
                 val floor = 1200
-                // Every part named, so the sum can be checked: resting, the 10% for digesting and
-                // everyday moving, and active; then the change for the goal, in the person's units.
-                val everyday = resting * 0.1
+                // Every part named, so the sum can be checked: resting, the 10% for digesting food,
+                // and active (devices count movement); then the change for the goal, in the person's units.
+                val digesting = resting * 0.1
                 val activeText = if (averageActive != null) "%,d active (your average)".format(active.roundToInt()) else "%,d for moving about".format(active.roundToInt())
-                val head = "%,d resting + %,d digesting and everyday moving + %s ≈ %,d kcal keeps your weight".format(
-                    resting.roundToInt(), everyday.roundToInt(), activeText, (maintain / 10).roundToInt() * 10,
+                val head = "%,d resting + %,d digesting food + %s ≈ %,d kcal keeps your weight".format(
+                    resting.roundToInt(), digesting.roundToInt(), activeText, (maintain / 10).roundToInt() * 10,
                 )
                 val amount = weekly(abs(goals.weeklyChangeKg), profile.units)
                 val tail = when {

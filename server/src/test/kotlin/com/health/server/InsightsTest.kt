@@ -301,7 +301,7 @@ class InsightsTest {
         assertEquals(98, target.protein)
         assertTrue(target.basis, target.basis.contains("lose 0.5 kg a week: 1,450"))
         // Every part is named and the parts add up to what keeps the weight.
-        assertTrue(target.basis, target.basis.startsWith("1,452 resting + 145 digesting and everyday moving + 400 active (your average) ≈ 2,000 kcal keeps your weight"))
+        assertTrue(target.basis, target.basis.startsWith("1,452 resting + 145 digesting food + 400 active (your average) ≈ 2,000 kcal keeps your weight"))
         val pounds = Energy.target(base.copy(units = com.health.api.Units.IMPERIAL), 70.0, female, 400.0)
         assertTrue(pounds.basis, pounds.basis.contains("lose 1.1 lb a week"))
     }
