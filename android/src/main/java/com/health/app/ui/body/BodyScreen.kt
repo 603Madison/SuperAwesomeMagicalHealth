@@ -84,6 +84,7 @@ import com.health.app.ui.components.TimeChart
 import com.health.app.ui.components.TimeChartStyle
 import com.health.app.ui.components.TitledCard
 import com.health.app.ui.components.appContainer
+import com.health.app.ui.components.opensDetails
 import com.health.app.ui.components.showsField
 import com.health.app.ui.devices.Compare
 import com.health.app.ui.log.WeightDialog
@@ -102,7 +103,8 @@ import java.time.ZoneId
  * Body: everything the ring, the strap and the rest measured. A device filter and a switch: 24
  * hours (the night, heart rate with the night shaded, small tiles for HRV, blood oxygen, breathing
  * and temperature, then steps; arranged under android.recent) or the week, month or year (the
- * trends' charts, arranged under android.trends). At the bottom, Health alerts and Compare devices.
+ * trends' charts, arranged under android.trends); every card opens its details (BodyDetail.kt).
+ * At the bottom, Health alerts and Compare devices.
  */
 
 /** What Body can do, as callbacks (so it can be drawn with sample data). */
@@ -201,7 +203,7 @@ fun BodyScreen(
                             state.error?.let { ErrorCard(it, actionLabel = "Try again", onAction = actions.retry) }
                             TrendSections(
                                 trends, state.weights, units, goals, zone, modules, vitalsTargets, water, micros, state.combined, state.combinedSleep,
-                                onRecent = if (readOnly) null else ({ actions.span(BodySpan.DAY) }),
+                                onDetails = { id -> actions.open(BodyDetail.route(id, state.span)) },
                                 onWeighIn = { weighing = true },
                                 onDeleteWeight = actions.deleteWeight,
                             )
@@ -248,14 +250,14 @@ private fun DeviceFilter(chips: List<Recent.Chip>, chosen: String?, onChoose: (S
     }
 }
 
-/** 24 hours · Week · Month · Year, as one rounded switch. */
+/** 24 hours · Week · Month · Year (or those of them in [spans]), as one rounded switch. */
 @Composable
-fun SpanSwitch(span: BodySpan, onSpan: (BodySpan) -> Unit) {
+fun SpanSwitch(span: BodySpan, onSpan: (BodySpan) -> Unit, spans: List<BodySpan> = BodySpan.entries) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(4.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        BodySpan.entries.forEach { s ->
+        spans.forEach { s ->
             val on = s == span
             Box(
                 Modifier
@@ -298,15 +300,15 @@ private fun Day(state: BodyState, readings: RecentReadings?, sections: List<com.
                     }
                 }
             } else {
-                DayCards(readings, state, sections, units, zone)
+                DayCards(readings, state, sections, units, zone) { id -> actions.open(BodyDetail.route(id, BodySpan.DAY, state.device)) }
             }
         }
     }
 }
 
-/** The 24 hours' cards in the person's order, the small tiles two to a row. */
+/** The 24 hours' cards in the person's order, the small tiles two to a row; each opens its details ([details], given its id). */
 @Composable
-private fun DayCards(readings: RecentReadings, state: BodyState, sections: List<com.health.app.ui.components.ArrangeItem>, units: Units, zone: ZoneId) {
+private fun DayCards(readings: RecentReadings, state: BodyState, sections: List<com.health.app.ui.components.ArrangeItem>, units: Units, zone: ZoneId, details: (String) -> Unit) {
     val axis = TimeAxis.of(readings.from, readings.to, zone)
     val shade = Recent.shade(readings)
     val series = Recent.series(readings)
@@ -318,16 +320,16 @@ private fun DayCards(readings: RecentReadings, state: BodyState, sections: List<
             val ids = key.split("+")
             if (ids.size == 2 || ids[0] in BodyText.TILES) {
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ids.forEach { id -> Box(Modifier.weight(1f).fillMaxHeight()) { ReadingTile(id, series, usualDays, today, units, zone) } }
+                    ids.forEach { id -> Box(Modifier.weight(1f).fillMaxHeight()) { ReadingTile(id, series, usualDays, today, units, zone) { details(id) } } }
                     if (ids.size == 1) Spacer(Modifier.weight(1f))
                 }
             } else when (ids[0]) {
-                Recent.SLEEP -> NightCard(readings, zone)
+                Recent.SLEEP -> NightCard(readings, zone) { details(Recent.SLEEP) }
                 Recent.HEART -> series[Metric.HEART_RATE]?.let { hr ->
                     val resting = usualDays.lastOrNull { it.date == today }?.restingHeartRate
-                    HeartCard(hr, resting, BodyText.sources(readings), axis, shade, units)
+                    HeartCard(hr, resting, BodyText.sources(readings), axis, shade, units) { details(Recent.HEART) }
                 }
-                Recent.STEPS -> series[Metric.STEPS]?.let { StepsCard(it, axis, shade, units) }
+                Recent.STEPS -> series[Metric.STEPS]?.let { StepsCard(it, axis, shade, units) { details(Recent.STEPS) } }
             }
         }
     }
@@ -335,43 +337,18 @@ private fun DayCards(readings: RecentReadings, state: BodyState, sections: List<
 
 /** Last night: how long, when, the stages across the night with their names, and each stage's time. */
 @Composable
-private fun NightCard(readings: RecentReadings, zone: ZoneId) {
+private fun NightCard(readings: RecentReadings, zone: ZoneId, onDetails: () -> Unit) {
     val night = BodyText.mainNight(readings)
+    val card = Modifier.opensDetails("Last night", onDetails)
     if (night == null) {
-        TitledCard("Last night") { Text(Recent.NO_SLEEP, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        TitledCard("Last night", card) { Text(Recent.NO_SLEEP, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         return
     }
     val totals = Recent.totals(listOf(night))
-    TitledCard("Last night", note = "${Format.timeOfDay(night.start, zone)} – ${Format.timeOfDay(night.end, zone)}") {
+    TitledCard("Last night", card, note = "${Format.timeOfDay(night.start, zone)} – ${Format.timeOfDay(night.end, zone)}") {
         Text(Format.minutes(totals.asleep), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { contentDescription = "Asleep ${Format.minutes(totals.asleep)}" })
-        val span = TimeAxis.of(night.start, night.end, zone, everyHours = 2)
-        Column {
-            Row(Modifier.fillMaxWidth()) {
-                Column(Modifier.width(52.dp).height(104.dp)) {
-                    listOf("Awake", "REM", "Light", "Deep").forEach { name ->
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                            Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        }
-                    }
-                }
-                Hypnogram(
-                    Recent.stagesIn(listOf(night), night.start, night.end), night.start, night.end,
-                    Modifier.weight(1f).semantics { contentDescription = Recent.sleepDescription(totals) },
-                    height = 104.dp, ticks = span.ticks.map { it.at },
-                )
-            }
-            TimeAxisLabels(span, Modifier.padding(start = 52.dp), gutter = 0.dp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BodyText.stageTiles(totals).forEach { (name, time) ->
-                Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(8.dp).semantics(mergeDescendants = true) {},
-                ) {
-                    Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(time, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                }
-            }
-        }
+        NightStages(night, zone)
+        StageTiles(totals)
         // Naps, and a second night, under it.
         Recent.nights(readings.sleep).filter { it != night }.forEach { s ->
             Text(
@@ -381,10 +358,52 @@ private fun NightCard(readings: RecentReadings, zone: ZoneId) {
     }
 }
 
+/** A night's stages across it, with their names on the left and the hours under it (Last night, and its details). */
+@Composable
+internal fun NightStages(night: com.health.api.SleepSession, zone: ZoneId, height: androidx.compose.ui.unit.Dp = 104.dp, labels: Boolean = true) {
+    val totals = Recent.totals(listOf(night))
+    val span = TimeAxis.of(night.start, night.end, zone, everyHours = 2)
+    val gutter = if (labels) 52.dp else 0.dp
+    Column {
+        Row(Modifier.fillMaxWidth()) {
+            if (labels) {
+                Column(Modifier.width(gutter).height(height)) {
+                    listOf("Awake", "REM", "Light", "Deep").forEach { name ->
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            Hypnogram(
+                Recent.stagesIn(listOf(night), night.start, night.end), night.start, night.end,
+                Modifier.weight(1f).semantics { contentDescription = Recent.sleepDescription(totals) },
+                height = height, ticks = span.ticks.map { it.at },
+            )
+        }
+        if (labels) TimeAxisLabels(span, Modifier.padding(start = gutter), gutter = 0.dp)
+    }
+}
+
+/** Each stage's time as a small tile: deep, REM, light and awake (or asleep and awake). */
+@Composable
+internal fun StageTiles(totals: Recent.SleepTotals) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        BodyText.stageTiles(totals).forEach { (name, time) ->
+            Column(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(8.dp).semantics(mergeDescendants = true) {},
+            ) {
+                Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(time, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+            }
+        }
+    }
+}
+
 /** Heart rate: resting (or lowest), average and highest, then the 24 hours with the night shaded. */
 @Composable
-private fun HeartCard(series: com.health.api.RecentSeries, resting: Double?, sources: String?, axis: TimeAxis, shade: List<Pair<Long, Long>>, units: Units) {
-    TitledCard("Heart rate") {
+private fun HeartCard(series: com.health.api.RecentSeries, resting: Double?, sources: String?, axis: TimeAxis, shade: List<Pair<Long, Long>>, units: Units, onDetails: () -> Unit) {
+    TitledCard("Heart rate", Modifier.opensDetails("Heart rate", onDetails)) {
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             val low = resting ?: series.min
             low?.let { BigFigure(it.toInt().toString(), caption = if (resting != null) "resting" else "lowest") }
@@ -405,9 +424,9 @@ private fun HeartCard(series: com.health.api.RecentSeries, resting: Double?, sou
 
 /** Steps an hour at a time, with the total. */
 @Composable
-private fun StepsCard(series: com.health.api.RecentSeries, axis: TimeAxis, shade: List<Pair<Long, Long>>, units: Units) {
+private fun StepsCard(series: com.health.api.RecentSeries, axis: TimeAxis, shade: List<Pair<Long, Long>>, units: Units, onDetails: () -> Unit) {
     val total = series.total ?: series.points.sumOf { it.value }
-    TitledCard("Steps", trailing = { Text(Format.number(total), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) }) {
+    TitledCard("Steps", Modifier.opensDetails("Steps", onDetails), trailing = { Text(Format.number(total), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) }) {
         Column {
             val points = Recent.points(series, units)
             TimeBars(
@@ -421,7 +440,7 @@ private fun StepsCard(series: com.health.api.RecentSeries, axis: TimeAxis, shade
 
 /** A small tile: a reading's name, its figure, and a line against the person's usual (or its range). */
 @Composable
-private fun ReadingTile(id: String, series: Map<Metric, com.health.api.RecentSeries>, usualDays: List<com.health.api.TrendDay>, today: String, units: Units, zone: ZoneId) {
+private fun ReadingTile(id: String, series: Map<Metric, com.health.api.RecentSeries>, usualDays: List<com.health.api.TrendDay>, today: String, units: Units, zone: ZoneId, onDetails: () -> Unit) {
     val warn = AppTheme.status.warn
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     var label = ""
@@ -468,7 +487,7 @@ private fun ReadingTile(id: String, series: Map<Metric, com.health.api.RecentSer
         }
     }
     val shown = value ?: return
-    AppCard(Modifier.fillMaxHeight(), padding = 16.dp) {
+    AppCard(Modifier.fillMaxHeight().opensDetails(label, onDetails), padding = 16.dp) {
         Column(Modifier.semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.titleSmall, color = quiet)
             Text(shown, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 2)

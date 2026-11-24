@@ -172,3 +172,14 @@ fun BigFigure(value: String, modifier: Modifier = Modifier, caption: String? = n
         caption?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
     }
 }
+
+/**
+ * A whole card that opens its details: one tap target (a button), read out as "[name]: details".
+ * Buttons inside the card keep working on their own. Nothing changes without [onClick].
+ */
+fun Modifier.opensDetails(name: String, onClick: (() -> Unit)?): Modifier =
+    if (onClick == null) this
+    else this
+        .clip(RoundedCornerShape(CARD_CORNER))
+        .clickable(onClickLabel = "Show details", role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+        .semantics { contentDescription = "$name: details" }
