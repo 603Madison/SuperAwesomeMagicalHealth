@@ -76,10 +76,12 @@ object FeatureScreens {
     val BODY_DETAIL = key("bodyDetail")
     /** You › Medical records (ui/records/RecordsScreen.kt): the same section ids as the web's. */
     val RECORDS = key("records")
+    /** Guided meditation (ui/meditation/MeditationScreen.kt): summary, meditations, recent, reminder. */
+    val MEDITATION = key("meditation")
 
     val ALL: List<String> = listOf(
         MIND, NEURO, CYCLE, CONTINENCE, CONTINENCE_PROGRESS, SUPPLIES, MEDS_TODAY, MEDS_LABS, VITALS, SYMPTOMS, HABITS,
-        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT, COMPARE, PRIVACY, ALERTS, RECORDS, BODY_DETAIL,
+        HORMONES, APPOINTMENTS, REPORTS, SHARING, TRANSITION, PHOTOS, MEASUREMENTS, TRENDS, RECENT, COMPARE, PRIVACY, ALERTS, RECORDS, BODY_DETAIL, MEDITATION,
     )
 
     private fun key(screen: String) = Layouts.screen(Layouts.ANDROID, screen)

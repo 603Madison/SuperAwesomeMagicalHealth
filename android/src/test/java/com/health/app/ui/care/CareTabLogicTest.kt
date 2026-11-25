@@ -164,6 +164,28 @@ class CareTabLogicTest {
     }
 
     @Test
+    fun `meditation has its card for everyone, whatever's on, last until it's moved`() {
+        assertEquals(listOf(CareArea.FOOD, CareArea.MEDITATION), CareArea.shown(Module.DEFAULT, meditation = true))
+        assertEquals(listOf(CareArea.MEDITATION), CareArea.shown(emptySet(), meditation = true))
+        assertEquals("MEDITATION", CareArea.MEDITATION.navId)
+        assertEquals("Meditation", CareArea.MEDITATION.title)
+        assertEquals(setOf(CarePart.MEDITATION), CareParts.of(CareArea.MEDITATION, ctx()))
+
+        val summary = com.health.api.MeditationSummary(days = 30, weekMinutes = 24.6, lastMeditationId = "body-scan-15")
+        // Afternoon: this week's minutes.
+        val afternoon = card(CareArea.MEDITATION, data.copy(meditation = summary))
+        assertNull(afternoon.now)
+        assertEquals(listOf("25 min this week"), afternoon.lines)
+        // Evening: a way to start winding down, with the one used last.
+        val evening = card(CareArea.MEDITATION, data.copy(meditation = summary), ctx(at = at(today, 21, 10)))
+        assertEquals("meditation?play=body-scan-15", evening.now?.action?.route)
+        assertEquals(CareActionKind.START, evening.now?.action?.kind)
+        // Never an action on someone else's share; and plainly nothing yet.
+        assertNull(card(CareArea.MEDITATION, data.copy(meditation = summary.copy(weekMinutes = 0.0)), ctx(at = at(today, 21, 10), readOnly = true)).now)
+        assertEquals(listOf("Nothing yet this week"), card(CareArea.MEDITATION, data.copy(meditation = summary.copy(weekMinutes = 0.0))).lines)
+    }
+
+    @Test
     fun `anything due in the next few hours comes first, soonest first, then the person's order`() {
         val cards = listOf(
             CareCard(CareArea.FOOD),

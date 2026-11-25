@@ -519,5 +519,10 @@ private fun Routes(nav: NavHostController, go: (String) -> Unit, bodyAsk: BodySp
             com.health.app.ui.modules.photos.PhotosPage(a?.getString("page").orEmpty(), a?.getString("id"), a?.getString("album"), ::back, ::open)
         }
         page("measurements", nav) { com.health.app.ui.modules.body.MeasurementsRoute(onBack = ::back) }
+
+        // ---- Guided meditation (under Care; everyone's): with ?play=, its player opens straight away.
+        page("meditation?play={play}", nav, listOf(arg("play"))) { back ->
+            com.health.app.ui.meditation.MeditationRoute(back.arguments?.getString("play"), onBack = ::back)
+        }
     }
 }

@@ -87,6 +87,8 @@ object TodayRows {
             NowAction.VOICE_START -> id(action, "lessonId")?.let { "transition/voice-lesson?id=$it" } ?: "transition/voice-training"
             NowAction.APPOINTMENT_OPEN -> id(action, "appointmentId", "id")?.let { "appointments/edit?id=$it" } ?: "appointments"
             NowAction.ALERT_OPEN -> "alerts"
+            // The evening's wind-down: the Meditation page, its player opening on that one.
+            NowAction.MEDITATION_OPEN -> id(action, "meditationId", "id")?.let { "meditation?play=$it" } ?: "meditation"
             else -> item.page?.let { InsightLinks.target(it, modules).route }
         }
     }
