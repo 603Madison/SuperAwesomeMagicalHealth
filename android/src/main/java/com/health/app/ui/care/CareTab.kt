@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -138,6 +139,7 @@ fun CareRoute(open: (String) -> Unit) {
         plainCycle = plainOnToday(),
         photosLocked = locked,
         viewing = viewing != null,
+        meditation = viewing == null || com.health.api.Module.MIND in shownModules(),
         clock = { Format.timeOfDay(it, zone) },
     )
     CareScreen(state, ctx, CareActions(open = open, take = vm::take, change = { changing = true }, retry = vm::load))
@@ -149,7 +151,7 @@ fun CareRoute(open: (String) -> Unit) {
 fun CareScreen(state: CareState, ctx: CareContext, actions: CareActions) {
     var arranging by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf<DueDose?>(null) }
-    val areas = CareArea.shown(ctx.modules)
+    val areas = CareArea.shown(ctx.modules, ctx.meditation)
     val arranged = arrangedBy(Layouts.NAV, areas) { it.navId }
     val cards = CareOrder.dueFirst(arranged.map { CareCards.card(it, state.data, ctx, state.pending, state.failed) }, ctx.now)
     val act = { a: CareAction ->
@@ -232,7 +234,7 @@ private fun Header(card: CareCard, subtitle: String?, onOpen: () -> Unit) {
             contentColor = if (green) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.size(40.dp),
         ) {
-            Box(contentAlignment = Alignment.Center) { Icon(ModuleInfo.icon(card.area.module), null, Modifier.size(20.dp)) }
+            Box(contentAlignment = Alignment.Center) { Icon(card.area.module?.let(ModuleInfo::icon) ?: Icons.Rounded.SelfImprovement, null, Modifier.size(20.dp)) }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

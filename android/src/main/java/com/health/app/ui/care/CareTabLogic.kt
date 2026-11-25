@@ -16,6 +16,7 @@ import com.health.api.LabResult
 import com.health.api.LifeStage
 import com.health.api.Meal
 import com.health.api.MealiePlan
+import com.health.api.MeditationSummary
 import com.health.api.Medication
 import com.health.api.Module
 import com.health.api.NavPage
@@ -45,6 +46,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /*
  * The Care tab (CareTab.kt), in plain Kotlin so it's tested without a phone: one card for each area
@@ -60,7 +62,7 @@ import kotlin.math.floor
  * [com.health.api.Layouts.NAV] (saved: never change it). The order here is the default one, the
  * same as the features list has always had.
  */
-enum class CareArea(val module: Module, val route: String) {
+enum class CareArea(val module: Module?, val route: String) {
     FOOD(Module.NUTRITION, "food"),
     MIND(Module.MIND, "mind"),
     NEURO(Module.NEURO, "neuro"),
@@ -74,20 +76,27 @@ enum class CareArea(val module: Module, val route: String) {
     TRANSITION(Module.TRANSITION, "transition"),
     APPOINTMENTS(Module.APPOINTMENTS, "appointments"),
     PHOTOS(Module.PHOTOS, "photos"),
+    /** Guided meditation: everyone's, whatever's on ([NavPage.MEDITATION]); last unless the person moves it. */
+    MEDITATION(null, "meditation"),
     ;
 
-    /** One name per place: the feature's own. */
-    val title: String get() = module.label
+    /** One name per place: the feature's own, or the page's. */
+    val title: String get() = module?.label ?: NavPage.MEDITATION.label
 
-    /** Food is the page [NavPage.FOOD] in the features list; the rest are their features' names. */
-    val navId: String get() = if (module == Module.NUTRITION) NavPage.FOOD.name else module.name
+    /** Food is the page [NavPage.FOOD] in the features list, Meditation [NavPage.MEDITATION]; the rest are their features' names. */
+    val navId: String get() = when (module) {
+        Module.NUTRITION -> NavPage.FOOD.name
+        null -> NavPage.MEDITATION.name
+        else -> module.name
+    }
 
     companion object {
         /**
-         * The areas for [modules], in the default order. Hormone therapy is part of Medications and
+         * The areas for [modules] (and Meditation, with [meditation]), in the default order. Hormone therapy is part of Medications and
          * progress photos part of Transition, so each is a card of its own only without the other.
          */
-        fun shown(modules: Set<Module>): List<CareArea> = entries.filter { a ->
+        fun shown(modules: Set<Module>, meditation: Boolean = false): List<CareArea> = entries.filter { a ->
+            if (a == MEDITATION) return@filter meditation
             a.module in modules && when (a) {
                 HORMONES -> Module.MEDICATIONS !in modules
                 PHOTOS -> Module.TRANSITION !in modules
@@ -99,7 +108,7 @@ enum class CareArea(val module: Module, val route: String) {
 
 /** What the tab loads, each on its own, so one that fails or is slow never holds up the rest. */
 enum class CarePart {
-    DAY, MEDS, LABS, HORMONES, WEARING, CONTINENCE, SUPPLIES, APPOINTMENTS, MEALS, PLAN, TRANSITION, VOICE, PHOTOS, ROUTINES;
+    DAY, MEDS, LABS, HORMONES, WEARING, CONTINENCE, SUPPLIES, APPOINTMENTS, MEALS, PLAN, TRANSITION, VOICE, PHOTOS, ROUTINES, MEDITATION;
 
     companion object {
         /** Extras whose failing is said on their own pages, not here (tonight's Mealie plan). */
@@ -126,6 +135,8 @@ data class CareData(
     /** How many progress photos there are (never asked while they're locked). */
     val photos: Int? = null,
     val routines: List<Routine>? = null,
+    /** Guided meditation's last month (the person's own, or shared with Mind). */
+    val meditation: MeditationSummary? = null,
 )
 
 /**
@@ -147,6 +158,8 @@ data class CareContext(
     /** Progress photos are locked on this phone: not even their number shows. */
     val photosLocked: Boolean = false,
     val viewing: Boolean = false,
+    /** Whether Meditation has its card: always for the person's own; while viewing, only with Mind shared. */
+    val meditation: Boolean = false,
     val clock: (Long) -> String,
 )
 
@@ -217,11 +230,12 @@ object CareParts {
             }
             CareArea.PHOTOS -> if (!ctx.photosLocked) add(CarePart.PHOTOS)
             CareArea.NEURO -> addAll(listOf(CarePart.DAY, CarePart.ROUTINES))
+            CareArea.MEDITATION -> add(CarePart.MEDITATION)
             else -> add(CarePart.DAY)
         }
     }
 
-    fun needed(ctx: CareContext): Set<CarePart> = CareArea.shown(ctx.modules).flatMapTo(LinkedHashSet()) { of(it, ctx) }
+    fun needed(ctx: CareContext): Set<CarePart> = CareArea.shown(ctx.modules, ctx.meditation).flatMapTo(LinkedHashSet()) { of(it, ctx) }
 }
 
 /** Anything due in the next few hours first (soonest first), then the rest as they were. */
@@ -258,6 +272,7 @@ object CareCards {
             CareArea.VITALS -> vitals(data, ctx)
             CareArea.SYMPTOMS -> symptoms(data)
             CareArea.HABITS -> habits(data, ctx)
+            CareArea.MEDITATION -> meditation(data, ctx)
         }
         if (built.hasContent) return built
         val parts = CareParts.of(area, ctx)
@@ -386,6 +401,22 @@ object CareCards {
     /** Progress photos on their own (Transition off): how many, or that they're locked. */
     private fun photos(data: CareData, ctx: CareContext): CareCard =
         CareCard(CareArea.PHOTOS, lines = listOfNotNull(CareWords.photos(data.photos, ctx)?.replaceFirstChar(Char::uppercase) ?: "No photos yet".takeIf { data.photos == 0 }))
+
+    // ---- Meditation: this week's minutes; in the evening, a way to start winding down
+
+    private fun meditation(data: CareData, ctx: CareContext): CareCard {
+        val s = data.meditation
+        val hour = Instant.ofEpochMilli(ctx.now).atZone(ctx.zone).hour
+        val evening = hour >= 18 || hour < 4
+        val now = if (evening && !ctx.readOnly) {
+            val id = s?.lastMeditationId ?: "wind-down-10"
+            CareNow("Time to wind down", "A guided meditation, ready when you are", CareAction(CareActionKind.START, "Start", "Start a meditation", route = "meditation?play=$id"))
+        } else {
+            null
+        }
+        val line = s?.let { if (it.weekMinutes > 0) "${it.weekMinutes.roundToInt()} min this week" else "Nothing yet this week" }
+        return CareCard(CareArea.MEDITATION, now = now, lines = listOfNotNull(line))
+    }
 
     // ---- Autism & ADHD
 

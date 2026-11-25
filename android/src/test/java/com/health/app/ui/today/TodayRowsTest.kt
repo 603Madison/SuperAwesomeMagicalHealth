@@ -91,6 +91,9 @@ class TodayRowsTest {
         assertEquals("appointments/edit?id=ap1", route(NowAction.APPOINTMENT_OPEN, mapOf("appointmentId" to "ap1")))
         assertEquals("appointments/edit?id=ap2", route(NowAction.APPOINTMENT_OPEN, mapOf("id" to "ap2")))
         assertEquals("alerts", route(NowAction.ALERT_OPEN, mapOf("alertId" to "a1")))
+        // The evening's wind-down: the player opens on that meditation.
+        assertEquals("meditation?play=wind-down-10", route(NowAction.MEDITATION_OPEN, mapOf("meditationId" to "wind-down-10")))
+        assertEquals("meditation", route(NowAction.MEDITATION_OPEN))
         // Done in place: the change sheet, taking the dose.
         assertNull(route(NowAction.CONTINENCE_CHANGE))
         assertNull(route(NowAction.DOSE_TAKE))
@@ -128,6 +131,8 @@ class TodayRowsTest {
         assertEquals("food", TodayRows.route(item(TimelineKind.MEAL, AppPage.FOOD), modules))
         assertEquals("meds", TodayRows.route(item(TimelineKind.DOSE_TAKEN, AppPage.MEDS, "d1"), modules))
         assertEquals("alerts", TodayRows.route(item(TimelineKind.HEALTH_ALERT, AppPage.ALERTS, "a1"), modules))
+        // A guided meditation done: the Meditation page.
+        assertEquals("meditation", TodayRows.route(item(TimelineKind.CALM, AppPage.MEDITATION, "s1"), modules))
         assertEquals("measurements", TodayRows.route(item(TimelineKind.MEASUREMENT, AppPage.BODY), modules, measurements = true))
         assertEquals("trends", TodayRows.route(item(TimelineKind.WEIGHT, AppPage.BODY), modules))
         assertNull(TodayRows.route(item(TimelineKind.OTHER, null), modules))
