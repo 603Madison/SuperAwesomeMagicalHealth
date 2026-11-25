@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { create } from "zustand";
 import {
   ArrowUpDown, CalendarClock, CalendarHeart, Camera, Coffee, CupSoda, Droplet, Droplets, Dumbbell, GlassWater, Heart, HeartPulse, Layers, ListChecks,
-  Moon, Pill, Ruler, Salad, Smile, Sparkles, Stethoscope, Waves, Weight, Wind, Zap, type LucideIcon,
+  Moon, MoonStar, Pill, Ruler, Salad, Smile, Sparkles, Stethoscope, Waves, Weight, Wind, Zap, type LucideIcon,
 } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
@@ -15,6 +15,7 @@ import { actionIds, hourIn, knownAction, mealAt, type ActionIds } from "../lib/t
 import { BODY_MEASUREMENTS, LAYOUT_QUICK, QUICK_ACTIONS, arrange, type Meal, type NowItem, type QuickAction } from "../lib/types";
 import { useReadOnly } from "../lib/viewing";
 import { useMealie } from "../pages/Mealie";
+import { playPath } from "../pages/Meditation";
 import { MoodDialog } from "../pages/Mind";
 import { BloodPressureDialog, GlucoseDialog } from "../pages/Vitals";
 import { SymptomDialog } from "../pages/Symptoms";
@@ -113,6 +114,8 @@ function useActions(onDialog: (d: Dialog) => void): LogAction[] {
     { id: "PHOTO", word: "Photo", name: "Add a progress photo", icon: Camera, run: go("/photos") },
     { id: "MEASUREMENTS", word: "Measure", name: "Log body measurements", icon: Ruler, when: has(F.BODY_MEASUREMENTS), run: () => onDialog("measure") },
     { id: "APPOINTMENT", word: "Appointment", name: "Add an appointment", icon: CalendarClock, run: go("/appointments") },
+    // Guided meditation: everyone's, whatever's on.
+    { id: "MEDITATE", word: "Meditate", name: "Guided meditation", icon: MoonStar, run: go("/meditation") },
   ];
   const moduleOf = (id: QuickAction) => QUICK_ACTIONS.find((q) => q.id === id)?.module ?? null;
   return all.filter((a) => a.when !== false && (moduleOf(a.id) == null || on.includes(moduleOf(a.id)!)));
@@ -167,6 +170,11 @@ function Sheet({ onClose, onDialog, onArrange }: { onClose: () => void; onDialog
       right.push({ key: item.id, icon: Layers, tone: "primary", title: action.label, sub: [item.title, item.detail].filter(Boolean).join(" · "), run: () => onDialog("change") });
     } else if (action.action === "dose.take" && right.filter((r) => r.icon === Pill).length < 2) {
       right.push({ key: item.id, icon: Pill, tone: "primary", title: `${action.label} ${item.title}`, sub: item.detail ?? "", run: () => void take(item, ids) });
+    } else if (action.action === "meditation.open") {
+      right.push({
+        key: item.id, icon: MoonStar, tone: "primary", title: item.title, sub: item.detail ?? "A guided meditation",
+        run: () => { onClose(); navigate(ids.meditationId ? playPath(ids.meditationId) : "/meditation"); },
+      });
     } else if (action.action === "food.add") {
       const meal = ids.meal ?? mealAt(hourIn(now, zone)).meal;
       const name = meal === mealAt(hourIn(now, zone)).meal ? mealAt(hourIn(now, zone)).name : MEAL_NAMES[meal];

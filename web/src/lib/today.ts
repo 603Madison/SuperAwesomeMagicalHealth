@@ -77,7 +77,9 @@ export interface Say {
 // ---- Right now, from the feed ----
 
 /** The actions this version knows how to do; a newer server's others show no button. */
-export const NOW_ACTIONS: NowActionKey[] = ["continence.change", "dose.take", "food.add", "energy.add", "voice.start", "appointment.open", "alert.open"];
+export const NOW_ACTIONS: NowActionKey[] = [
+  "continence.change", "dose.take", "food.add", "energy.add", "voice.start", "appointment.open", "alert.open", "meditation.open",
+];
 
 /** An item's action, if this version knows it; null otherwise (no button). */
 export function knownAction(item: Pick<NowItem, "action">): NowAction | null {
@@ -95,6 +97,7 @@ export interface ActionIds {
   lessonId?: string;
   appointmentId?: string;
   alertId?: string;
+  meditationId?: string;
 }
 
 const MEAL_IDS: Meal[] = ["BREAKFAST", "LUNCH", "DINNER", "SNACK"];
@@ -111,6 +114,7 @@ export function actionIds(a: Pick<NowAction, "ids">): ActionIds {
     lessonId: ids.lessonId || undefined,
     appointmentId: ids.appointmentId || ids.id || undefined,
     alertId: ids.alertId || ids.id || undefined,
+    meditationId: ids.meditationId || undefined,
   };
 }
 

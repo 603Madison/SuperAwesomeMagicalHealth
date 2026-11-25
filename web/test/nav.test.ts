@@ -16,7 +16,8 @@ test("four tabs, always the same, in order (the + sits between Body and Care)", 
 test("each page lights up its tab: features under Care; what devices measured under Body; the rest under You", () => {
   assert.equal(tabOf("/"), "today");
   for (const p of ["/body", "/body/", "/body/weight", "/alerts", "/devices/compare"]) assert.equal(tabOf(p), "body", p);
-  for (const p of ["/care", "/food", "/bladder", "/bladder/settings", "/cycle/settings", "/transition/voice", "/supplies", "/vitals/", "/meds", "/photos"]) assert.equal(tabOf(p), "care", p);
+  for (const p of ["/care", "/food", "/bladder", "/bladder/settings", "/cycle/settings", "/transition/voice", "/supplies", "/vitals/", "/meds", "/photos", "/meditation", "/meditation/play/wind-down-10"]) assert.equal(tabOf(p), "care", p);
+  assert.equal(tabOf("/meditations-elsewhere"), "you");
   for (const p of ["/you", "/settings", "/devices", "/digest", "/reports", "/conditions", "/assistant", "/assistant/sent", "/admin", "/records"]) assert.equal(tabOf(p), "you", p);
   // A path that only starts like a feature's isn't one.
   assert.equal(tabOf("/foodie"), "you");
@@ -31,6 +32,8 @@ test("tab roots have no back arrow; every other page goes back to its parent", (
   for (const p of ["/food", "/bladder", "/meds", "/hormones", "/photos", "/neuro", "/supplies"]) assert.deepEqual(backFor(p), { to: "/care", label: "Care" }, p);
   assert.deepEqual(backFor("/bladder/settings"), { to: "/bladder", label: "Bladder & bowel" });
   assert.deepEqual(backFor("/transition/voice"), { to: "/transition", label: "Transition" });
+  assert.deepEqual(backFor("/meditation"), { to: "/care", label: "Care" });
+  assert.deepEqual(backFor("/meditation/play/body-scan-5"), { to: "/meditation", label: "Meditation" });
   for (const p of ["/body/weight", "/alerts", "/devices/compare"]) assert.deepEqual(backFor(p), { to: "/body", label: "Body" }, p);
   assert.deepEqual(backFor("/assistant/sent"), { to: "/assistant", label: "Assistant" });
   for (const p of ["/digest", "/reports", "/devices", "/settings", "/conditions", "/assistant", "/admin", "/records"]) assert.deepEqual(backFor(p), { to: "/you", label: "You" }, p);

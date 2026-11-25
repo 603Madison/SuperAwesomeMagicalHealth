@@ -66,12 +66,12 @@ test("an action this version knows gets a button; a newer server's doesn't", () 
   assert.equal(knownAction(item("a", "WEARING", 45, { action: { label: "Change", action: "continence.change", ids: { supplyId: "s1" } } }))?.label, "Change");
   assert.equal(knownAction(item("b", "OTHER", 40, { action: { label: "Do", action: "something.new" as never } })), null);
   assert.equal(knownAction(item("c", "FOOD_TODAY", 30)), null);
-  assert.deepEqual(NOW_ACTIONS, ["continence.change", "dose.take", "food.add", "energy.add", "voice.start", "appointment.open", "alert.open"]);
+  assert.deepEqual(NOW_ACTIONS, ["continence.change", "dose.take", "food.add", "energy.add", "voice.start", "appointment.open", "alert.open", "meditation.open"]);
 });
 
 test("an action's ids, read: times as numbers, meals checked, an appointment's or alert's id by either name", () => {
   assert.deepEqual(actionIds({ ids: { medicationId: "m1", scheduledFor: "1763380800000" } }), {
-    medicationId: "m1", scheduledFor: 1763380800000, supplyId: undefined, meal: undefined, date: undefined, lessonId: undefined, appointmentId: undefined, alertId: undefined,
+    medicationId: "m1", scheduledFor: 1763380800000, supplyId: undefined, meal: undefined, date: undefined, lessonId: undefined, appointmentId: undefined, alertId: undefined, meditationId: undefined,
   });
   assert.equal(actionIds({ ids: { meal: "LUNCH", date: "2026-11-13" } }).meal, "LUNCH");
   assert.equal(actionIds({ ids: { meal: "ELEVENSES" } }).meal, undefined);
@@ -80,6 +80,7 @@ test("an action's ids, read: times as numbers, meals checked, an appointment's o
   assert.equal(actionIds({ ids: { id: "a2" } }).appointmentId, "a2");
   assert.equal(actionIds({ ids: { alertId: "x" } }).alertId, "x");
   assert.equal(actionIds({}).supplyId, undefined);
+  assert.equal(actionIds({ ids: { meditationId: "wind-down-10" } }).meditationId, "wind-down-10");
 });
 
 test("the alert Today leads with comes from Right now: the most pressing, and it isn't repeated below", () => {

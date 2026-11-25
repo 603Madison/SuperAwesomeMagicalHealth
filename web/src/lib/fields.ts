@@ -57,6 +57,9 @@ export const F = {
 
   MIND_ENERGY_BUDGET: "mind.energyBudget",
 
+  // Meditation (everyone's; with Mind for sharing): how it felt afterwards, a tap at the end.
+  MEDITATION_FELT_AFTER: "meditation.feltAfter",
+
   NEURO_ENERGY: "neuro.energy",
   NEURO_ABOUT_ME: "neuro.aboutMe",
   NEURO_SENSORY: "neuro.sensory",
@@ -96,6 +99,7 @@ export const DEFAULT_FIELDS: string[] = [
   F.NUTRITION_WATER,
   F.NUTRITION_MICROS,
   F.FOOD_GRADES,
+  F.MEDITATION_FELT_AFTER,
 ];
 
 /** Every field, in the order settings pages list them: its feature and label. */
@@ -142,6 +146,7 @@ export const ALL_FIELDS: { key: string; module: Module; label: string }[] = [
   { key: F.CYCLE_FERTILITY, module: "CYCLE", label: "Fertile window and ovulation" },
   { key: F.CYCLE_DISCHARGE, module: "CYCLE", label: "Discharge" },
   { key: F.MIND_ENERGY_BUDGET, module: "MIND", label: "Energy budget" },
+  { key: F.MEDITATION_FELT_AFTER, module: "MIND", label: "How you felt after meditating" },
   { key: F.NEURO_ENERGY, module: "NEURO", label: "Energy and focus check-ins" },
   { key: F.NEURO_ABOUT_ME, module: "NEURO", label: "About me" },
   { key: F.NEURO_SENSORY, module: "NEURO", label: "Sensory profile and overload" },

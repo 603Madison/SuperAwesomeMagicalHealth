@@ -35,6 +35,7 @@ export const NAMES = {
   privacy: "Where your data goes",
   records: "Medical records",
   weight: "Weight",
+  meditation: "Meditation",
 } as const;
 
 export type Tab = "today" | "body" | "care" | "you";
@@ -96,6 +97,8 @@ const PARENTS: Record<string, { to: string; label: string }> = {
   "/body/weight": { to: "/body", label: NAMES.body },
   "/devices/compare": { to: "/body", label: NAMES.body },
   "/alerts": { to: "/body", label: NAMES.body },
+  // Guided meditation: everyone's, a card in Care.
+  "/meditation": { to: "/care", label: NAMES.care },
 };
 
 /** Pages that belong to Body, past its own. */
@@ -112,7 +115,7 @@ export function tabOf(pathname: string): Tab {
   const path = clean(pathname);
   if (path === "/") return "today";
   if (BODY_PAGES.some((p) => under(path, p))) return "body";
-  if (under(path, "/care") || path === "/supplies" || Object.keys(CARE_PATHS).some((p) => under(path, p))) return "care";
+  if (under(path, "/care") || path === "/supplies" || under(path, "/meditation") || Object.keys(CARE_PATHS).some((p) => under(path, p))) return "care";
   return "you";
 }
 
@@ -124,6 +127,8 @@ export function backFor(pathname: string): { to: string; label: string } | null 
   const path = clean(pathname);
   if (isTabRoot(path)) return null;
   if (PARENTS[path]) return PARENTS[path];
+  // A meditation playing (/meditation/play/wind-down-10).
+  if (under(path, "/meditation")) return { to: "/meditation", label: NAMES.meditation };
   // A card's details (/body/hrv).
   if (under(path, "/body")) return { to: "/body", label: NAMES.body };
   if (CARE_PATHS[path]) return { to: "/care", label: NAMES.care };

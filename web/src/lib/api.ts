@@ -3,7 +3,7 @@ import type {
   OidcSettings, Point, Profile, Sample, ServerSettings, SessionInfo, SleepSummary, Trends, User, WaterEntry, Workout,
   ContinenceEntry, ContinenceSummary, ContinenceWearing, ContinenceDiary, MealiePlan, MealieRecipes, MealieStatus, ShoppingList, ProductStats, CrisisResource, CycleDay, CycleOverview, DoseLog, JournalEntry, LabResult, Medication, MedsDay, MedsHistory, RecordProvider, UsdaLocalStatus,
   HealthRecords, RecordAuthorize, RecordConnect, RecordConnection, RecordItem, RecordKind, RecordOrganization,
-  MindSummary, MindfulnessSession, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
+  MindSummary, MindfulnessSession, Meditation, MeditationSession, MeditationSettings, MeditationSummary, Module, MoodEntry, ScreenerDefinition, ScreenerResult,
   Appointment, BloodPressure, Digest, DoseChange, Drink, DrinksDay, DrinksSummary, Contraction, Feed, GlucoseReading, Habit,
   HabitStatus, HabitTick, HormoneOverview, HormoneSettings, HotFlash, IntegrationKey, KickSession, LifeStageInfo,
   LifeStageOverview, Migraine, Place, PushKey, PushMessage, PushSubscriptionInfo, ReportSectionKey, Shares, Share,
@@ -43,12 +43,14 @@ const SHARED_PATHS = [
   "/api/day/", "/api/feed", "/api/trends", "/api/series", "/api/food/", "/api/measurements", "/api/workouts", "/api/sleep", "/api/checkins/",
   "/api/mind/", "/api/cycle", "/api/continence/", "/api/meds", "/api/labs", "/api/vitals/", "/api/drinks", "/api/symptoms/",
   "/api/habits", "/api/hormones", "/api/appointments", "/api/supplies", "/api/neuro/", "/api/transition", "/api/photos",
+  // Meditation counts as Mind for a share (its settings never: OWN_PATHS).
+  "/api/meditations",
   // Their field layout, filtered by the server to the features they shared.
   "/api/fields",
 ];
 
 /** The person's own settings, never someone's share: no X-SAMH-View, and no changes while viewing one. */
-const OWN_PATHS = ["/api/devices/choices", "/api/food/targets"];
+const OWN_PATHS = ["/api/devices/choices", "/api/food/targets", "/api/meditations/settings"];
 
 /** Where a photo's picture is, for an <img> (the session cookie goes with it). */
 export const photoUrl = (id: string, thumb = false) => `/api/photos/${encodeURIComponent(id)}/${thumb ? "thumb" : "image"}`;
@@ -253,6 +255,16 @@ export const api = {
   mindSessions: (days = 30) => get<MindfulnessSession[]>(`/api/mind/sessions?days=${days}`),
   saveSession: (s: Omit<MindfulnessSession, "id" | "date">) => post<MindfulnessSession>("/api/mind/sessions", s),
   mindSummary: (days = 30) => get<MindSummary>(`/api/mind/summary?days=${days}`),
+
+  // Guided meditation: the meditations (the same for everyone), sessions, the summary and the nightly reminder.
+  meditations: () => get<Meditation[]>("/api/meditations"),
+  meditationSessions: (days = 30) => get<MeditationSession[]>(`/api/meditations/sessions?days=${days}`),
+  saveMeditationSession: (s: MeditationSession) => post<MeditationSession>("/api/meditations/sessions", s),
+  updateMeditationSession: (id: string, s: MeditationSession) => put<MeditationSession>(`/api/meditations/sessions/${q(id)}`, s),
+  deleteMeditationSession: (id: string) => del<unknown>(`/api/meditations/sessions/${q(id)}`),
+  meditationSummary: (days = 30) => get<MeditationSummary>(`/api/meditations/summary?days=${days}`),
+  meditationSettings: () => get<MeditationSettings>("/api/meditations/settings"),
+  saveMeditationSettings: (s: MeditationSettings) => put<MeditationSettings>("/api/meditations/settings", s),
   resources: () => get<CrisisResource[]>("/api/mind/resources"),
 
   cycle: (months = 12) => get<CycleOverview>(`/api/cycle?months=${months}`),

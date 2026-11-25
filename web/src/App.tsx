@@ -48,6 +48,8 @@ import { DigestPage } from "./pages/Digest";
 import { Compare } from "./pages/Compare";
 import { Alerts } from "./pages/Alerts";
 import { Records } from "./pages/Records";
+import { MeditationPage } from "./pages/Meditation";
+import { MeditationPlayer } from "./pages/MeditationPlayer";
 import { LogHost } from "./components/LogSheet";
 import { MOVED, movedTo } from "./lib/nav";
 
@@ -76,6 +78,8 @@ function Root() {
   if (location.pathname === "/watch-setup") return <WatchSetup />;
   // Calm mode fills the screen, with nothing else around it.
   if (location.pathname === "/calm") return <CalmMode />;
+  // A meditation playing fills the screen too, dark and dim.
+  if (location.pathname.startsWith("/meditation/play/")) return <MeditationPlayer />;
   return <Shell />;
 }
 
@@ -138,6 +142,8 @@ function Shell() {
           <Route path="/transition/voice" element={<Shared id="TRANSITION"><VoicePage /></Shared>} />
           <Route path="/photos" element={<Shared id="PHOTOS"><Photos /></Shared>} />
           <Route path="/supplies" element={<SharedAny ids={["CONTINENCE", "CYCLE"]}><Supplies /></SharedAny>} />
+          {/* Guided meditation: everyone's; for someone viewing a share, part of Mind. */}
+          <Route path="/meditation" element={<Shared id="MIND"><MeditationPage /></Shared>} />
           {!viewing && <Route path="/bladder/settings" element={<ContinenceSettingsPage />} />}
           {!viewing && <Route path="/cycle/settings" element={<CycleSettingsPage />} />}
           {/* Devices, records, where data goes and the settings: only ever the person's own. */}
