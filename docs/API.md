@@ -79,6 +79,7 @@ a date for a day's entry like the cycle or the check-in; none for a meal, which 
 | `DOSE_CHANGE` | A hormone medication's start, or a change to its dose or schedule (`HORMONES`) |
 | `BATHROOM`, `LEAK`, `PRODUCT_CHANGE`, `PELVIC_FLOOR` | The bladder and bowel diary: trips, bowel movements and catheters; leaks, bowel accidents and wet nights; changes, with how the one taken off was; pelvic floor sets (`CONTINENCE`) |
 | `MOOD`, `CALM`, `JOURNAL` | Moods, calm practice, journal entries by kind only (`MIND`) |
+| `CALM` (page `MEDITATION`) | Each finished guided meditation: "Meditated 10 min" · its title; `ref` is the session's id, `end` when it ended (`MIND` while Mind is on, otherwise no module: never shared) |
 | `CHECK_IN` | The day's check-in (`MIND` when that's on, otherwise no module), and Autism & ADHD check-ins (`NEURO`) |
 | `ENERGY`, `OVERLOAD`, `FOCUS`, `ROUTINE` | The energy budget, times things got too much, focus, routines done (`NEURO`; the energy budget under `MIND` with Mind's energy budget and without Autism & ADHD) |
 | `SYMPTOM` | Symptoms and migraines (`SYMPTOMS`) |
@@ -105,6 +106,7 @@ means something.
 | `VOICE_PRACTICE_DUE` | With a voice plan, no practice yet today, not a rest day, from its reminder time (40) | Start: `voice.start` (`lessonId`, the next lesson) |
 | `FOOD_TODAY` | Food so far against the day's target (30) | Add: `food.add` (`meal`, the meal it is now, and `date`) |
 | `ENERGY_TODAY` | The energy budget: what's left, or a nudge to set it (65 when running low, else 25 or 20) | Add: `energy.add` (`date`) |
+| `WIND_DOWN` | "Wind down", from 30 minutes before the person's wind-down time (`MeditationSettings.time`) to 3 hours after, with the reminder on or after meditating in the last week; gone once one's begun tonight. `id` `meditation:wind-down:<evening's date>`, `page` `MEDITATION`, no module (30) | Start: `meditation.open` (`meditationId`: the one used last, else `wind-down-10`) |
 
 Without numbers about food (`FieldLayout.foodNumbers` false: eating disorder recovery), meals have
 no calories and `FOOD_TODAY` says which meals were logged, with no `progress`. With water turned
@@ -371,6 +373,57 @@ from `at`, in the person's time zone.
 | `GET /api/mind/summary?days=30` | `MindSummary`: daily averages, feelings, patterns, latest screeners |
 | `GET /api/mind/resources` | `[CrisisResource]`, as the server's admin set them |
 
+### Meditation
+
+Guided meditation, for winding down at night. It's there for everyone, whatever features are on
+(no module to turn on). What's logged is sealed on the server and counts as part of Mind for
+anyone else: a share sees sessions only when it includes `MIND` and the owner has Mind on, and
+the settings never; AI never sees any of it (no connector tool, not in the assistant's tools).
+Nothing here leaves the server.
+
+| | |
+|---|---|
+| `GET /api/meditations` | `[Meditation]`: every guided meditation, the same for everyone |
+| `GET /api/meditations/sessions?days=30` · `POST` · `PUT /{id}` · `DELETE /{id}` | `MeditationSession`, newest first |
+| `GET /api/meditations/summary?days=30` | `MeditationSummary`: minutes (and in the last 7 days), sessions, days, the one used last, and nights after meditating against nights without |
+| `GET /api/meditations/settings` · `PUT` | `MeditationSettings`: the nightly reminder (`reminder`, off to start; `time`, `"21:30"` to start, `HH:mm` in the person's time zone). Never shared |
+
+A `Meditation` has a stable `id` (`<kind>-<minutes>`: `wind-down-10`), a `title`, a one-line
+`about`, its `minutes`, its `kind` (`MeditationKind`: `WIND_DOWN`, `BODY_SCAN`, `BREATHING`,
+`DRIFTING_OFF`, `GRATITUDE`) and its `steps`. Each kind comes in 5, 10 and 15 minutes:
+
+| `kind` | `title` | ids |
+|---|---|---|
+| `WIND_DOWN` | Wind down | `wind-down-5`, `wind-down-10`, `wind-down-15` |
+| `BODY_SCAN` | Body scan | `body-scan-5`, `body-scan-10`, `body-scan-15` |
+| `BREATHING` | Slow breathing | `breathing-5`, `breathing-10`, `breathing-15` |
+| `DRIFTING_OFF` | Drifting off | `drifting-off-5`, `drifting-off-10`, `drifting-off-15` |
+| `GRATITUDE` | Gratitude | `gratitude-5`, `gratitude-10`, `gratitude-15` |
+
+To play one, for each `MeditationStep` in order: read `say` aloud with the device's own
+text-to-speech (offline voices where there's a choice; a calm rate, about 2.5 words a second, is
+what the lengths assume) and show it; then, if there's a `breath` (`BreathPacing`: `inSeconds`,
+`holdSeconds`, `outSeconds`, `rounds`), run a visual pacer for that many breaths; then keep quiet
+for `pauseSeconds`. Words, pacer and pauses together land within 15% of `minutes`. Pausing,
+stopping and going on with the screen off are the apps' own.
+
+When it ends (or is stopped), `POST` a `MeditationSession`: `startedAt` (epoch ms), `minutes`
+actually spent (more than 0, up to 600), `finished`, and optionally `meditationId` (one of the
+server's, or none) and `feltAfter` (1 still unsettled to 5 very settled; asked only while the
+field `meditation.feltAfter` shows, on by default). The server sets `id`, `date`, and `title` and
+`kind` from the meditation. `PUT /{id}` changes one (to add how it felt afterwards, say). Every
+write works the day out again.
+
+`MeditationSummary.nights` (`MeditationNights`) sets the nights after an evening with meditation
+(begun from 5 pm to before 4 am) beside the other nights in the period, by average sleep score and
+time asleep, only with at least 5 nights of each; `insights` then says what happened, never that
+meditating caused it. The nightly reminder goes at `time` by browser push and to webhooks
+subscribed to `WIND_DOWN` (`meditation.reminder`: only ever "Time to wind down"), unless a
+session was begun in the half hour before; the phone app sets its own alarm from the settings.
+The weekly digest has a "Meditation" line (module `MIND`, so the email leaves it out unless Mind
+is listed for email); the report has a line (with Mind, or in the overview); the export has
+`meditation.csv`.
+
 ### Cycle
 
 | | |
@@ -521,7 +574,8 @@ what they read, don't offer `log_water`, and refuse `log_drink` with `WATER`.
 
 Keys (`Layouts` in `shared/…/Layouts.kt`): `today` (`TodaySection` names), `today.quick`
 (`QuickAction` names; hidden ones go under "More"), `nav` (`Module` and `NavPage` names, for the
-web's sidebar and the phone's Health tab), shared by both apps; and `web.<screen>` or
+web's sidebar and the phone's Health tab), shared by both apps (meditation is `MEDITATE` in
+`today.quick` and `MEDITATION` in `nav`, everyone's whatever's on); and `web.<screen>` or
 `android.<screen>` for the rest, with ids each app keeps stable. Sections a saved order doesn't
 name go where they'd be by default (`Layouts.arrange`). Always the person's own: refused with
 `X-SAMH-View`. Up to 100 screens, 80 sections each, ids of letters, digits, `.`, `-` and `_`.
@@ -779,7 +833,8 @@ shared features (and to those the owner has on): `/api/day`, `/api/trends` and `
 `/api/profile` gives only units, time zone, goals and the features shared, and each feature's own
 endpoints need it shared (`/api/series` and `/api/measurements` by their `metric`; photos only with
 `PHOTOS`). `/api/fields` gives only the shared features' fields, without the conditions behind them;
-`/api/conditions` is never shared. A day's `combined` keeps only the readings of shared features.
+`/api/conditions` is never shared. Meditation sessions and their summary need `MIND` shared
+(`/api/meditations/settings` never). A day's `combined` keeps only the readings of shared features.
 Anything else with the header (a change, or `/api/me`, devices and their choices, settings, admin,
 reports, exports) is refused with 403. Shares go to existing accounts by username, and only for the features picked.
 
@@ -817,7 +872,7 @@ Assistant's state) answers that it "is paused in Settings › Where your data go
 
 Every minute the server sends what's due: doses (and again, every `remindAgainMinutes` while
 unmarked), refills, appointments, habits, routines, bladder training, change checks, low supplies, cycle reminders,
-voice practice and the weekly digest, by browser push (names only if
+voice practice, the nightly wind-down and the weekly digest, by browser push (names only if
 `ReminderPrefs.showNames`; nothing but doses in quiet hours) and to webhooks subscribed to the
 event. A push is a `PushMessage` (JSON, encrypted per RFC 8291); "taken" and "skip" actions carry
 `medicationId` and `scheduledFor` for `POST /api/meds/doses`.

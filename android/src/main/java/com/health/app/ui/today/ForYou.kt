@@ -84,6 +84,7 @@ object InsightLinks {
         AppPage.ACTIVITY, AppPage.TRENDS -> Target(page, "trends", "Body")
         AppPage.DEVICES -> Target(page, "devices", "Devices")
         AppPage.ALERTS -> Target(page, "alerts", "Health alerts")
+        AppPage.MEDITATION -> Target(page, "meditation", "Meditation")
     }
 
     /**

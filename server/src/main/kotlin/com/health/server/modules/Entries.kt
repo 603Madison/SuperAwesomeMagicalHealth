@@ -23,6 +23,8 @@ enum class EntryKind {
     CONTINENCE_CHECKIN, SUPPLY_LOG,
     // Energy and focus check-ins (neuro/EnergyFocus.kt).
     NEURO_ENERGY_CHECK,
+    // Guided meditation sessions (modules/Meditation.kt).
+    MEDITATION,
 }
 
 /** An entry as stored: its row's id, day and time, and what it holds. */

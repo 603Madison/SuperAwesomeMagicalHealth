@@ -33,13 +33,14 @@ const PAGES: Record<AppPage, { path: string; name: string }> = {
   TRENDS: { path: "/body?span=month", name: "Body" },
   DEVICES: { path: "/devices", name: "Devices" },
   ALERTS: { path: "/alerts", name: "Health alerts" },
+  MEDITATION: { path: "/meditation", name: "Meditation" },
 };
 
 /** The feature each page needs shared, for someone viewing a share (Summary.kt's AppPage.module). */
 const PAGE_MODULES: Partial<Record<AppPage, Module[]>> = {
   FOOD: ["NUTRITION"], MEDS: ["MEDICATIONS"], MIND: ["MIND"], CYCLE: ["CYCLE"], CONTINENCE: ["CONTINENCE"], SUPPLIES: ["CONTINENCE", "CYCLE"],
   VITALS: ["VITALS"], HABITS: ["HABITS"], SYMPTOMS: ["SYMPTOMS"], HORMONES: ["HORMONES"], APPOINTMENTS: ["APPOINTMENTS"], NEURO: ["NEURO"],
-  TRANSITION: ["TRANSITION"], PHOTOS: ["PHOTOS"], BODY: ["BODY"], SLEEP: ["SLEEP"], ACTIVITY: ["ACTIVITY"],
+  TRANSITION: ["TRANSITION"], PHOTOS: ["PHOTOS"], MEDITATION: ["MIND"], BODY: ["BODY"], SLEEP: ["SLEEP"], ACTIVITY: ["ACTIVITY"],
 };
 
 /** A page's name, for "Open …". */

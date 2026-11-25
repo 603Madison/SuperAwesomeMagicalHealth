@@ -109,12 +109,14 @@ data class Insight(
 enum class AppPage {
     TODAY, FOOD, MEDS, MIND, CYCLE, CONTINENCE, SUPPLIES, VITALS, HABITS, SYMPTOMS, HORMONES, APPOINTMENTS, NEURO, TRANSITION,
     PHOTOS, BODY, SLEEP, ACTIVITY, TRENDS, DEVICES, ALERTS,
+    /** Guided meditation: everyone's (a viewer reaches its sessions only with Mind shared). */
+    MEDITATION,
     ;
 
     /** The feature a page belongs to (shown to someone viewing a share only if it's shared), or null for the pages everyone has. */
     val module: Module?
         get() = when (this) {
-            TODAY, TRENDS, DEVICES, SUPPLIES, ALERTS -> null
+            TODAY, TRENDS, DEVICES, SUPPLIES, ALERTS, MEDITATION -> null
             FOOD -> Module.NUTRITION
             MEDS -> Module.MEDICATIONS
             MIND -> Module.MIND

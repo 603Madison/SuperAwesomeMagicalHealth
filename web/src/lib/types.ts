@@ -576,7 +576,9 @@ export interface Insight {
 /** The apps' pages, for an insight to open (Summary.kt's AppPage). */
 export type AppPage =
   | "TODAY" | "FOOD" | "MEDS" | "MIND" | "CYCLE" | "CONTINENCE" | "SUPPLIES" | "VITALS" | "HABITS" | "SYMPTOMS" | "HORMONES"
-  | "APPOINTMENTS" | "NEURO" | "TRANSITION" | "PHOTOS" | "BODY" | "SLEEP" | "ACTIVITY" | "TRENDS" | "DEVICES" | "ALERTS";
+  | "APPOINTMENTS" | "NEURO" | "TRANSITION" | "PHOTOS" | "BODY" | "SLEEP" | "ACTIVITY" | "TRENDS" | "DEVICES" | "ALERTS"
+  /** Guided meditation: everyone's (a viewer reaches its sessions only with Mind shared). */
+  | "MEDITATION";
 
 /** A feature's own page (AppPage.of). */
 export const MODULE_PAGE: Record<Module, AppPage> = {
@@ -874,6 +876,89 @@ export interface MindfulnessSession {
   note?: string;
   id?: string;
   date?: string;
+}
+
+// ---------------------------------------------------------------- Meditation (Meditation.kt)
+
+/** The kinds of guided meditation. */
+export type MeditationKind = "WIND_DOWN" | "BODY_SCAN" | "BREATHING" | "DRIFTING_OFF" | "GRATITUDE";
+
+/** A breathing pacer, shown after a step's words and before its pause: `rounds` breaths of in, rest (0 for none), out. */
+export interface BreathPacing {
+  inSeconds: number;
+  holdSeconds: number;
+  outSeconds: number;
+  rounds: number;
+}
+
+/** One step: `say` is read aloud (the device's own text-to-speech) and shown; then the pacer, if any; then `pauseSeconds` of silence. */
+export interface MeditationStep {
+  say: string;
+  pauseSeconds: number;
+  breath?: BreathPacing;
+}
+
+/** A guided meditation (GET /api/meditations). `id` is stable ("wind-down-10"). */
+export interface Meditation {
+  id: string;
+  title: string;
+  /** One line: what it's like. */
+  about: string;
+  /** About how long it takes, read at a calm pace (about 2.5 words a second) with its pauses and pacer. */
+  minutes: number;
+  kind: MeditationKind;
+  steps: MeditationStep[];
+}
+
+/** A meditation done (or begun), logged when it ends; sealed on the server. */
+export interface MeditationSession {
+  /** When it began (epoch ms). */
+  startedAt: number;
+  /** How long it actually went on (more than 0, up to 600). */
+  minutes: number;
+  /** Heard to the end; false for one stopped partway. */
+  finished: boolean;
+  /** One of the server's meditations; none for sitting quietly without one. */
+  meditationId?: string;
+  /** 1 (still unsettled) to 5 (very settled); optional (field "meditation.feltAfter"). */
+  feltAfter?: number;
+  /** Set by the server. */
+  id?: string;
+  date?: string;
+  title?: string;
+  kind?: MeditationKind;
+}
+
+/** The nightly reminder (GET/PUT /api/meditations/settings): off to start; `time` "HH:mm" in the person's time zone. */
+export interface MeditationSettings {
+  reminder: boolean;
+  time: string;
+}
+
+/** Nights after meditating in the evening against nights without: only with at least 5 of each. */
+export interface MeditationNights {
+  nightsAfter: number;
+  nightsWithout: number;
+  scoreAfter?: number;
+  scoreWithout?: number;
+  /** Average minutes asleep. */
+  asleepAfter?: number;
+  asleepWithout?: number;
+}
+
+/** GET /api/meditations/summary?days=30. */
+export interface MeditationSummary {
+  days: number;
+  sessions: number;
+  finished: number;
+  minutes: number;
+  /** The last 7 days, today included. */
+  weekMinutes: number;
+  daysMeditated: number;
+  lastMeditationId?: string;
+  nights?: MeditationNights;
+  /** Said as what happened, never as a cause. */
+  insights: Insight[];
 }
 
 export interface CrisisResource {
@@ -1654,7 +1739,9 @@ export interface Digest {
 export type WebhookEvent =
   | "MORNING" | "READINESS_LOW" | "DOSE_DUE" | "DOSE_MISSED" | "DOSE_TAKEN" | "REFILL" | "BP_HIGH" | "GLUCOSE_LOW"
   | "GLUCOSE_HIGH" | "MIGRAINE" | "HABIT_DUE" | "APPOINTMENT_SOON" | "DEVICE_BATTERY_LOW" | "DEVICE_QUIET" | "DIGEST" | "TEST"
-  | "BLADDER_TRAINING" | "CONTINENCE_CHANGE" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE" | "HEALTH_ALERT";
+  | "BLADDER_TRAINING" | "CONTINENCE_CHANGE" | "SUPPLIES_LOW" | "CYCLE_REMINDER" | "VOICE_PRACTICE" | "HEALTH_ALERT"
+  /** The nightly meditation reminder ("meditation.reminder"): only ever "time to wind down". */
+  | "WIND_DOWN";
 
 export interface Webhook {
   name: string;
@@ -2683,7 +2770,7 @@ export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
 export type QuickAction =
   | "FOOD" | "WATER" | "MOOD" | "PERIOD" | "BLADDER" | "DOSE" | "WEIGHT" | "COFFEE" | "DRINK" | "WORKOUT" | "SLEEP"
   | "CHECK_IN" | "SYMPTOM" | "BLOOD_PRESSURE" | "GLUCOSE" | "HABIT" | "ENERGY" | "OVERLOAD" | "CALM" | "MOMENT"
-  | "PHOTO" | "MEASUREMENTS" | "APPOINTMENT";
+  | "PHOTO" | "MEASUREMENTS" | "APPOINTMENT" | "MEDITATE";
 
 /** Quick actions, in the default order, with the feature each needs (null: always). */
 export const QUICK_ACTIONS: { id: QuickAction; label: string; module: Module | null }[] = [
@@ -2699,10 +2786,11 @@ export const QUICK_ACTIONS: { id: QuickAction; label: string; module: Module | n
   { id: "CALM", label: "Calm", module: "MIND" }, { id: "MOMENT", label: "Euphoria", module: "TRANSITION" },
   { id: "PHOTO", label: "Photo", module: "PHOTOS" }, { id: "MEASUREMENTS", label: "Measurements", module: "BODY" },
   { id: "APPOINTMENT", label: "Appointment", module: "APPOINTMENTS" },
+  { id: "MEDITATE", label: "Meditate", module: null },
 ];
 /* How many quick actions show in Today's row (QuickAction.SHOWN) is lib/today.ts's QUICK_ROW. */
 
-export type NavPage = "TODAY" | "TRENDS" | "FOOD" | "REPORTS" | "DEVICES" | "CONDITIONS" | "ASSISTANT" | "ALERTS";
+export type NavPage = "TODAY" | "TRENDS" | "FOOD" | "REPORTS" | "DEVICES" | "CONDITIONS" | "ASSISTANT" | "ALERTS" | "MEDITATION";
 
 /** Applies a saved layout to a screen's sections (ids in the default order): the person's order, then new ones where they'd be. */
 export function arrange<T>(defaults: T[], id: (t: T) => string, layout?: ScreenLayout): T[] {
@@ -2934,11 +3022,15 @@ export interface TimelineItem {
 
 /** What's live now ("Right now"). OTHER stands in for a kind this version doesn't know. */
 export type NowKind =
-  | "WEARING" | "DOSE_DUE" | "DOSE_OVERDUE" | "FOOD_TODAY" | "APPOINTMENT_SOON" | "ENERGY_TODAY" | "VOICE_PRACTICE_DUE" | "HEALTH_ALERT" | "OTHER";
+  | "WEARING" | "DOSE_DUE" | "DOSE_OVERDUE" | "FOOD_TODAY" | "APPOINTMENT_SOON" | "ENERGY_TODAY" | "VOICE_PRACTICE_DUE" | "HEALTH_ALERT"
+  /** The evening's wind-down time: a guided meditation to start. */
+  | "WIND_DOWN" | "OTHER";
 
 /** What a "Right now" item's one action does (NowAction's keys). */
 export type NowActionKey =
-  | "continence.change" | "dose.take" | "food.add" | "energy.add" | "voice.start" | "appointment.open" | "alert.open";
+  | "continence.change" | "dose.take" | "food.add" | "energy.add" | "voice.start" | "appointment.open" | "alert.open"
+  /** Opens a guided meditation, ready to start (ids: meditationId). */
+  | "meditation.open";
 
 /** The one thing a "Right now" item offers. */
 export interface NowAction {
@@ -2946,7 +3038,7 @@ export interface NowAction {
   label: string;
   /** What it does. A newer server may send a key this version doesn't know: leave the button out then. */
   action: NowActionKey;
-  /** What it needs, by name: medicationId, scheduledFor (epoch ms), supplyId, meal, date, lessonId, appointmentId, alertId. */
+  /** What it needs, by name: medicationId, scheduledFor (epoch ms), supplyId, meal, date, lessonId, appointmentId, alertId, meditationId. */
   ids?: Record<string, string>;
 }
 

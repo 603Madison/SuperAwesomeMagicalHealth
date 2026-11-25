@@ -125,6 +125,8 @@ enum class QuickAction(val label: String, val module: Module?) {
     PHOTO("Photo", Module.PHOTOS),
     MEASUREMENTS("Measurements", Module.BODY),
     APPOINTMENT("Appointment", Module.APPOINTMENTS),
+    /** Opens guided meditation: everyone's, whatever's on. */
+    MEDITATE("Meditate", null),
     ;
 
     companion object {
@@ -138,4 +140,6 @@ enum class QuickAction(val label: String, val module: Module?) {
 enum class NavPage(val label: String) {
     TODAY("Today"), TRENDS("Trends"), FOOD("Food"), REPORTS("Reports"), DEVICES("Devices"), CONDITIONS("What you're tracking"), ASSISTANT("Assistant"),
     ALERTS("Health alerts"),
+    /** Guided meditation: everyone's, whatever's on. */
+    MEDITATION("Meditation"),
 }

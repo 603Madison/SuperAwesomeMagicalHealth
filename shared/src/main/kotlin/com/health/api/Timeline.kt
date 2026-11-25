@@ -27,7 +27,7 @@ enum class TimelineKind {
     MOOD,
     /** The day's check-in, or an Autism & ADHD check-in. */
     CHECK_IN,
-    /** A breathing exercise, grounding or meditation. */
+    /** A breathing exercise, grounding or meditation (a guided meditation's `page` is [AppPage.MEDITATION]). */
     CALM,
     JOURNAL,
     /** The day's energy budget. */
@@ -95,6 +95,8 @@ enum class NowKind {
     VOICE_PRACTICE_DUE,
     /** A health alert not put away yet. */
     HEALTH_ALERT,
+    /** The evening's wind-down time: a guided meditation to start. */
+    WIND_DOWN,
     OTHER,
 }
 
@@ -105,7 +107,7 @@ data class NowAction(
     val label: String,
     /** What it does: one of the keys below. */
     val action: String,
-    /** What it needs, by name: "medicationId", "scheduledFor" (epoch ms), "supplyId", "meal", "date", "lessonId", "appointmentId", "alertId". */
+    /** What it needs, by name: "medicationId", "scheduledFor" (epoch ms), "supplyId", "meal", "date", "lessonId", "appointmentId", "alertId", "meditationId". */
     val ids: Map<String, String> = emptyMap(),
 ) {
     companion object {
@@ -123,6 +125,8 @@ data class NowAction(
         const val APPOINTMENT_OPEN = "appointment.open"
         /** Opens a health alert ([ids]: alertId). */
         const val ALERT_OPEN = "alert.open"
+        /** Opens a guided meditation, ready to start ([ids]: meditationId). */
+        const val MEDITATION_OPEN = "meditation.open"
     }
 }
 

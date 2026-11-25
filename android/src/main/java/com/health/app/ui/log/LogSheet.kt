@@ -320,6 +320,7 @@ fun LogHost(
             QuickAction.PHOTO -> open("photos/add?id=camera")
             QuickAction.MEASUREMENTS -> open("measurements")
             QuickAction.APPOINTMENT -> open("appointments/edit")
+            QuickAction.MEDITATE -> open("meditation")
         }
     }
 

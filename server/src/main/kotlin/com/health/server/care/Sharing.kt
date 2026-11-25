@@ -154,6 +154,9 @@ object SharedView {
         "/api/water" to any(Module.NUTRITION),
         "/api/drinks" to any(Module.NUTRITION),
         "/api/mind" to any(Module.MIND),
+        // Guided meditation is everyone's, but what's logged counts as Mind's; the reminder setting is the owner's alone.
+        "/api/meditations/settings" to Need.Never,
+        "/api/meditations" to any(Module.MIND),
         "/api/cycle" to any(Module.CYCLE),
         "/api/continence" to any(Module.CONTINENCE),
         "/api/meds" to any(Module.MEDICATIONS),

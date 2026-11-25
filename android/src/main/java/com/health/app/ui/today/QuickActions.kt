@@ -58,6 +58,7 @@ object QuickActions {
         QuickAction.PHOTO -> Icons.Rounded.PhotoCamera
         QuickAction.MEASUREMENTS -> Icons.Rounded.Straighten
         QuickAction.APPOINTMENT -> Icons.AutoMirrored.Rounded.EventNote
+        QuickAction.MEDITATE -> Icons.Rounded.SelfImprovement
     }
 
     /** The word under a tile in the + sheet's grid: short, so four fit across a small phone. */
