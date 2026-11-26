@@ -60,6 +60,9 @@ class MeditationLogicTest {
     @Test
     fun `the time left is in whole minutes, rounded up`() {
         assertEquals("10 min left", MeditationPlan.leftText(600.0))
+        assertEquals("10:00 left", MeditationPlan.clockText(600.0))
+        assertEquals("9:42 left", MeditationPlan.clockText(581.2))
+        assertEquals("0:00 left", MeditationPlan.clockText(-1.0))
         assertEquals("10 min left", MeditationPlan.leftText(541.0))
         assertEquals("1 min left", MeditationPlan.leftText(60.0))
         assertEquals("Less than a minute left", MeditationPlan.leftText(59.0))

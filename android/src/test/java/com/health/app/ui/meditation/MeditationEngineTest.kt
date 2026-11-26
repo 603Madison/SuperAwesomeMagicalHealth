@@ -61,6 +61,34 @@ class MeditationEngineTest {
     private fun TestScope.engine(voice: Speaker?, mode: VoiceMode = VoiceMode.VOICE, fadeOut: Boolean = false, chimes: Chimes = Counter(), ended: MutableList<PlayerState> = mutableListOf()) =
         MeditationEngine(meditation, voice, chimes, { currentTime }, mode, fadeOut, onEnd = { ended += it })
 
+    /** A voice that takes the words and never reads them, or never says it has (some phones' engines). */
+    private class SilentVoice : Speaker {
+        var stops = 0
+        private var reading: CompletableDeferred<Boolean>? = null
+        override suspend fun say(text: String): Boolean = CompletableDeferred<Boolean>().also { reading = it }.await()
+        override fun stop() {
+            stops++
+            reading?.complete(false)
+        }
+    }
+
+    @Test
+    fun `a voice that never reads doesn't hold it up, it carries on with the words shown`() = runTest {
+        val voice = SilentVoice()
+        val e = engine(voice)
+        e.start(this)
+        runCurrent()
+        assertEquals(0, e.state.value.step)
+        // Twice the 2 s the words take, and 8 s more: then it gives up on the voice.
+        advanceTimeBy(12_100)
+        assertEquals(VoiceMode.VOICE_FAILED, e.state.value.voice)
+        assertTrue(voice.stops > 0)
+        // Then the step's quiet (4 s), and the next step, shown without the voice.
+        advanceTimeBy(4_100)
+        assertEquals(1, e.state.value.step)
+        e.stop()
+    }
+
     @Test
     fun `text only shows each step for as long as it would take to read, then the pacer, then the quiet`() = runTest {
         val ended = mutableListOf<PlayerState>()

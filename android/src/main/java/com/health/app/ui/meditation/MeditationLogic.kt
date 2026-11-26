@@ -66,7 +66,13 @@ object MeditationPlan {
         return current + timeline.drop(index + 1).sumOf { it.seconds }
     }
 
-    /** "12 min left", "1 min left", "Less than a minute left". */
+    /** On the player, counting down each second so it's clear it's going on: "9:42 left". */
+    fun clockText(seconds: Double): String {
+        val s = ceil(seconds - 1e-9).toInt().coerceAtLeast(0)
+        return "%d:%02d left".format(s / 60, s % 60)
+    }
+
+    /** In the notification: "12 min left", "1 min left", "Less than a minute left". */
     fun leftText(seconds: Double): String {
         val minutes = ceil(seconds / 60.0 - 1e-9).toInt()
         return when {

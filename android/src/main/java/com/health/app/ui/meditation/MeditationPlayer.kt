@@ -253,7 +253,7 @@ private fun Playing(state: PlayerState, still: Boolean, actions: PlayerActions) 
                 Text("${state.minutes} min", style = MaterialTheme.typography.bodySmall, color = Night.quiet)
             }
             Text(
-                if (state.phase == PlayerPhase.PAUSED) "Paused" else MeditationPlan.leftText(state.secondsLeft),
+                if (state.phase == PlayerPhase.PAUSED) "Paused" else MeditationPlan.clockText(state.secondsLeft),
                 style = MaterialTheme.typography.bodyMedium, color = Night.quiet, modifier = Modifier.padding(end = 8.dp),
             )
         }
@@ -277,6 +277,7 @@ private fun Playing(state: PlayerState, still: Boolean, actions: PlayerActions) 
             }
         }
         if (state.voice == VoiceMode.NO_OFFLINE_VOICE) NoVoiceNote(actions.voiceSettings)
+        if (state.voice == VoiceMode.VOICE_FAILED) NoVoiceNote(actions.voiceSettings, failed = true)
         Controls(state, actions)
     }
 }
@@ -303,10 +304,11 @@ private fun BreathCircle(point: PacerPoint, still: Boolean) {
 
 /** No offline voice on this phone: words on screen instead, and where to get a voice. */
 @Composable
-private fun NoVoiceNote(onSettings: () -> Unit) {
+private fun NoVoiceNote(onSettings: () -> Unit, failed: Boolean = false) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            "There's no offline voice on this phone yet, so it's words only. You can download one in your phone's text-to-speech settings.",
+            if (failed) "Your phone's voice didn't read that, so it's words only for now. Turn Voice on to try again, or check your phone's text-to-speech settings."
+            else "There's no offline voice on this phone yet, so it's words only. You can download one in your phone's text-to-speech settings.",
             style = MaterialTheme.typography.bodySmall, color = Night.quiet, textAlign = TextAlign.Center,
         )
         TextButton(onClick = onSettings, modifier = Modifier.heightIn(min = 48.dp)) { Text("Text-to-speech settings") }
@@ -331,7 +333,7 @@ private fun Controls(state: PlayerState, actions: PlayerActions) {
             }
             Spacer(Modifier.weight(1f))
         }
-        val voiceOn = state.voice != VoiceMode.TEXT_ONLY
+        val voiceOn = state.voice != VoiceMode.TEXT_ONLY && state.voice != VoiceMode.VOICE_FAILED
         SegmentedChoice(listOf(true, false), voiceOn, { if (it) "Voice" else "Text only" }, actions.voice, Modifier.padding(horizontal = 24.dp))
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).heightIn(min = 48.dp).clickable { actions.fadeOut(!state.fadeOut) },

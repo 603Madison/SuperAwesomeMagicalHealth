@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /*
  * Playing a meditation: for each step, its words (read aloud, or shown for as long as reading them
@@ -35,7 +36,8 @@ fun interface Chimes {
 }
 
 /** How it's being read: aloud, as text only (the person's choice), or text only for want of an offline voice. */
-enum class VoiceMode { VOICE, TEXT_ONLY, NO_OFFLINE_VOICE }
+/** VOICE_FAILED: the phone's voice didn't read a step (it never started, or never said it had finished), so it's words only until turned on again. */
+enum class VoiceMode { VOICE, TEXT_ONLY, NO_OFFLINE_VOICE, VOICE_FAILED }
 
 enum class PlayerPhase { PLAYING, PAUSED, ENDED }
 
@@ -215,15 +217,20 @@ class MeditationEngine(
                 wait((estimate - (active() - segmentStart)).coerceAtLeast(0))
                 return
             }
+            // Never waits on the phone's voice for ever: some engines take the words and never read
+            // them, or never say they've finished. Past twice the time the words take (and a little),
+            // it carries on with the words shown.
             val done = coroutineScope {
                 val watch = launch { paused.first { it }; voice.stop() }
-                val read = voice.say(segment.text)
+                val read = withTimeoutOrNull(estimate * 2 + SAY_GRACE_MS) { voice.say(segment.text) }
                 watch.cancel()
+                if (read == null) voice.stop()
                 read
             }
-            if (done) return
-            // Paused (read again on resuming), turned to text only (shown for the rest), or the voice failed (shown).
+            if (done == true) return
+            // Paused (read again on resuming), turned to text only (shown for the rest), or the voice failed.
             if (!paused.value && _state.value.voice == VoiceMode.VOICE) {
+                _state.update { it.copy(voice = VoiceMode.VOICE_FAILED) }
                 wait((estimate - (active() - segmentStart)).coerceAtLeast(0))
                 return
             }
@@ -234,5 +241,6 @@ class MeditationEngine(
         const val TICK_MS = 1_000L
         const val BREATH_TICK_MS = 100L
         const val WAIT_STEP_MS = 250L
+        const val SAY_GRACE_MS = 8_000L
     }
 }

@@ -182,7 +182,7 @@ class MeditationScreenshotTest {
     fun playerMidStep() {
         renderPlayer(playing)
         shows("Wind down")
-        shows("7 min left")
+        shows("6:52 left")
         shows("yes, that happened")
         compose.onNodeWithContentDescription("Pause").assertExists()
         compose.onNodeWithContentDescription("Stop and go back").assertExists()
