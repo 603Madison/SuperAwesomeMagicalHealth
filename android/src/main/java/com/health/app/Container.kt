@@ -638,6 +638,44 @@ class Container(val context: Context) {
         }
     }
 
+    // ---- Guided meditation (ui/meditation): the nightly "Time to wind down" is the phone's own alarm,
+    // from the person's settings on the server; planned again when they're loaded or changed, after
+    // each sync (data changing), and forgotten on signing out. Only ever the person's own. ----
+
+    /** The reminder's settings as the server has them (loaded or just saved): the alarm follows. */
+    fun meditationSettingsLoaded(settings: com.health.api.MeditationSettings) {
+        if (_viewing.value != null) return
+        attempt { com.health.app.ui.meditation.MeditationReminders(context).update(settings, zone()) }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun startMeditation() {
+        scope.launch {
+            profile.map { it?.timezone }.distinctUntilChanged().collect { zone ->
+                if (zone != null && settings.value.signedIn && _viewing.value == null) {
+                    attempt { com.health.app.ui.meditation.MeditationReminders.refresh(context, api, zone()) }
+                }
+            }
+        }
+        scope.launch {
+            revision.drop(1).debounce(5_000).collect {
+                if (settings.value.signedIn && _viewing.value == null) attempt { com.health.app.ui.meditation.MeditationReminders.refresh(context, api, zone()) }
+            }
+        }
+        scope.launch {
+            settings.map { it.signedIn }.distinctUntilChanged().drop(1).collect { signedIn ->
+                if (!signedIn) {
+                    kotlinx.coroutines.withContext(Dispatchers.Main) { com.health.app.ui.meditation.MeditationPlayback.stop() }
+                    com.health.app.ui.meditation.MeditationReminders.forget(context)
+                }
+            }
+        }
+    }
+
+    init {
+        startMeditation()
+    }
+
     companion object {
         private const val TAG = "Health"
     }

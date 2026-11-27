@@ -155,6 +155,9 @@ class Services(
 
     // Conditions and goals, supplies (bladder and bowel, periods).
     val conditions = com.health.server.conditions.ConditionsService(userSettings, profiles)
+
+    /** Guided meditation: everyone's, whatever's on (with Mind for sharing; never offered to AI). */
+    val meditation = com.health.server.modules.MeditationService(entries, userSettings, profiles, days, clock)
     val supplies = com.health.server.modules.SuppliesService(db, box, entries, profiles, clock)
     init {
         modules.continence.supplies = supplies
@@ -200,6 +203,7 @@ class Services(
             com.health.server.modules.SuppliesHooks(supplies, profiles, clock),
             com.health.server.modules.CycleHooks(modules.cycle, clock),
             com.health.server.photos.PhotoHooks(photos),
+            com.health.server.modules.MeditationHooks(meditation, clock),
             alerts,
         )
     }

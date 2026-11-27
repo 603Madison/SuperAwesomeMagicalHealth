@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Medication
@@ -332,6 +333,7 @@ fun nowIcon(kind: NowKind): ImageVector = when (kind) {
     NowKind.ENERGY_TODAY -> Icons.Rounded.Bolt
     NowKind.VOICE_PRACTICE_DUE -> Icons.Rounded.Mic
     NowKind.HEALTH_ALERT -> Icons.Rounded.MonitorHeart
+    NowKind.WIND_DOWN -> Icons.Rounded.Bedtime
     NowKind.OTHER -> Icons.Rounded.Schedule
 }
 

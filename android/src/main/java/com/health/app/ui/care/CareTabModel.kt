@@ -15,6 +15,7 @@ import com.health.app.net.continenceWearing
 import com.health.app.net.hormones
 import com.health.app.net.mealiePlan
 import com.health.app.net.mealieStatus
+import com.health.app.net.meditationSummary
 import com.health.app.net.photoAlbums
 import com.health.app.net.routines
 import com.health.app.net.supplyStatus
@@ -100,6 +101,7 @@ class CareViewModel(private val c: Container) : ViewModel() {
         foodNumbers = c.fields.value?.foodNumbers ?: true,
         viewing = c.viewing.value != null,
         photosLocked = photosLocked,
+        meditation = c.viewing.value == null || com.health.api.Module.MIND in c.shownModules(),
         clock = { "" },
     )
 
@@ -137,6 +139,7 @@ class CareViewModel(private val c: Container) : ViewModel() {
                 CarePart.VOICE -> api.voiceProgress().let { v -> { d: CareData -> d.copy(voice = v) } }
                 CarePart.PHOTOS -> api.photoAlbums().sumOf { it.count }.let { v -> { d: CareData -> d.copy(photos = v.takeUnless { photosLocked }) } }
                 CarePart.ROUTINES -> api.routines().let { v -> { d: CareData -> d.copy(routines = v) } }
+                CarePart.MEDITATION -> api.meditationSummary(30).let { v -> { d: CareData -> d.copy(meditation = v) } }
             }
         }
         _state.update { s ->

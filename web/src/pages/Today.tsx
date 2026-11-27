@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Bell, CalendarClock, ChevronDown, ChevronRight, CircleDot, HeartPulse, Layers, Mic, Phone, Pill, RefreshCw, Salad, Sparkles, Thermometer, Timer, Watch, Wind,
+  Bell, CalendarClock, ChevronDown, ChevronRight, CircleDot, HeartPulse, Layers, Mic, MoonStar, Phone, Pill, RefreshCw, Salad, Sparkles, Thermometer, Timer, Watch, Wind,
   type LucideIcon,
 } from "lucide-react";
 import { FirstRunPrompt } from "./Conditions";
@@ -30,6 +30,7 @@ import { InsightRow, pagePath, usePageOpens } from "../components/Insights";
 import { WorkoutDialog } from "../components/LogDialogs";
 import { QuickCheckDialog } from "./EnergyFocus";
 import { useLogged } from "../components/LogSheet";
+import { playPath } from "./Meditation";
 
 /*
  * Today, top to bottom: the health alert that's still active, when there is one (always first, never
@@ -58,7 +59,7 @@ const SECTIONS: { id: TodaySection; label: string }[] = [
 
 const NOW_ICONS: Record<string, LucideIcon> = {
   WEARING: Layers, DOSE_DUE: Pill, DOSE_OVERDUE: Pill, FOOD_TODAY: Salad, APPOINTMENT_SOON: CalendarClock, ENERGY_TODAY: Sparkles,
-  VOICE_PRACTICE_DUE: Mic, HEALTH_ALERT: HeartPulse,
+  VOICE_PRACTICE_DUE: Mic, HEALTH_ALERT: HeartPulse, WIND_DOWN: MoonStar,
 };
 
 export function Today() {
@@ -127,6 +128,8 @@ export function Today() {
       case "voice.start": navigate("/transition/voice"); return;
       case "appointment.open": navigate("/appointments"); return;
       case "alert.open": navigate("/alerts"); return;
+      // The evening's wind-down: the player, on the meditation it suggests.
+      case "meditation.open": navigate(ids.meditationId ? playPath(ids.meditationId) : "/meditation"); return;
       case "dose.take": {
         if (!ids.medicationId) return;
         const due = data?.modules.meds?.due.find((d) => d.medicationId === ids.medicationId && d.scheduledFor === ids.scheduledFor);

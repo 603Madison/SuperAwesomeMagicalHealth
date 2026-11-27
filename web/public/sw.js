@@ -10,6 +10,32 @@ const SNOOZE_MS = 10 * 60 * 1000;
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+/*
+ * The guided meditations (GET /api/meditations: the same for everyone, nothing of anyone's), kept
+ * for offline: from the server when it answers, else the copy from last time, so one can be begun
+ * without a connection. Nothing else is cached or touched here.
+ */
+const MEDITATIONS = "samh-meditations-v1";
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname !== "/api/meditations") return;
+  event.respondWith((async () => {
+    const cache = await caches.open(MEDITATIONS);
+    try {
+      const response = await fetch(request);
+      if (response.ok) await cache.put("/api/meditations", response.clone());
+      return response;
+    } catch (e) {
+      const kept = await cache.match("/api/meditations");
+      if (kept) return kept;
+      throw e;
+    }
+  })());
+});
+
 /** A health alert that could need care now (its tag is "alert:<id>:URGENT"): it stays until it's seen to. */
 function urgentAlert(message) {
   return typeof message.tag === "string" && message.tag.startsWith("alert:") && message.tag.endsWith(":URGENT");

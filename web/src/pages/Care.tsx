@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, ClipboardList, Lock } from "lucide-react";
+import { ChevronRight, ClipboardList, Lock, MoonStar } from "lucide-react";
 import { useModules } from "../App";
 import { api } from "../lib/api";
 import { careAreas, careOrder, type CareArea, type CareAreaInfo } from "../lib/care";
@@ -23,6 +23,8 @@ import {
 } from "./CareLines";
 import { useMealie } from "./Mealie";
 import { QuickChange } from "./Wearing";
+import { loadMeditations, playPath } from "./Meditation";
+import { weekLine } from "../lib/meditation";
 
 /*
  * Care: what the person looks after, one card per area, each saying what's going on now and
@@ -54,12 +56,13 @@ export function Care() {
   const food = useLoad(() => (is("NUTRITION") && !foodNumbers ? api.foodDay(date).catch(() => null) : Promise.resolve(null)), [is("NUTRITION"), foodNumbers, date, logged]);
   const mealie = useMealie();
   const plan = useLoad(() => (is("NUTRITION") && mealie?.connected && !mealie.paused ? api.mealiePlan(date).catch(() => null) : Promise.resolve(null)), [date, !!mealie?.connected, !!mealie?.paused]);
+  const calm = useLoad(() => (!viewing || is("MIND") ? Promise.all([api.meditationSummary(30), loadMeditations().catch(() => [])]).catch(() => null) : Promise.resolve(null)), [!!viewing, is("MIND"), logged]);
   const [changing, setChanging] = useState(false);
   const [arranging, setArranging] = useState(false);
   const [busy, setBusy] = useState(false);
   const layout = useScreenLayout(LAYOUT_NAV);
 
-  const areas = careAreas(on);
+  const areas = careAreas(on, !!viewing);
   const hidden = new Set(layout?.hidden ?? []);
   const arranged = arrange(areas, (a) => a.id, layout).filter((a) => !hidden.has(a.id));
   const d = day.data;
@@ -190,6 +193,18 @@ export function Care() {
       case "SYMPTOMS": return <AreaCard {...props} sub={lineText(symptomsLine(m.symptoms)) ?? "Nothing logged today"} />;
       case "HABITS": return <AreaCard {...props} sub={lineText(habitsLine(m.habits ?? [])) ?? "None set up yet"} />;
       case "HORMONES": return <AreaCard {...props} sub={lineText(hormonesLine(m.hormones)) ?? "Nothing due"} />;
+      case "MEDITATION": {
+        const [summary, list] = calm.data ?? [null, []];
+        const next = list.find((x) => x.id === summary?.lastMeditationId) ?? list.find((x) => x.id === "wind-down-10") ?? list[0];
+        return (
+          <AreaCard {...props} sub={summary ? weekLine(summary.weekMinutes) : undefined}>
+            {next && !readOnly && (
+              <NowBox title={next.title} sub={`${next.minutes} min · ${next.id === summary?.lastMeditationId ? "the one you did last" : "to wind down at night"}`}
+                action={<Button variant="tonal" className="care-btn is-soft" onClick={() => navigate(playPath(next.id))} aria-label={`Start ${next.title}`}>Start</Button>} />
+            )}
+          </AreaCard>
+        );
+      }
       case "PHOTOS": {
         const pics = photos.data?.length;
         return <AreaCard {...props} sub={pics == null ? undefined : pics === 0 ? "None yet" : `${pics} ${pics === 1 ? "photo" : "photos"}`} />;
@@ -197,7 +212,7 @@ export function Care() {
     }
   };
 
-  const sensitive = areas.some((a) => SENSITIVE.includes(a.module));
+  const sensitive = areas.some((a) => a.module && SENSITIVE.includes(a.module));
   return (
     <div className="page care-page">
       <header className="page-header">
@@ -236,7 +251,7 @@ export function Care() {
 /** One area: its header (icon, name, a line) opening its page, then what's going on. */
 function AreaCard({ area, title, sub, children }: { area: CareAreaInfo; title?: string; sub?: string; children?: ReactNode }) {
   const feature = FEATURES.find((f) => f.id === area.module);
-  const Icon = feature?.icon ?? ClipboardList;
+  const Icon = area.id === "MEDITATION" ? MoonStar : feature?.icon ?? ClipboardList;
   const tone = area.id === "FOOD" ? "accent" : "primary";
   return (
     <article className="care-card" aria-label={area.name}>

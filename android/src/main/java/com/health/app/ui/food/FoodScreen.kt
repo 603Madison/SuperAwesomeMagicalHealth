@@ -292,7 +292,7 @@ private fun Totals(day: FoodDay) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        val burned = day.burned?.let { " · ${Format.number(it)} kcal burned so far today" }?.takeUnless { t.basis.contains("burned so far") } ?: ""
+        val burned = day.burned?.let { " · ${Format.number(it)} kcal burned so far today, resting included" }?.takeUnless { t.basis.contains("burned so far") } ?: ""
         Hint("${t.basis}$burned")
     }
 }

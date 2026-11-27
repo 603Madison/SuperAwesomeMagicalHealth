@@ -109,7 +109,8 @@ class BodyViewModel(private val c: Container, device: String? = null, span: Body
 
     private suspend fun loadTrends(span: BodySpan) {
         val trends = c.ui.trends(span.days)
-        val weights = attempt { c.ui.measurements(Metric.WEIGHT, maxOf(span.days, 90)) }.getOrDefault(emptyList())
+        // Oldest first (the server sends newest first): the chart reads left to right and the latest is the last.
+        val weights = attempt { c.ui.measurements(Metric.WEIGHT, maxOf(span.days, 90)) }.getOrDefault(emptyList()).sortedBy { it.start }
         _state.update { if (it.span == span) it.copy(trends = trends, weights = weights, loading = false, refreshing = false) else it }
         // Combined devices: today's, for the charts' "From 2 devices" (ui/components/Sources.kt).
         attempt { c.ui.day(LocalDate.now(c.zone()).toString()) }.getOrNull()?.let { day ->

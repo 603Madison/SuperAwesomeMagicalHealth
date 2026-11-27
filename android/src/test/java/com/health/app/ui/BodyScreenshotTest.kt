@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -279,5 +280,114 @@ class BodyScreenshotTest {
         render(readOnly = true) { day(dayState)() }
         shows("Only for your own data")
         assertEquals(0, compose.onAllNodesWithText("Health alerts").fetchSemanticsNodes().size)
+    }
+
+    // ---- A card, opened
+
+    @Test
+    fun eachCardOpensItsDetails() {
+        val opened = mutableListOf<String>()
+        render { day(dayState, actions = BodyActions(open = { opened += it }))() }
+        compose.onNodeWithContentDescription("Last night: details").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Heart rate: details").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("HRV: details").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Steps: details").performScrollTo().performClick()
+        assertEquals(listOf("body/detail/sleep?span=DAY", "body/detail/heart?span=DAY", "body/detail/hrv?span=DAY", "body/detail/steps?span=DAY"), opened)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h2300dp-xxhdpi")
+    fun theWeeksCardsOpenTheirDetailsAndTheirButtonsStillWork() {
+        val opened = mutableListOf<String>()
+        val deleted = mutableListOf<Long>()
+        render {
+            BodyScreen(
+                BodyState(span = BodySpan.MONTH, trends = trends(BodySpan.MONTH), weights = weights, known = known, loading = false),
+                Units.METRIC, f.zone, BodyActions(open = { opened += it }, deleteWeight = { deleted += it }), modules = Module.DEFAULT, now = f.now,
+            )
+        }
+        listOf("Scores", "Sleep", "Steps", "Resting heart rate", "Heart rate variability", "Weight", "Workouts").forEach { name ->
+            compose.onNodeWithContentDescription("$name: details").performScrollTo().performClick()
+        }
+        assertEquals(listOf("scores", "sleep", "steps", "heart", "hrv", "weight", "workouts").map { "body/detail/$it?span=MONTH" }, opened)
+        // The weigh-ins' own delete is still its own button.
+        compose.onAllNodes(hasContentDescription("Delete")).onLast().performScrollTo().performClick()
+        assertEquals(1, deleted.size)
+        assertEquals(7, opened.size)
+    }
+
+    private val detailCtx = com.health.app.ui.body.BodyDetail.Ctx(Units.METRIC, f.zone, f.today, Goals(steps = 8000, sleepMinutes = 450, targetWeightKg = 65.0))
+
+    private fun detail(id: String, state: com.health.app.ui.body.BodyDetailState, ctx: com.health.app.ui.body.BodyDetail.Ctx = detailCtx) = @Composable {
+        com.health.app.ui.body.BodyDetailScreen(id, state, ctx, com.health.app.ui.body.BodyDetailActions())
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1700dp-xxhdpi")
+    fun detailRestingHeartRateWeek() {
+        render {
+            detail(
+                "heart",
+                com.health.app.ui.body.BodyDetailState(BodySpan.WEEK, trends = trends(BodySpan.WEEK), usual = trends(BodySpan.MONTH), loading = false),
+            )()
+        }
+        listOf("Resting heart rate", "Past 7 days", "Average", "Lowest", "Highest", "Each day", "Dashed line: your usual").forEach(::shows)
+        compose.onNodeWithContentDescription("Back").assertExists()
+        // The 24 hours are there to switch to.
+        shows("24 hours")
+        save("body_detail_week_light")
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
+    fun detailHeartRate24Hours() {
+        render { detail("heart", com.health.app.ui.body.BodyDetailState(BodySpan.DAY, readings = f.all, loading = false))() }
+        listOf("Heart rate", "Past 24 hours", "latest at", "Each hour", "Show all").forEach(::shows)
+        save("body_detail_24h_light")
+        compose.onNodeWithText("Show all", substring = true).performScrollTo().performClick()
+        assertEquals(0, compose.onAllNodesWithText("Show all", substring = true).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1900dp-xxhdpi")
+    fun detailLastNight24HoursDark() {
+        render(dark = true) { detail("sleep", com.health.app.ui.body.BodyDetailState(BodySpan.DAY, readings = f.all, loading = false))() }
+        listOf("Sleep", "7h 7m", "Deep", "Each sleep").forEach(::shows)
+        save("body_detail_sleep_24h_dark")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun detailWeightMonthNarrow() {
+        var deleted: Long? = null
+        render {
+            com.health.app.ui.body.BodyDetailScreen(
+                "weight", com.health.app.ui.body.BodyDetailState(BodySpan.MONTH, weights = weights, loading = false), detailCtx,
+                com.health.app.ui.body.BodyDetailActions(deleteWeight = { deleted = it }),
+            )
+        }
+        listOf("Weight", "Change", "Each weigh-in", "Dashed line: your goal").forEach(::shows)
+        // No 24 hours for weight.
+        assertEquals(0, compose.onAllNodesWithText("24 hours").fetchSemanticsNodes().size)
+        save("body_detail_weight_month_narrow")
+        compose.onAllNodes(hasContentDescription("Delete the weigh-in", substring = true)).onFirst().performScrollTo().performClick()
+        assertEquals(9L, deleted)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h1300dp-xxhdpi")
+    fun detailScoresYearAndNothingInTheSpan() {
+        render { detail("scores", com.health.app.ui.body.BodyDetailState(BodySpan.YEAR, trends = trends(BodySpan.YEAR), loading = false))() }
+        listOf("Readiness", "Activity", "Past year").forEach(::shows)
+        save("body_detail_scores_year_light")
+    }
+
+    @Test
+    fun detailNothingInTheSpanAndViewingAShare() {
+        val empty = Trends(f.today.minusDays(6).toString(), f.today.toString(), (0 until 7).map { TrendDay(f.today.minusDays(6L - it).toString()) })
+        render(readOnly = true) { detail("hrv", com.health.app.ui.body.BodyDetailState(BodySpan.WEEK, trends = empty, loading = false))() }
+        shows(com.health.app.ui.body.BodyDetail.EMPTY)
+        // While viewing a share, no 24 hours.
+        assertEquals(0, compose.onAllNodesWithText("24 hours").fetchSemanticsNodes().size)
     }
 }

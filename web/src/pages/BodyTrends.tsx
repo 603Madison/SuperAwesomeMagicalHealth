@@ -1,13 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Dumbbell, Moon, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
-import { clock, distance, hm, isoDate, num, shortDate, useToday, useUnits, weightValue, workoutLabel } from "../lib/format";
-import { BODY_SPANS, type BodySpan } from "../lib/nav";
-import { useSession } from "../lib/session";
-import { DEFAULT_TARGETS, glucoseValue, unitLabel } from "../lib/vitals";
-import type { NutritionTarget, TrendDay, Workout } from "../lib/types";
+import { clock, distance, hm, num, shortDate, useToday, useUnits, workoutLabel } from "../lib/format";
+import { BODY_SPANS, NAMES, type BodySpan } from "../lib/nav";
+import { FIRST, detailOf, detailPath, firstFew } from "../lib/bodyDetail";
+import type { NutritionTarget, SleepSummary, TrendDay, Workout } from "../lib/types";
 import { useReadOnly } from "../lib/viewing";
-import { BarChart, Hypnogram, LineChart, StageLegend, scoreFloor } from "../components/charts";
+import { BarChart, Hypnogram, StageLegend } from "../components/charts";
 import { useModules } from "../App";
 import { Button, Card, CardAction, ErrorNotice, Menu, Spinner, errorToast, useLoad } from "../components/ui";
 import { useArrange, useHashScroll, type Section } from "../components/Arrange";
@@ -16,27 +15,9 @@ import { useLogged } from "../components/LogSheet";
 import { ACTIVITY_METRICS, NIGHT_METRICS, SourcesLink, combinedFor } from "../components/Sources";
 import { layoutKey } from "../lib/types";
 import { BodyFrame } from "./Body";
-import { useMicros, useWater } from "../lib/fields";
+import { useMicros } from "../lib/fields";
+import { DailyChart, useTrendSeries } from "./bodyMetrics";
 import { GROUPS, NUTRIENTS, amountText, infoOf, targetOf, trendValue, withUnit, type NutrientKey } from "../lib/micros";
-
-interface Series {
-  /** Saved in the person's arrangement: keep it. */
-  id: string;
-  title: string;
-  value: (d: TrendDay) => number | null | undefined;
-  format: (v: number) => string;
-  kind: "line" | "bar";
-  color: string;
-  domain?: [number, number];
-  score?: boolean;
-  tick?: (v: number) => string;
-  goal?: number;
-  band?: [number, number];
-  note?: string;
-  /** A second line (blood pressure's bottom number). */
-  extra?: { value: (d: TrendDay) => number | null | undefined; color: string; name: string };
-  name?: string;
-}
 
 /*
  * Body at a week, a month or a year: each day's numbers, as Trends had them (the scores, sleep,
@@ -47,69 +28,10 @@ interface Series {
 export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; setSpan: (s: BodySpan) => void }) {
   const days = BODY_SPANS.find((s) => s.id === span)!.days;
   const on = useModules();
-  const units = useUnits();
-  const goals = useSession((s) => s.profile?.goals);
   const logged = useLogged();
   const { data, error, loading, reload } = useLoad(() => api.trends(days), [days, logged]);
-  const unit = units === "IMPERIAL" ? "lb" : "kg";
-  const vt = useSession((s) => s.profile?.vitalsTargets) ?? DEFAULT_TARGETS;
-  const water = useWater(on);
   const micros = useMicros(on);
-  const all: Series[] = [
-    { id: "readiness", title: "Readiness", value: (d) => d.readiness, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c2)", score: true, band: [85, 100] },
-    { id: "sleep-score", title: "Sleep score", value: (d) => d.sleepScore, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c1)", score: true, band: [85, 100] },
-    { id: "activity-score", title: "Activity score", value: (d) => d.activityScore, format: (v) => String(Math.round(v)), kind: "line", color: "var(--c3)", score: true, band: [85, 100] },
-    { id: "resting-hr", title: "Resting heart rate", value: (d) => d.restingHeartRate, format: (v) => `${Math.round(v)} bpm`, kind: "line", color: "var(--c2)", note: "Lower usually means better recovered" },
-    { id: "hrv", title: "Heart rate variability", value: (d) => d.hrv, format: (v) => `${Math.round(v)} ms`, kind: "line", color: "var(--c2)", note: "Higher usually means better recovered" },
-    { id: "asleep", title: "Time asleep", value: (d) => (d.sleepMinutes != null ? d.sleepMinutes / 60 : null), format: (v) => hm(v * 60), kind: "bar", color: "var(--c1)", goal: goals ? goals.sleepMinutes / 60 : undefined, tick: (v) => `${v}h` },
-    { id: "steps", title: "Steps", value: (d) => d.steps, format: (v) => num(v), kind: "bar", color: "var(--c3)", goal: goals?.steps },
-    { id: "calories", title: "Calories eaten", value: (d) => d.calories, format: (v) => `${num(v)} kcal`, kind: "bar", color: "var(--c1)" },
-    ...(water ? [{ id: "water", title: "Water", value: (d: TrendDay) => d.waterMl, format: (v: number) => `${num(v)} ml`, kind: "bar" as const, color: "var(--c3)", goal: goals?.waterMl }] : []),
-    { id: "protein", title: "Protein", value: (d) => d.protein, format: (v) => `${num(v)} g`, kind: "bar", color: "var(--c1)" },
-    { id: "weight", title: "Weight", value: (d) => (d.weightKg != null ? weightValue(d.weightKg, units) : null), format: (v) => `${v.toFixed(1)} ${unit}`, kind: "line", color: "var(--c1)" },
-    { id: "temperature", title: "Temperature", value: (d) => d.temperatureDeviation, format: (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} °C`, kind: "line", color: "var(--c3)", note: "Against your usual" },
-    { id: "spo2", title: "Blood oxygen", value: (d) => d.spo2, format: (v) => `${v.toFixed(0)}%`, kind: "line", color: "var(--c2)" },
-    ...(on.includes("MIND") ? [
-      { id: "mood", title: "Mood", value: (d: TrendDay) => d.mood, format: (v: number) => `${v.toFixed(1)} of 5`, kind: "line" as const, color: "var(--c2)", domain: [1, 5] as [number, number] },
-      { id: "anxiety", title: "Anxiety", value: (d: TrendDay) => d.anxiety, format: (v: number) => `${v.toFixed(1)} of 5`, kind: "line" as const, color: "var(--c3)", domain: [1, 5] as [number, number], note: "Lower is calmer" },
-    ] : []),
-    ...(on.includes("CONTINENCE") ? [
-      { id: "trips", title: "Toilet trips", value: (d: TrendDay) => d.voids, format: (v: number) => `${num(v, v % 1 ? 1 : 0)} trips`, kind: "bar" as const, color: "var(--c1)" },
-      { id: "leaks", title: "Leaks", value: (d: TrendDay) => d.leaks, format: (v: number) => `${num(v, v % 1 ? 1 : 0)} leaks`, kind: "bar" as const, color: "var(--c3)" },
-    ] : []),
-    ...(on.includes("MEDICATIONS") ? [
-      { id: "doses", title: "Doses taken", value: (d: TrendDay) => (d.dosesDue ? Math.round(((d.dosesTaken ?? 0) / d.dosesDue) * 100) : null), format: (v: number) => `${Math.round(v)}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
-    ] : []),
-    ...(on.includes("ACTIVITY") ? [
-      { id: "stressed", title: "Stressed time", value: (d: TrendDay) => d.stressedMinutes, format: (v: number) => hm(v), kind: "bar" as const, color: "var(--c3)", note: "Daytime minutes your body showed stress" },
-      { id: "restored", title: "Restored time", value: (d: TrendDay) => d.restoredMinutes, format: (v: number) => hm(v), kind: "bar" as const, color: "var(--c2)", note: "Calm, recovering time while awake" },
-    ] : []),
-    ...(on.includes("NUTRITION") ? [
-      { id: "caffeine", title: "Caffeine", value: (d: TrendDay) => d.caffeineMg, format: (v: number) => `${num(v)} mg`, kind: "bar" as const, color: "var(--c3)", goal: 400, note: "400 mg a day is a common upper limit for adults" },
-      { id: "alcohol", title: "Alcohol", value: (d: TrendDay) => d.standardDrinks, format: (v: number) => `${num(v, 1)} drinks`, kind: "bar" as const, color: "var(--c1)", note: "Standard drinks of 14 g" },
-    ] : []),
-    ...(on.includes("VITALS") ? [
-      {
-        id: "bp", title: "Blood pressure", name: "Top", value: (d: TrendDay) => d.systolic, format: (v: number) => `${Math.round(v)}`, kind: "line" as const, color: "var(--c1)",
-        extra: { name: "Bottom", value: (d: TrendDay) => d.diastolic, color: "var(--c2)" },
-        note: `Daily averages, mmHg: top and bottom numbers (your target: under ${vt.systolicHigh}/${vt.diastolicHigh})`,
-      },
-      { id: "glucose", title: "Glucose", value: (d: TrendDay) => (d.glucose != null ? glucoseValue(d.glucose, vt.glucoseUnit) : null), format: (v: number) => `${vt.glucoseUnit === "MG_DL" ? Math.round(v) : v.toFixed(1)} ${unitLabel(vt.glucoseUnit)}`, kind: "line" as const, color: "var(--c1)", band: [glucoseValue(vt.glucoseLow, vt.glucoseUnit), glucoseValue(vt.glucoseHigh, vt.glucoseUnit)] as [number, number] },
-    ] : []),
-    ...(on.includes("SYMPTOMS") ? [
-      { id: "symptoms", title: "Symptoms", value: (d: TrendDay) => d.symptomWorst, format: (v: number) => `${num(v, v % 1 ? 1 : 0)} of 10`, kind: "bar" as const, color: "var(--c3)", domain: [0, 10] as [number, number], note: "The worst symptom each day" },
-    ] : []),
-    ...(on.includes("HABITS") ? [
-      { id: "habits", title: "Habits done", value: (d: TrendDay) => (d.habitsDue ? Math.round(((d.habitsDone ?? 0) / d.habitsDue) * 100) : null), format: (v: number) => `${Math.round(v)}%`, kind: "bar" as const, color: "var(--c2)", goal: 100 },
-    ] : []),
-    ...(on.includes("CYCLE") ? [
-      { id: "hot-flashes", title: "Hot flashes", value: (d: TrendDay) => d.hotFlashes, format: (v: number) => num(v, v % 1 ? 1 : 0), kind: "bar" as const, color: "var(--c3)" },
-    ] : []),
-  ];
-  const series = all.filter((s) => (s.title !== "Steps" && s.title !== "Activity score") || on.includes("ACTIVITY"))
-    .filter((s) => (s.title !== "Time asleep" && s.title !== "Sleep score") || on.includes("SLEEP"))
-    .filter((s) => (s.title !== "Calories eaten" && s.title !== "Protein") || on.includes("NUTRITION"))
-    .filter((s) => s.title !== "Weight" || on.includes("BODY"));
+  const series = useTrendSeries();
 
   const sections: Section[] = series.map((s) => {
     const values = data ? data.days.map(s.value).filter((v): v is number => v != null) : [];
@@ -122,19 +44,10 @@ export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; 
     return {
       id: s.id, label: s.title, node: (
         <Card title={s.title} className="body-card" action={<span className="muted small">average <strong>{average}</strong></span>}
-          link={s.id === "weight" ? { to: "/body/weight", label: "Open Weight: every entry, body fat and measurements" } : undefined}>
-          {s.kind === "line"
-            ? <LineChart
-                label={`${s.title} each day`} color={s.color} band={s.band} dots={data.days.length <= 31} area={!s.score && !s.extra} name={s.name}
-                extra={s.extra ? [{ name: s.extra.name, color: s.extra.color, points: data.days.map((d) => ({ x: new Date(`${d.date}T12:00`).getTime(), y: s.extra!.value(d) ?? null })) }] : []}
-                yMin={s.score ? scoreFloor(data.days.map(s.value)) : s.domain?.[0]} yMax={s.score ? 100 : s.domain?.[1]}
-                points={data.days.map((d) => ({ x: new Date(`${d.date}T12:00`).getTime(), y: s.value(d) ?? null }))}
-                formatX={(x) => shortDate(isoDate(new Date(x)))} formatY={s.format}
-              />
-            : <BarChart
-                label={`${s.title} each day`} color={s.color} goal={s.goal} labelEvery={Math.ceil(data.days.length / 8)} formatY={s.format} formatTick={s.tick}
-                bars={data.days.map((d) => ({ key: d.date, label: shortDate(d.date), value: s.value(d) ?? null, detail: shortDate(d.date) }))}
-              />}
+          open={s.id === "weight" ? { to: "/body/weight", label: `${NAMES.weight}: details` } : { to: detailPath(detailOf(s.id), span), label: `${s.title}: details` }}>
+          <DailyChart series={s} dates={data.days.map((d) => d.date)}
+            value={(date) => { const d = data.days.find((x) => x.date === date); return d ? s.value(d) ?? null : null; }}
+            extra={s.extra ? (date) => { const d = data.days.find((x) => x.date === date); return d ? s.extra!.value(d) ?? null : null; } : undefined} />
           {s.note && <Note>{s.note}</Note>}
         </Card>
       ),
@@ -142,7 +55,7 @@ export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; 
   });
   // A nutrient's daily intake against its target, after protein (its id is saved: keep it).
   if (micros) {
-    const nutrient: Section = { id: "nutrient", label: "Vitamins & minerals", node: data && <NutrientChart days={data.days} target={data.nutritionTarget} /> };
+    const nutrient: Section = { id: "nutrient", label: "Vitamins & minerals", node: data && <NutrientChart days={data.days} target={data.nutritionTarget} open={{ to: detailPath("nutrient", span), label: "Vitamins & minerals: details" }} /> };
     const after = sections.findIndex((x) => x.id === "protein");
     sections.splice(after >= 0 ? after + 1 : sections.length, 0, nutrient);
   }
@@ -151,8 +64,8 @@ export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; 
     const at = sections.findIndex((x) => x.id === after);
     sections.splice(at >= 0 ? at + 1 : sections.length, 0, section);
   };
-  if (on.includes("SLEEP")) place({ id: "nights", label: "Nights", node: <NightsCard days={days} /> }, "asleep");
-  if (on.includes("ACTIVITY")) place({ id: "workouts", label: "Workouts", node: <WorkoutsCard days={days} /> }, "steps");
+  if (on.includes("SLEEP")) place({ id: "nights", label: "Nights", node: <NightsCard days={days} open={{ to: detailPath(detailOf("nights"), span), label: "Nights: details" }} /> }, "asleep");
+  if (on.includes("ACTIVITY")) place({ id: "workouts", label: "Workouts", node: <WorkoutsCard days={days} open={{ to: detailPath("workouts", span), label: "Workouts: details" }} /> }, "steps");
   const arranged = useArrange(layoutKey("trends"), "Body", sections);
   useHashScroll(!!data);
 
@@ -166,11 +79,8 @@ export function BodyTrends({ span, setSpan }: { span: Exclude<BodySpan, "day">; 
   );
 }
 
-/** How many nights or workouts show before "Show all". */
-const FIRST = 7;
-
 /** Each night in the time (up to a month), with its stages; one entered by hand can go, and a night can be added. */
-function NightsCard({ days }: { days: number }) {
+function NightsCard({ days, open }: { days: number; open: { to: string; label: string } }) {
   const readOnly = useReadOnly();
   const logged = useLogged();
   const nights = useLoad(() => api.sleep(Math.min(days, 30)), [days, logged]);
@@ -182,37 +92,47 @@ function NightsCard({ days }: { days: number }) {
   const reload = () => { nights.reload(); day.reload(); };
   const list = nights.data ?? [];
   return (
-    <Card id="nights" title="Nights" icon={<Moon size={18} />} className="span-2 body-card"
+    <Card id="nights" title="Nights" icon={<Moon size={18} />} className="span-2 body-card" open={open}
       action={!readOnly && <CardAction label="Add a night" onClick={() => setAdding(true)}><Plus size={18} /></CardAction>}>
       {nights.error && <p className="muted">{nights.error}</p>}
       {nights.data && <SourcesLink values={combinedFor(day.data?.combined, NIGHT_METRICS)} onChanged={reload} prefix="Last night's readings:" />}
       {nights.data && list.length === 0 && <p className="muted">No nights yet. Wear your ring or watch to bed, or add a night by hand.</p>}
-      {(all ? list : list.slice(0, FIRST)).map((n) => (
-        <div key={n.sessionId ?? n.start} className="night">
-          <div className="night-head">
-            <div>
-              <strong>{new Date(n.end).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}</strong>
-              <div className="muted small">{clock(n.start)} – {clock(n.end)} · {hm(n.asleepMinutes)} asleep · {n.efficiency}% efficiency{n.lowestHeartRate ? ` · lowest ${num(n.lowestHeartRate)} bpm` : ""}{n.source ? ` · ${n.source}` : ""}</div>
-            </div>
-            {!readOnly && n.source === "Entered by hand" && n.sessionId && (
-              <Button variant="ghost" onClick={async () => { try { await api.deleteSleep(n.sessionId!); reload(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /> Delete</Button>
-            )}
-          </div>
-          {n.stages.length > 0 && <Hypnogram stages={n.stages} start={n.start} end={n.end} height={120} />}
-          {n.staged && <StageLegend deep={n.deepMinutes} rem={n.remMinutes} light={n.lightMinutes} awake={n.awakeMinutes} />}
-          {n.combined && <SourcesLink sleep={n.combined} onChanged={reload} />}
-        </div>
-      ))}
-      {list.length > FIRST && <button type="button" className="link-btn" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${list.length}`}</button>}
+      {firstFew(list, all).map((n) => <NightRow key={n.sessionId ?? n.start} night={n} onChanged={reload} />)}
+      {list.length > FIRST && <ShowAll all={all} count={list.length} onToggle={() => setAll(!all)} />}
       {adding && <SleepDialog onClose={() => setAdding(false)} onSaved={reload} />}
     </Card>
   );
 }
 
-/** Each workout in the time; one entered by hand can be changed or deleted, and one can be logged. */
-function WorkoutsCard({ days }: { days: number }) {
+/** "Show all 12" or "Show fewer", under a long list. */
+export function ShowAll({ all, count, onToggle }: { all: boolean; count: number; onToggle: () => void }) {
+  return <button type="button" className="link-btn show-all" aria-expanded={all} onClick={onToggle}>{all ? "Show fewer" : `Show all ${count}`}</button>;
+}
+
+/** One night: its date, times, time asleep and the rest, its stages, and (entered by hand) Delete. */
+export function NightRow({ night: n, onChanged }: { night: SleepSummary; onChanged: () => void }) {
   const readOnly = useReadOnly();
-  const units = useUnits();
+  return (
+    <div className="night">
+      <div className="night-head">
+        <div>
+          <strong>{new Date(n.end).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}</strong>
+          <div className="muted small">{clock(n.start)} – {clock(n.end)} · {hm(n.asleepMinutes)} asleep · {n.efficiency}% efficiency{n.lowestHeartRate ? ` · lowest ${num(n.lowestHeartRate)} bpm` : ""}{n.source ? ` · ${n.source}` : ""}</div>
+        </div>
+        {!readOnly && n.source === "Entered by hand" && n.sessionId && (
+          <Button variant="ghost" onClick={async () => { try { await api.deleteSleep(n.sessionId!); onChanged(); } catch (e) { errorToast(e); } }}><Trash2 size={16} /> Delete</Button>
+        )}
+      </div>
+      {n.stages.length > 0 && <Hypnogram stages={n.stages} start={n.start} end={n.end} height={120} />}
+      {n.staged && <StageLegend deep={n.deepMinutes} rem={n.remMinutes} light={n.lightMinutes} awake={n.awakeMinutes} />}
+      {n.combined && <SourcesLink sleep={n.combined} onChanged={onChanged} />}
+    </div>
+  );
+}
+
+/** Each workout in the time; one entered by hand can be changed or deleted, and one can be logged. */
+function WorkoutsCard({ days, open }: { days: number; open: { to: string; label: string } }) {
+  const readOnly = useReadOnly();
   const logged = useLogged();
   const workouts = useLoad(() => api.workouts(days), [days, logged]);
   const now = useToday();
@@ -222,46 +142,69 @@ function WorkoutsCard({ days }: { days: number }) {
   const reload = () => { workouts.reload(); day.reload(); };
   const list = workouts.data ?? [];
   return (
-    <Card id="workouts" title="Workouts" icon={<Dumbbell size={18} />} className="span-2 body-card"
+    <Card id="workouts" title="Workouts" icon={<Dumbbell size={18} />} className="span-2 body-card" open={open}
       action={!readOnly && <CardAction label="Log a workout" onClick={() => setEditing("new")}><Plus size={18} /></CardAction>}>
       {workouts.error && <p className="muted">{workouts.error}</p>}
       {workouts.data && <SourcesLink values={combinedFor(day.data?.combined, ACTIVITY_METRICS)} onChanged={reload} prefix="Today's steps and calories:" />}
       {workouts.data && list.length === 0 && <p className="muted">None in this time. They come from your watch, or log one with +.</p>}
       {list.length > 0 && (
         <ul className="rows">
-          {(all ? list : list.slice(0, FIRST)).map((w) => (
-            <li key={w.id} className="row">
-              <div className="row-icon"><Dumbbell size={18} /></div>
-              <div className="row-main">
-                <div className="row-title">{w.name ?? workoutLabel(w.type)}</div>
-                <div className="row-sub">
-                  {new Date(w.start).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} {clock(w.start)} · {hm((w.end - w.start) / 60_000)}
-                  {w.distanceM ? ` · ${distance(w.distanceM, units)}` : ""}{w.avgHeartRate ? ` · ${num(w.avgHeartRate)} bpm avg` : ""}{w.effort ? ` · effort ${w.effort}/10` : ""}{w.source ? ` · ${w.source}` : ""}
-                </div>
-              </div>
-              <div className="row-end">{w.activeCalories ? `${num(w.activeCalories)} kcal` : ""}</div>
-              {!readOnly && w.manual && (
-                <div className="row-actions">
-                  <Menu label={`More for ${w.name ?? workoutLabel(w.type)}`} trigger={<MoreHorizontal size={18} />} items={[
-                    { label: "Change", icon: <Pencil size={18} />, onSelect: () => setEditing(w) },
-                    { label: "Delete", icon: <Trash2 size={18} />, danger: true, onSelect: async () => { try { await api.deleteWorkout(w.id!); reload(); } catch (e) { errorToast(e); } } },
-                  ]} />
-                </div>
-              )}
-            </li>
-          ))}
+          {firstFew(list, all).map((w) => <WorkoutRow key={w.id} workout={w} onEdit={() => setEditing(w)} onChanged={reload} />)}
         </ul>
       )}
-      {list.length > FIRST && <button type="button" className="link-btn" aria-expanded={all} onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${list.length}`}</button>}
+      {list.length > FIRST && <ShowAll all={all} count={list.length} onToggle={() => setAll(!all)} />}
       {editing && <WorkoutDialog workout={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </Card>
+  );
+}
+
+/** One workout: its name, when, how long and the rest ([full]: every detail there is), and (entered by hand) Change and Delete. */
+export function WorkoutRow({ workout: w, onEdit, onChanged, full }: { workout: Workout; onEdit: () => void; onChanged: () => void; full?: boolean }) {
+  const readOnly = useReadOnly();
+  const units = useUnits();
+  const name = w.name ?? workoutLabel(w.type);
+  const details = [
+    w.distanceM ? distance(w.distanceM, units) : null,
+    w.avgHeartRate ? `${num(w.avgHeartRate)} bpm avg` : null,
+    full && w.maxHeartRate ? `${num(w.maxHeartRate)} bpm highest` : null,
+    full && w.steps ? `${num(w.steps)} steps` : null,
+    w.effort ? `effort ${w.effort}/10` : null,
+    full && w.activeCalories ? `${num(w.activeCalories)} kcal` : null,
+    w.source ?? null,
+  ].filter((x): x is string => !!x);
+  return (
+    <li className={`row ${full ? "workout-row" : ""}`}>
+      <div className="row-icon"><Dumbbell size={18} /></div>
+      <div className="row-main">
+        <div className="row-title">{name}</div>
+        <div className={`row-sub ${full ? "wraps" : ""}`}>
+          {new Date(w.start).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} {clock(w.start)}{full ? ` – ${clock(w.end)}` : ""} · {hm((w.end - w.start) / 60_000)}
+          {details.length > 0 ? ` · ${details.join(" · ")}` : ""}
+        </div>
+        {full && w.note && <div className="row-sub wraps">{w.note}</div>}
+      </div>
+      {!full && <div className="row-end">{w.activeCalories ? `${num(w.activeCalories)} kcal` : ""}</div>}
+      {!readOnly && w.manual && (
+        <div className="row-actions">
+          <Menu label={`More for ${name}`} trigger={<MoreHorizontal size={18} />} items={[
+            { label: "Change", icon: <Pencil size={18} />, onSelect: onEdit },
+            { label: "Delete", icon: <Trash2 size={18} />, danger: true, onSelect: async () => { try { await api.deleteWorkout(w.id!); onChanged(); } catch (e) { errorToast(e); } } },
+          ]} />
+        </div>
+      )}
+    </li>
   );
 }
 
 /** Which nutrient the chart shows, remembered in this browser. */
 const NUTRIENT_KEY = "samh.trends.nutrient";
 
-function chosenNutrient(): NutrientKey {
+/** Remembers the nutrient chosen, for the chart and its details. */
+export function keepNutrient(k: NutrientKey) {
+  try { localStorage.setItem(NUTRIENT_KEY, k); } catch { /* fine without */ }
+}
+
+export function chosenNutrient(): NutrientKey {
   try {
     const saved = localStorage.getItem(NUTRIENT_KEY);
     if (saved && NUTRIENTS.some((x) => x.key === saved)) return saved as NutrientKey;
@@ -273,7 +216,7 @@ function chosenNutrient(): NutrientKey {
  * A chosen nutrient's daily intake against its target (or limit). A day nothing carried it is a
  * gap, never a zero; only foods that came with it count.
  */
-export function NutrientChart({ days, target }: { days: TrendDay[]; target?: NutritionTarget }) {
+export function NutrientChart({ days, target, open }: { days: TrendDay[]; target?: NutritionTarget; open: { to: string; label: string } }) {
   const [key, setKey] = useState<NutrientKey>(chosenNutrient);
   const info = infoOf(key);
   const t = targetOf(target, key);
@@ -281,10 +224,10 @@ export function NutrientChart({ days, target }: { days: TrendDay[]; target?: Nut
   const known = values.filter((v): v is number => v != null);
   const choose = (k: NutrientKey) => {
     setKey(k);
-    try { localStorage.setItem(NUTRIENT_KEY, k); } catch { /* fine without */ }
+    keepNutrient(k);
   };
   return (
-    <Card id="nutrient" title="Vitamins & minerals" className="body-card" action={known.length > 0 && <span className="muted small">average <strong>{withUnit(known.reduce((a, b) => a + b, 0) / known.length, info.unit)}</strong></span>}>
+    <Card id="nutrient" title="Vitamins & minerals" className="body-card" open={open} action={known.length > 0 && <span className="muted small">average <strong>{withUnit(known.reduce((a, b) => a + b, 0) / known.length, info.unit)}</strong></span>}>
       <label className="nutrient-pick">
         <span className="sr-only">Nutrient</span>
         <select value={key} onChange={(e) => choose(e.target.value as NutrientKey)}>
@@ -310,6 +253,6 @@ export function NutrientChart({ days, target }: { days: TrendDay[]; target?: Nut
   );
 }
 
-function Note({ children }: { children: ReactNode }) {
+export function Note({ children }: { children: ReactNode }) {
   return <p className="muted small">{children}</p>;
 }

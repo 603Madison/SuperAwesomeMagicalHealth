@@ -8,6 +8,7 @@ import com.health.api.QuickAction.CHECK_IN
 import com.health.api.QuickAction.COFFEE
 import com.health.api.QuickAction.DRINK
 import com.health.api.QuickAction.FOOD
+import com.health.api.QuickAction.MEDITATE
 import com.health.api.QuickAction.SLEEP
 import com.health.api.QuickAction.WATER
 import com.health.api.QuickAction.WEIGHT
@@ -54,11 +55,12 @@ class TodayLayoutTest {
     @Test
     fun `the + sheet's grid is every way to log for the features on, in the person's order`() {
         val available = TodayLayout.quickActions(Module.DEFAULT)
-        assertEquals(listOf(FOOD, WATER, WEIGHT, COFFEE, DRINK, WORKOUT, SLEEP, CHECK_IN), available)
+        assertEquals(listOf(FOOD, WATER, WEIGHT, COFFEE, DRINK, WORKOUT, SLEEP, CHECK_IN, MEDITATE), available)
         assertEquals(available, TodayLayout.grid(available, null))
         // Arranged: theirs first; what they hid from the old Quick log is still there (everything tracked shows).
         val arranged = TodayLayout.grid(available, ScreenLayout(listOf("CHECK_IN", "FOOD"), hidden = setOf("WATER", "COFFEE")))
-        assertEquals(listOf(CHECK_IN, FOOD), arranged.take(2))
+        // (Meditate, newer than the saved order, keeps its place after Check in.)
+        assertEquals(listOf(CHECK_IN, MEDITATE, FOOD), arranged.take(3))
         assertEquals(available.toSet(), arranged.toSet())
     }
 
@@ -68,8 +70,8 @@ class TodayLayoutTest {
         assertEquals(QuickAction.entries.toList(), everything)
         assertFalse(QuickAction.MEASUREMENTS in TodayLayout.quickActions(Module.entries.toSet(), measurements = false))
         assertFalse(QuickAction.MOOD in TodayLayout.quickActions(Module.DEFAULT))
-        // Check in is everyone's.
-        assertEquals(listOf(CHECK_IN), TodayLayout.quickActions(emptySet()))
+        // Check in and Meditate are everyone's.
+        assertEquals(listOf(CHECK_IN, MEDITATE), TodayLayout.quickActions(emptySet()))
     }
 
     @Test

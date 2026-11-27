@@ -128,6 +128,8 @@ enum class WebhookEvent(val key: String, val label: String, val module: Module? 
     SUPPLIES_LOW("supplies.low", "Supplies are running low"),
     CYCLE_REMINDER("cycle.reminder", "A cycle reminder", Module.CYCLE),
     VOICE_PRACTICE("voice.practice", "Time for voice practice", Module.TRANSITION),
+    /** The nightly meditation reminder (MeditationSettings): only ever "time to wind down", never what was done. */
+    WIND_DOWN("meditation.reminder", "Time to wind down"),
     /** A health alert ([HealthAlert]): without details, only its level goes out. */
     HEALTH_ALERT("health.alert", "A health alert"),
     TEST("test", "A test"),

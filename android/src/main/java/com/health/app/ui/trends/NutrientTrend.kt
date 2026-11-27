@@ -35,7 +35,7 @@ import com.health.app.ui.food.NutrientGroup
  * gap, never a zero, and only foods that came with it count.
  */
 @Composable
-internal fun NutrientTrendCard(days: List<TrendDay>, target: NutritionTarget?, labels: Triple<String, String?, String>, initial: String = "FIBER") {
+internal fun NutrientTrendCard(days: List<TrendDay>, target: NutritionTarget?, labels: Triple<String, String?, String>, initial: String = "FIBER", onDetails: ((String) -> Unit)? = null) {
     var key by rememberSaveable { mutableStateOf(initial) }
     val info = MicroText.info(key)
     val values = days.map { MicroText.amount(it, info) }
@@ -51,6 +51,8 @@ internal fun NutrientTrendCard(days: List<TrendDay>, target: NutritionTarget?, l
         "Vitamins & minerals", Icons.Rounded.Eco, color,
         known.takeIf { it.isNotEmpty() }?.average()?.let { MicroText.withUnit(it, info.unit) }, "a day it came with food", labels,
         footer = "$line ${info.label} came with food on ${known.size} of ${days.size} days; only the foods that carried it count.",
+        // The chosen nutrient's own details.
+        onDetails = onDetails?.let { open -> { open(com.health.app.ui.body.BodyDetail.nutrient(key)) } },
     ) {
         NutrientPicker(key) { key = it }
         Spacer(Modifier.height(10.dp))

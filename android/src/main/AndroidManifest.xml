@@ -23,6 +23,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
+        Guided meditation going on with the screen off: a foreground service that plays (the
+        phone's own offline voice and a chime made in the app; nothing is streamed).
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Barcodes on food packaging. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -70,6 +75,10 @@
         <package android:name="com.google.android.apps.healthdata" />
         <!-- SuperAwesomeMagicalOrchestrator, to sign in as whoever is signed in there (nothing else is shared with it). -->
         <package android:name="app.superawesomemagical.orchestrator" />
+        <!-- The phone's text-to-speech, for reading meditations aloud (offline voices only). -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
     </queries>
 
     <!-- Home servers are often plain HTTP on the home network. -->
@@ -166,6 +175,29 @@
         <!-- Voice trainer: the practice reminder's alarm, set again after a restart. -->
         <receiver
             android:name=".ui.modules.transition.voice.VoiceReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <!-- Allowed (again) to go off at the minute: the alarm is set again. -->
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Guided meditation: the player (always dark), what keeps it playing, and the nightly reminder. -->
+        <activity
+            android:name=".ui.meditation.MeditationActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Health.Night" />
+        <service
+            android:name=".ui.meditation.MeditationService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        <receiver
+            android:name=".ui.meditation.MeditationReminderReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
